@@ -1,0 +1,111 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/prisma";
+import { getCurrentSession } from "@/lib/auth";
+import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@/lib/apiSecurity";
+import { logAuditEvent } from "@/lib/auditLogger";
+import { subscriptionsDb } from "@/lib/subscriptions-db";
+import { prisma } from "@/lib/prisma";
+
+const updateJobSchema = z.object({
+  title: z.string().min(3).optional(),
+  company: z.string().min(2).optional(),
+  location: z.string().min(2).optional(),
+  type: z.string().optional(),
+  salary: z.string().min(2).optional(),
+  status: z.enum(["ACTIVE", "DRAFT", "CLOSED", "PAUSED"]).optional(),
+});
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const job = await prisma.jobListing.findUnique({
+      where: { id },
+    });
+    if (!job) {
+      throw new ApiError("Job listing not found.", 404);
+    }
+    return NextResponse.json({ success: true, job });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    enforceRateLimit(request, "employer_jobs_put");
+    const session = getCurrentSession(request.headers);
+
+    if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
+      throw new ApiError("Forbidden: Employer or Admin role required.", 403);
+    }
+
+    const body = await readValidatedJson(request, updateJobSchema);
+
+    // Resolve companyId (default to "comp-1")
+    let companyId = "comp-1";
+    try {
+      const profile = await prisma.employerProfile.findUnique({
+        where: { userId: session.id },
+      });
+      if (profile) {
+        companyId = profile.companyId;
+      }
+    } catch {
+      // Ignore
+    }
+
+    // Load existing job state
+    const oldJob = await prisma.jobListing.findUnique({
+      where: { id },
+    });
+    if (!oldJob) {
+      throw new ApiError("Job listing not found.", 404);
+    }
+
+    const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
+
+    // Check active credits quota if publishing a draft
+    if (isPublishingDraft && session.role !== "ADMIN") {
+      const credits = await subscriptionsDb.getCompanyCredits(companyId);
+      if (credits.jobPostsLeft <= 0) {
+        throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
+      }
+    }
+
+    // Update job listing details
+    const updatedJob = await prisma.jobListing.update({
+      where: { id },
+      data: {
+        title: body.title !== undefined ? body.title : undefined,
+        location: body.location !== undefined ? body.location : undefined,
+        type: body.type !== undefined ? body.type : undefined,
+        salaryRange: body.salary !== undefined ? body.salary : undefined,
+        status: body.status !== undefined ? (body.status as any) : undefined,
+      },
+    });
+
+    // Deduct credit if draft is published as active
+    if (isPublishingDraft && session.role !== "ADMIN") {
+      await subscriptionsDb.updateCompanyCredits(companyId, -1, 0, 0);
+    }
+
+    logAuditEvent({
+      userId: session.id,
+      action: "JOB_UPDATE",
+      resource: `/api/employer/jobs/${id}`,
+      details: `Updated job listing ${updatedJob.title} (${updatedJob.id}). Published from draft: ${isPublishingDraft}`,
+    });
+
+    return NextResponse.json({ success: true, job: updatedJob });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

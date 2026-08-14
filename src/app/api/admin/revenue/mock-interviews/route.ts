@@ -1,0 +1,93 @@
+import { NextResponse } from "next/server";
+
+export const mockInterviewSummary = {
+  totalRevenue: 520000,
+  totalRevenueFormatted: "₹5.2 Lakhs",
+  totalTestsConducted: 4280,
+  videoInterviews: 1840,
+  codingTests: 1220,
+  aiInterviews: 890,
+  practiceSessions: 330,
+  grossSales: 545000,
+  totalRefunds: 9980,
+  couponsDiscounted: 15020,
+  activeTokenPackages: 1840,
+  averageCandidateScore: 84.6,
+  packages: [
+    { name: "Single Mock Test", price: "₹499", sold: 360, revenue: "₹1,79,640", features: "1 Full AI Technical Interview + Scorecard" },
+    { name: "Standard Pack (3 Tests)", price: "₹1,299", sold: 120, revenue: "₹1,55,880", features: "3 Sessions with System Design + Coding Sandbox" },
+    { name: "Mastery Bundle (5 Tests)", price: "₹1,999", sold: 88, revenue: "₹1,75,912", features: "5 Sessions + Voice/Vision AI + DNA Certificate" },
+    { name: "College Enterprise Pass", price: "₹9,999", sold: 1, revenue: "₹9,999", features: "Unlimited 30-Day Batch Access" },
+  ],
+};
+
+export const mockInterviewLogs = [
+  {
+    id: "MOCK-TXN-401",
+    candidateName: "Aarav Sharma",
+    candidateEmail: "aarav.sharma@example.com",
+    packageType: "Mastery Bundle (5 Sessions)",
+    amount: 1999,
+    amountFormatted: "₹1,999",
+    purchaseDate: "2026-07-14 16:40",
+    sessionDuration: "45 mins",
+    targetRole: "Full Stack Engineer (MERN)",
+    aiScore: 92,
+    aiReportViewed: true,
+    certificateDownloaded: true,
+    status: "Completed",
+  },
+  {
+    id: "MOCK-TXN-402",
+    candidateName: "Priya Patel",
+    candidateEmail: "priya.p@tech.io",
+    packageType: "Single Mock Test",
+    amount: 499,
+    amountFormatted: "₹499",
+    purchaseDate: "2026-07-05 20:01",
+    sessionDuration: "35 mins",
+    targetRole: "Cloud Solutions Architect",
+    aiScore: 98,
+    aiReportViewed: true,
+    certificateDownloaded: true,
+    status: "Completed",
+  },
+  {
+    id: "MOCK-TXN-403",
+    candidateName: "Karan Mehta",
+    candidateEmail: "karan.mehta@gmail.com",
+    packageType: "Standard Pack (3 Tests)",
+    amount: 1299,
+    amountFormatted: "₹1,299",
+    purchaseDate: "2026-07-18 11:20",
+    sessionDuration: "40 mins",
+    targetRole: "Data Engineer",
+    aiScore: 78,
+    aiReportViewed: true,
+    certificateDownloaded: false,
+    status: "Active (2 Credits Left)",
+  },
+  {
+    id: "MOCK-TXN-404",
+    candidateName: "Divya Nambiar",
+    candidateEmail: "divya.nambiar@yahoo.com",
+    packageType: "Single Mock Test",
+    amount: 499,
+    amountFormatted: "₹499",
+    purchaseDate: "2026-07-25 19:10",
+    sessionDuration: "30 mins",
+    targetRole: "Frontend UI/UX Developer",
+    aiScore: 88,
+    aiReportViewed: true,
+    certificateDownloaded: true,
+    status: "Completed",
+  },
+];
+
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    summary: mockInterviewSummary,
+    data: mockInterviewLogs,
+  });
+}

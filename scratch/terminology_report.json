@@ -1,0 +1,62 @@
+[
+  {
+    "old": "Talent Pool",
+    "new": "Candidate Intelligence",
+    "file": "app\\employer\\enterprise-talent-pool-database\\page.tsx",
+    "reason": "Enterprise AI Hiring OS terminology"
+  },
+  {
+    "old": "Talent Pool",
+    "new": "Candidate Intelligence",
+    "file": "app\\employer\\full-candidate-profile-employer-view\\page.tsx",
+    "reason": "Enterprise AI Hiring OS terminology"
+  },
+  {
+    "old": "Job Board",
+    "new": "Opportunities",
+    "file": "app\\employer\\job-performance-analytics\\page.tsx",
+    "reason": "Enterprise AI Hiring OS terminology for candidate positions"
+  },
+  {
+    "old": "Job Board",
+    "new": "Opportunities",
+    "file": "app\\employer\\referral-and-source-tracking\\page.tsx",
+    "reason": "Enterprise AI Hiring OS terminology for candidate positions"
+  },
+  {
+    "old": "Browse Jobs",
+    "new": "Browse Opportunities",
+    "file": "app\\interviews\\replay\\page.tsx",
+    "reason": "Standardized candidate navigation label"
+  },
+  {
+    "old": "Talent Pool",
+    "new": "Candidate Intelligence",
+    "file": "app\\onboarding\\hire-score\\page.tsx",
+    "reason": "Enterprise AI Hiring OS terminology"
+  },
+  {
+    "old": "Browse Jobs",
+    "new": "Browse Opportunities",
+    "file": "app\\register\\complete\\page.tsx",
+    "reason": "Standardized candidate navigation label"
+  },
+  {
+    "old": "HireGo Admin Console",
+    "new": "HireGo Platform Control Center",
+    "file": "components\\admin\\AdminSidebar.tsx",
+    "reason": "Standardized platform control center label"
+  },
+  {
+    "old": "Browse Jobs",
+    "new": "Browse Opportunities",
+    "file": "components\\candidate\\CandidateSidebar.tsx",
+    "reason": "Standardized candidate navigation label"
+  },
+  {
+    "old": "HireGo Candidate Portal",
+    "new": "HireGo Candidate Workspace",
+    "file": "components\\candidate\\CandidateSidebar.tsx",
+    "reason": "Standardized candidate workspace label"
+  }
+]

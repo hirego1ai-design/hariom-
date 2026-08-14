@@ -1,0 +1,928 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CANDIDATE
+  EMPLOYER
+  RECRUITER
+  ADMIN
+}
+
+enum ApplicationStatus {
+  APPLIED
+  SCREENING
+  AI_INTERVIEW
+  ASSESSMENT
+  SHORTLISTED
+  HIRED
+  REJECTED
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  role          Role     @default(CANDIDATE)
+  phoneNumber   String?
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  candidateProfile CandidateProfile?
+  employerProfile  EmployerProfile?
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  aiUsages         AiUsage[]
+}
+
+model CandidateProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline        String?
+  bio             String?
+  location        String?
+  skills          String[] @default([])
+  experienceYears Float    @default(0)
+  hireGoScore     Int      @default(0)
+  resumeUrl       String?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  videoResumes VideoResume[]
+  applications Application[]
+}
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  logoUrl     String?
+  website     String?
+  description String?
+  industry    String?
+  size        String?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employers     EmployerProfile[]
+  jobs          JobListing[]
+  subscriptions CompanySubscription[]
+  credits       CompanyCredits?
+}
+
+model EmployerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  designation String?
+  documents   DocumentVerification[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model JobListing {
+  id           String    @id @default(uuid())
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title        String
+  department   String?
+  location     String
+  type         String    @default("Full-time")
+  salaryRange  String?
+  description  String
+  requirements String[]  @default([])
+  status       JobStatus @default(ACTIVE)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  applications Application[]
+}
+
+model Application {
+  id                 String            @id @default(uuid())
+  jobId              String
+  job                JobListing        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateProfileId String
+  candidateProfile   CandidateProfile  @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  status             ApplicationStatus @default(APPLIED)
+  matchScore         Int               @default(0)
+  aiSummary          String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  interviews Interview[]
+}
+
+model VideoResume {
+  id                 String           @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  videoUrl           String
+  durationSeconds    Int
+  transcript         String?
+  communicationScore Int              @default(0)
+  confidenceScore    Int              @default(0)
+  clarityScore       Int              @default(0)
+  professionalism    Int              @default(0)
+  createdAt          DateTime         @default(now())
+}
+
+model Interview {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  scheduledAt   DateTime
+  durationMins  Int         @default(30)
+  status        String      @default("SCHEDULED")
+  roomUrl       String?
+  transcript    String?
+  aiFeedback    String?
+  createdAt     DateTime    @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  type      String   @default("INFO")
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  resource  String
+  ipAddress String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model AiUsage {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  agentType     String
+  tokensUsed    Int      @default(0)
+  estimatedCost Float    @default(0.0)
+  createdAt     DateTime @default(now())
+}
+
+enum RequirementStatus {
+  SUBMITTED
+  IN_DISCUSSION
+  AGREEMENT_DRAFTED
+  AGREEMENT_SENT
+  ACTIVE
+  CLOSED
+}
+
+enum AgreementStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  SENT_TO_EMPLOYER
+  AMENDMENT_REQUESTED
+  ACTIVE
+  REJECTED
+  EXPIRED
+}
+
+model HiringRequirement {
+  id                     String            @id @default(uuid())
+  referenceCode          String            @unique
+  companyName            String
+  contactPerson          String
+  email                  String
+  primaryMobile          String
+  secondaryMobile        String?
+  industry               String
+  numberOfPositions      Int
+  jobTitles              String[]          @default([])
+  experienceYears        String
+  skillsRequired         String[]          @default([])
+  education              String
+  certifications         String?
+  salaryRangeMin         Float
+  salaryRangeMax         Float
+  currency               String            @default("INR")
+  workMode               String            @default("Hybrid")
+  location               String
+  joiningTimeline        String
+  hiringPriority         String            @default("Standard")
+  replacementExpectation String            @default("90 Days")
+  additionalNotes        String?
+  jdFileUrl              String?
+  status                 RequirementStatus @default(SUBMITTED)
+  assignedSalesLead      String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  agreements CommercialAgreement[]
+}
+
+model AgreementTemplate {
+  id                  String   @id @default(uuid())
+  name                String
+  slug                String   @unique
+  description         String
+  category            String   @default("General") // Startup, Growth, Enterprise, Executive, Campus, Custom
+  feeType             String   @default("PERCENTAGE") // PERCENTAGE | FIXED
+  feeValue            Float    @default(8.33)
+  invoiceRule         String   @default("ON_JOINING") // ON_OFFER, ON_JOINING, DAY_30, SPLIT_50_50
+  replacementDays     Int      @default(90)
+  validityMonths      Int      @default(12)
+  advancePayment      Float    @default(0.0)
+  creditTermsDays     Int      @default(15)
+  standardDiscountPct Float    @default(0.0)
+  taxRatePct          Float    @default(18.0)
+  specialClauses      String[] @default([])
+  commercialNotes     String?
+  isArchived          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model CommercialAgreement {
+  id              String             @id @default(uuid())
+  agreementNumber String             @unique
+  requirementId   String?
+  requirement     HiringRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  templateId      String?
+  companyName     String
+  clientLegalName String
+  contactPerson   String
+  clientEmail     String
+  clientPhone     String
+  status          AgreementStatus    @default(DRAFT)
+
+  // Commercial Parameters
+  feeType              String   @default("PERCENTAGE")
+  feeValue             Float    @default(8.33)
+  invoiceRule          String   @default("ON_JOINING")
+  replacementDays      Int      @default(90)
+  validityStartDate    DateTime @default(now())
+  validityEndDate      DateTime
+  advancePaymentAmount Float    @default(0.0)
+  discountPercentage   Float    @default(0.0)
+  creditDays           Int      @default(15)
+  taxRatePct           Float    @default(18.0)
+
+  // Custom Legal Terms & Clauses
+  customClauses       String[] @default([])
+  commercialNotes     String?
+  salesExecutiveNotes String?
+
+  // Signing & Acceptance Metadata
+  signedByName        String?
+  signedByDesignation String?
+  signedAt            DateTime?
+  signerIpAddress     String?
+  amendmentNotes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events AgreementEvent[]
+}
+
+model AgreementEvent {
+  id          String              @id @default(uuid())
+  agreementId String
+  agreement   CommercialAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  eventType   String // CREATED, DRAFT_UPDATED, SENT, AMENDMENT_REQUESTED, ACCEPTED, REJECTED
+  performedBy String
+  notes       String?
+  createdAt   DateTime            @default(now())
+}
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  OVERDUE
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  agreementId   String
+  companyName   String
+  candidateName String?
+  jobTitle      String?
+  amount        Float
+  taxAmount     Float
+  totalAmount   Float
+  currency      String        @default("INR")
+  status        PaymentStatus @default(UNPAID)
+  dueDate       String
+  paidDate      String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model PaymentTransaction {
+  id           String   @id @default(uuid())
+  gatewayTxId  String   @unique
+  companyId    String
+  planId       String?
+  amount       Float    @default(0.0)
+  currency     String   @default("INR")
+  status       String   @default("PENDING") // PENDING | SUCCESS | FAILED | REJECTED
+  provider     String   @default("RAZORPAY") // RAZORPAY | STRIPE
+  rawPayload   Json?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+model IdempotencyRecord {
+  id              String   @id @default(uuid())
+  companyId       String
+  idempotencyKey  String
+  requestHash     String
+  status          String   @default("PROCESSING") // PROCESSING | SUCCESS | FAILED
+  jobId           String?
+  responsePayload Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId])
+}
+
+model PaymentGatewayConfig {
+  id                     String   @id @default("global-gateway-config")
+  mode                   String   @default("AUTO") // AUTO | MANUAL
+  primaryGateway         String   @default("RAZORPAY") // RAZORPAY | PAYU | PHONEPE
+  autoFailover           Boolean  @default(true)
+  allowEmployerSelection Boolean  @default(true)
+  gatewaysStatus         Json     // { RAZORPAY: "HEALTHY", PAYU: "HEALTHY", PHONEPE: "HEALTHY" }
+  priorities             Json     // ["RAZORPAY", "PAYU", "PHONEPE"]
+  updatedAt              DateTime @updatedAt
+}
+
+model AiExecutionLog {
+  id               String   @id @default(uuid())
+  task             String
+  provider         String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int
+  latencyMs        Int
+  costEstUsd       Float
+  status           String
+  timestamp        DateTime @default(now())
+}
+
+model SubscriptionPlan {
+  id                           String   @id @default(uuid())
+  name                         String
+  description                  String
+  price                        Float
+  currency                     String   @default("INR")
+  jobPostsQuota                Int
+  resumeUnlocksQuota           Int
+  aiInterviewsQuota            Int
+  applicationsQuota            Int      @default(100)
+  resumeDownloadsQuota         Int      @default(50)
+  backgroundVerificationsQuota Int      @default(5)
+  featuresAllowed              String[] @default([])
+  validityMonths               Int      @default(1)
+  isArchived                   Boolean  @default(false)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  subscriptions CompanySubscription[]
+}
+
+model CompanySubscription {
+  id        String           @id @default(uuid())
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+  startDate DateTime         @default(now())
+  endDate   DateTime
+  status    String           @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+  paymentId String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model CompanyCredits {
+  id                          String   @id @default(uuid())
+  companyId                   String   @unique
+  company                     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobPostsLeft                Int      @default(0)
+  resumeUnlocksLeft           Int      @default(0)
+  aiInterviewsLeft            Int      @default(0)
+  applicationsLeft            Int      @default(0)
+  resumeDownloadsLeft         Int      @default(0)
+  backgroundVerificationsLeft Int      @default(0)
+  updatedAt                   DateTime @updatedAt
+}
+
+model PromoCode {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  discountType  String // PERCENTAGE | FLAT
+  discountValue Float
+  maxUsage      Int       @default(9999)
+  usageCount    Int       @default(0)
+  validUntil    DateTime?
+  isArchived    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AiServiceCost {
+  id          String   @id @default(uuid())
+  serviceKey  String   @unique // e.g. "resume_screening"
+  serviceName String
+  creditCost  Int
+  billingType String // INCLUDED | CREDIT_BASED | PAID_ADDON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ================================================================
+// HireGo AI ROS — Recruitment Operating System Models
+// 16 models. Single migration: init_ros_architecture
+// These models integrate WITH the existing HireGo business schema.
+// They do NOT replace User, Company, JobListing, Application, etc.
+// ================================================================
+
+// ================================================================
+// MODEL 1: SYSTEM EVENT (IMMUTABLE EVENT HISTORY)
+// ================================================================
+// What actually happened. Immutable after creation.
+// Created by EventDispatcher via idempotent upsert.
+// ================================================================
+
+enum EventScope {
+  GLOBAL
+  TENANT
+}
+
+model SystemEvent {
+  id             String     @id @default(uuid())
+  scope          EventScope @default(TENANT)
+  companyId      String? // Null for global events
+  eventType      String
+  eventVersion   Int        @default(1)
+  actorId        String?
+  correlationId  String
+  idempotencyKey String     @unique
+  payload        Json
+  createdAt      DateTime   @default(now())
+
+  @@index([scope, companyId])
+  @@index([eventType])
+  @@index([correlationId])
+}
+
+// ================================================================
+// MODEL 2: TRANSACTIONAL OUTBOX (DELIVERY MECHANISM)
+// ================================================================
+// Written in same DB transaction as business state change.
+// Polled by OutboxPoller using FOR UPDATE SKIP LOCKED.
+// Status: PENDING → PROCESSING → DISPATCHED | FAILED
+// ================================================================
+
+model OutboxEntry {
+  id             String    @id @default(uuid())
+  eventType      String
+  payload        Json
+  correlationId  String
+  companyId      String?
+  idempotencyKey String    @unique
+  status         String    @default("PENDING")
+  retryCount     Int       @default(0)
+  maxRetries     Int       @default(5)
+  createdAt      DateTime  @default(now())
+  claimedAt      DateTime?
+  dispatchedAt   DateTime?
+  failedAt       DateTime?
+
+  @@index([status, createdAt])
+}
+
+// ================================================================
+// MODEL 3: EVENT CONSUMER CHECKPOINT (CONSUMER PROCESSING STATE)
+// ================================================================
+// Tracks which consumers have processed which events.
+// Composite unique: one event may be processed by multiple consumers.
+// This is a record of completion, NOT a distributed lock.
+// Consumer handlers must be independently idempotent.
+// ================================================================
+
+model EventConsumerCheckpoint {
+  id             String   @id @default(uuid())
+  idempotencyKey String
+  consumerId     String
+  status         String   @default("PROCESSED")
+  processedAt    DateTime @default(now())
+
+  @@unique([idempotencyKey, consumerId])
+}
+
+// ================================================================
+// MODEL 4: WORKFLOW INSTANCE
+// ================================================================
+
+enum WorkflowStatus {
+  PENDING
+  RUNNING
+  PAUSED_FOR_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model WorkflowInstance {
+  id              String         @id @default(uuid())
+  companyId       String?
+  jobId           String?
+  candidateId     String?
+  applicationId   String?
+  interviewId     String?
+  workflowType    String
+  workflowVersion String         @default("1.0.0")
+  status          WorkflowStatus @default(PENDING)
+  currentStep     String
+  checkpointState Json
+  correlationId   String         @unique
+  initiatedBy     String
+  failureCount    Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  steps WorkflowStepLog[]
+}
+
+// ================================================================
+// MODEL 5: WORKFLOW STEP LOG (REAL IDEMPOTENCY KEY)
+// ================================================================
+// executionKey = deterministic: "{workflowId}:{stepName}:{attemptNumber}"
+// sideEffectDone guards against re-execution on crash recovery.
+// External side effects must additionally use their own business
+// idempotency keys (see IdempotencyGuard).
+// ================================================================
+
+model WorkflowStepLog {
+  id                 String           @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+  stepName           String
+  executionKey       String           @unique
+  attemptNumber      Int              @default(1)
+  status             String
+  sideEffectDone     Boolean          @default(false)
+  inputPayload       Json?
+  outputPayload      Json?
+  errorMessage       String?
+  durationMs         Int              @default(0)
+  createdAt          DateTime         @default(now())
+
+  @@index([workflowInstanceId, stepName])
+}
+
+// ================================================================
+// MODEL 6: AGENT MEMORY RECORD (3 AGENT LAYERS ONLY)
+// ================================================================
+// BUSINESS_STATE is NOT stored here. It lives in PostgreSQL
+// business tables and is accessed exclusively through Tools.
+// ================================================================
+
+enum MemoryType {
+  WORKING
+  DOMAIN
+  KNOWLEDGE
+}
+
+enum MemoryScopeLevel {
+  COMPANY
+  JOB
+  CANDIDATE
+  APPLICATION
+  INTERVIEW
+  WORKFLOW
+}
+
+model AgentMemoryRecord {
+  id           String           @id @default(uuid())
+  memoryType   MemoryType       @default(DOMAIN)
+  scopeLevel   MemoryScopeLevel @default(COMPANY)
+  scopeId      String
+  companyId    String?
+  agentId      String
+  key          String
+  value        Json
+  ttlSeconds   Int?
+  expiresAt    DateTime?
+  isAnonymized Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([scopeLevel, scopeId, agentId, key])
+  @@index([companyId, scopeLevel, scopeId])
+}
+
+// ================================================================
+// MODEL 7: AI COMPANY BUDGET
+// ================================================================
+
+model AiCompanyBudget {
+  id                         String   @id @default(uuid())
+  companyId                  String   @unique
+  currency                   String   @default("INR")
+  monthlyLimitMinorUnits     BigInt   @default(5000000)
+  costPerCandidateLimitMinor BigInt   @default(50000)
+  costPerInterviewLimitMinor BigInt   @default(20000)
+  currentSpendMinorUnits     BigInt   @default(0)
+  reservedSpendMinorUnits    BigInt   @default(0)
+  isHardCapEnabled           Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
+}
+
+// ================================================================
+// MODEL 8: BUDGET RESERVATION (KEYED BY EXECUTION ID)
+// ================================================================
+// Currency inherited from AiCompanyBudget. Not stored here.
+// executionId = one agent task execution (not correlationId,
+// because one workflow may spawn multiple billable executions).
+// ================================================================
+
+model BudgetReservation {
+  id            String    @id @default(uuid())
+  companyId     String
+  executionId   String    @unique
+  correlationId String
+  reservedMinor BigInt
+  actualMinor   BigInt?
+  status        String    @default("HELD")
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  reconciledAt  DateTime?
+
+  @@index([companyId, status])
+  @@index([expiresAt])
+}
+
+// ================================================================
+// MODEL 9: AGENT EVALUATION LOG
+// ================================================================
+
+model AgentEvaluationLog {
+  id                 String   @id @default(uuid())
+  companyId          String?
+  correlationId      String
+  executionId        String
+  agentId            String
+  algorithmVersion   String   @default("hirego-score-v1.2")
+  score              Float
+  fairnessChecked    Boolean  @default(true)
+  policyCompliant    Boolean  @default(true)
+  biasScore          Float    @default(0.0)
+  schemaValid        Boolean  @default(true)
+  factualConsistency Boolean  @default(true)
+  verdict            String // ACCEPT, RETRY, FALLBACK, ESCALATE
+  humanApprovedBy    String?
+  humanApprovedRole  String?
+  humanNotes         String?
+  createdAt          DateTime @default(now())
+
+  @@index([correlationId])
+  @@index([executionId])
+}
+
+// ================================================================
+// MODEL 10: KILL SWITCH CONFIG
+// ================================================================
+
+enum KillSwitchType {
+  GLOBAL
+  AGENT
+  WORKFLOW
+  MODEL
+  TOOL
+}
+
+model KillSwitchConfig {
+  id          String         @id @default(uuid())
+  targetType  KillSwitchType
+  targetId    String
+  isActive    Boolean        @default(false)
+  reason      String?
+  activatedBy String
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([targetType, targetId])
+}
+
+// ================================================================
+// MODEL 11: SHADOW EXECUTION LOG
+// ================================================================
+
+model ShadowExecutionLog {
+  id               String   @id @default(uuid())
+  correlationId    String
+  agentId          String
+  algorithmVersion String
+  productionResult Json
+  shadowResult     Json
+  diffSummary      Json
+  latencyMs        Int
+  createdAt        DateTime @default(now())
+
+  @@index([agentId, correlationId])
+}
+
+// ================================================================
+// MODEL 12: HIRING OUTCOME FEEDBACK
+// ================================================================
+
+model HiringOutcomeFeedback {
+  id                  String   @id @default(uuid())
+  companyId           String
+  candidateId         String
+  jobId               String
+  aiRecommendedScore  Int
+  hiringVerdict       String
+  actualRetentionDays Int?
+  performanceRating   Float?
+  createdAt           DateTime @default(now())
+
+  @@index([companyId])
+}
+
+// ================================================================
+// MODEL 13: CONFIGURABLE DATA RETENTION
+// ================================================================
+// WARNING: @@unique([companyId, dataType]) with nullable companyId.
+// PostgreSQL allows multiple NULL values in unique constraints.
+// Application-level code must explicitly handle global (null companyId)
+// policies to ensure at most one global policy per dataType.
+// ================================================================
+
+model DataRetentionConfig {
+  id            String   @id @default(uuid())
+  companyId     String?
+  dataType      String
+  retentionDays Int      @default(90)
+  autoAnonymize Boolean  @default(true)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, dataType])
+}
+
+// ================================================================
+// MODEL 14: AGENT LIFECYCLE LOG
+// ================================================================
+
+enum AgentLifecycleState {
+  REGISTERED
+  IDLE
+  PLANNING
+  EXECUTING
+  AWAITING_APPROVAL
+  EVALUATING
+  COMPLETED
+  FAILED
+  SUSPENDED
+  KILLED
+}
+
+model AgentLifecycleLog {
+  id            String              @id @default(uuid())
+  agentId       String
+  executionId   String
+  correlationId String
+  previousState AgentLifecycleState
+  currentState  AgentLifecycleState
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime            @default(now())
+
+  @@index([agentId, executionId])
+  @@index([correlationId])
+}
+
+// ================================================================
+// MODEL 15: DEAD LETTER JOB
+// ================================================================
+
+model DeadLetterJob {
+  id            String    @id @default(uuid())
+  sourceType    String
+  sourceId      String
+  correlationId String
+  errorType     String
+  errorMessage  String
+  payload       Json?
+  retryCount    Int       @default(0)
+  status        String    @default("OPEN")
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+  resolvedBy    String?
+
+  @@index([status, createdAt])
+  @@index([correlationId])
+}
+
+// ================================================================
+// MODEL 16: EXECUTION TRACE RECORD
+// ================================================================
+
+model TraceRecord {
+  id               String   @id @default(uuid())
+  traceId          String   @unique
+  correlationId    String
+  executionId      String?
+  companyId        String?
+  jobId            String?
+  candidateId      String?
+  agentId          String?
+  workflowId       String?
+  stepName         String?
+  provider         String?
+  model            String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costMinorUnits   BigInt   @default(0)
+  latencyMs        Int      @default(0)
+  status           String
+  toolCalls        Json?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+
+  @@index([correlationId])
+  @@index([companyId, jobId, candidateId])
+  @@index([agentId])
+}
+
+// ================================================================
+// MODEL 17: DOCUMENT VERIFICATION (EMPLOYER KYC)
+// ================================================================
+
+model DocumentVerification {
+  id              String   @id @default(uuid())
+  employerId      String
+  employerProfile EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  docType         String   // GST Certificate, PAN Card, Certificate of Incorporation, Tax Residency
+  fileUrl         String
+  fileName        String
+  submittedAt     DateTime @default(now())
+  status          String   @default("Pending Audit") // Pending Audit, Verified, Rejected
+  riskScore       String   @default("Low") // Low, Medium, High
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  logs            DocumentVerificationLog[]
+
+  @@index([employerId])
+  @@index([status])
+  @@index([riskScore])
+}
+
+// ================================================================
+// MODEL 18: DOCUMENT VERIFICATION LOG (AUDIT TRAIL)
+// ================================================================
+
+model DocumentVerificationLog {
+  id              String   @id @default(uuid())
+  documentId      String
+  document        DocumentVerification @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  action          String   // VERIFY, REJECT
+  performedBy     String
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([documentId])
+  @@index([performedBy])
+}
