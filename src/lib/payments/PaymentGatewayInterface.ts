@@ -5,6 +5,7 @@ export interface CreateOrderParams {
   amount: number;
   currency: string;
   planName: string;
+  planId?: string;
   companyId: string;
 }
 
@@ -30,6 +31,7 @@ export interface VerifyWebhookParams {
 export interface VerifyWebhookResult {
   isValid: boolean;
   gatewayTxId: string;
+  gatewayOrderId?: string;
   companyId?: string;
   planId?: string;
   amount?: number;

@@ -1288,3 +1288,24 @@ model WhatsAppInboundEvent {
   @@index([waId, receivedAt])
   @@index([processed, receivedAt])
 }
+
+model PaymentOrder {
+  id              String   @id @default(uuid())
+  orderId         String   @unique
+  companyId       String
+  planId          String
+  originalAmount  Float
+  discountAmount  Float    @default(0)
+  expectedAmount  Float
+  gateway         String?
+  gatewayOrderId  String?  @unique
+  gatewayTxId     String?
+  promoCode       String?
+  status          String   @default("INITIATED") // INITIATED | CREATED | SUCCESS | FAILED | REJECTED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([gatewayOrderId])
+  @@index([gatewayTxId])
+}

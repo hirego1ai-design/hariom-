@@ -80,9 +80,13 @@ export class PayUGateway implements PaymentGateway {
       }
     }
 
+    const body = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
+    const gatewayOrderId = jsonPayload?.txnid || body?.txnid;
+
     return {
       isValid: true,
       gatewayTxId,
+      gatewayOrderId,
       companyId: jsonPayload?.udf1,
       planId: jsonPayload?.udf2,
       amount: jsonPayload?.amount ? parseFloat(jsonPayload.amount) : undefined,

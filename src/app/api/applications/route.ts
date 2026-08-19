@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
           orderBy: { createdAt: "desc" },
         });
       }
-    } catch {
+    } catch (err) {
+      if (process.env.NODE_ENV === "production") {
+        throw err;
+      }
       // Database fallback
       applications = [];
     }
@@ -55,6 +58,11 @@ export async function POST(req: NextRequest) {
       return jsonError("jobId is required", 400);
     }
 
+    const job = await prisma.jobListing.findUnique({ where: { id: jobId } });
+    if (!job) {
+      return jsonError("Job listing not found", 404);
+    }
+
     let application: any = null;
 
     try {
@@ -77,7 +85,7 @@ export async function POST(req: NextRequest) {
         userId: session.id,
         jobId,
         candidateProfileId: candidate.id,
-        companyId: "comp-1",
+        companyId: job.companyId,
       });
       application = newApp;
     } catch (e: any) {

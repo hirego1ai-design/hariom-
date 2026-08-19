@@ -65,8 +65,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const companyId = verification.companyId || payload?.companyId || payload?.metadata?.companyId;
-    const planId = verification.planId || payload?.planId || payload?.metadata?.planId;
     const gatewayTxId = verification.gatewayTxId || payload?.paymentId || payload?.id || `tx_${Date.now()}`;
 
     // 2. Strict Gateway Transaction Idempotency Pre-Check
@@ -83,16 +81,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const paymentOrder = await prisma.paymentOrder.findFirst({
+      where: {
+        OR: [
+          ...(verification.gatewayOrderId ? [{ gatewayOrderId: verification.gatewayOrderId }] : []),
+          ...(verification.gatewayTxId ? [{ gatewayTxId: verification.gatewayTxId }] : []),
+        ],
+      },
+    });
+
+    // We can extract basic company/plan data if order missing but required for failure cases
+    const baseCompanyId = verification.companyId || payload?.companyId || payload?.metadata?.companyId;
+
     // 3. Handle Payment Failure / Rejection Events
     if (verification.status === "FAILED" || verification.status === "REJECTED" || event === "payment.failed") {
-      if (gatewayTxId && companyId) {
+      const failCompanyId = paymentOrder?.companyId || baseCompanyId;
+      if (gatewayTxId && failCompanyId) {
         await prisma.paymentTransaction.upsert({
           where: { gatewayTxId },
           update: { status: "FAILED", errorMessage: "Payment gateway failed event received" },
           create: {
             gatewayTxId,
-            companyId,
-            planId: planId || null,
+            companyId: failCompanyId,
+            planId: paymentOrder?.planId || null,
             amount: verification.amount || 0,
             status: "FAILED",
             provider: providerHeader,
@@ -102,10 +113,10 @@ export async function POST(req: NextRequest) {
       }
 
       logAuditEvent({
-        userId: companyId || "SYSTEM",
+        userId: failCompanyId || "SYSTEM",
         action: "PAYMENT_FAILED",
         resource: "/api/payments/webhook",
-        details: `Payment failed for order ${gatewayTxId} (Company: ${companyId})`,
+        details: `Payment failed for order ${gatewayTxId} (Company: ${failCompanyId})`,
       });
 
       return NextResponse.json({
@@ -124,23 +135,22 @@ export async function POST(req: NextRequest) {
       event === "payment_intent.succeeded";
 
     if (isPaymentSuccess) {
-      if (!companyId || !planId) {
-        return NextResponse.json(
-          { success: false, error: "Missing companyId or planId in webhook payload" },
-          { status: 400 }
-        );
+      if (!paymentOrder) {
+        throw new ApiError("Authoritative payment order not found", 400);
       }
+      
+      const companyId = paymentOrder.companyId;
+      const planId = paymentOrder.planId;
+      const expectedAmount = paymentOrder.expectedAmount;
 
       const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
       if (!plan) {
         return NextResponse.json({ success: false, error: "Subscription plan not found" }, { status: 404 });
       }
 
-      // Amount Integrity Enforcement: Reject if gateway amount does not match authoritative plan price
-      if (verification.amount !== undefined && verification.amount > 0) {
-        if (Math.abs(verification.amount - plan.price) > 0.01) {
-          throw new ApiError(`Payment amount mismatch. Gateway: ₹${verification.amount}, Plan: ₹${plan.price}`, 400);
-        }
+      // Amount Integrity Enforcement
+      if (verification.amount !== undefined && verification.amount > 0 && Math.abs(verification.amount - expectedAmount) > 0.01) {
+        throw new ApiError(`Payment amount mismatch. Gateway: ₹${verification.amount}, Plan: ₹${expectedAmount}`, 400);
       }
 
       // =========================================================================
@@ -160,15 +170,21 @@ export async function POST(req: NextRequest) {
           };
         }
 
+        // Update PaymentOrder Status
+        await tx.paymentOrder.update({
+          where: { orderId: paymentOrder.orderId },
+          data: { status: "SUCCESS", gatewayTxId }
+        });
+
         // Step 2: Payment status is recorded
         await tx.paymentTransaction.upsert({
           where: { gatewayTxId },
-          update: { status: "SUCCESS", planId: plan.id, amount: plan.price, provider: providerHeader },
+          update: { status: "SUCCESS", planId: plan.id, amount: expectedAmount, provider: providerHeader },
           create: {
             gatewayTxId,
             companyId,
             planId: plan.id,
-            amount: plan.price,
+            amount: expectedAmount,
             status: "SUCCESS",
             provider: providerHeader,
             rawPayload: body,
@@ -224,7 +240,7 @@ export async function POST(req: NextRequest) {
         const referralResult = await processPaymentReferralReward(
           {
             companyId,
-            amount: plan.price,
+            amount: expectedAmount,
             provider: providerHeader,
             planId: plan.id,
             transactionId: gatewayTxId,
@@ -248,7 +264,7 @@ export async function POST(req: NextRequest) {
                 gatewayTxId,
                 companyId,
                 planId: plan.id,
-                amount: plan.price,
+                amount: expectedAmount,
                 provider: providerHeader,
                 rewardId: referralResult.reward?.id || null,
                 rewardAmount: referralResult.reward?.rewardAmount || 0,
@@ -267,7 +283,7 @@ export async function POST(req: NextRequest) {
               userId: companyId,
               action: "PAYMENT_AND_REFERRAL_COMMITTED",
               resource: "/api/payments/webhook",
-              details: `Payment SUCCESS for plan ${plan.name} (Amount: ₹${plan.price}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+              details: `Payment SUCCESS for plan ${plan.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
             },
           });
         } catch {

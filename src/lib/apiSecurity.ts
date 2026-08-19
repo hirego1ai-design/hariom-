@@ -58,6 +58,13 @@ export function enforceRateLimit(
 ) {
   const store = getRateLimitStore();
   const now = Date.now();
+
+  for (const [k, v] of store.entries()) {
+    if (v.resetAt <= now) {
+      store.delete(k);
+    }
+  }
+
   const ip = getClientIp(request);
   const key = `${keyPrefix}:${ip}`;
   const current = store.get(key);

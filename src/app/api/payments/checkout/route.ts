@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
     const session = getCurrentSession(req.headers);
-    if (!session) {
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
       return jsonError("Unauthorized access", 401);
     }
+
+    const profile = await prisma.employerProfile.findUnique({
+      where: { userId: session.id },
+    });
+    if (!profile || !profile.companyId) {
+      return jsonError("No employer profile found for this account", 403);
+    }
+    const companyId = profile.companyId;
 
     const body = await req.json();
     const { planId, paymentMethod, promoCode } = body;
@@ -74,16 +83,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const orderId = 'ord_' + crypto.randomUUID();
 
-    // Resolve companyId
-    let companyId = "comp-1";
-    const profile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
+    await prisma.paymentOrder.create({
+      data: {
+        orderId,
+        companyId,
+        planId: plan.id,
+        originalAmount: plan.price,
+        discountAmount: discountApplied,
+        expectedAmount: finalPrice,
+        promoCode: promoCode || null,
+        status: "INITIATED"
+      }
     });
-    if (profile) {
-      companyId = profile.companyId;
-    }
 
     // Invoke PaymentGatewayController for multi-provider routing & safe failover
     const { PaymentGatewayController } = await import("@/lib/payments/PaymentGatewayController");
@@ -93,10 +106,20 @@ export async function POST(req: NextRequest) {
         amount: finalPrice,
         currency: plan.currency,
         planName: plan.name,
+        planId: plan.id,
         companyId,
       },
       paymentMethod
     );
+
+    await prisma.paymentOrder.update({
+      where: { orderId },
+      data: {
+        gateway: gatewayResult.gateway,
+        gatewayOrderId: gatewayResult.gatewayOrderId,
+        status: "CREATED"
+      }
+    });
 
     return NextResponse.json({
       success: true,

@@ -32,7 +32,7 @@ export class RazorpayGateway implements PaymentGateway {
             amount: Math.round(params.amount * 100), // amount in paise
             currency: params.currency || "INR",
             receipt: params.orderId,
-            notes: { companyId: params.companyId, planName: params.planName },
+            notes: { companyId: params.companyId, planId: params.planId },
           }),
         });
 
@@ -121,10 +121,12 @@ export class RazorpayGateway implements PaymentGateway {
     const entity = jsonPayload?.payload?.payment?.entity || jsonPayload;
     const gatewayTxId = entity?.id || `pay_rzp_${Date.now()}`;
     const status = entity?.status === "captured" || jsonPayload?.event === "payment.captured" ? "SUCCESS" : "FAILED";
+    const gatewayOrderId = entity?.order_id || jsonPayload?.order_id || jsonPayload?.payload?.payment?.entity?.order_id;
 
     return {
       isValid: true,
       gatewayTxId,
+      gatewayOrderId,
       companyId: entity?.notes?.companyId,
       planId: entity?.notes?.planId,
       amount: entity?.amount ? entity.amount / 100 : undefined,

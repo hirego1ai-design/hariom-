@@ -152,6 +152,17 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Managed Hiring Referral & Scheduled Cron Suite", category: "Managed Hiring Pipeline & Cron", passed: false, message: e.message });
   }
 
+  // 9. Audit Fixes Verification Suite
+  try {
+    const { runAuditFixesTests } = await import("./audit-fixes.test");
+    const auditRes = await runAuditFixesTests();
+    for (const r of auditRes.results) {
+      results.push({ name: r.name, category: r.category, passed: r.passed, message: r.message });
+    }
+  } catch (e: any) {
+    results.push({ name: "Audit Fixes Suite", category: "Audit Fixes", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const failedCount = results.length - passedCount;
 

@@ -14,38 +14,34 @@ export async function GET(req: NextRequest) {
     const gatewayOrderId = searchParams.get("gatewayOrderId");
     const txId = searchParams.get("txId");
 
-    // Resolve companyId for authenticated user
-    let companyId = "comp-1";
     const profile = await prisma.employerProfile.findUnique({
       where: { userId: session.id },
     });
-    if (profile) {
-      companyId = profile.companyId;
+    if (!profile || !profile.companyId) {
+      return jsonError("No employer profile found for this account", 403);
     }
+    const companyId = profile.companyId;
+
+    const paymentOrder = await prisma.paymentOrder.findFirst({
+      where: {
+        companyId,
+        OR: [
+          ...(orderId ? [{ orderId }] : []),
+          ...(gatewayOrderId ? [{ gatewayOrderId }] : []),
+          ...(txId ? [{ gatewayTxId: txId }, { gatewayOrderId: txId }, { orderId: txId }] : []),
+        ],
+      },
+    });
 
     let transaction = null;
-
-    if (gatewayOrderId || txId) {
-      const searchKey = gatewayOrderId || txId || "";
+    const searchKey = paymentOrder?.gatewayTxId || txId || gatewayOrderId || orderId || "";
+    
+    if (searchKey) {
       transaction = await prisma.paymentTransaction.findFirst({
         where: {
-          OR: [
-            { gatewayTxId: searchKey },
-            { id: searchKey },
-          ],
+          companyId,
+          gatewayTxId: searchKey,
         },
-      });
-    }
-
-    if (!transaction && orderId) {
-      transaction = await prisma.paymentTransaction.findFirst({
-        where: {
-          OR: [
-            { gatewayTxId: orderId },
-            { gatewayTxId: { contains: orderId } },
-          ],
-        },
-        orderBy: { createdAt: "desc" },
       });
     }
 

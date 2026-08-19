@@ -122,10 +122,12 @@ export class PhonePeGateway implements PaymentGateway {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const gatewayTxId = jsonPayload?.data?.transactionId || `phonepe_${Date.now()}`;
     const status = jsonPayload?.code === "PAYMENT_SUCCESS" ? "SUCCESS" : "FAILED";
+    const gatewayOrderId = jsonPayload?.data?.merchantTransactionId;
 
     return {
       isValid: true,
       gatewayTxId,
+      gatewayOrderId,
       companyId: jsonPayload?.data?.merchantUserId,
       amount: jsonPayload?.data?.amount ? jsonPayload.data.amount / 100 : undefined,
       currency: "INR",

@@ -133,10 +133,13 @@ export class StripeGateway implements PaymentGateway {
       dataObj?.payment_status === "paid";
 
     const status = isSuccess ? "SUCCESS" : "FAILED";
+    const session = eventPayload?.data?.object;
+    const gatewayOrderId = session?.id || session?.payment_intent || eventPayload?.id;
 
     return {
       isValid: true,
       gatewayTxId,
+      gatewayOrderId,
       companyId: dataObj?.metadata?.companyId || dataObj?.client_reference_id,
       planId: dataObj?.metadata?.planId,
       amount: dataObj?.amount ? dataObj.amount / 100 : dataObj?.amount_total ? dataObj.amount_total / 100 : undefined,
