@@ -1,20 +1,239 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-const rawHtml = "\n<!-- Atmospheric Gradients -->\n<div className=\"atmospheric-glow bg-[#E53935] -bottom-20 -left-20\"></div>\n<div className=\"atmospheric-glow bg-[#4285F4] -top-20 -right-20\"></div>\n<div className=\"fixed inset-0 bg-grid pointer-events-none\"></div>\n<!-- Navigation Shell (Desktop Only for now) -->\n<nav className=\"fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-margin-desktop h-[64px] w-full border-b border-white/10 backdrop-blur-md bg-surface/80 shadow-md\">\n<div className=\"flex items-center gap-stack-md\">\n<span className=\"font-display-lg text-primary font-bold tracking-tight\">HireGo AI</span>\n<div className=\"hidden md:flex items-center ml-12 gap-8 h-full\">\n<a className=\"font-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Dashboard</a>\n<a className=\"font-body-md text-primary border-b-2 border-primary pb-1\" href=\"#\">Jobs</a>\n<a className=\"font-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Messages</a>\n<a className=\"font-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Analytics</a>\n</div>\n</div>\n<div className=\"flex items-center gap-6\">\n<span className=\"material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors\">notifications</span>\n<span className=\"material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors\">settings</span>\n<button className=\"px-6 py-2 rounded-full border border-primary text-primary font-label-md hover:bg-primary/10 transition-all\">Proctor Active</button>\n<div className=\"w-10 h-10 rounded-full overflow-hidden border border-white/10\">\n<img className=\"w-full h-full object-cover\" data-alt=\"Close up portrait of a professional modern user in a tech environment, softly lit by cinematic blue and red neon lights against a dark background, high resolution photography style.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuDntqjOofcRjUvxHSTcOA5165ogNsU949kz22b69Auq_mAm6CdTyEuPkiGMZqd5bI8sgvzith4bt1W1qew5_58QXHHWzp9yZHIIP6L2MK9MO7Vnm0ZQe4UZz3VhJiAXNuKUYa2VYxtTpc0Et4QT0m2ja_-kp4T7LHyUxrghsodXi_bEv9PnF87jBeuep7OVJpE8ckPMVjjgRcojiHCqusQjsfdUdTTWC8j2-jZTWUVwAcLFmgb_BU4Eyy-EftGJ6QrlO69gGa5cXv0\">\n</div>\n</div>\n</nav>\n<!-- Sidebar (Hidden on Mobile) -->\n<aside className=\"hidden lg:flex w-[240px] h-screen fixed left-0 top-0 border-r border-white/5 bg-surface-container-low flex-col py-stack-lg gap-stack-md pt-24 z-40\">\n<div className=\"flex flex-col gap-2 px-2\">\n<div className=\"flex items-center gap-3 p-3 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all mx-2 cursor-pointer\">\n<span className=\"material-symbols-outlined\">dashboard</span>\n<span className=\"font-label-md\">Dashboard</span>\n</div>\n<div className=\"flex items-center gap-3 p-3 bg-primary-container text-on-primary-container rounded-lg mx-2 cursor-pointer\">\n<span className=\"material-symbols-outlined\">description</span>\n<span className=\"font-label-md\">Applications</span>\n</div>\n<div className=\"flex items-center gap-3 p-3 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all mx-2 cursor-pointer\">\n<span className=\"material-symbols-outlined\">video_call</span>\n<span className=\"font-label-md\">Interviews</span>\n</div>\n<div className=\"flex items-center gap-3 p-3 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all mx-2 cursor-pointer\">\n<span className=\"material-symbols-outlined\">settings</span>\n<span className=\"font-label-md\">Settings</span>\n</div>\n<div className=\"flex items-center gap-3 p-3 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all mx-2 cursor-pointer\">\n<span className=\"material-symbols-outlined\">help</span>\n<span className=\"font-label-md\">Help</span>\n</div>\n</div>\n<div className=\"mt-auto px-4\">\n\n<div className=\"mt-8 flex items-center gap-3 p-3 text-on-surface-variant hover:text-on-surface transition-all cursor-pointer\">\n<span className=\"material-symbols-outlined\">logout</span>\n<span className=\"font-label-md\">Logout</span>\n</div>\n</div>\n</aside>\n<!-- Main Canvas -->\n<main className=\"lg:ml-[240px] pt-24 px-margin-mobile md:px-margin-desktop pb-32\">\n<div className=\"max-w-container-max mx-auto\">\n<!-- Header Section -->\n<div className=\"flex flex-col md:flex-row md:items-end justify-between gap-stack-md mb-stack-lg\">\n<div>\n<h1 className=\"font-display-xl text-primary mb-2\">Saved Jobs</h1>\n<p className=\"font-body-lg text-on-surface-variant\">Manage your potential opportunities and track your career growth.</p>\n</div>\n<!-- Sort & Filter Controls -->\n<div className=\"flex flex-col gap-4\">\n<div className=\"flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar\">\n<button className=\"active-pill px-6 py-2 rounded-full font-label-md transition-all whitespace-nowrap\">All</button>\n<button className=\"bg-subtle text-on-surface-variant hover:text-primary px-6 py-2 rounded-full font-label-md transition-all whitespace-nowrap\">Tech</button>\n<button className=\"bg-subtle text-on-surface-variant hover:text-primary px-6 py-2 rounded-full font-label-md transition-all whitespace-nowrap\">Marketing</button>\n<button className=\"bg-subtle text-on-surface-variant hover:text-primary px-6 py-2 rounded-full font-label-md transition-all whitespace-nowrap\">Remote</button>\n</div>\n<div className=\"flex items-center justify-between md:justify-end gap-stack-md\">\n<div className=\"flex items-center gap-2 bg-surface-container px-4 py-2 rounded-full border border-white/5\">\n<span className=\"text-on-surface-variant text-label-md\">Sort:</span>\n<select className=\"bg-transparent border-none focus:ring-0 text-primary font-label-md cursor-pointer appearance-none pr-6\">\n<option>Saved Date</option>\n<option>Match %</option>\n</select>\n</div>\n</div>\n</div>\n</div>\n<!-- Job Cards List -->\n<div className=\"grid grid-cols-1 gap-4\">\n<!-- Job Card 1 -->\n<div className=\"bg-card glass-card p-6 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-x-1 transition-all group\">\n<div className=\"flex items-center gap-6 flex-1\">\n<div className=\"w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center p-3 border border-white/5\">\n<img className=\"w-full h-full object-contain\" data-alt=\"A minimalist tech company logo featuring abstract geometric shapes in bold primary colors, clean white background, high-end branding aesthetic, 3D claymorphism style.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAPFGlSOQwMTVmJ_KyulwR9F4PaXyTF6E8198gjl913hM4YoI4KRVAkisqGEhOrUKCwdHBqn9o2CXGUXpuREOf7cy2Wuw5TTzVj_JvjjpRfoQbHQoTP5ETWlk5kiXtVKeI5u2XuCV0FJ4kZVN5r4MOJz2BYvbbRcx5CDxreBUpGc3SAKIFhaQoVHFXnYXTfTi2D_leeVYhv6Xff92is2w0kp-RVxwjiJu6ORDODp2mN13TCY3YApz7fuX3GL3S39qmdv2RvbIMPuCI\">\n</div>\n<div className=\"space-y-1\">\n<h3 className=\"font-headline-md text-primary leading-tight\">Senior Product Designer</h3>\n<div className=\"flex flex-wrap items-center gap-3\">\n<span className=\"text-on-surface-variant font-body-md\">Google AI • Zurich, Switzerland</span>\n<span className=\"w-1.5 h-1.5 rounded-full bg-outline-variant\"></span>\n<span className=\"text-gold-payment font-data-md\">$180k - $240k</span>\n</div>\n</div>\n</div>\n<div className=\"flex flex-wrap md:flex-nowrap items-center gap-8 w-full md:w-auto\">\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">AI Match</span>\n<div className=\"flex items-center gap-2\">\n<div className=\"w-2 h-2 rounded-full bg-green animate-pulse\"></div>\n<span className=\"font-data-lg text-green\">98%</span>\n</div>\n</div>\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">Saved</span>\n<span className=\"font-data-md text-on-surface\">Oct 24, 2023</span>\n</div>\n<div className=\"flex items-center gap-4 ml-auto\">\n<button className=\"w-12 h-12 rounded-full btn-ghost flex items-center justify-center group-hover:bg-red-deep/20 transition-all\">\n<span className=\"material-symbols-outlined text-primary\" style=\"font-variation-settings: 'FILL' 1;\">bookmark</span>\n</button>\n<button className=\"h-[50px] px-10 rounded-full btn-primary-red text-white font-label-md transition-all\">Apply</button>\n</div>\n</div>\n</div>\n<!-- Job Card 2 -->\n<div className=\"bg-card glass-card p-6 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-x-1 transition-all group\">\n<div className=\"flex items-center gap-6 flex-1\">\n<div className=\"w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center p-3 border border-white/5\">\n<img className=\"w-full h-full object-contain\" data-alt=\"Logotype for a creative agency, sophisticated minimal design with thin lines, elegant serif typography, charcoal grey and soft white palette, professional corporate branding.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAqVyB14UyPeZsAb4wfGG49Q45hyIMN9s5P_3JkpmscPATenTXDyUet6uRMw8zz_G84Ir4B0IJGR3Wk4F1EPHatdlWvZ_iQB5UDXHlsz1TTBMbrht-qH5kFw1lBNsAweW_LM0rb-3FOVy14buWz7pKCyXQQH0QvPmvk86Vv-ilIj12-F_a-_JY05OmY6HHi92zuXeqG15ttspX2rzj_SouMQNKdzKBm-IK86XvBYrIrX-S7Qu9ESwvaPC0yGnWI5L9B6HmBUF--dVY\">\n</div>\n<div className=\"space-y-1\">\n<h3 className=\"font-headline-md text-primary leading-tight\">Full Stack Engineer</h3>\n<div className=\"flex flex-wrap items-center gap-3\">\n<span className=\"text-on-surface-variant font-body-md\">OpenAI • Remote</span>\n<span className=\"w-1.5 h-1.5 rounded-full bg-outline-variant\"></span>\n<span className=\"text-gold-payment font-data-md\">$210k - $290k</span>\n</div>\n</div>\n</div>\n<div className=\"flex flex-wrap md:flex-nowrap items-center gap-8 w-full md:w-auto\">\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">AI Match</span>\n<div className=\"flex items-center gap-2\">\n<div className=\"w-2 h-2 rounded-full bg-green animate-pulse\"></div>\n<span className=\"font-data-lg text-green\">94%</span>\n</div>\n</div>\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">Saved</span>\n<span className=\"font-data-md text-on-surface\">Oct 21, 2023</span>\n</div>\n<div className=\"flex items-center gap-4 ml-auto\">\n<button className=\"w-12 h-12 rounded-full btn-ghost flex items-center justify-center\">\n<span className=\"material-symbols-outlined text-primary\" style=\"font-variation-settings: 'FILL' 1;\">bookmark</span>\n</button>\n<button className=\"h-[50px] px-10 rounded-full btn-primary-red text-white font-label-md transition-all\">Apply</button>\n</div>\n</div>\n</div>\n<!-- Job Card 3 -->\n<div className=\"bg-card glass-card p-6 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-x-1 transition-all group opacity-80\">\n<div className=\"flex items-center gap-6 flex-1\">\n<div className=\"w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center p-3 border border-white/5\">\n<img className=\"w-full h-full object-contain\" data-alt=\"Modern logo for a fintech startup, abstract shield shape, gradient blue and vibrant red colors, sleek metallic texture, clean futuristic design.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuCKBhBzcNX8__hZe8HhTeK_vmIbb13YThRVRL8b1mp9hQno8L5nZ3f1ZhpM-VdhpYO6LAjx1882Du1KO7sp-V1eTYeYqS314uoft6ZIjh_Rg6QxMMt9cp4q6WtvI3EiGtPnL5S6EBowVE2_lFer7SB31M2WrAQxlsvQW8dhFs85BkbX1yzkv7a-EDHN8oySuny18mRGSPISDTf6TvNBu3JgIz7cwZpDI6ca0SNG72bRLqWjc_euMOeIALDm1friUpiNAR6Pb4OTVO8\">\n</div>\n<div className=\"space-y-1\">\n<h3 className=\"font-headline-md text-primary leading-tight\">Growth Lead</h3>\n<div className=\"flex flex-wrap items-center gap-3\">\n<span className=\"text-on-surface-variant font-body-md\">Stripe • San Francisco, CA</span>\n<span className=\"w-1.5 h-1.5 rounded-full bg-outline-variant\"></span>\n<span className=\"text-gold-payment font-data-md\">$160k - $200k</span>\n</div>\n</div>\n</div>\n<div className=\"flex flex-wrap md:flex-nowrap items-center gap-8 w-full md:w-auto\">\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">AI Match</span>\n<div className=\"flex items-center gap-2\">\n<div className=\"w-2 h-2 rounded-full bg-yellow animate-pulse\"></div>\n<span className=\"font-data-lg text-yellow\">82%</span>\n</div>\n</div>\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">Saved</span>\n<span className=\"font-data-md text-on-surface\">Oct 15, 2023</span>\n</div>\n<div className=\"flex items-center gap-4 ml-auto\">\n<button className=\"w-12 h-12 rounded-full btn-ghost flex items-center justify-center\">\n<span className=\"material-symbols-outlined text-primary\" style=\"font-variation-settings: 'FILL' 1;\">bookmark</span>\n</button>\n<button className=\"h-[50px] px-10 rounded-full btn-primary-red text-white font-label-md transition-all\">Apply</button>\n</div>\n</div>\n</div>\n<!-- Job Card 4 -->\n<div className=\"bg-card glass-card p-6 rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:translate-x-1 transition-all group\">\n<div className=\"flex items-center gap-6 flex-1\">\n<div className=\"w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center p-3 border border-white/5\">\n<img className=\"w-full h-full object-contain\" data-alt=\"Playful but professional logo for a social media platform, fluid organic shapes, warm sunset color palette, high fidelity 3D render with soft shadows.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuDu_S34IInHsqY7v-OHoCtTXGUnDi22PEai0-zSx39PQRuhqDqT82mgzCoMM_PtzT_Wp78osLw-_KiZBhd4z8PjGW-Ftuib-h01irEzlpy2AD98nPG5q1tx4nCpVSCMQvndVa4dH2QlQiX6pg4A3PLb2rwQ-L_Np7vdsGlMDj4S51pDGGjpOYC94sMKKeLTDkUmOYypzlga8TqeK-Z9ghutXRyQLb1UDWeS1M4cdFqDNQGZpSKvLAkP6xbXVzX4EhljT9hZfvm1HpY\">\n</div>\n<div className=\"space-y-1\">\n<h3 className=\"font-headline-md text-primary leading-tight\">Head of Marketing</h3>\n<div className=\"flex flex-wrap items-center gap-3\">\n<span className=\"text-on-surface-variant font-body-md\">TikTok • New York, NY</span>\n<span className=\"w-1.5 h-1.5 rounded-full bg-outline-variant\"></span>\n<span className=\"text-gold-payment font-data-md\">$250k+</span>\n</div>\n</div>\n</div>\n<div className=\"flex flex-wrap md:flex-nowrap items-center gap-8 w-full md:w-auto\">\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">AI Match</span>\n<div className=\"flex items-center gap-2\">\n<div className=\"w-2 h-2 rounded-full bg-green animate-pulse\"></div>\n<span className=\"font-data-lg text-green\">91%</span>\n</div>\n</div>\n<div className=\"flex flex-col items-start md:items-center\">\n<span className=\"text-text-muted text-[12px] uppercase tracking-wider font-bold mb-1\">Saved</span>\n<span className=\"font-data-md text-on-surface\">Oct 12, 2023</span>\n</div>\n<div className=\"flex items-center gap-4 ml-auto\">\n<button className=\"w-12 h-12 rounded-full btn-ghost flex items-center justify-center\">\n<span className=\"material-symbols-outlined text-primary\" style=\"font-variation-settings: 'FILL' 1;\">bookmark</span>\n</button>\n<button className=\"h-[50px] px-10 rounded-full btn-primary-red text-white font-label-md transition-all\">Apply</button>\n</div>\n</div>\n</div>\n</div>\n<!-- Empty State / Pagination Hint -->\n<div className=\"mt-stack-lg flex justify-center\">\n<button className=\"px-8 py-3 rounded-full bg-surface-container-highest text-on-surface font-label-md border border-white/10 hover:bg-surface-bright transition-colors\">\n                    Load More Saved Jobs\n                </button>\n</div>\n</div>\n</main>\n<!-- Bottom Nav (Mobile Only) -->\n<nav className=\"md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface/90 backdrop-blur-lg border-t border-white/10 flex items-center justify-around z-50\">\n<button className=\"flex flex-col items-center gap-1 text-on-surface-variant\">\n<span className=\"material-symbols-outlined\">dashboard</span>\n<span className=\"text-[10px] font-label-md\">Dashboard</span>\n</button>\n<button className=\"flex flex-col items-center gap-1 text-primary\">\n<span className=\"material-symbols-outlined\" style=\"font-variation-settings: 'FILL' 1;\">work</span>\n<span className=\"text-[10px] font-label-md\">Jobs</span>\n</button>\n<button className=\"flex flex-col items-center gap-1 text-on-surface-variant\">\n<span className=\"material-symbols-outlined\">chat_bubble</span>\n<span className=\"text-[10px] font-label-md\">Messages</span>\n</button>\n<button className=\"flex flex-col items-center gap-1 text-on-surface-variant\">\n<span className=\"material-symbols-outlined\">person</span>\n<span className=\"text-[10px] font-label-md\">Profile</span>\n</button>\n</nav>\n<!-- Floating Action Button (Contextual) -->\n<button className=\"fixed bottom-20 right-6 md:bottom-10 md:right-10 w-16 h-16 rounded-full btn-primary-red flex items-center justify-center text-white shadow-xl z-40 lg:hidden\">\n<span className=\"material-symbols-outlined text-[28px]\">search</span>\n</button>\n\n";
+interface SavedJobItem {
+  id: string;
+  jobId: string;
+  savedAt: string;
+  job: {
+    id: string;
+    title: string;
+    company?: { name: string; logoUrl?: string; location?: string };
+    location?: string;
+    salaryRange?: string;
+    type?: string;
+    description?: string;
+  } | null;
+  unavailable?: boolean;
+}
 
-export default function C30Page() {
+export default function SavedJobsPage() {
   const router = useRouter();
+  const [savedJobs, setSavedJobs] = useState<SavedJobItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/candidate/saved-jobs")
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Unable to load saved jobs");
+        return data;
+      })
+      .then((data) => {
+        if (data.success && data.savedJobs) {
+          setSavedJobs(data.savedJobs);
+          setLoadError(data.warning || null);
+        }
+      })
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Unable to load saved jobs"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleRemove = async (jobId: string) => {
+    const previous = savedJobs;
+    setSavedJobs((prev) => prev.filter((item) => item.jobId !== jobId));
+    try {
+      const response = await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Unable to remove saved job");
+    } catch {
+      setSavedJobs(previous);
+      setMessage("Could not remove this job. Please try again.");
+    }
+  };
+
+  const handleApply = async (jobId: string, title: string) => {
+    if (appliedJobs.includes(jobId)) return;
+    setAppliedJobs((prev) => [...prev, jobId]);
+
+    try {
+      const response = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      if (!response.ok) throw new Error("Application failed");
+      setMessage(`Application submitted for ${title}!`);
+      setTimeout(() => setMessage(null), 4000);
+    } catch {
+      setAppliedJobs((prev) => prev.filter((id) => id !== jobId));
+      setMessage(`Could not submit the application for ${title}. Please try again.`);
+      setTimeout(() => setMessage(null), 4000);
+    }
+  };
+
+  const filtered = savedJobs.filter((item) => {
+    if (activeFilter === "All") return true;
+    if (activeFilter === "Remote") return item.job?.location?.toLowerCase().includes("remote");
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-extrabold text-primary mb-2">
+              Saved Jobs
+            </h1>
+            <p className="text-sm text-text-secondary">
+              Manage your bookmarked opportunities and track application statuses.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {["All", "Remote"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveFilter(tab)}
+                className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${
+                  activeFilter === tab
+                    ? "bg-primary text-white shadow-md"
+                    : "bg-white/5 hover:bg-white/10 text-text-secondary"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {message && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-xs text-green-400 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            <span>{message}</span>
+          </div>
+        )}
+
+        {loadError && (
+          <div role="alert" className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl text-xs text-yellow-300">
+            {loadError}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-28 rounded-2xl bg-white/5 animate-pulse border border-white/5"
+              />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 glass-card rounded-2xl border border-white/10 p-8">
+            <span className="material-symbols-outlined text-5xl text-text-muted mb-3">
+              bookmark_border
+            </span>
+            <h3 className="text-lg font-bold text-text-primary mb-1">No saved jobs yet</h3>
+            <p className="text-xs text-text-secondary mb-6">
+              Browse recommended opportunities and bookmark roles you want to apply for later.
+            </p>
+            <Link
+              href="/jobs"
+              className="btn-3d-red inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-md"
+            >
+              <span className="material-symbols-outlined text-[16px]">search</span>
+              <span>Explore Jobs</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {filtered.map((item) => {
+              const isApplied = appliedJobs.includes(item.jobId);
+              return (
+                <div
+                  key={item.id}
+                  className="glass-card p-5 lg:p-6 rounded-2xl border border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 hover:border-primary/40 transition-all group"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center p-2">
+                      <span className="material-symbols-outlined text-primary text-[28px]">
+                        work
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-text-primary group-hover:text-primary transition-colors">
+                        {item.job?.title || "Saved job details unavailable"}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
+                        {item.job ? (
+                          <>
+                            <span>{item.job.company?.name || "Company not provided"}</span>
+                            <span>•</span>
+                            <span>{item.job.location || "Location not provided"}</span>
+                            {item.job.salaryRange && <><span>•</span><span className="text-primary font-bold">{item.job.salaryRange}</span></>}
+                          </>
+                        ) : <span>Reconnect the database to load this job.</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                    <button
+                      onClick={() => handleRemove(item.jobId)}
+                      title="Remove from saved"
+                      className="w-10 h-10 rounded-full bg-white/5 hover:bg-red-500/20 text-text-muted hover:text-red-400 flex items-center justify-center transition-all border border-white/5"
+                    >
+                      <span
+                        className="material-symbols-outlined text-[20px]"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        bookmark
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleApply(item.jobId, item.job?.title || "this role")}
+                      disabled={isApplied || !item.job}
+                      className={`h-10 px-6 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        isApplied
+                          ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                          : "btn-3d-red text-white shadow-md hover:scale-[1.02]"
+                      }`}
+                    >
+                      {isApplied ? (
+                        <>
+                          <span className="material-symbols-outlined text-[16px]">check</span>
+                          <span>Applied</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Apply Now</span>
+                          <span className="material-symbols-outlined text-[16px]">
+                            arrow_forward
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
     </div>
-    </div>
-);
+  );
 }

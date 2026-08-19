@@ -12,7 +12,7 @@ export default function AdminAgreementTemplatesPage() {
     fetchTemplates();
   }, []);
 
-  const fetchTemplates = async () => {
+  async function fetchTemplates() {
     try {
       const res = await fetch("/api/agreements/templates");
       const data = await res.json();
@@ -24,7 +24,7 @@ export default function AdminAgreementTemplatesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   const handleDuplicate = async (id: string) => {
     try {
@@ -76,7 +76,7 @@ export default function AdminAgreementTemplatesPage() {
             </div>
             <p className="text-sm text-text-secondary ml-8">Manage baseline commercial structures and fee matrices.</p>
           </div>
-          <button className="px-4 py-2 bg-primary hover:bg-primary/90 transition-colors rounded-lg text-sm text-white font-bold flex items-center gap-2">
+          <button onClick={() => router.push("/admin/agreements/builder")} className="px-4 py-2 bg-primary hover:bg-primary/90 transition-colors rounded-lg text-sm text-white font-bold flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px]">add</span>
             Create Template
           </button>
@@ -122,7 +122,7 @@ export default function AdminAgreementTemplatesPage() {
                 </div>
 
                 <div className="flex gap-2 pt-4 border-t border-white/10">
-                  <button className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-semibold transition-colors flex justify-center items-center gap-1">
+                  <button onClick={() => router.push(`/admin/agreements/builder?templateId=${encodeURIComponent(tpl.id)}`)} className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-semibold transition-colors flex justify-center items-center gap-1">
                     <span className="material-symbols-outlined text-[14px]">edit</span> Edit
                   </button>
                   <button onClick={() => handleDuplicate(tpl.id)} className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-semibold transition-colors flex justify-center items-center gap-1">

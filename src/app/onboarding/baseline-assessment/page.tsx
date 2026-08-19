@@ -90,7 +90,7 @@ export default function BaselineAssessmentPage() {
           </div>
           <div className="flex items-center gap-3 font-mono text-xs">
             <span className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-text-muted">
-              Step 9 of 10
+              Skill baseline
             </span>
           </div>
         </header>

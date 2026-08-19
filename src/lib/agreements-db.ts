@@ -26,10 +26,54 @@ export type {
 // INITIAL SEED DATA
 // ----------------------------------------------------------------------------
 
-export const initialTemplates: AgreementTemplateRecord[] = [];
-export const initialRequirements: HiringRequirementRecord[] = [];
+export const initialTemplates: AgreementTemplateRecord[] = [
+  {
+    id: "tpl-default-1",
+    name: "Standard Enterprise Commercial SLA",
+    slug: "standard-enterprise-sla",
+    description: "Standard SLA agreement with 90 days replacement warranty",
+    category: "Enterprise",
+    feeType: "PERCENTAGE",
+    feeValue: 8.33,
+    invoiceRule: "ON_JOINING",
+    replacementDays: 90,
+    specialClauses: ["Confidentiality & Non-Disclosure", "Replacement Guarantee SLA"],
+    isDefault: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+export const initialRequirements: HiringRequirementRecord[] = [
+  {
+    id: "req-default-1",
+    referenceCode: "REQ-2026-001",
+    companyName: "HireGo Enterprise Partner",
+    contactPerson: "Sarah Jenkins",
+    email: "sarah.j@enterprise.com",
+    primaryMobile: "+91 9876543210",
+    industry: "Technology",
+    numberOfPositions: 3,
+    jobTitles: ["Senior Full Stack Engineer"],
+    experienceYears: "4+ Years",
+    skillsRequired: ["React", "TypeScript", "Node.js"],
+    education: "B.Tech / MCA",
+    salaryRangeMin: 1800000,
+    salaryRangeMax: 2800000,
+    currency: "INR",
+    workMode: "Remote",
+    location: "Bangalore / Remote",
+    joiningTimeline: "Immediate",
+    hiringPriority: "High",
+    replacementExpectation: "90 Days",
+    status: "ACTIVE",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
 export const initialAgreements: CommercialAgreementRecord[] = [];
 export const initialEvents: AgreementEventRecord[] = [];
+
+
 
 // ----------------------------------------------------------------------------
 // SINGLETON IN-MEMORY DATABASE STORE WITH DUAL PRISMA LOGIC

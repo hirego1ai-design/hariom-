@@ -5,6 +5,9 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+const isProduction = process.env.NODE_ENV === "production";
+const allowMockFallbacks = !isProduction || process.env.MOCK_DB === "true";
+
 const createMockPrisma = () => {
   return new Proxy({}, {
     get(target, prop) {
@@ -87,17 +90,26 @@ export const db = {
     try {
       const user = await prisma.user.findUnique({ where: { email } });
       if (user) return user;
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (allowMockFallbacks) {
+        return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
+      }
+      throw error;
     }
-    return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
+    if (allowMockFallbacks) {
+      return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
+    }
+    return null;
   },
 
   async createUser(data: { email: string; name: string; passwordHash: string; role: any }) {
     try {
       const user = await prisma.user.create({ data });
       return user;
-    } catch {
+    } catch (error) {
+      if (!allowMockFallbacks) {
+        throw error;
+      }
       const newUser = {
         id: `user-${Date.now()}`,
         email: data.email,
@@ -114,10 +126,14 @@ export const db = {
     try {
       const jobs = await prisma.jobListing.findMany();
       if (jobs && jobs.length > 0) return jobs;
-    } catch {
-      // Fallback
+      if (allowMockFallbacks) return mockJobs;
+      return jobs ?? [];
+    } catch (error) {
+      if (allowMockFallbacks) {
+        return mockJobs;
+      }
+      throw error;
     }
-    return mockJobs;
   },
 
   async createJob(data: { title: string; company: string; location: string; type: string; salary: string; status: string }) {

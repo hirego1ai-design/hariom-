@@ -13,7 +13,7 @@ export default function EducationPage() {
   const [eduList, setEduList] = useState<EducationEntry[]>(
     state.education && state.education.length > 0
       ? state.education
-      : [{ degree: "B.S. Computer Science", university: "Stanford University", year: "2020", gpa: "3.8 / 4.0" }]
+      : []
   );
 
   const handleAdd = () => {
@@ -33,8 +33,25 @@ export default function EducationPage() {
   const handleNext = () => {
     updateState({ education: eduList });
     markStepComplete(4);
+
+    // Persist to backend
+    fetch("/api/candidate/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        education: eduList,
+      }),
+    }).catch(() => {});
+
     router.push("/onboarding/experience");
   };
+
+  const handleSkip = () => {
+    updateState({ education: [] });
+    markStepComplete(4);
+    router.push("/onboarding/experience");
+  };
+
 
   return (
     <div
@@ -58,7 +75,7 @@ export default function EducationPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -74,7 +91,7 @@ export default function EducationPage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 4/10
+                Education
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Academic Background & Qualifications
@@ -88,7 +105,7 @@ export default function EducationPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -97,7 +114,7 @@ export default function EducationPage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 4 of 10
+              Academic background
             </span>
           </div>
         </header>
@@ -268,6 +285,15 @@ export default function EducationPage() {
               Back
             </Link>
 
+            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
+            >
+              Skip for now
+            </button>
             <button
               onClick={handleNext}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
@@ -279,6 +305,7 @@ export default function EducationPage() {
               <span>Next: Work Experience</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
+            </div>
           </div>
         </main>
       </div>

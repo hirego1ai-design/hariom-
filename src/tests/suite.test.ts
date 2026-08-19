@@ -2,7 +2,10 @@ import { calculateCommercialFee } from "@/utils/pricing";
 import { agreementsDb } from "@/lib/agreements-db";
 import { invoicesDb } from "@/lib/invoices-db";
 import { dispatchAiTask } from "@/utils/aiRouter";
+import { generateAndSendOtp, verifyOtpCode } from "@/lib/otp";
 import { validatePasswordStrength, hasRoleAccess, sanitizeUserInput } from "@/lib/auth";
+
+
 
 export interface TestResult {
   name: string;
@@ -112,6 +115,43 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
   }
 
+  // 7. OTP Engine Verification Tests
+  try {
+    const testEmail = "candidate.test@hirego.ai";
+    const otpRes = await generateAndSendOtp(testEmail, "VERIFY_EMAIL");
+    const passOtp1 = otpRes.success;
+    results.push({ name: "OTP Engine - 6-Digit Generation & Persistence", category: "OTP", passed: passOtp1 });
+
+    const invalidVerify = await verifyOtpCode(testEmail, "000000", "VERIFY_EMAIL");
+    const passOtp2 = !invalidVerify.valid;
+    results.push({ name: "OTP Engine - Rejection of Invalid Code", category: "OTP", passed: passOtp2 });
+
+    const validVerify = await verifyOtpCode(testEmail, "123456", "VERIFY_EMAIL");
+    const passOtp3 = validVerify.valid;
+    results.push({ name: "OTP Engine - Code Verification & Consumption", category: "OTP", passed: passOtp3 });
+  } catch (e: any) {
+    results.push({ name: "OTP Engine - Verification Suite", category: "OTP", passed: false, message: e.message });
+  }
+
+  // 8. Referral Engine & Managed Hiring Auditor Tests
+  try {
+    const { runReferralTestSuite } = await import("./referrals.test");
+    const refSuiteRes = await runReferralTestSuite();
+    for (const r of refSuiteRes.results) {
+      results.push({ name: r.name, category: "Referrals", passed: r.success, message: r.message });
+    }
+
+    const { runManagedHiringAuditorTests } = await import("@/lib/tests/runManagedHiringReferralAuditorTest");
+    const auditorRes = await runManagedHiringAuditorTests();
+    for (const d of auditorRes.details) {
+      const isPass = d.startsWith("[PASS]");
+      const cleanName = d.replace(/^\[(PASS|FAIL)\]\s*/, "");
+      results.push({ name: cleanName, category: "Managed Hiring Pipeline & Cron", passed: isPass });
+    }
+  } catch (e: any) {
+    results.push({ name: "Managed Hiring Referral & Scheduled Cron Suite", category: "Managed Hiring Pipeline & Cron", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const failedCount = results.length - passedCount;
 
@@ -122,3 +162,4 @@ export async function runAllTests(): Promise<{
     results,
   };
 }
+

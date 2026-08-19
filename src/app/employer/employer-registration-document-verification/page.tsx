@@ -1,40 +1,20 @@
 "use client";
 
 import React, { useState } from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
-import { useRouter } from "next/navigation";
-
-import { getCurrentSession, UserSession } from "@/lib";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function EmployerDocumentVerificationPage() {
   const router = useRouter();
-  const [session, setSession] = useState<UserSession | null>(null);
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-
-  // Get session from cookie on client side
-  React.useEffect(() => {
-    const getSessionFromCookie = (): UserSession | null => {
-      if (typeof window === "undefined") return null;
-      const cookie = document.cookie.split(";").find(c => c.trim().startsWith("hirego_session="));
-      if (!cookie) return null;
-      const token = cookie.split("=").slice(1).join("=");
-      try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        return payload;
-      } catch {
-        return null;
-      }
-    };
-    setSession(getSessionFromCookie());
-  }, []);
+  const [error, setError] = useState("");
+  const [verificationType, setVerificationType] = useState<"GST" | "MSME" | "INCORPORATION">("GST");
 
   const [docs, setDocs] = useState({
     gstin: "",
-    pan: "",
     msme: "",
     cin: "",
     gstFile: null as File | null,
-    panFile: null as File | null,
     msmeFile: null as File | null,
     incFile: null as File | null,
   });
@@ -47,74 +27,48 @@ export default function EmployerDocumentVerificationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasAtLeastOneFile = docs.gstFile || docs.panFile || docs.msmeFile || docs.incFile;
+    const selectedIdentifier = verificationType === "GST" ? docs.gstin : verificationType === "MSME" ? docs.msme : docs.cin;
+    const selectedFile = verificationType === "GST" ? docs.gstFile : verificationType === "MSME" ? docs.msmeFile : docs.incFile;
 
-    if (!docs.gstin || !docs.pan) {
-      alert("Please provide required GSTIN and PAN details for KYC verification.");
+    if (!selectedIdentifier || !selectedFile) {
+      setError(`Please provide the ${verificationType === "GST" ? "GSTIN" : verificationType === "MSME" ? "MSME / Udyam registration number" : "CIN / incorporation number"} and upload the matching certificate.`);
+      return;
+    }
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError("The selected file is larger than 10 MB.");
       return;
     }
 
-    if (!hasAtLeastOneFile) {
-      alert("At least one official verification document is required. Please upload your GST, PAN, MSME, or Certificate of Incorporation file.");
-      return;
-    }
-
-    if (!session) {
-      alert("Session expired. Please log in again.");
-      return;
-    }
-
+    setError("");
     setLoading(true);
 
     try {
       const fileUploads = [];
-      const docTypeMapping: Record<string, string> = {
-        gstFile: "GST Certificate",
-        panFile: "PAN Card",
-        msmeFile: "MSME Certificate",
-        incFile: "Certificate of Incorporation",
-      };
-
-      // Upload each file and submit for verification
-      if (docs.gstFile) {
-        fileUploads.push(uploadAndSubmit(docs.gstFile, "gstFile", docTypeMapping.gstFile));
-      }
-      if (docs.panFile) {
-        fileUploads.push(uploadAndSubmit(docs.panFile, "panFile", docTypeMapping.panFile));
-      }
-      if (docs.msmeFile) {
-        fileUploads.push(uploadAndSubmit(docs.msmeFile, "msmeFile", docTypeMapping.msmeFile));
-      }
-      if (docs.incFile) {
-        fileUploads.push(uploadAndSubmit(docs.incFile, "incFile", docTypeMapping.incFile));
-      }
+      const docType = verificationType === "GST" ? "GST Certificate" : verificationType === "MSME" ? "MSME Certificate" : "Certificate of Incorporation";
+      fileUploads.push(uploadAndSubmit(selectedFile, docType, selectedIdentifier));
 
       const results = await Promise.all(fileUploads);
       
       // Check if all uploads succeeded
       const failedUploads = results.filter(r => !r.success);
       if (failedUploads.length > 0) {
-        alert(`Failed to upload ${failedUploads.length} document(s). Please try again.`);
+        setError(`Failed to upload ${failedUploads.length} document(s). Please try again.`);
         setLoading(false);
         return;
       }
 
-      alert("Documents uploaded and submitted for verification!");
-      router.push("/employer/employer-registration-complete");
+      const model = searchParams.get("model") === "managed" ? "managed" : "subscription";
+      router.push(`/employer/employer-registration-complete?model=${model}`);
     } catch (error) {
       console.error("Upload error:", error);
-      alert("An error occurred while uploading documents. Please try again.");
+      setError("An error occurred while uploading the document. Please try again.");
       setLoading(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const uploadAndSubmit = async (
-    file: File,
-    fileKey: string,
-    docType: string
-  ): Promise<{ success: boolean; fileUrl?: string }> => {
+  const uploadAndSubmit = async (file: File, docType: string, identifier: string): Promise<{ success: boolean; fileUrl?: string }> => {
     try {
       // Upload file
       const formData = new FormData();
@@ -130,7 +84,12 @@ export default function EmployerDocumentVerificationPage() {
         throw new Error(`Upload failed: ${uploadResponse.statusText}`);
       }
 
-      const uploadJson = await uploadResponse.json();
+      const uploadBody = await uploadResponse.text();
+      if (!uploadBody.trim()) throw new Error("Upload service returned an empty response.");
+      const uploadJson = JSON.parse(uploadBody);
+      if (!uploadResponse.ok || !uploadJson.success || !uploadJson.file?.url) {
+        throw new Error(uploadJson.error || "Upload failed.");
+      }
 
       // Submit for document verification
       const verifyResponse = await fetch("/api/admin/document-verification", {
@@ -140,88 +99,24 @@ export default function EmployerDocumentVerificationPage() {
           docType,
           fileUrl: uploadJson.file.url,
           fileName: file.name,
-          employerId: session?.id,
-          companyName: docs.gstin,
         }),
       });
 
       if (!verifyResponse.ok) {
-        throw new Error(`Verification submission failed: ${verifyResponse.statusText}`);
+        const verifyBody = await verifyResponse.text();
+        let verifyError = verifyResponse.statusText;
+        try { verifyError = JSON.parse(verifyBody).error || verifyError; } catch { /* keep status text */ }
+        throw new Error(`Verification submission failed: ${verifyError}`);
       }
 
       return { success: true, fileUrl: uploadJson.file.url };
     } catch (error) {
       console.error(`Error uploading ${file.name}:`, error);
-      alert(`Failed to upload ${file.name}`);
       return { success: false };
     }
   };
 
-  // Sleek Input-Pill Upload Box Helper Component
-  const RenderUploadPill = ({
-    label,
-    placeholder,
-    file,
-    fileKey,
-    accept = ".pdf,.jpg,.jpeg,.png",
-  }: {
-    label: string;
-    placeholder: string;
-    file: File | null;
-    fileKey: string;
-    accept?: string;
-  }) => {
-    return (
-      <div className="space-y-1">
-        <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
-          {label}
-        </label>
-        <label
-          className={`input-pill w-full h-10 text-xs px-3.5 flex items-center justify-between cursor-pointer transition-all ${
-            file
-              ? "border-emerald-500/50 bg-emerald-500/10 text-white font-bold"
-              : "text-text-secondary hover:border-amber-400/50"
-          }`}
-        >
-          <input
-            type="file"
-            accept={accept}
-            className="hidden"
-            onChange={(e) => handleFileChange(e, fileKey)}
-          />
-
-          {file ? (
-            /* Uploaded State: Centered Filename Only + Green Verified Badge */
-            <div className="w-full flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 truncate">
-                <span className="material-symbols-outlined text-emerald-400 text-[17px]">
-                  check_circle
-                </span>
-                <span className="truncate text-xs font-bold text-white">
-                  {file.name}
-                </span>
-              </div>
-              <span className="text-[9.5px] text-emerald-400 font-extrabold uppercase tracking-wider flex-shrink-0">
-                Uploaded
-              </span>
-            </div>
-          ) : (
-            /* Empty State: Placeholder + 3D Upload Icon */
-            <div className="w-full flex items-center justify-between gap-2">
-              <span className="truncate text-text-secondary font-medium">
-                {placeholder}
-              </span>
-              <div className="w-6 h-6 rounded-md bg-amber-400/10 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
-                <span className="material-symbols-outlined text-amber-400 text-[15px]">
-                  upload_file
-                </span>
-              </div>
-            </div>
-          )}
-        </label>
-      </div>
-    );
-  };
+  const selectedFileForForm = verificationType === "GST" ? docs.gstFile : verificationType === "MSME" ? docs.msmeFile : docs.incFile;
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
@@ -269,6 +164,20 @@ export default function EmployerDocumentVerificationPage() {
               </div>
             </div>
 
+            <div className="flex items-center gap-3 opacity-70">
+              <div className="w-5.5 h-5.5 rounded-full bg-white/10 flex items-center justify-center text-[11px] text-white font-bold">
+                4
+              </div>
+              <div>
+                <p className="font-label-md text-[9.5px] text-text-secondary uppercase font-bold">
+                  Step 4
+                </p>
+                <p className="font-body-md text-xs text-text-secondary">
+                  Plan Setup (Subscription Only)
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
               <div className="w-5.5 h-5.5 rounded-full bg-emerald-500 flex items-center justify-center text-[11px] text-black font-bold">
                 ✓
@@ -292,7 +201,7 @@ export default function EmployerDocumentVerificationPage() {
                   Step 3
                 </p>
                 <p className="font-body-md text-xs text-text-primary font-bold">
-                  Business Model & Plan
+                  Hiring Model
                 </p>
               </div>
             </div>
@@ -303,10 +212,10 @@ export default function EmployerDocumentVerificationPage() {
               </div>
               <div>
                 <p className="font-label-md text-[9.5px] text-primary uppercase font-bold">
-                  FINAL STEP
+                  Step 5 · Final
                 </p>
                 <p className="font-body-md text-xs text-text-primary font-bold">
-                  KYC Document Verification
+                  One-Document KYC
                 </p>
               </div>
             </div>
@@ -329,97 +238,42 @@ export default function EmployerDocumentVerificationPage() {
 
             {/* Form */}
             <form className="space-y-3" onSubmit={handleSubmit}>
-              {/* Row 1: GSTIN & GST Certificate Upload */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
-                    GSTIN Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="27AAAAA0000A1Z5"
-                    value={docs.gstin}
-                    onChange={(e) => setDocs({ ...docs, gstin: e.target.value.toUpperCase() })}
-                    className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono"
-                  />
+              <div className="space-y-3">
+                <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">Choose one verification document *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["GST", "MSME", "INCORPORATION"] as const).map((type) => (
+                    <button key={type} type="button" onClick={() => setVerificationType(type)} className={`h-10 rounded-xl border text-[11px] font-bold transition-all ${verificationType === type ? "bg-primary text-white border-primary" : "bg-white/5 text-text-secondary border-white/10 hover:bg-white/10"}`}>
+                      {type === "GST" ? "GST" : type === "MSME" ? "MSME / Udyam" : "Incorporation"}
+                    </button>
+                  ))}
                 </div>
-
-                <RenderUploadPill
-                  label="GST Certificate * (.pdf / .jpg)"
-                  placeholder="Upload GST Document"
-                  file={docs.gstFile}
-                  fileKey="gstFile"
-                />
-              </div>
-
-              {/* Row 2: Company PAN & PAN Card Upload */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
-                    Company PAN / Tax ID *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ABCDE1234F"
-                    value={docs.pan}
-                    onChange={(e) => setDocs({ ...docs, pan: e.target.value.toUpperCase() })}
-                    className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
+                      {verificationType === "GST" ? "GSTIN Number" : verificationType === "MSME" ? "MSME / Udyam Registration Number" : "CIN / Incorporation Number"} *
+                    </label>
+                    <input type="text" required placeholder={verificationType === "GST" ? "27AAAAA0000A1Z5" : verificationType === "MSME" ? "UDYAM-MH-00-0000000" : "U72900MH2023PTC123456"} value={verificationType === "GST" ? docs.gstin : verificationType === "MSME" ? docs.msme : docs.cin} onChange={(e) => setDocs({ ...docs, ...(verificationType === "GST" ? { gstin: e.target.value.toUpperCase() } : verificationType === "MSME" ? { msme: e.target.value.toUpperCase() } : { cin: e.target.value.toUpperCase() }) })} className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">{verificationType === "GST" ? "GST" : verificationType === "MSME" ? "MSME / Udyam" : "Incorporation"} Certificate *</label>
+                    <label className={`input-pill w-full h-10 px-3 flex items-center justify-center gap-2 cursor-pointer transition-all ${selectedFileForForm ? "border-emerald-500/60 bg-emerald-500/10" : "hover:border-primary/70"}`}>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        required={!selectedFileForForm}
+                        onChange={(e) => handleFileChange(e, verificationType === "GST" ? "gstFile" : verificationType === "MSME" ? "msmeFile" : "incFile")}
+                        className="sr-only"
+                      />
+                      <span className={`material-symbols-outlined text-[17px] ${selectedFileForForm ? "text-emerald-400" : "text-primary"}`}>
+                        {selectedFileForForm ? "check_circle" : "upload_file"}
+                      </span>
+                      <span className={`text-xs font-bold truncate max-w-[170px] ${selectedFileForForm ? "text-emerald-300" : "text-text-secondary"}`}>
+                        {selectedFileForForm ? selectedFileForForm.name : "Choose File"}
+                      </span>
+                    </label>
+                    <p className="text-[9px] text-text-muted text-center">PDF, JPG, JPEG or PNG · Max 10 MB</p>
+                  </div>
                 </div>
-
-                <RenderUploadPill
-                  label="PAN Card Document * (.pdf / .jpg)"
-                  placeholder="Upload PAN Card Document"
-                  file={docs.panFile}
-                  fileKey="panFile"
-                />
-              </div>
-
-              {/* Row 3: MSME / Udyam & CIN Numbers */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
-                    MSME / Udyam Reg No. (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="UDYAM-MH-00-0000000"
-                    value={docs.msme}
-                    onChange={(e) => setDocs({ ...docs, msme: e.target.value })}
-                    className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
-                    CIN / Incorporation No. (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="U72900MH2023PTC123456"
-                    value={docs.cin}
-                    onChange={(e) => setDocs({ ...docs, cin: e.target.value.toUpperCase() })}
-                    className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: MSME & Incorporation Upload Pills */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <RenderUploadPill
-                  label="MSME Certificate (Optional)"
-                  placeholder="Upload MSME Document"
-                  file={docs.msmeFile}
-                  fileKey="msmeFile"
-                />
-                <RenderUploadPill
-                  label="Incorporation Certificate (Optional)"
-                  placeholder="Upload Certificate of Inc."
-                  file={docs.incFile}
-                  fileKey="incFile"
-                />
               </div>
 
               {/* Requirement Alert Banner */}
@@ -428,9 +282,13 @@ export default function EmployerDocumentVerificationPage() {
                   info
                 </span>
                 <span className="text-[10.5px] text-amber-200 leading-tight">
-                  <strong className="font-bold">Final Step Requirement:</strong> Upload at least 1 document (GST / PAN / MSME / CIN) for manual KYC compliance review by the <strong className="font-extrabold text-white">HireGo AI team.</strong>
+                  <strong className="font-bold">Final Step Requirement:</strong> Submit any one certificate: GST, MSME / Udyam, or Incorporation. PAN is not required for this step.
                 </span>
               </div>
+
+              {error && (
+                <p role="alert" className="text-center text-xs text-red-300">{error}</p>
+              )}
 
               {/* Submit Button */}
               <div className="pt-0.5">

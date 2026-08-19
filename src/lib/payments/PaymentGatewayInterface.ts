@@ -1,4 +1,4 @@
-export type GatewayName = "RAZORPAY" | "PAYU" | "PHONEPE";
+export type GatewayName = "RAZORPAY" | "PAYU" | "PHONEPE" | "STRIPE";
 
 export interface CreateOrderParams {
   orderId: string;

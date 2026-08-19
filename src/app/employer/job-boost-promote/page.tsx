@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 
 export default function EmployerPageE13() {
@@ -12,9 +13,9 @@ export default function EmployerPageE13() {
 
       <header className="mb-10 max-w-2xl">
         <nav className="flex items-center gap-2 text-text-secondary mb-4">
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/dashboard">Dashboard</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/hiring-pipeline">Talent</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/upcoming-interviews-list">Interviews</a>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/dashboard">Dashboard</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/hiring-pipeline">Talent</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/upcoming-interviews-list">Interviews</Link>
         </nav>
         <h1 className="font-display-lg text-display-lg text-on-surface mb-2">Boost Your Reach</h1>
         <p className="font-body-lg text-body-lg text-on-surface-variant">Maximize exposure for your "Senior Product Designer" role. Get the best talent faster with AI-powered candidate matching and priority placement.</p>
@@ -162,3 +163,5 @@ export default function EmployerPageE13() {
     </PageContainer>
   );
 }
+
+

@@ -143,6 +143,12 @@ export default function EmployerManagedHiringDashboard() {
               New Sourcing Requirement
             </button>
             <button
+              onClick={() => router.push("/employer/managed-hiring/service-plan")}
+              className="px-6 py-2.5 rounded-2xl bg-white/5 border border-indigo-400/30 text-indigo-200 hover:bg-indigo-400/10 font-medium text-[11px] transition-all text-center"
+            >
+              View Service & Interview Plan
+            </button>
+            <button
               onClick={() => router.push("/employer/employer-registration-business-model")}
               className="px-6 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 font-medium text-[11px] transition-all text-center"
             >

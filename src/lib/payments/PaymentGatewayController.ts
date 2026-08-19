@@ -10,6 +10,7 @@ import {
 import { RazorpayGateway } from "./RazorpayGateway";
 import { PayUGateway } from "./PayUGateway";
 import { PhonePeGateway } from "./PhonePeGateway";
+import { StripeGateway } from "./StripeGateway";
 
 export interface GatewayConfigState {
   mode: "AUTO" | "MANUAL";
@@ -25,6 +26,7 @@ export class PaymentGatewayController {
     RAZORPAY: new RazorpayGateway(),
     PAYU: new PayUGateway(),
     PHONEPE: new PhonePeGateway(),
+    STRIPE: new StripeGateway(),
   };
 
   private static cachedConfig: GatewayConfigState | null = null;
@@ -67,8 +69,9 @@ export class PaymentGatewayController {
         RAZORPAY: "HEALTHY",
         PAYU: "HEALTHY",
         PHONEPE: "HEALTHY",
+        STRIPE: "HEALTHY",
       },
-      priorities: ["RAZORPAY", "PAYU", "PHONEPE"],
+      priorities: ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
     };
   }
 

@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/auditLogger";
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+  portal: z.enum(["admin", "employer", "candidate"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -34,6 +35,26 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "Invalid email or password." },
         { status: 401 }
+      );
+    }
+
+    if ("emailVerified" in user && user.emailVerified === false) {
+      return NextResponse.json(
+        { success: false, error: "Verify your email address before signing in.", requiresEmailVerification: true },
+        { status: 403 }
+      );
+    }
+
+    if (body.portal === "admin" && user.role !== "ADMIN") {
+      logAuditEvent({
+        userId: user.id,
+        action: "ADMIN_LOGIN_DENIED",
+        resource: "/api/auth/login",
+        details: `Non-admin account ${user.email} attempted to access the admin portal`,
+      });
+      return NextResponse.json(
+        { success: false, error: "This account does not have administrator access." },
+        { status: 403 }
       );
     }
 

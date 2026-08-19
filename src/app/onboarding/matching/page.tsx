@@ -1,6 +1,6 @@
 "use client";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
+import React, { useEffect } from "react";
 import parse from "html-react-parser";
 import { useRouter } from "next/navigation";
 
@@ -8,6 +8,7 @@ const rawHtml = "\n<!-- Background Effects -->\n<div className=\"fixed inset-0 g
 
 export default function C15Page() {
   const router = useRouter();
+  useEffect(() => { router.replace("/jobs"); }, [router]);
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">

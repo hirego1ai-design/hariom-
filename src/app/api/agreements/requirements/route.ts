@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { getCurrentSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const requirements = await agreementsDb.getRequirements();
+    const session = getCurrentSession(req.headers);
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    let requirements = await agreementsDb.getRequirements();
+    if (session.role !== "ADMIN") {
+      try {
+        const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, include: { company: true } });
+        if (!profile) return NextResponse.json({ success: false, error: "Employer profile not found" }, { status: 404 });
+        requirements = requirements.filter((item) => item.companyName.toLowerCase() === profile.company.name.toLowerCase());
+      } catch {
+        if (process.env.NODE_ENV === "production") throw new Error("Employer profile database is unavailable.");
+        // Development mode can use the in-memory requirements store without PostgreSQL.
+      }
+    }
     return NextResponse.json({ success: true, count: requirements.length, requirements });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -12,6 +26,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = getCurrentSession(req.headers);
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const body = await req.json();
 
     // Validation for core fields
@@ -22,6 +38,15 @@ export async function POST(req: NextRequest) {
           { success: false, error: `Missing required field: ${field}` },
           { status: 400 }
         );
+      }
+    }
+    if (session.role !== "ADMIN") {
+      try {
+        const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, include: { company: true } });
+        if (!profile || profile.company.name.toLowerCase() !== String(body.companyName).trim().toLowerCase()) return NextResponse.json({ success: false, error: "Company does not match the signed-in employer." }, { status: 403 });
+      } catch {
+        if (process.env.NODE_ENV === "production") throw new Error("Employer profile database is unavailable.");
+        // Development mode can create an in-memory requirement before the database is connected.
       }
     }
 

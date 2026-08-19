@@ -1,6 +1,6 @@
 "use client";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
+import React, { useEffect } from "react";
 import parse from "html-react-parser";
 import { useRouter } from "next/navigation";
 
@@ -8,6 +8,7 @@ const rawHtml = "\n<!-- Onboarding Step Counter (Fixed Top) -->\n<div className=
 
 export default function C14Page() {
   const router = useRouter();
+  useEffect(() => { router.replace("/onboarding/complete"); }, [router]);
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">

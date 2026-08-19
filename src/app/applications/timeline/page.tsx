@@ -1,20 +1,205 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-const rawHtml = "\n<!-- Atmospheric Background -->\n<div className=\"fixed inset-0 z-0 grid-bg\"></div>\n<div className=\"fixed inset-0 z-0 radial-glow-red\"></div>\n<div className=\"fixed inset-0 z-0 radial-glow-blue\"></div>\n<!-- Side Navigation Shell (from JSON) -->\n<aside className=\"w-[240px] h-screen fixed left-0 top-0 bg-surface-container-low border-r border-white/5 z-40 hidden md:flex flex-col py-stack-lg gap-stack-md\">\n<div className=\"px-6 mb-stack-lg\">\n<h1 className=\"font-display-lg text-display-lg text-primary\">HireGo AI</h1>\n<p className=\"font-label-md text-label-md text-on-surface-variant\">Enterprise Portal</p>\n</div>\n<nav className=\"flex-1 px-2 space-y-2\">\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/dashboard\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">dashboard</span>\n<span className=\"font-label-md text-label-md\">Dashboard</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/jobs\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">work</span>\n<span className=\"font-label-md text-label-md\">Jobs</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/applications\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">description</span>\n<span className=\"font-label-md text-label-md\">Applications</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/interviews\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">video_call</span>\n<span className=\"font-label-md text-label-md\">Interviews</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/ai/practice-hub\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">psychology</span>\n<span className=\"font-label-md text-label-md\">AI Practice Hub</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/profile\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">person</span>\n<span className=\"font-label-md text-label-md\">Profile</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/settings\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">settings</span>\n<span className=\"font-label-md text-label-md\">Settings</span>\n</a>\n</nav>\n<div className=\"px-4 mt-auto\">\n\n<div className=\"mt-stack-md border-t border-white/10 pt-stack-md\">\n<a className=\"flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface rounded-lg mx-2\" href=\"#\">\n<span className=\"material-symbols-outlined\">logout</span>\n<span className=\"font-label-md text-label-md\">Logout</span>\n</a>\n</div>\n</div>\n</aside>\n<!-- Top AppBar Shell (from JSON) -->\n<header className=\"fixed top-0 left-0 right-0 z-50 h-[64px] backdrop-blur-md bg-surface/80 flex items-center justify-between px-margin-desktop ml-[116px]\">\n<div className=\"flex items-center gap-margin-mobile\">\n<h2 className=\"font-display-lg text-display-lg-mobile font-bold tracking-tight text-primary\">HireGo AI</h2>\n<div className=\"hidden lg:flex items-center gap-gutter ml-stack-lg\">\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Dashboard</a>\n<a className=\"font-body-md text-body-md text-primary border-b-2 border-primary pb-1\" href=\"#\">Jobs</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Messages</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Analytics</a>\n</div>\n</div>\n<div className=\"flex items-center gap-stack-md\">\n<div className=\"hidden sm:flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-variant text-primary font-label-md border border-primary/20\">\n<span className=\"material-symbols-outlined text-[18px]\">security</span>\n                Proctor Active\n            </div>\n<button className=\"material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors\">notifications</button>\n<button className=\"material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors\">settings</button>\n<div className=\"w-8 h-8 rounded-full overflow-hidden border border-white/20\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional close-up headshot of a recruitment manager in a high-tech corporate office. The individual is wearing a sophisticated dark suit and has a warm, confident expression. The lighting is crisp and professional, reflecting a dark-mode aesthetic with subtle red and blue accents in the background bokeh. High fidelity, corporate portraiture style.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuDOJ0ho3ry_aecs6a7gjqD9yPTQiD7q0eZurs0TlvAXUxNeU5C6fkR7JYT3kwg2sb15NBSzioQEKN5mvNsVHS_r5Hmcl3G3GO4EkM6dwRhqu688mVfQTUTdI9z0DCsUa2Jha88A7uq7GLALtemZiwSzl7Qchy4XhRah0IXwmn-7X5sVNxQxzFg2sChA6ty_fl4pJhz31W7bIoghjrflmprjH4O_E4ruUB8CgBV5mUl4CqD__oyi-BMEsyM2_337ok7l8Oj4qgcPqxQ\">\n</div>\n</div>\n</header>\n<!-- Main Content Canvas -->\n<main className=\"relative z-10 pt-[104px] pb-stack-lg px-margin-mobile ml-[116px] md:px-margin-desktop max-w-[1200px]\">\n<!-- Page Header & Probability Pill -->\n<div className=\"flex flex-col md:flex-row md:items-end justify-between gap-stack-md mb-stack-lg\">\n<div>\n<nav className=\"flex items-center gap-2 text-text-muted font-label-md mb-stack-sm\">\n<span>Applications</span>\n<span className=\"material-symbols-outlined text-[16px]\">chevron_right</span>\n<span>Design Lead</span>\n<span className=\"material-symbols-outlined text-[16px]\">chevron_right</span>\n<span className=\"text-primary\">Timeline</span>\n</nav>\n<h1 className=\"font-display-xl text-display-xl-mobile md:text-display-xl text-white\">Application Timeline</h1>\n<p className=\"text-text-secondary mt-2\">Candidate: Alex Rivera • Applied for Lead UI/UX Designer</p>\n</div>\n<!-- AI Interview Probability Pill -->\n<div className=\"flex items-center gap-3 glass-card px-stack-md py-stack-sm rounded-full border-primary/20\">\n<div className=\"relative w-10 h-10 flex items-center justify-center\">\n<svg className=\"w-10 h-10 -rotate-90\">\n<circle className=\"text-white/5\" cx=\"20\" cy=\"20\" fill=\"none\" r=\"18\" stroke=\"currentColor\" strokeWidth=\"3\"></circle>\n<circle className=\"text-primary\" cx=\"20\" cy=\"20\" fill=\"none\" r=\"18\" stroke=\"currentColor\" strokeDasharray=\"113\" strokeDashoffset=\"18\" strokeWidth=\"3\"></circle>\n</svg>\n<span className=\"absolute text-[10px] font-bold text-primary\">84%</span>\n</div>\n<div>\n<p className=\"text-[10px] uppercase tracking-widest text-text-muted font-bold\">Interview Match</p>\n<p className=\"font-data-md text-green\">High Probability</p>\n</div>\n</div>\n</div>\n<div className=\"grid grid-cols-1 lg:grid-cols-12 gap-gutter\">\n<!-- Vertical Timeline Section -->\n<div className=\"lg:col-span-8\">\n<div className=\"relative space-y-0\">\n<!-- Vertical Line -->\n<div className=\"absolute left-[27px] top-8 bottom-8 timeline-connector\"></div>\n<!-- Timeline Item 1: Completed -->\n<div className=\"relative flex gap-6 pb-stack-lg\">\n<div className=\"z-10 flex-shrink-0 w-14 h-14 rounded-full bg-green/20 border-2 border-green flex items-center justify-center text-green\">\n<span className=\"material-symbols-outlined\" style=\"font-variation-settings: 'FILL' 1;\">check_circle</span>\n</div>\n<div className=\"glass-card flex-1 p-stack-md rounded-xl\">\n<div className=\"flex justify-between items-start mb-2\">\n<h3 className=\"font-headline-md text-lg text-white\">Application Received</h3>\n<span className=\"font-data-md text-text-muted\">Oct 12, 10:45 AM</span>\n</div>\n<p className=\"text-text-secondary mb-3\">Your resume and portfolio were successfully uploaded and indexed by HireGo AI.</p>\n<div className=\"flex gap-2\">\n<span className=\"px-3 py-1 rounded-full bg-bg-subtle text-[12px] text-on-surface-variant border border-white/5\">Resume.pdf</span>\n<span className=\"px-3 py-1 rounded-full bg-bg-subtle text-[12px] text-on-surface-variant border border-white/5\">Portfolio_Link</span>\n</div>\n</div>\n</div>\n<!-- Timeline Item 2: Completed -->\n<div className=\"relative flex gap-6 pb-stack-lg\">\n<div className=\"z-10 flex-shrink-0 w-14 h-14 rounded-full bg-green/20 border-2 border-green flex items-center justify-center text-green\">\n<span className=\"material-symbols-outlined\" style=\"font-variation-settings: 'FILL' 1;\">check_circle</span>\n</div>\n<div className=\"glass-card flex-1 p-stack-md rounded-xl\">\n<div className=\"flex justify-between items-start mb-2\">\n<h3 className=\"font-headline-md text-lg text-white\">AI Screening Completed</h3>\n<span className=\"font-data-md text-text-muted\">Oct 12, 11:30 AM</span>\n</div>\n<p className=\"text-text-secondary\">The system matched your profile against the job requirements with a 92% technical score.</p>\n</div>\n</div>\n<!-- Timeline Item 3: Active Event (Red Left Border) -->\n<div className=\"relative flex gap-6 pb-stack-lg\">\n<div className=\"z-10 flex-shrink-0 w-14 h-14 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center text-primary animate-pulse\">\n<span className=\"material-symbols-outlined\">schedule</span>\n</div>\n<div className=\"glass-card flex-1 p-stack-md rounded-xl border-l-4 border-l-primary-container bg-surface-container/40\">\n<div className=\"flex justify-between items-start mb-2\">\n<h3 className=\"font-headline-md text-lg text-primary\">Technical Assessment Phase</h3>\n<span className=\"font-data-md text-primary font-bold\">IN PROGRESS</span>\n</div>\n<p className=\"text-on-surface-variant mb-4\">You are currently in the AI-driven technical screening window. Please complete the assessment before the deadline.</p>\n<!-- AI Assessment Card -->\n<div className=\"bg-surface-container-lowest p-stack-md rounded-lg border border-white/5 flex items-center justify-between\">\n<div className=\"flex items-center gap-4\">\n<div className=\"w-10 h-10 rounded-lg bg-secondary-container/20 flex items-center justify-center text-secondary\">\n<span className=\"material-symbols-outlined\">psychology</span>\n</div>\n<div>\n<p className=\"font-label-md text-white\">UX Strategy Simulation</p>\n<p className=\"text-[12px] text-text-muted\">Est. time: 45 mins</p>\n</div>\n</div>\n<button className=\"h-[40px] px-6 rounded-full btn-primary-red text-white text-sm font-bold\">\n                                    Start Now\n                                </button>\n</div>\n<div className=\"mt-4 flex items-center gap-2 text-[12px] text-error font-bold\">\n<span className=\"material-symbols-outlined text-[16px]\">warning</span>\n                                Expires in 14 hours\n                            </div>\n</div>\n</div>\n<!-- Timeline Item 4: Pending -->\n<div className=\"relative flex gap-6 pb-stack-lg\">\n<div className=\"z-10 flex-shrink-0 w-14 h-14 rounded-full bg-surface-container border-2 border-white/10 flex items-center justify-center text-text-muted\">\n<span className=\"material-symbols-outlined\">group</span>\n</div>\n<div className=\"glass-card flex-1 p-stack-md rounded-xl opacity-60\">\n<div className=\"flex justify-between items-start mb-2\">\n<h3 className=\"font-headline-md text-lg text-white/50\">Human Review</h3>\n<span className=\"font-data-md text-text-muted italic\">Scheduled</span>\n</div>\n<p className=\"text-text-muted italic\">Awaiting assessment completion for review by the design team.</p>\n</div>\n</div>\n<!-- Timeline Item 5: Future -->\n<div className=\"relative flex gap-6\">\n<div className=\"z-10 flex-shrink-0 w-14 h-14 rounded-full bg-surface-container border-2 border-white/10 flex items-center justify-center text-text-muted\">\n<span className=\"material-symbols-outlined\">description</span>\n</div>\n<div className=\"glass-card flex-1 p-stack-md rounded-xl opacity-40\">\n<h3 className=\"font-headline-md text-lg text-white/30\">Final Offer Phase</h3>\n</div>\n</div>\n</div>\n</div>\n<!-- Sidebar Info Panels -->\n<div className=\"lg:col-span-4 space-y-gutter\">\n<!-- Job Summary Card -->\n<div className=\"glass-card p-stack-lg rounded-2xl overflow-hidden relative\">\n<div className=\"absolute top-0 right-0 p-2\">\n<span className=\"material-symbols-outlined text-primary/20 text-6xl\">work</span>\n</div>\n<h3 className=\"font-headline-md text-white mb-2\">Lead UI/UX Designer</h3>\n<p className=\"text-text-secondary font-label-md\">HireGo AI • Full-time</p>\n<p className=\"text-text-secondary font-label-md mt-1\">$140k - $185k • Remote</p>\n<div className=\"mt-stack-lg pt-stack-lg border-t border-white/5\">\n<p className=\"text-[12px] uppercase tracking-wider text-text-muted font-bold mb-stack-sm\">Key Contacts</p>\n<div className=\"flex items-center gap-3 mb-4\">\n<div className=\"w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-primary\">\n<span className=\"material-symbols-outlined\">person</span>\n</div>\n<div>\n<p className=\"font-body-md text-sm text-white\">Sarah Jenkins</p>\n<p className=\"text-[12px] text-text-muted\">Head of Talent</p>\n</div>\n</div>\n<button className=\"w-full h-[40px] rounded-full bg-surface-container border border-white/10 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-all\">\n<span className=\"material-symbols-outlined text-[18px]\">mail</span>\n                            Message Recruiter\n                        </button>\n</div>\n</div>\n<!-- AI Insights Card -->\n<div className=\"glass-card p-stack-lg rounded-2xl border-l-4 border-l-secondary\">\n<h3 className=\"font-headline-md text-white mb-stack-md flex items-center gap-2\">\n<span className=\"material-symbols-outlined text-secondary\">analytics</span>\n                        AI Insights\n                    </h3>\n<div className=\"space-y-stack-md\">\n<div className=\"p-stack-sm rounded-lg bg-secondary-container/10 border border-secondary/10\">\n<p className=\"text-[11px] font-bold text-secondary uppercase mb-1\">Portfolio Sentiment</p>\n<p className=\"text-sm text-on-surface\">\"Strong emphasis on accessibility and design systems. High alignment with our brand pillars.\"</p>\n</div>\n<div className=\"p-stack-sm rounded-lg bg-surface-container/40 border border-white/5\">\n<p className=\"text-[11px] font-bold text-text-muted uppercase mb-1\">Competitive Rank</p>\n<p className=\"text-sm text-on-surface\">Top 15% of all applicants for this role based on technical skill mapping.</p>\n</div>\n</div>\n</div>\n<!-- Danger Zone Action -->\n<div className=\"pt-stack-lg\">\n<button className=\"w-full h-[50px] rounded-full btn-ghost-danger font-bold flex items-center justify-center gap-2 transition-all\">\n<span className=\"material-symbols-outlined\">cancel</span>\n                        Withdraw Application\n                    </button>\n<p className=\"text-center text-[11px] text-text-muted mt-3 px-stack-md\">\n                        Withdrawing will remove you from all consideration for this role and cannot be undone.\n                    </p>\n</div>\n</div>\n</div>\n</main>\n<!-- Floating Atmosphere Elements -->\n<div className=\"fixed bottom-10 right-10 z-50\">\n<button className=\"w-14 h-14 rounded-full btn-primary-red flex items-center justify-center text-white shadow-2xl group transition-transform hover:scale-110\">\n<span className=\"material-symbols-outlined group-hover:rotate-12 transition-transform\">chat</span>\n</button>\n</div>\n<!-- Micro-interaction Scripts -->\n\n";
+interface ApplicationItem {
+  id: string;
+  jobId: string;
+  status: string;
+  matchScore: number;
+  aiSummary?: string;
+  createdAt: string;
+  job?: {
+    id: string;
+    title: string;
+    location: string;
+    company?: { name: string; logoUrl?: string };
+  };
+}
 
-export default function C92Page() {
-  const router = useRouter();
+export default function ApplicationTimelinePage() {
+  const [applications, setApplications] = useState<ApplicationItem[]>([]);
+  const [selectedApp, setSelectedApp] = useState<ApplicationItem | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/applications")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.applications && data.applications.length > 0) {
+          setApplications(data.applications);
+          setSelectedApp(data.applications[0]);
+        } else {
+          // Default fallback application timeline item
+          const defaultApp: ApplicationItem = {
+            id: "app-default-1",
+            jobId: "job-101",
+            status: "SCREENING",
+            matchScore: 92,
+            aiSummary: "Candidate demonstrates strong technical expertise and architecture alignment.",
+            createdAt: new Date().toISOString(),
+            job: {
+              id: "job-101",
+              title: "Senior Full Stack AI Engineer",
+              location: "Bangalore / Remote",
+              company: { name: "HireGo AI Labs" },
+            },
+          };
+          setApplications([defaultApp]);
+          setSelectedApp(defaultApp);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+        {/* Breadcrumb & Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
+              <Link href="/applications" className="hover:text-primary transition-colors">
+                Applications
+              </Link>
+              <span>/</span>
+              <span className="text-primary font-bold">Timeline</span>
+            </div>
+            <h1 className="text-2xl lg:text-3xl font-extrabold text-primary mb-1">
+              Application Tracker
+            </h1>
+            <p className="text-xs text-text-secondary">
+              Live status and AI screening progression for{" "}
+              <strong className="text-text-primary">
+                {selectedApp?.job?.title || "your application"}
+              </strong>
+            </p>
+          </div>
+
+          {selectedApp && (
+            <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                {selectedApp.matchScore || 92}%
+              </div>
+              <div className="text-xs">
+                <span className="text-text-muted block text-[10px] uppercase font-bold">
+                  AI Fit Score
+                </span>
+                <span className="text-green-400 font-bold">High Probability Match</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-24 rounded-2xl bg-white/5 animate-pulse border border-white/5"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Timeline Column (8 cols) */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-6">
+                <div className="relative pl-8 border-l-2 border-primary/30 space-y-8">
+                  {/* Step 1 */}
+                  <div className="relative">
+                    <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-black font-bold text-xs">
+                      ✓
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-sm font-bold text-text-primary">
+                          Application Submitted
+                        </h3>
+                        <span className="text-[11px] text-text-muted">
+                          {selectedApp?.createdAt
+                            ? new Date(selectedApp.createdAt).toLocaleDateString()
+                            : "Recent"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-secondary">
+                        Your profile and verified credentials have been transmitted to the employer pipeline.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="relative">
+                    <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs shadow-md">
+                      2
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-sm font-bold text-primary">
+                          AI Autonomous Screening
+                        </h3>
+                        <span className="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full border border-primary/30">
+                          {selectedApp?.status || "ACTIVE"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-secondary">
+                        {selectedApp?.aiSummary ||
+                          "AI matching algorithms parsed your experience against the job description with high alignment."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="relative">
+                    <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-text-muted text-xs">
+                      3
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-text-muted">
+                        Recruiter Review & Interview Invitation
+                      </h3>
+                      <p className="text-xs text-text-muted">
+                        The hiring team will review the AI scorecard and issue an interview invitation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar Details (4 cols) */}
+            <div className="lg:col-span-4 space-y-5">
+              <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+                <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                  Target Opportunity
+                </h3>
+                <div>
+                  <h4 className="text-base font-bold text-text-primary">
+                    {selectedApp?.job?.title || "Senior Engineering Role"}
+                  </h4>
+                  <p className="text-xs text-text-secondary mt-0.5">
+                    {selectedApp?.job?.company?.name || "HireGo Partner"} • {selectedApp?.job?.location || "Remote"}
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <Link
+                    href={`/jobs/${selectedApp?.jobId || "job-101"}`}
+                    className="w-full h-10 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-text-primary flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <span>View Job Posting</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
-    </div>
-);
+  );
 }

@@ -17,8 +17,22 @@ const mainNavItems: NavRailItem[] = [
   { id: "dashboard", label: "System Overview", href: "/admin/dashboard", icon: "dashboard" },
   { id: "users", label: "Candidate Users", href: "/admin/users", icon: "group", badge: "12.4k" },
   { id: "employers", label: "Employers & Companies", href: "/admin/employers", icon: "domain", badge: "2.4k" },
+  { id: "jobs", label: "Job Listings", href: "/admin/jobs", icon: "work" },
+  { id: "signups", label: "New Signups", href: "/admin/signups", icon: "person_add" },
+  { id: "document-verification", label: "KYC Document Review", href: "/admin/document-verification", icon: "verified_user", badge: "Review" },
   { id: "revenue", label: "Revenue & Billing", href: "/admin/revenue", icon: "payments" },
+  { id: "invoices", label: "Invoices", href: "/admin/invoices", icon: "receipt_long" },
+  { id: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: "autorenew" },
+  { id: "managed-requests", label: "Managed Hiring Requests", href: "/admin/managed-hiring/requests", icon: "assignment" },
+  { id: "managed-pipeline", label: "Managed Hiring Pipeline", href: "/admin/managed-hiring/pipeline", icon: "account_tree" },
+  { id: "managed-hiring", label: "Managed Hiring Operations", href: "/admin/managed-hiring/operations", icon: "business_center" },
+  { id: "agreements", label: "Agreements & Templates", href: "/admin/agreements/templates", icon: "description" },
+  { id: "referrals", label: "Referrals", href: "/admin/referrals", icon: "share" },
+  { id: "pricing-engine", label: "Pricing Engine", href: "/admin/pricing-engine", icon: "sell" },
+  { id: "proctoring", label: "Proctoring Control", href: "/admin/proctoring-control-panel", icon: "security" },
+  { id: "payment-gateways", label: "Payment Gateways", href: "/admin/payment-gateways", icon: "account_balance" },
   { id: "roles", label: "Roles & Permissions", href: "/admin/roles", icon: "admin_panel_settings" },
+  { id: "settings", label: "Admin Settings Hub", href: "/admin/settings/hub", icon: "settings" },
   { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring", badge: "Live", badgeColor: "bg-green text-black" },
 ];
 
@@ -26,6 +40,10 @@ const infrastructureItems: NavRailItem[] = [
   { id: "SI01", label: "System Gateway (SI01)", href: "/admin/system/infrastructure", icon: "router" },
   { id: "SI02", label: "DB Connection Pool (SI02)", href: "/admin/system/db-pool", icon: "database" },
   { id: "SI03", label: "Queue Broker Health (SI03)", href: "/admin/system/queue-broker", icon: "queue" },
+  { id: "backup-recovery", label: "Backup & PITR", href: "/admin/system/backup-recovery", icon: "cloud_download" },
+  { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring" },
+  { id: "sla", label: "SLA Uptime Monitor", href: "/admin/sla/monitor", icon: "speed" },
+  { id: "security-inspector", label: "Security Inspector", href: "/admin/security/vulnerability-inspector", icon: "bug_report" },
 ];
 
 const modelItems: NavRailItem[] = [
@@ -33,9 +51,9 @@ const modelItems: NavRailItem[] = [
   { id: "LM02", label: "Prompt Playground (LM02)", href: "/admin/models/playground", icon: "terminal" },
   { id: "LM03", label: "License Allocator (LM03)", href: "/admin/licenses/allocator", icon: "badge" },
   { id: "LM04", label: "Real-Time Log Stream (LM04)", href: "/admin/logs/stream", icon: "wysiwyg" },
-  { id: "LM05", label: "Security Inspector (LM05)", href: "/admin/security/vulnerability-inspector", icon: "bug_report" },
-  { id: "LM06", label: "SLA Uptime Monitor (LM06)", href: "/admin/sla/monitor", icon: "speed" },
-  { id: "LM07", label: "Backup & PITR (LM07)", href: "/admin/system/backup-recovery", icon: "cloud_download" },
+  { id: "LM05", label: "AI Agents Settings (LM05)", href: "/admin/settings/ai-agents", icon: "smart_toy" },
+  { id: "LM06", label: "LLM Usage Analytics (LM06)", href: "/admin/settings/llm-usage", icon: "analytics" },
+  { id: "LM07", label: "Model & Platform Settings (LM07)", href: "/admin/settings/hub", icon: "tune" },
 ];
 
 export default function AdminSidebar() {

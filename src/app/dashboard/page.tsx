@@ -9,6 +9,31 @@ export default function CandidateDashboardPage() {
   const { theme, setTheme } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [candidateName, setCandidateName] = useState("Candidate");
+  const [appliedCount, setAppliedCount] = useState(0);
+
+  React.useEffect(() => {
+    fetch("/api/candidate/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.profile) {
+          setCandidateName(data.profile.name || "Candidate");
+          if (data.profile.applications) {
+            setAppliedCount(data.profile.applications.length);
+          }
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/applications")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.applications) {
+          setAppliedCount(data.applications.length);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const selectTheme = (mode: "light" | "dark" | "system") => {
     if (mode === "system") {
@@ -45,13 +70,14 @@ export default function CandidateDashboardPage() {
                 className="text-headline-md font-bold tracking-tight"
                 style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}
               >
-                Welcome back, <span style={{ color: "var(--primary)" }}>Rahul Verma</span>
+                Welcome back, <span style={{ color: "var(--primary)" }}>{candidateName}</span>
               </h1>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                You have 3 active interview invitations waiting for confirmation.
+                You have {appliedCount} active application{appliedCount === 1 ? "" : "s"} tracked on HireGo AI.
               </p>
             </div>
           </div>
+
 
           <div className="flex items-center gap-3">
             {/* Proctor Status Badge */}

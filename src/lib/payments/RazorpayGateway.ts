@@ -70,9 +70,25 @@ export class RazorpayGateway implements PaymentGateway {
   }
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
     if (process.env.NODE_ENV === "production" && !secret) {
-      throw new Error("Razorpay Webhook secret missing in production environment.");
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Razorpay Webhook secret missing in production environment.",
+      };
+    }
+
+    if (!params.signature && (secret || process.env.NODE_ENV === "production")) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Missing Razorpay webhook signature (x-razorpay-signature)",
+      };
     }
 
     if (secret && params.signature) {
@@ -81,7 +97,16 @@ export class RazorpayGateway implements PaymentGateway {
         .update(params.rawBody)
         .digest("hex");
 
-      if (expectedSignature !== params.signature) {
+      let isMatch = false;
+      try {
+        const sigBuf = Buffer.from(params.signature, "utf-8");
+        const expBuf = Buffer.from(expectedSignature, "utf-8");
+        isMatch = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
+      } catch {
+        isMatch = false;
+      }
+
+      if (!isMatch) {
         return {
           isValid: false,
           gatewayTxId: "",

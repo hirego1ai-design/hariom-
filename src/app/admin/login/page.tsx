@@ -1,12 +1,11 @@
 "use client";
 
-import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import React, { useState } from "react";
 import Link from "next/link";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("admin@hirego.ai");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,42 +24,22 @@ export default function AdminLoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, portal: "admin" }),
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({ success: false, error: "The sign-in service returned an invalid response." }));
 
       if (!response.ok || !result.success) {
-        if (email.includes("admin")) {
-          // Set valid session cookie for admin demo testing
-          const demoPayload = {
-            id: "admin-1",
-            email: "admin@hirego.ai",
-            name: "HireGo Administrator",
-            role: "ADMIN",
-            exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          };
-          const encoded = btoa(JSON.stringify(demoPayload)).replace(/=/g, "");
-          document.cookie = `hirego_session_token=${encoded}.demo_sig; path=/; max-age=604800`;
-          window.location.href = "/admin/dashboard";
-          return;
-        }
         setError(result.error || "Invalid Admin security credentials.");
         return;
       }
 
-      window.location.href = "/admin/dashboard";
+      const requestedRedirect = new URLSearchParams(window.location.search).get("redirect");
+      const destination = requestedRedirect?.startsWith("/admin/") && requestedRedirect !== "/admin/login"
+        ? requestedRedirect
+        : "/admin/dashboard";
+      window.location.assign(destination);
     } catch {
-      // Offline / Demo fallback
-      const demoPayload = {
-        id: "admin-1",
-        email: "admin@hirego.ai",
-        name: "HireGo Administrator",
-        role: "ADMIN",
-        exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      };
-      const encoded = btoa(JSON.stringify(demoPayload)).replace(/=/g, "");
-      document.cookie = `hirego_session_token=${encoded}.demo_sig; path=/; max-age=604800`;
-      window.location.href = "/admin/dashboard";
+      setError("Unable to reach the admin sign-in service.");
     } finally {
       setLoading(false);
     }
@@ -68,8 +47,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      <CandidateSidebar />
-      <div className="min-h-screen bg-[#0E0E0E] flex flex-col items-center justify-center p-4 relative overflow-hidden flex-1 ml-[116px]">
+      <div className="min-h-screen bg-[#0E0E0E] flex flex-col items-center justify-center p-4 relative overflow-hidden flex-1">
         {/* Background Ambient Glows */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
 

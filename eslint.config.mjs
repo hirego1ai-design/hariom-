@@ -14,6 +14,11 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "scratch/**",
     "hirego-app/**",
+    // One-off local migration helpers are not application source.
+    "fix_duplicates.js",
+    "fix_sections.js",
+    "fix_styles.js",
+    "refactor.js",
   ]),
   {
     files: ["src/**/*.{ts,tsx}"],
@@ -27,6 +32,12 @@ const eslintConfig = defineConfig([
       "react-hooks/purity": "warn",
       "react-hooks/exhaustive-deps": "off",
       "react-hooks/set-state-in-effect": "off",
+    },
+  },
+  {
+    files: ["scripts/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
 ]);

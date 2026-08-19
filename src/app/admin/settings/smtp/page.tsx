@@ -10,7 +10,7 @@ export default function AdminSetting_G04_Page() {
       <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
         <AdminHeader title="SMTP Email Configuration (G04)" />
         <main className="flex-1 p-gutter pt-24 pb-12 overflow-y-auto max-w-[1600px] w-full mx-auto">
-          <G04Component />
+          <G04Component embedded />
         </main>
       </div>
     </div>

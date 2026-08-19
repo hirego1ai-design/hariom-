@@ -1,26 +1,23 @@
 import { NextResponse } from "next/server";
-import { agreementsDb } from "@/lib/agreements-db";
-import {
-  HireGoManagedHiringRecord,
-  managedHiringSummary,
-  managedHiringPlacementLogs,
-} from "../pph/route";
-
-export { type HireGoManagedHiringRecord, managedHiringSummary, managedHiringPlacementLogs };
+import { loadManagedHiringRevenue, revenueUnavailable } from "../_shared";
 
 export async function GET() {
-  const agreements = await agreementsDb.getAgreements();
-  const activeAgreements = agreements.filter((a) => a.status === "ACTIVE");
-
-  return NextResponse.json({
-    success: true,
-    framework: "HireGo Managed Hiring™ Commercial Agreement System",
-    summary: {
-      ...managedHiringSummary,
-      activeAgreementsCount: activeAgreements.length,
-      totalAgreementsCount: agreements.length,
-    },
-    placements: managedHiringPlacementLogs,
-    agreements: agreements,
-  });
+  try {
+    const data = await loadManagedHiringRevenue();
+    const activeAgreements = data.agreements.filter((agreement) => agreement.status === "ACTIVE");
+    return NextResponse.json({
+      success: true,
+      source: "database",
+      framework: "HireGo Managed Hiring™ Commercial Agreement System",
+      summary: {
+        ...data.summary,
+        activeAgreementsCount: activeAgreements.length,
+        totalAgreementsCount: data.agreements.length,
+      },
+      placements: data.placements,
+      agreements: data.agreements,
+    });
+  } catch (error) {
+    return revenueUnavailable(error, "Managed hiring revenue");
+  }
 }

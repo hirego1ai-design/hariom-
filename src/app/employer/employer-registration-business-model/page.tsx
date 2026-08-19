@@ -1,6 +1,5 @@
 "use client";
 import React from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 import { useRouter } from "next/navigation";
 
 export default function EmployerRegistrationBusinessModelPage() {
@@ -64,7 +63,7 @@ export default function EmployerRegistrationBusinessModelPage() {
                 </div>
               </div>
             </div>
-            <button onClick={() => router.push("/employer/managed-hiring/request")} className="btn-3d-red h-12 w-full rounded-2xl font-headline-md text-xs text-white flex items-center justify-center gap-2">
+            <button onClick={() => router.push("/employer/employer-registration-document-verification?model=managed")} className="btn-3d-red h-12 w-full rounded-2xl font-headline-md text-xs text-white flex items-center justify-center gap-2">
               <span>Activate Managed Hiring™</span>
               <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
             </button>
@@ -106,7 +105,7 @@ export default function EmployerRegistrationBusinessModelPage() {
                 </div>
               </div>
             </div>
-            <button onClick={() => router.push("/employer/employer-registration-plan-selection")} className="btn-3d-red h-12 w-full rounded-2xl font-headline-md text-xs text-white flex items-center justify-center gap-2">
+            <button onClick={() => router.push("/employer/employer-registration-plan-selection?model=subscription")} className="btn-3d-red h-12 w-full rounded-2xl font-headline-md text-xs text-white flex items-center justify-center gap-2">
               <span>Start 14-Day Trial</span>
               <span className="material-symbols-outlined text-[18px]">bolt</span>
             </button>

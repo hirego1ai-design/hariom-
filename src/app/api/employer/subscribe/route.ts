@@ -3,6 +3,19 @@ import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 
+const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
+
+async function resolveCompanyId(userId: string) {
+  try {
+    const profile = await prisma.employerProfile.findUnique({ where: { userId } });
+    if (profile) return profile.companyId;
+    if (!allowMockFallbacks) throw new Error("Employer profile not found.");
+  } catch (error) {
+    if (!allowMockFallbacks) throw error;
+  }
+  return "comp-1";
+}
+
 // GET employer's subscription, credits, and available plans
 export async function GET(request: NextRequest) {
   const session = await getCurrentSession(request.headers);
@@ -10,20 +23,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  // Resolve companyId (default to "comp-1")
-  let companyId = "comp-1";
-  const profile = await prisma.employerProfile.findUnique({
-    where: { userId: session.id },
-  });
-  if (profile) {
-    companyId = profile.companyId;
-  }
+  try {
+    const companyId = await resolveCompanyId(session.id);
 
-  const [credits, activeSubscription, plans] = await Promise.all([
-    subscriptionsDb.getCompanyCredits(companyId),
-    subscriptionsDb.getCompanySubscription(companyId),
-    subscriptionsDb.getSubscriptionPlans(false),
-  ]);
+    const [credits, activeSubscription, plans] = await Promise.all([
+      subscriptionsDb.getCompanyCredits(companyId),
+      subscriptionsDb.getCompanySubscription(companyId),
+      subscriptionsDb.getSubscriptionPlans(false),
+    ]);
 
   let activePlan = null;
   if (activeSubscription) {
@@ -54,26 +61,30 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
-    success: true,
-    credits,
-    activeSubscription,
-    activePlan,
-    plans,
-    subscriptionState: {
-      status: derivedStatus,
-      daysRemaining,
-      endDate: activeSubscription?.endDate || null,
-      price: activePlan?.price || 0,
-      currency: activePlan?.currency || "INR",
-      planName: activePlan?.name || "Free Tier",
-    },
-    quotas: {
-      jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota || 10 },
-      resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota || 100 },
-      aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota || 40 },
-    },
-  });
+    return NextResponse.json({
+      success: true,
+      credits,
+      activeSubscription,
+      activePlan,
+      plans,
+      subscriptionState: {
+        status: derivedStatus,
+        daysRemaining,
+        endDate: activeSubscription?.endDate || null,
+        price: activePlan?.price || 0,
+        currency: activePlan?.currency || "INR",
+        planName: activePlan?.name || "Free Tier",
+      },
+      quotas: {
+        jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota || 10 },
+        resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota || 100 },
+        aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota || 40 },
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load subscription data.";
+    return NextResponse.json({ success: false, error: message }, { status: message === "Employer profile not found." ? 404 : 500 });
+  }
 }
 
 // POST purchase/activate a plan
@@ -90,14 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing planId" }, { status: 400 });
     }
 
-    // Resolve companyId (default to "comp-1")
-    let companyId = "comp-1";
-    const profile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
-    });
-    if (profile) {
-      companyId = profile.companyId;
-    }
+    const companyId = await resolveCompanyId(session.id);
 
     const paymentId = crypto.randomUUID();
     const subscription = await subscriptionsDb.subscribeCompanyToPlan(companyId, planId, paymentId);

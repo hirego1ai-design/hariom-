@@ -31,6 +31,12 @@ enum JobStatus {
   CLOSED
 }
 
+enum CustomSkillStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
@@ -43,11 +49,21 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  candidateProfile CandidateProfile?
-  employerProfile  EmployerProfile?
-  auditLogs        AuditLog[]
-  notifications    Notification[]
-  aiUsages         AiUsage[]
+  candidateProfile   CandidateProfile?
+  employerProfile    EmployerProfile?
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  aiUsages           AiUsage[]
+  savedJobs          SavedJob[]
+  referralsInitiated ReferralAttribution[] @relation("UserReferrer")
+  referralReceived   ReferralAttribution?  @relation("UserReferred")
+  referralPayouts       ReferralPayout[]
+  referralRewards       ReferralReward[]      @relation("UserReferralRewards")
+  referralLedgerEntries ReferralLedgerEntry[]
+  customSkillRequests   CustomSkillRequest[]
+  whatsAppContact       WhatsAppContact?
+
+  @@index([phoneNumber])
 }
 
 model CandidateProfile {
@@ -58,6 +74,9 @@ model CandidateProfile {
   bio             String?
   location        String?
   skills          String[] @default([])
+  education       Json?
+  experience      Json?
+  preferences     Json?
   experienceYears Float    @default(0)
   hireGoScore     Int      @default(0)
   resumeUrl       String?
@@ -81,10 +100,11 @@ model Company {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  employers     EmployerProfile[]
-  jobs          JobListing[]
-  subscriptions CompanySubscription[]
-  credits       CompanyCredits?
+  employers        EmployerProfile[]
+  jobs             JobListing[]
+  subscriptions    CompanySubscription[]
+  credits          CompanyCredits?
+  referralReceived ReferralAttribution?  @relation("CompanyReferred")
 }
 
 model EmployerProfile {
@@ -115,6 +135,77 @@ model JobListing {
   updatedAt    DateTime  @updatedAt
 
   applications Application[]
+  savedBy      SavedJob[]
+}
+
+// Shared role-to-skill catalog used by candidate profiles, job creation,
+// matching, skill-gap analysis, interviews, and course recommendations.
+model SkillMaster {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  slug        String             @unique
+  category    String
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  roleMappings RoleSkillMapping[]
+}
+
+model RoleSkillMapping {
+  id                     String      @id @default(uuid())
+  roleTitle              String
+  industry               String?
+  department             String?
+  skillId                String
+  skill                  SkillMaster @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillCategory          String
+  priority               String      @default("preferred")
+  recommendedProficiency String      @default("intermediate")
+  isActive               Boolean     @default(true)
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  @@unique([roleTitle, skillId])
+  @@index([roleTitle, industry, department])
+}
+
+model CustomSkillRequest {
+  id               String            @id @default(uuid())
+  name             String
+  normalizedName   String
+  suggestedForRole String?
+  requestedById    String
+  requestedBy      User              @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  status           CustomSkillStatus @default(PENDING)
+  reviewedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([normalizedName])
+}
+
+model SavedJob {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       JobListing @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, jobId])
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  type      String   @default("VERIFY_EMAIL")
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
 }
 
 model Application {
@@ -384,6 +475,22 @@ model PaymentGatewayConfig {
   gatewaysStatus         Json     // { RAZORPAY: "HEALTHY", PAYU: "HEALTHY", PHONEPE: "HEALTHY" }
   priorities             Json     // ["RAZORPAY", "PAYU", "PHONEPE"]
   updatedAt              DateTime @updatedAt
+}
+
+// Global transactional-email delivery policy. API credentials are encrypted
+// before storage and are never returned by the admin API.
+model EmailDeliveryConfig {
+  id                        String   @id @default("global-email-delivery")
+  primaryProvider           String   @default("SENDGRID")
+  fallbackProvider          String   @default("ZEPTOMAIL")
+  autoFailover              Boolean  @default(true)
+  sendgridEnabled           Boolean  @default(true)
+  zeptoMailEnabled          Boolean  @default(false)
+  sendgridFromEmail         String?
+  zeptoMailFromEmail        String?
+  sendgridApiKeyEncrypted   String?
+  zeptoMailApiKeyEncrypted  String?
+  updatedAt                 DateTime @updatedAt
 }
 
 model AiExecutionLog {
@@ -925,4 +1032,259 @@ model DocumentVerificationLog {
 
   @@index([documentId])
   @@index([performedBy])
+}
+
+// ================================================================
+// MODEL 19: REFERRAL ENGINE PHASE 1
+// ================================================================
+
+enum ReferralStatus {
+  ATTRIBUTED
+  QUALIFIED
+  LOCKED
+  ELIGIBLE
+  PAYABLE
+  PAID
+  REJECTED
+  REVERSED
+  FRAUD_HOLD
+  LIMIT_REACHED
+}
+
+enum ReferralProductType {
+  CANDIDATE_MOCK_INTERVIEW
+  CANDIDATE_CAREER_PASS
+  EMPLOYER_JOB_POST
+  EMPLOYER_SUBSCRIPTION
+  EMPLOYER_MANAGED_HIRING
+  EMPLOYER_PPH_PLACEMENT
+}
+
+model ReferralAttribution {
+  id                String          @id @default(uuid())
+  referrerId        String
+  referrer          User            @relation("UserReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId    String?         @unique
+  referredUser      User?           @relation("UserReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
+  referredCompanyId String?         @unique
+  referredCompany   Company?        @relation("CompanyReferred", fields: [referredCompanyId], references: [id], onDelete: SetNull)
+  referralCode      String
+  attributionSource String
+  attributionDate   DateTime        @default(now())
+  userType          Role
+  metadata          Json?
+  rewards           ReferralReward[]
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([referrerId])
+  @@index([referralCode])
+  @@index([attributionDate])
+}
+
+model ReferralReward {
+  id                        String                @id @default(uuid())
+  attributionId             String
+  attribution               ReferralAttribution   @relation(fields: [attributionId], references: [id], onDelete: Cascade)
+  referrerId                String
+  referrer                  User                  @relation("UserReferralRewards", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId            String?
+  referredCompanyId         String?
+  productType               ReferralProductType
+  transactionSequenceNumber Int
+  rewardAmount              Float
+  currency                  String                @default("INR")
+  status                    ReferralStatus        @default(ATTRIBUTED)
+  isLocked                  Boolean               @default(false)
+  lockDurationDays          Int                   @default(0)
+  lockExpiresAt             DateTime?
+  unlockedAt                DateTime?
+  transactionId             String?               @unique
+  hiringRequirementId       String?
+  commercialAgreementId     String?
+  payoutId                  String?
+  payout                    ReferralPayout?       @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  ledgerEntries             ReferralLedgerEntry[]
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  @@index([attributionId])
+  @@index([referrerId])
+  @@index([status])
+  @@index([payoutId])
+  @@index([lockExpiresAt])
+}
+
+model ReferralPayout {
+  id             String                @id @default(uuid())
+  referrerId     String
+  referrer       User                  @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  amount         Float
+  currency       String                @default("INR")
+  payoutMethod   String
+  payoutAddress  String
+  status         String                @default("PENDING_ADMIN_APPROVAL")
+  transactionRef String?
+  adminNotes     String?
+  approvedBy     String?
+  processedAt    DateTime?
+  rewards        ReferralReward[]
+  ledgerEntries  ReferralLedgerEntry[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([referrerId])
+  @@index([status])
+}
+
+enum ReferralLedgerEntryType {
+  REWARD_CREDIT
+  REWARD_LOCK
+  REWARD_UNLOCK
+  REWARD_REVERSAL
+  PAYOUT_RESERVED
+  PAYOUT_SETTLED
+  PAYOUT_REFUNDED
+}
+
+model ReferralLedgerEntry {
+  id            String                  @id @default(uuid())
+  referrerId    String
+  referrer      User                    @relation(fields: [referrerId], references: [id], onDelete: Cascade)
+  rewardId      String?
+  reward        ReferralReward?         @relation(fields: [rewardId], references: [id], onDelete: SetNull)
+  payoutId      String?
+  payout        ReferralPayout?         @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  entryType     ReferralLedgerEntryType
+  amount        Float
+  balanceAfter  Float
+  currency      String                  @default("INR")
+  correlationId String
+  metadata      Json?
+  createdAt     DateTime                @default(now())
+
+  @@index([referrerId])
+  @@index([correlationId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
+model ReferralProgramConfig {
+  id                                 String   @id @default("global-referral-config")
+  isEnabled                          Boolean  @default(true)
+  candidateRewardAmount              Float    @default(250.0)
+  candidateMaxQualifyingTransactions Int      @default(2)
+  employerJobRewardAmount            Float    @default(1000.0)
+  employerMaxQualifyingTransactions  Int      @default(2)
+  managedHiringRewardAmount          Float    @default(5000.0)
+  managedHiringMaxRewards            Int      @default(1)
+  managedHiringDefaultLockDays       Int      @default(90)
+  pphRewardAmount                    Float    @default(5000.0)
+  pphMaxQualifyingHires              Int      @default(1)
+  pphDefaultLockingPeriodDays        Int      @default(90)
+  minPayoutAmount                    Float    @default(500.0)
+  attributionWindowDays              Int      @default(30)
+  updatedAt                          DateTime @updatedAt
+}
+
+
+// ================================================================
+// WHATSAPP CHANNEL — Identity, Session, Event Models
+// Migration: add_whatsapp_channel
+// ================================================================
+
+// ── MODEL: WhatsAppContact ────────────────────────────────────────────────────
+// One canonical identity mapping per Meta WABA contact (waId).
+// waId is Meta's unique identifier for the contact, e.g. "919876543210".
+// userId is null until the contact is verified and linked to a HireGo User.
+// One HireGo User can have at most ONE WhatsApp contact (@unique on userId).
+
+model WhatsAppContact {
+  id               String   @id @default(uuid())
+  waId             String   @unique  // Meta WABA contact ID — digits only e.g. "919876543210"
+  normalizedPhone  String            // E.164 format e.g. "+919876543210"
+  userId           String?  @unique  // Null until verified link; @unique prevents 1-user-many-contacts
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Link / verification state
+  verificationStatus String  @default("UNVERIFIED")
+  // UNVERIFIED | OTP_SENT | VERIFIED | AMBIGUOUS
+
+  linkStatus         String  @default("UNLINKED")
+  // UNLINKED | PENDING_VERIFICATION | LINKED | REJECTED
+
+  optInStatus        String  @default("OPTED_IN")
+  // OPTED_IN | OPTED_OUT
+
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  onboardingSession WhatsAppOnboardingSession?
+  inboundEvents     WhatsAppInboundEvent[]
+
+  @@index([normalizedPhone])
+  @@index([userId])
+}
+
+// ── MODEL: WhatsAppOnboardingSession ─────────────────────────────────────────
+// Persists multi-step onboarding state so candidates can leave and return.
+// One session per contact (@unique on whatsAppContactId).
+// collectedData stores staged (not-yet-committed) field values as JSON.
+// Sensitive values (e.g. email) are stored here only during the session
+// and committed to User/CandidateProfile on COMPLETE.
+
+model WhatsAppOnboardingSession {
+  id                String          @id @default(uuid())
+  whatsAppContactId String          @unique
+  contact           WhatsAppContact @relation(fields: [whatsAppContactId], references: [id], onDelete: Cascade)
+
+  userId      String?  // Populated after User creation
+  candidateId String?  // Populated after CandidateProfile creation
+
+  currentStep String   @default("START")
+  // START | NAME | EMAIL | ROLE | EXPERIENCE | LOCATION | CONFIRMATION
+  // | EXISTING_USER_VERIFY | CREATING | COMPLETE | CANCELLED | EXPIRED
+
+  status      String   @default("ACTIVE")
+  // ACTIVE | COMPLETE | CANCELLED | EXPIRED
+
+  collectedData   Json     @default("{}")   // Staged slot values
+  referralCode    String?                   // Captured from ?ref= or WhatsApp message
+  attributionSource String? @default("whatsapp")
+  campaignMeta    Json?                     // QR / UTM attribution metadata
+
+  startedAt      DateTime @default(now())
+  lastActivityAt DateTime @updatedAt
+  completedAt    DateTime?
+  expiresAt      DateTime              // Computed: startedAt + 7 days
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([userId])
+}
+
+// ── MODEL: WhatsAppInboundEvent ───────────────────────────────────────────────
+// Immutable record of every inbound Meta webhook message.
+// providerEventId @unique is the primary idempotency guard:
+// duplicate Meta deliveries of the same message are detected and skipped.
+
+model WhatsAppInboundEvent {
+  id              String          @id @default(uuid())
+  providerEventId String          @unique   // Meta message_id
+  waId            String
+  contact         WhatsAppContact @relation(fields: [waId], references: [waId], onDelete: Cascade)
+  messageType     String          // text | interactive | image | document | audio | video | location
+  rawPayload      Json
+  processed       Boolean         @default(false)
+  processingError String?
+  receivedAt      DateTime        @default(now())
+  processedAt     DateTime?
+
+  @@index([waId, receivedAt])
+  @@index([processed, receivedAt])
 }

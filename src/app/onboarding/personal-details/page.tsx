@@ -11,20 +11,51 @@ export default function PersonalDetailsPage() {
   const { state, updateState, markStepComplete } = useOnboarding();
 
   const [formData, setFormData] = useState({
-    fullName: state.personalDetails?.fullName || "Alex Chen",
-    email: state.personalDetails?.email || "alex.chen@example.com",
-    phone: state.personalDetails?.phone || "+1 (555) 234-5678",
-    location: state.personalDetails?.location || "San Francisco, CA",
-    dateOfBirth: state.personalDetails?.dateOfBirth || "1998-04-12",
-    linkedinUrl: state.personalDetails?.linkedinUrl || "https://linkedin.com/in/alexchen",
+    fullName: state.personalDetails?.fullName || "",
+    email: state.personalDetails?.email || "",
+    phone: state.personalDetails?.phone || "",
+    location: state.personalDetails?.location || "",
+    dateOfBirth: state.personalDetails?.dateOfBirth || "",
+    linkedinUrl: state.personalDetails?.linkedinUrl || "",
   });
+
+  React.useEffect(() => {
+    fetch("/api/candidate/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.profile) {
+          setFormData((prev) => ({
+            ...prev,
+            fullName: prev.fullName || data.profile.name || "",
+            email: prev.email || data.profile.email || "",
+            location: prev.location || data.profile.location || "",
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     updateState({ personalDetails: formData });
     markStepComplete(3);
+
+    // Persist to backend
+    fetch("/api/candidate/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fullName: formData.fullName,
+        phone: formData.phone,
+        location: formData.location,
+        linkedinUrl: formData.linkedinUrl,
+        bio: formData.location ? `Professional based in ${formData.location}` : "",
+      }),
+    }).catch(() => {});
+
     router.push("/onboarding/education");
   };
+
 
   return (
     <div
@@ -48,7 +79,7 @@ export default function PersonalDetailsPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -64,7 +95,7 @@ export default function PersonalDetailsPage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 3/10
+                Profile setup
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Personal Profile Verification
@@ -78,7 +109,7 @@ export default function PersonalDetailsPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -87,7 +118,7 @@ export default function PersonalDetailsPage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 3 of 10
+              Your details
             </span>
           </div>
         </header>
@@ -149,13 +180,13 @@ export default function PersonalDetailsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  EMAIL ADDRESS
+                  EMAIL ADDRESS · VERIFIED
                 </label>
                 <input
                   type="email"
                   required
+                  readOnly
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold transition-all"
                   style={{
                     backgroundColor: "var(--bg-input)",
@@ -173,10 +204,11 @@ export default function PersonalDetailsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  MOBILE NUMBER
+                  MOBILE NUMBER · OPTIONAL
                 </label>
                 <input
                   type="tel"
+                  placeholder="+1 555 123 4567"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold transition-all"
@@ -219,30 +251,7 @@ export default function PersonalDetailsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  DATE OF BIRTH
-                </label>
-                <input
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                  className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor: "var(--bg-input)",
-                    border: "1.5px solid var(--outline)",
-                    color: "var(--text-primary)",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "var(--primary)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "var(--outline)";
-                  }}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  LINKEDIN PROFILE URL
+                  LINKEDIN PROFILE URL · OPTIONAL
                 </label>
                 <input
                   type="url"
@@ -267,7 +276,7 @@ export default function PersonalDetailsPage() {
             {/* Bottom Actions */}
             <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--outline)" }}>
               <Link
-                href="/onboarding/welcome"
+                href="/onboarding/role-select"
                 className="px-6 h-11 rounded-full font-bold text-xs flex items-center gap-2 transition-all border"
                 style={{
                   backgroundColor: "var(--surface-container-high)",

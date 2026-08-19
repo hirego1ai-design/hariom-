@@ -4,12 +4,6 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-function createDemoSession(payload: Record<string, unknown>) {
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "");
-  const body = btoa(JSON.stringify(payload)).replace(/=/g, "");
-  document.cookie = `hirego_session=${header}.${body}.demoSignature; path=/; max-age=604800`;
-}
-
 function EmployerSignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -17,6 +11,7 @@ function EmployerSignInContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
 
   // If role=admin in URL, redirect directly to Admin Control Console
   useEffect(() => {
@@ -47,20 +42,8 @@ function EmployerSignInContent() {
     const password = String(formData.get("password") || "");
 
     setIsSubmitting(true);
+    setError("");
     try {
-      if (email.includes("admin")) {
-        const demoPayload = {
-          id: "admin-1",
-          email: "admin@hirego.ai",
-          name: "HireGo Administrator",
-          role: "ADMIN",
-          exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-        };
-        createDemoSession(demoPayload);
-        window.location.href = "/admin/dashboard";
-        return;
-      }
-
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,16 +52,7 @@ function EmployerSignInContent() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        // Issue employer demo session
-        const demoPayload = {
-          id: "employer-1",
-          email: email || "employer@acme.com",
-          name: "Acme Hiring Team",
-          role: "EMPLOYER",
-          exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-        };
-        createDemoSession(demoPayload);
-        window.location.href = "/employer/dashboard";
+        setError(result.error || "Invalid email or password.");
         return;
       }
 
@@ -89,16 +63,7 @@ function EmployerSignInContent() {
         window.location.href = "/employer/dashboard";
       }
     } catch {
-      // Demo fallback for offline
-      const demoPayload = {
-        id: "employer-1",
-        email: email || "employer@acme.com",
-        name: "Acme Hiring Team",
-        role: "EMPLOYER",
-        exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-      };
-      createDemoSession(demoPayload);
-      window.location.href = "/employer/dashboard";
+      setError("Unable to sign in right now. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -248,6 +213,7 @@ function EmployerSignInContent() {
 
             {/* Form */}
             <form className="space-y-3" onSubmit={handleSignIn}>
+              {error && <p className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">{error}</p>}
               {/* Corporate Email */}
               <div className="space-y-1">
                 <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">

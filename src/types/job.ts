@@ -21,7 +21,7 @@ export interface JobListing {
   updatedAt?: Date;
 }
 
-export interface DbJob extends JobListing {}
+export type DbJob = JobListing;
 
 export interface Application {
   id: string;

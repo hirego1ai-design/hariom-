@@ -86,7 +86,7 @@ export default function DocumentUploadPage() {
           <div className="flex items-center justify-between">
             <div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary-container-bg text-primary">
-                Onboarding Step 8/10
+                Document upload
               </span>
               <h1 className="font-display-lg text-lg font-bold text-text-primary mt-1">
                 Admin Verification Documents

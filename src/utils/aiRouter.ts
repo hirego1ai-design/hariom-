@@ -9,7 +9,7 @@ export interface AiTaskRequest {
   primaryProvider?: LlmProvider;
   temperature?: number;
   maxTokens?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   bypassCache?: boolean;
 }
 
@@ -79,8 +79,8 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     deepseek: "deepseek-v3",
   };
 
-  let providerUsed: LlmProvider = primaryProvider;
-  let status: "SUCCESS" | "FALLBACK" | "FAILED" = "SUCCESS";
+  const providerUsed: LlmProvider = primaryProvider;
+  const status = "SUCCESS" as const;
   let responseText = "";
   let actualPromptTokens = 0;
   let actualCompletionTokens = 0;
@@ -99,43 +99,18 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
       responseText = response.choices[0]?.message?.content || "";
       actualPromptTokens = response.usage?.prompt_tokens || 0;
       actualCompletionTokens = response.usage?.completion_tokens || 0;
-    } catch (err: any) {
-      status = "FALLBACK";
-      console.warn(`[AI Router] Primary provider ${primaryProvider} failed (${err.message}). Falling back to internal engine.`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown provider error";
+      throw new Error(`AI provider ${primaryProvider} failed: ${message}`);
     }
   }
 
-  // Fallback / Simulated engine execution if real API call was not made or failed
   if (!responseText) {
-    if (request.task === "RESUME_SCORE") {
-      responseText = JSON.stringify({
-        score: 84,
-        skillsFound: ["React", "TypeScript", "Node.js", "Next.js", "GraphQL"],
-        experienceYears: 4.5,
-        strengths: ["Strong modern frontend stack", "Fullstack API design experience"],
-        missingKeywords: ["Docker", "Kubernetes", "CI/CD Pipeline"],
-        aiSummary: "High-potential candidate with strong React & Node.js architecture proficiency.",
-      });
-    } else if (request.task === "JD_GENERATION") {
-      responseText = `Job Description: Senior Full Stack AI Engineer\n\nRole Overview:\nWe are seeking an experienced Full Stack AI Engineer to lead development on our core AI platform...\n\nKey Responsibilities:\n- Build scalable Next.js and TypeScript web applications\n- Integrate OpenAI and Gemini LLM APIs for automated workflow execution\n- Optimize database queries and API response times\n\nQualifications:\n- 3+ years experience with Next.js, Node.js, and Tailwind CSS\n- Direct experience building AI/LLM integrated products`;
-    } else if (request.task === "CANDIDATE_MATCH") {
-      responseText = JSON.stringify({
-        matchScore: 92,
-        matchingSkills: ["React", "TypeScript", "Next.js"],
-        gapSkills: ["AWS"],
-        recommendation: "Strong Match — Proceed to Technical Interview",
-      });
-    } else if (request.task === "INTERVIEW_EVALUATION") {
-      responseText = JSON.stringify({
-        communicationScore: 88,
-        technicalScore: 90,
-        confidenceScore: 85,
-        verdict: "Pass",
-        feedback: "Candidate demonstrated clear communication and solid system design principles.",
-      });
-    } else {
-      responseText = `AI Execution Result for prompt: "${request.prompt.slice(0, 50)}..." processed via ${providerUsed.toUpperCase()} (${modelMap[providerUsed]}).`;
-    }
+    throw new Error(
+      primaryProvider === "openai"
+        ? "AI service is not configured. Set a valid OPENAI_API_KEY."
+        : `AI provider ${primaryProvider} is not configured.`,
+    );
   }
 
   const latencyMs = Math.max(120, Date.now() - startTime);
@@ -207,7 +182,7 @@ export async function getAiUsageStats() {
         totalTokens: l.totalTokens,
         latencyMs: l.latencyMs,
         costEstUsd: l.costEstUsd,
-        status: l.status as any,
+        status: l.status as AiExecutionLog["status"],
         timestamp: l.timestamp.toISOString(),
       }));
     }

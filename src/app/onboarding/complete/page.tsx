@@ -3,8 +3,12 @@
 import React from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
+import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function OnboardingCompletePage() {
+  const { state } = useOnboarding();
+  const displayName = state.personalDetails.fullName.trim() || "Candidate";
+  const score = state.hireGoScore?.overall;
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
@@ -33,9 +37,11 @@ export default function OnboardingCompletePage() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-2xl font-bold text-white">Congratulations, Alex!</h1>
+              <h1 className="text-2xl font-bold text-white">Congratulations, {displayName}!</h1>
               <p className="text-xs text-text-muted max-w-[400px] mx-auto leading-relaxed">
-                Your HireGo Score™ of <strong>88</strong> and candidate intelligence report are now visible to top enterprise hiring teams.
+                {score !== undefined
+                  ? <>Your current HireGo Score™ is <strong>{score}</strong>. You can keep improving your profile at any time.</>
+                  : "Your candidate profile is ready. Complete any optional assessments later to generate a HireGo Score™."}
               </p>
             </div>
 

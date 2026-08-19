@@ -1,20 +1,447 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ReferralDashboardStatsDTO, ReferralStatus } from "@/types/referral";
 
-const rawHtml = "\n<!-- Background Elements -->\n<div className=\"fixed inset-0 grid-overlay pointer-events-none z-0\"></div>\n<div className=\"fixed inset-0 radial-glow-red pointer-events-none z-0\"></div>\n<div className=\"fixed inset-0 radial-glow-blue pointer-events-none z-0\"></div>\n\n<!-- Main Content Area -->\n<main className=\"flex-1 flex flex-col min-w-0 z-10\">\n<!-- TopNavBar -->\n<header className=\"h-[64px] w-full sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-white/10 shadow-sm flex items-center justify-between px-margin-desktop\">\n<div className=\"flex items-center gap-gutter\">\n<div className=\"relative\">\n<span className=\"absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-text-muted\">search</span>\n<input className=\"h-[36px] w-[300px] bg-bg-elevated border-none rounded-full pl-10 pr-4 text-label-md focus:ring-1 focus:ring-primary/50 transition-all\" placeholder=\"Search resources...\" type=\"text\">\n</div>\n</div>\n<div className=\"flex items-center gap-6\">\n<button className=\"text-text-secondary hover:text-primary transition-colors active:scale-95\">\n<span className=\"material-symbols-outlined\">notifications</span>\n</button>\n<button className=\"text-text-secondary hover:text-primary transition-colors active:scale-95\">\n<span className=\"material-symbols-outlined\">auto_awesome</span>\n</button>\n<div className=\"flex items-center gap-3 pl-4 border-l border-white/10\">\n<div className=\"text-right hidden sm:block\">\n<p className=\"font-label-md text-label-md text-text-primary leading-none\">Rahul Sharma</p>\n<p className=\"text-[11px] text-text-secondary uppercase tracking-widest mt-1\">Premium Member</p>\n</div>\n<img className=\"w-10 h-10 rounded-full border border-white/20 object-cover\" data-alt=\"A professional close-up studio portrait of a young South Asian male professional with a friendly smile, clean-shaven, wearing a smart casual dark blazer. The lighting is cinematic with a soft blue rim light, set against a dark, technologically textured background with subtle digital artifacts. High-fidelity photography style for a premium AI-driven candidate portal.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuBJje3LQRkkGLmxWDQZlIG-8KBCrhLqHpIla2HdCW25i3uB0UVT6GxZryvJD9iaNK2erBidEtV0ssj1V-oTL9WN1fDLQeiuq5zmFpKk6Hc6tnl24vvsE2zpCekdm5YkhYDkne0B800M4bXdPfpVdJtHc_Pjpep572KnyJnR7RCkrchxog9Nlm7NF5OCWxO_hBwXfrhAv0Gd2x8S70WNqF9qvBG5pxfSPVNjELku6nodCc5Vy8a1t4dzeDN3IF9n9nZEBVvri7hsBfM\">\n</div>\n</div>\n</header>\n<!-- Canvas -->\n<section className=\"flex-1 p-margin-desktop overflow-y-auto custom-scrollbar\">\n<!-- Hero Stats & Action -->\n<div className=\"grid grid-cols-12 gap-gutter mb-stack-lg\">\n<!-- Main Earnings Card -->\n<div className=\"col-span-12 lg:col-span-8 glass-card p-stack-lg rounded-lg flex flex-col justify-between relative overflow-hidden group\">\n<div className=\"absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity\">\n<span className=\"material-symbols-outlined text-[120px]\">account_balance_wallet</span>\n</div>\n<div>\n<h2 className=\"font-label-md text-label-md text-text-secondary uppercase tracking-widest mb-2\">Total Referral Rewards</h2>\n<div className=\"flex items-baseline gap-2\">\n<span className=\"font-display-xl text-display-xl text-green\">Rs.1500</span>\n<span className=\"font-headline-md text-headline-md text-text-primary/40\">earned</span>\n</div>\n</div>\n<div className=\"mt-stack-lg flex flex-wrap gap-4 items-center\">\n<button className=\"h-[50px] px-8 rounded-full btn-3d-gold flex items-center justify-center gap-2\">\n<span className=\"material-symbols-outlined text-[20px]\">payments</span>\n                            Withdraw Earnings\n                        </button>\n<button className=\"h-[50px] px-8 rounded-full btn-3d-red text-white flex items-center justify-center gap-2 font-bold\">\n<span className=\"material-symbols-outlined text-[20px]\">share</span>\n                            Refer More Friends\n                        </button>\n</div>\n</div>\n<!-- Referral Code Card -->\n<div className=\"col-span-12 lg:col-span-4 glass-card p-stack-lg rounded-lg flex flex-col items-center justify-center text-center border-primary/20\">\n<p className=\"font-label-md text-label-md text-text-secondary mb-4\">Your Unique Code</p>\n<div className=\"bg-primary/5 border border-primary/30 py-4 px-8 rounded-lg mb-6 w-full cursor-pointer hover:bg-primary/10 transition-colors group\">\n<span className=\"font-data-lg text-data-lg text-primary tracking-widest\">RAHUL2025</span>\n<div className=\"mt-2 text-[10px] text-primary/60 uppercase group-hover:text-primary transition-colors\">Click to copy</div>\n</div>\n<div className=\"flex gap-4\">\n<button className=\"w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors\">\n<img className=\"w-5 h-5 opacity-70\" data-alt=\"Social media platform icon for WhatsApp, circular minimalist design with a clean white vector logo on a dark glassmorphism background, matching a high-end dark mode UI.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuBmcWh1sM6x6kBpFCWkq8F3S91rV-8l9jIoqvzou_qf9qUN5AeoluoY5k3j9c5tH2bMQOIFk5kPsiGopq90Ena09JEFprmXlRlWzBpUeQk0yVhTJ7xzVrz4qT6KqDP9GHmjOFTkh95-yrOyZcdZr-Cae68b4q4VZiMUC6jXUNp36ku2sZNnlglCOLpTTe_zHosYimyiso6y92qMWvf1paz29FQCPHKA4AkTj5uMKjBv1ggtQP2liBH7QCITM0owN1scXuwIReMTjQg\">\n</button>\n<button className=\"w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors\">\n<img className=\"w-5 h-5 opacity-70\" data-alt=\"Social media platform icon for LinkedIn, circular minimalist design with a clean white vector logo on a dark glassmorphism background, matching a high-end dark mode UI.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuB_IStvzYrtTDqrzRXIBrnh06hMXKzNQW2Pb7EdnhcPAY3G-HXPBfltJ-0tZwzXEfAImDCnY88yS-cr9Qo-5wn_7-LTvYWvnGERy7kU-jrVYMlGYgRhyhTa1y90AVWwnWu0L5JzHubDZ8pcNjGdoajpqa5hmJZM56cnKU6-BxkJUFvjPG_VAetuvlErbxyWj-mCgp0_h3uJ9HHvD8fG2CBVFD3tCGTBHjtafBt4faYy9WG1felxkKJqZvm4GAy8EvLx9JVzd-uuYMs\">\n</button>\n<button className=\"w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors\">\n<img className=\"w-5 h-5 opacity-70\" data-alt=\"Social media platform icon for Twitter or X, circular minimalist design with a clean white vector logo on a dark glassmorphism background, matching a high-end dark mode UI.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAc62ejfXK5B-o9BS03tgDbCgJBRifDKqqCWhP_gJt5zmABfbMl0f3-k_ZUdhacUMgXve5BTLg3GPK0rY469efPULmqZu4vB-XNWWBzy42ifkt9u_5lbve73eE4cd_uTbFZ3uCCprm-DEwEnAPXObRYZ6oUniJR5ruTdt196Vl5CNB7YVbOiqVM815G3Z2J1ga5GO3WPFgfu5yMeJ_El5UwvD18W-ROXIrF56MNvbIS50VR1Oskpu-3iMP0i84oE5izEtipTJol1PI\">\n</button>\n</div>\n</div>\n</div>\n<!-- Stats Grid -->\n<div className=\"grid grid-cols-1 md:grid-cols-3 gap-gutter mb-stack-lg\">\n<div className=\"glass-card p-6 rounded-lg flex items-center gap-4\">\n<div className=\"w-14 h-14 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20\">\n<span className=\"material-symbols-outlined text-secondary\" style=\"font-variation-settings: 'FILL' 1;\">group</span>\n</div>\n<div>\n<p className=\"font-display-lg text-display-lg leading-none\">3</p>\n<p className=\"text-text-secondary text-sm\">Friends Referred</p>\n</div>\n</div>\n<div className=\"glass-card p-6 rounded-lg flex items-center gap-4 border-green/20\">\n<div className=\"w-14 h-14 rounded-full bg-green/10 flex items-center justify-center border border-green/20\">\n<span className=\"material-symbols-outlined text-green\" style=\"font-variation-settings: 'FILL' 1;\">check_circle</span>\n</div>\n<div>\n<p className=\"font-display-lg text-display-lg leading-none\">1</p>\n<p className=\"text-text-secondary text-sm\">Successfully Hired</p>\n</div>\n</div>\n<div className=\"glass-card p-6 rounded-lg flex items-center gap-4\">\n<div className=\"w-14 h-14 rounded-full bg-yellow/10 flex items-center justify-center border border-yellow/20\">\n<span className=\"material-symbols-outlined text-yellow\" style=\"font-variation-settings: 'FILL' 1;\">how_to_reg</span>\n</div>\n<div>\n<p className=\"font-display-lg text-display-lg leading-none\">2</p>\n<p className=\"text-text-secondary text-sm\">Registered Users</p>\n</div>\n</div>\n</div>\n<!-- Referred Friends Table -->\n<div className=\"glass-card rounded-lg overflow-hidden\">\n<div className=\"p-6 border-b border-white/5 flex items-center justify-between\">\n<h3 className=\"font-headline-md text-headline-md\">Referred Friends</h3>\n<div className=\"flex items-center gap-2\">\n<span className=\"h-2 w-2 rounded-full bg-green animate-pulse\"></span>\n<span className=\"text-sm text-text-secondary\">Tracking live updates</span>\n</div>\n</div>\n<div className=\"overflow-x-auto\">\n<table className=\"w-full text-left\">\n<thead>\n<tr className=\"bg-white/5 font-label-md text-label-md text-text-muted\">\n<th className=\"px-6 py-4\">Friend</th>\n<th className=\"px-6 py-4\">Status</th>\n<th className=\"px-6 py-4\">Registered Date</th>\n<th className=\"px-6 py-4\">Earnings</th>\n<th className=\"px-6 py-4\">Action</th>\n</tr>\n</thead>\n<tbody className=\"divide-y divide-white/5\">\n<!-- Hired -->\n<tr className=\"hover:bg-white/2 transition-colors\">\n<td className=\"px-6 py-4\">\n<div className=\"flex items-center gap-3\">\n<div className=\"w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold\">AK</div>\n<div>\n<p className=\"font-body-md text-body-md\">Ankit Kapoor</p>\n<p className=\"text-[11px] text-text-muted\">ankit.k@example.com</p>\n</div>\n</div>\n</td>\n<td className=\"px-6 py-4\">\n<span className=\"px-3 py-1 rounded-full bg-green/10 text-green text-[12px] font-bold border border-green/20\">Hired</span>\n</td>\n<td className=\"px-6 py-4 text-text-secondary font-data-md text-data-md\">Oct 12, 2024</td>\n<td className=\"px-6 py-4 font-bold text-green\">Rs.1000</td>\n<td className=\"px-6 py-4\">\n<button className=\"text-text-muted hover:text-primary transition-colors\">\n<span className=\"material-symbols-outlined\">more_vert</span>\n</button>\n</td>\n</tr>\n<!-- Registered -->\n<tr className=\"hover:bg-white/2 transition-colors\">\n<td className=\"px-6 py-4\">\n<div className=\"flex items-center gap-3\">\n<div className=\"w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-xs font-bold\">SM</div>\n<div>\n<p className=\"font-body-md text-body-md\">Sana Mehta</p>\n<p className=\"text-[11px] text-text-muted\">sana.m@example.com</p>\n</div>\n</div>\n</td>\n<td className=\"px-6 py-4\">\n<span className=\"px-3 py-1 rounded-full bg-yellow/10 text-yellow text-[12px] font-bold border border-yellow/20\">Registered</span>\n</td>\n<td className=\"px-6 py-4 text-text-secondary font-data-md text-data-md\">Nov 05, 2024</td>\n<td className=\"px-6 py-4 font-bold text-text-primary\">Rs.250</td>\n<td className=\"px-6 py-4\">\n<button className=\"text-text-muted hover:text-primary transition-colors\">\n<span className=\"material-symbols-outlined\">more_vert</span>\n</button>\n</td>\n</tr>\n<!-- Registered -->\n<tr className=\"hover:bg-white/2 transition-colors\">\n<td className=\"px-6 py-4\">\n<div className=\"flex items-center gap-3\">\n<div className=\"w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center text-xs font-bold\">RV</div>\n<div>\n<p className=\"font-body-md text-body-md\">Rohan Verma</p>\n<p className=\"text-[11px] text-text-muted\">rohan.v@example.com</p>\n</div>\n</div>\n</td>\n<td className=\"px-6 py-4\">\n<span className=\"px-3 py-1 rounded-full bg-yellow/10 text-yellow text-[12px] font-bold border border-yellow/20\">Registered</span>\n</td>\n<td className=\"px-6 py-4 text-text-secondary font-data-md text-data-md\">Dec 02, 2024</td>\n<td className=\"px-6 py-4 font-bold text-text-primary\">Rs.250</td>\n<td className=\"px-6 py-4\">\n<button className=\"text-text-muted hover:text-primary transition-colors\">\n<span className=\"material-symbols-outlined\">more_vert</span>\n</button>\n</td>\n</tr>\n</tbody>\n</table>\n</div>\n<div className=\"p-4 bg-white/2 border-t border-white/5 flex items-center justify-between\">\n<p className=\"text-sm text-text-muted\">Showing 1 to 3 of 3 friends</p>\n<div className=\"flex gap-2\">\n<button className=\"w-8 h-8 rounded bg-white/5 flex items-center justify-center opacity-50 cursor-not-allowed\"><span className=\"material-symbols-outlined text-sm\">chevron_left</span></button>\n<button className=\"w-8 h-8 rounded bg-primary/10 text-primary flex items-center justify-center font-bold\">1</button>\n<button className=\"w-8 h-8 rounded bg-white/5 flex items-center justify-center hover:bg-white/10\"><span className=\"material-symbols-outlined text-sm\">chevron_right</span></button>\n</div>\n</div>\n</div>\n<!-- How it Works section -->\n<div className=\"mt-stack-lg p-margin-desktop border border-white/5 rounded-lg bg-surface-container-low/30 backdrop-blur-sm\">\n<h3 className=\"font-headline-md text-headline-md mb-8 text-center\">How to earn more?</h3>\n<div className=\"grid grid-cols-1 md:grid-cols-3 gap-gutter relative\">\n<!-- Connectors (Desktop only) -->\n<div className=\"hidden md:block absolute top-12 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent\"></div>\n<div className=\"flex flex-col items-center text-center\">\n<div className=\"w-16 h-16 rounded-full bg-bg-elevated border border-white/10 flex items-center justify-center mb-4 z-10\">\n<span className=\"material-symbols-outlined text-primary\">send</span>\n</div>\n<h4 className=\"font-label-md text-label-md mb-2\">Invite Friends</h4>\n<p className=\"text-sm text-text-secondary\">Share your link or code via email, text, or social media.</p>\n</div>\n<div className=\"flex flex-col items-center text-center\">\n<div className=\"w-16 h-16 rounded-full bg-bg-elevated border border-white/10 flex items-center justify-center mb-4 z-10\">\n<span className=\"material-symbols-outlined text-yellow\">fitbit_push_ups</span>\n</div>\n<h4 className=\"font-label-md text-label-md mb-2\">They Register</h4>\n<p className=\"text-sm text-text-secondary\">Earn Rs.250 instantly when your friend signs up and completes profile.</p>\n</div>\n<div className=\"flex flex-col items-center text-center\">\n<div className=\"w-16 h-16 rounded-full bg-bg-elevated border border-white/10 flex items-center justify-center mb-4 z-10\">\n<span className=\"material-symbols-outlined text-green\">work</span>\n</div>\n<h4 className=\"font-label-md text-label-md mb-2\">They Get Hired</h4>\n<p className=\"text-sm text-text-secondary\">Unlock a massive bonus of Rs.1000 when your referral lands their dream job.</p>\n</div>\n</div>\n</div>\n</section>\n</main>\n\n";
+export default function ReferralsDashboardPage() {
+  const [stats, setStats] = useState<ReferralDashboardStatsDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("UPI");
+  const [withdrawMessage, setWithdrawMessage] = useState<string | null>(null);
+  const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
 
-export default function C97Page() {
-  const router = useRouter();
+  const fetchStats = () => {
+    fetch("/api/referrals")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.stats) {
+          setStats(data.stats);
+          if (data.stats.availableBalance > 0) {
+            setWithdrawAmount(data.stats.availableBalance.toString());
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const handleCopy = () => {
+    if (stats?.referralLink) {
+      navigator.clipboard.writeText(stats.referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    }
+  };
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!upiId.trim()) return;
+
+    const amt = parseFloat(withdrawAmount);
+    if (isNaN(amt) || amt <= 0) return;
+
+    setIsProcessingWithdraw(true);
+    setWithdrawMessage(null);
+
+    try {
+      const res = await fetch("/api/referrals/payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: amt,
+          payoutMethod,
+          payoutAddress: upiId.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWithdrawMessage(data.message);
+        fetchStats();
+        setTimeout(() => {
+          setShowWithdrawModal(false);
+          setWithdrawMessage(null);
+        }, 4000);
+      } else {
+        setWithdrawMessage(`Error: ${data.error || "Failed to submit request."}`);
+      }
+    } catch {
+      setWithdrawMessage("Network error. Failed to initiate payout.");
+    } finally {
+      setIsProcessingWithdraw(false);
+    }
+  };
+
+  const shareText = `Join me on HireGo AI, the autonomous neural talent & recruitment network! Use my referral code: ${
+    stats?.referralCode || "HIREGO2026"
+  }`;
+  const encodedShareText = encodeURIComponent(shareText);
+  const encodedShareUrl = encodeURIComponent(stats?.referralLink || "https://hirego.ai");
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
+        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
+          <div>
+            <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
+              Referral Earnings & Analytics
+            </h1>
+            <p className="text-text-muted text-xs">
+              Track multi-tier candidate, employer job post, and HireGo Managed Hiring™ rewards.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/referrals"
+              className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md border border-white/10"
+            >
+              <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+              <span className="hidden sm:inline">Program Overview</span>
+            </Link>
+          </div>
+        </header>
+
+        <main className="flex-1 p-6 lg:p-10 space-y-8 max-w-6xl w-full mx-auto overflow-y-auto">
+          {/* Top Bento Row: 4 Financial Metric Pillars */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Available to Withdraw */}
+            <div className="glass-card p-5 rounded-3xl border border-green-500/30 bg-green-500/5 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-green-400">
+                Available to Withdraw
+              </span>
+              <div className="my-2">
+                <span className="text-3xl font-extrabold text-green-400 font-mono">
+                  ₹{(stats?.availableBalance || 0).toLocaleString()}
+                </span>
+              </div>
+              <button
+                disabled={(stats?.availableBalance || 0) < 500}
+                onClick={() => setShowWithdrawModal(true)}
+                className="btn-3d-gold px-4 py-1.5 rounded-full text-xs font-bold text-black flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[16px]">payments</span>
+                <span>Request Payout</span>
+              </button>
+            </div>
+
+            {/* 2. Locked Managed Hiring™ Rewards (Replacement Guarantee) */}
+            <div className="glass-card p-5 rounded-3xl border border-yellow-500/30 bg-yellow-500/5 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-yellow-400">
+                Locked Managed Hiring™ Rewards
+              </span>
+              <div className="my-2">
+                <span className="text-3xl font-extrabold text-yellow-400 font-mono">
+                  ₹{(stats?.lockedBalance || 0).toLocaleString()}
+                </span>
+              </div>
+              <span className="text-[10px] text-text-muted">
+                Releases upon 45-90d replacement guarantee completion
+              </span>
+            </div>
+
+            {/* 3. Pending Payout Approvals */}
+            <div className="glass-card p-5 rounded-3xl border border-blue-500/30 bg-blue-500/5 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-blue-400">
+                Pending Approval
+              </span>
+              <div className="my-2">
+                <span className="text-3xl font-extrabold text-blue-400 font-mono">
+                  ₹{(stats?.pendingPayoutBalance || 0).toLocaleString()}
+                </span>
+              </div>
+              <span className="text-[10px] text-text-muted">
+                Under administrative verification
+              </span>
+            </div>
+
+            {/* 4. Lifetime Paid Out */}
+            <div className="glass-card p-5 rounded-3xl border border-white/10 bg-[#141418] flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">
+                Lifetime Paid Out
+              </span>
+              <div className="my-2">
+                <span className="text-3xl font-extrabold text-white font-mono">
+                  ₹{(stats?.paidBalance || 0).toLocaleString()}
+                </span>
+              </div>
+              <span className="text-[10px] text-text-muted">
+                Total earnings successfully disbursed
+              </span>
+            </div>
+          </div>
+
+          {/* Share & Unique Code Hub */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-8 glass-card p-6 lg:p-7 rounded-3xl border border-primary/30 bg-primary/5 space-y-3">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[18px]">share</span>
+                <span>Your Universal Referral Link (Unlimited Invites)</span>
+              </span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={stats?.referralLink || "https://hirego.ai/register?ref=HIREGO2026"}
+                  className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="btn-3d-red px-6 py-2.5 rounded-full text-white text-xs font-bold shrink-0 transition-all shadow-md"
+                >
+                  {copied ? "Copied! ✓" : "Copy Link"}
+                </button>
+              </div>
+            </div>
+
+            {/* Social Share Badges */}
+            <div className="lg:col-span-4 glass-card p-6 rounded-3xl border border-white/10 bg-[#141418] flex flex-col items-center justify-center text-center space-y-3">
+              <span className="text-xs text-text-muted font-bold">1-Click Instant Share</span>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodedShareText}%20${encodedShareUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-11 h-11 rounded-full bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 flex items-center justify-center text-green-400 transition-all shadow-md"
+                  title="Share on WhatsApp"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chat</span>
+                </a>
+
+                <a
+                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedShareUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-11 h-11 rounded-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 flex items-center justify-center text-blue-400 transition-all shadow-md"
+                  title="Share on LinkedIn"
+                >
+                  <span className="material-symbols-outlined text-[20px]">link</span>
+                </a>
+
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodedShareText}&url=${encodedShareUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center text-white transition-all shadow-md"
+                  title="Share on X"
+                >
+                  <span className="material-symbols-outlined text-[20px]">share</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Reward Transactions Table */}
+          <div className="glass-card rounded-3xl border border-white/10 overflow-hidden bg-[#141418]">
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base text-white">Referral Reward Ledger</h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Sanitized activity feed. Commercial contract economics are confidential.
+                </p>
+              </div>
+              <span className="text-xs text-green-400 flex items-center gap-1.5 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Live Database Stream
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-white/5 text-[10px] uppercase font-bold text-text-muted tracking-wider">
+                    <th className="px-6 py-4">Referred Activity</th>
+                    <th className="px-6 py-4">Sequence</th>
+                    <th className="px-6 py-4">Replacement Guarantee SLA</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4 text-right">Your Reward</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-xs">
+                  {!loading && (stats?.recentRewards?.length ?? 0) === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center text-text-muted">
+                        No referral rewards have been recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                  {(stats?.recentRewards ?? []).map((ref) => {
+                    const lockText = ref.isLocked && ref.lockExpiresAt
+                      ? `Until ${new Date(ref.lockExpiresAt).toLocaleDateString()} (${ref.lockDurationDays}d replacement guarantee)`
+                      : "None (Instant)";
+
+                    return (
+                      <tr key={ref.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                              {ref.productDisplayName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-bold text-white">{ref.productDisplayName}</p>
+                              <p className="text-[11px] text-text-muted font-mono">{ref.id}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 font-mono text-text-muted">
+                          #{ref.transactionSequenceNumber}
+                        </td>
+
+                        <td className="px-6 py-4 text-xs font-mono text-yellow-400">
+                          {lockText}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+                              ref.status === ReferralStatus.ELIGIBLE
+                                ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                : ref.status === ReferralStatus.LOCKED
+                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                                : ref.status === ReferralStatus.PAID
+                                ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                : "bg-white/10 text-text-muted border-white/20"
+                            }`}
+                          >
+                            {ref.status}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 text-right font-bold text-green-400 font-mono">
+                          +₹{ref.rewardAmount.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+
+        {/* Withdrawal Request Modal */}
+        {showWithdrawModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="glass-card max-w-md w-full p-6 rounded-3xl border border-white/20 bg-[#141418] space-y-5 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-base text-white">Request Referral Payout</h3>
+                <button
+                  onClick={() => setShowWithdrawModal(false)}
+                  className="text-text-muted hover:text-white"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              {withdrawMessage ? (
+                <div
+                  className={`p-4 rounded-2xl text-xs text-center font-bold border ${
+                    withdrawMessage.startsWith("Error")
+                      ? "bg-red-500/10 text-red-400 border-red-500/30"
+                      : "bg-green-500/10 text-green-400 border-green-500/30"
+                  }`}
+                >
+                  {withdrawMessage}
+                </div>
+              ) : (
+                <form onSubmit={handleWithdraw} className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-white/5 border border-white/5 flex justify-between items-center text-xs">
+                    <span className="text-text-muted">Available Eligible Balance:</span>
+                    <span className="text-green-400 font-bold font-mono text-base">
+                      ₹{(stats?.availableBalance || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-text-muted">Payout Method</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPayoutMethod("UPI")}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                          payoutMethod === "UPI"
+                            ? "bg-primary/20 border-primary text-white"
+                            : "bg-white/5 border-white/10 text-text-muted"
+                        }`}
+                      >
+                        UPI / VPA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayoutMethod("BANK_TRANSFER")}
+                        className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                          payoutMethod === "BANK_TRANSFER"
+                            ? "bg-primary/20 border-primary text-white"
+                            : "bg-white/5 border-white/10 text-text-muted"
+                        }`}
+                      >
+                        Bank Transfer
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-text-muted">
+                      {payoutMethod === "UPI" ? "Enter UPI ID / VPA *" : "Enter Bank Account Details *"}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder={payoutMethod === "UPI" ? "e.g. yourname@okhdfcbank" : "A/C: 12345678, IFSC: HDFC000123"}
+                      className="input-pill w-full h-11 px-4 text-xs text-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-text-muted">Withdrawal Amount (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      min={500}
+                      max={stats?.availableBalance || 500}
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
+                    />
+                    <p className="text-[10px] text-text-muted">Minimum withdrawal threshold: ₹500</p>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowWithdrawModal(false)}
+                      className="px-5 py-2 rounded-full text-xs text-text-muted hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isProcessingWithdraw}
+                      className="btn-3d-gold px-6 py-2 rounded-full text-xs font-bold text-black shadow-lg disabled:opacity-50"
+                    >
+                      {isProcessingWithdraw ? "Submitting..." : "Submit Payout Request"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-    </div>
-);
+  );
 }

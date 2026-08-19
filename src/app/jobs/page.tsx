@@ -174,6 +174,18 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
+    // Fetch user's saved jobs from real API
+    fetch("/api/candidate/saved-jobs")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.savedJobs) {
+          setSavedJobs(data.savedJobs.map((s: any) => s.jobId));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
     let isMounted = true;
     const fetchJobs = async () => {
       setLoading(true);
@@ -258,12 +270,30 @@ export default function JobsPage() {
     setTimeout(() => setApplySuccessMessage(null), 4000);
   };
 
-  const toggleBookmark = (jobId: string, e: React.MouseEvent) => {
+  const toggleBookmark = async (jobId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const isSaved = savedJobs.includes(jobId);
     setSavedJobs((prev) =>
-      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId]
+      isSaved ? prev.filter((id) => id !== jobId) : [...prev, jobId]
     );
+
+    try {
+      if (isSaved) {
+        await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
+          method: "DELETE",
+        });
+      } else {
+        await fetch("/api/candidate/saved-jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId }),
+        });
+      }
+    } catch {
+      // Offline fallback
+    }
   };
+
 
   return (
     <div

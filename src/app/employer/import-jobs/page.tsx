@@ -82,6 +82,24 @@ export default function ImportJobsPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  function simulateUpload(filename: string) {
+    setUploadedFile(filename);
+    setIsProcessing(true);
+    setAiProgress(0);
+
+    const interval = setInterval(() => {
+      setAiProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsProcessing(false);
+          setStep("mapping");
+          return 100;
+        }
+        return prev + Math.random() * 15 + 5;
+      });
+    }, 300);
+  }
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -101,24 +119,6 @@ export default function ImportJobsPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) simulateUpload(file.name);
-  };
-
-  const simulateUpload = (filename: string) => {
-    setUploadedFile(filename);
-    setIsProcessing(true);
-    setAiProgress(0);
-
-    const interval = setInterval(() => {
-      setAiProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsProcessing(false);
-          setStep("mapping");
-          return 100;
-        }
-        return prev + Math.random() * 15 + 5;
-      });
-    }, 300);
   };
 
   const toggleJobSelection = (idx: number) => {

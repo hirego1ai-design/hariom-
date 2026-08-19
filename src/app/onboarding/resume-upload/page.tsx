@@ -10,13 +10,24 @@ export default function ResumeUploadPage() {
   const router = useRouter();
   const { state, updateState, markStepComplete } = useOnboarding();
 
-  const [fileName, setFileName] = useState<string | null>(state.resumeUploaded ? "Alex_Chen_Resume_2026.pdf" : null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(state.resumeAnalysis);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileDrop = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setUploadError(null);
+      const allowedTypes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+      if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+        setUploadError("Please upload a PDF or Word document up to 10MB.");
+        return;
+      }
       setFileName(file.name);
       setAnalyzing(true);
 
@@ -32,7 +43,10 @@ export default function ResumeUploadPage() {
         });
 
         const uploadJson = await uploadRes.json();
-        const fileUrl = uploadJson.file?.url || "";
+        if (!uploadRes.ok || !uploadJson.file?.url) {
+          throw new Error(uploadJson.error || "Resume upload failed");
+        }
+        const fileUrl = uploadJson.file.url;
 
         // Dispatch AI Resume Analysis
         const aiRes = await fetch("/api/agents/dispatch", {
@@ -52,29 +66,51 @@ export default function ResumeUploadPage() {
           parsedAi = null;
         }
 
-        const realAnalysis = {
-          qualityScore: parsedAi?.score || 85,
-          extractedSkills: parsedAi?.skillsFound || ["React.js", "TypeScript", "Node.js", "System Design"],
-          experienceYears: parsedAi?.experienceYears || 4.5,
-          missingFields: parsedAi?.missingKeywords || ["Certifications", "GitHub Profile"],
-          summary: parsedAi?.aiSummary || "Strong engineering profile with solid modern stack proficiency.",
-          improvements: [
-            "Add quantitative metrics to experience bullet points.",
-            "Include links to live projects or public repositories.",
-          ],
-        };
+        const realAnalysis = parsedAi?.score
+          ? {
+              qualityScore: Number(parsedAi.score),
+              extractedSkills: Array.isArray(parsedAi.skillsFound) ? parsedAi.skillsFound : [],
+              experienceYears: Number(parsedAi.experienceYears) || 0,
+              missingFields: Array.isArray(parsedAi.missingKeywords) ? parsedAi.missingKeywords : [],
+              summary: typeof parsedAi.aiSummary === "string" ? parsedAi.aiSummary : "Resume uploaded successfully.",
+              improvements: Array.isArray(parsedAi.improvements) ? parsedAi.improvements : [],
+            }
+          : null;
 
         setAnalysis(realAnalysis);
         updateState({ resumeUploaded: true, resumeAnalysis: realAnalysis });
+
+        // Persist resume URL and score to candidate profile
+        fetch("/api/candidate/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resumeUrl: fileUrl,
+            ...(realAnalysis
+              ? {
+                  skills: realAnalysis.extractedSkills,
+                  experienceYears: realAnalysis.experienceYears,
+                }
+              : {}),
+          }),
+        });
       } catch (err) {
-        console.warn("API resume analysis fallback activated:", err);
+        setFileName(null);
+        setUploadError(err instanceof Error ? err.message : "Resume upload failed. Please try again.");
       } finally {
         setAnalyzing(false);
       }
     }
   };
 
+
   const handleNext = () => {
+    markStepComplete(7);
+    router.push("/onboarding/video-resume");
+  };
+
+  const handleSkip = () => {
+    updateState({ resumeUploaded: false, resumeAnalysis: null });
     markStepComplete(7);
     router.push("/onboarding/video-resume");
   };
@@ -101,7 +137,7 @@ export default function ResumeUploadPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -117,7 +153,7 @@ export default function ResumeUploadPage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 7/10
+                Resume upload
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Deep Neural Parser & Quality Scoring
@@ -131,7 +167,7 @@ export default function ResumeUploadPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -140,7 +176,7 @@ export default function ResumeUploadPage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 7 of 10
+              Upload or import
             </span>
           </div>
         </header>
@@ -218,6 +254,12 @@ export default function ResumeUploadPage() {
               </div>
             )}
 
+            {uploadError && (
+              <div className="p-3 rounded-2xl border text-xs font-semibold" style={{ backgroundColor: "rgba(229,57,53,0.08)", borderColor: "var(--primary)", color: "var(--primary)" }}>
+                {uploadError}
+              </div>
+            )}
+
             {/* Analysis Results */}
             {analysis && !analyzing && (
               <div
@@ -280,6 +322,15 @@ export default function ResumeUploadPage() {
               Back
             </Link>
 
+            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
+            >
+              Skip for now
+            </button>
             <button
               onClick={handleNext}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
@@ -291,6 +342,7 @@ export default function ResumeUploadPage() {
               <span>Next: Video Pitch Setup</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
+            </div>
           </div>
         </main>
       </div>

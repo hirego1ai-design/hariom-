@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { getCurrentSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   try {
+    const session = getCurrentSession(req.headers);
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const company = searchParams.get("company");
     const status = searchParams.get("status");
@@ -23,6 +26,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = getCurrentSession(req.headers);
+    if (!session || !["ADMIN", "EMPLOYER", "RECRUITER"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     const body = await req.json();
 
     if (!body.companyName || !body.clientEmail) {

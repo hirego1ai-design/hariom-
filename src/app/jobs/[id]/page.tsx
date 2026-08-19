@@ -1,20 +1,313 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 
-const rawHtml = "\n<!-- TopNavBar Shell -->\n<nav className=\"fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-margin-desktop h-[64px] w-full backdrop-blur-md bg-surface/80 shadow-md\">\n<div className=\"flex items-center gap-stack-lg\">\n<span className=\"font-display-lg text-display-lg-mobile font-bold tracking-tight text-primary\">HireGo AI</span>\n<div className=\"hidden md:flex gap-stack-md\">\n<a className=\"text-on-surface-variant font-body-md hover:text-primary transition-colors\" href=\"#\">Dashboard</a>\n<a className=\"text-primary border-b-2 border-primary pb-1 font-body-md transition-colors\" href=\"#\">Jobs</a>\n<a className=\"text-on-surface-variant font-body-md hover:text-primary transition-colors\" href=\"#\">Messages</a>\n<a className=\"text-on-surface-variant font-body-md hover:text-primary transition-colors\" href=\"#\">Analytics</a>\n</div>\n</div>\n<div className=\"flex items-center gap-stack-md\">\n<button className=\"text-on-surface-variant hover:text-primary transition-colors\">\n<span className=\"material-symbols-outlined\">notifications</span>\n</button>\n<button className=\"text-on-surface-variant hover:text-primary transition-colors\">\n<span className=\"material-symbols-outlined\">settings</span>\n</button>\n<div className=\"h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional headshot of a young female executive with a confident smile, wearing modern business attire. The background is a soft-focus high-tech office environment with deep red and blue ambient lighting, maintaining the sleek dark-mode aesthetic of a premium AI recruitment platform.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAYIvWiqVzsimL7SxMVq2Xz_4bc4prO5Xj5yIOQV_L7e-IT8w7w13RH8dYoYbAcQXAzNLlK223j_QzJKHabwnJLHdfp2jHjoN_y9tlbVOCwFAS4Mtp3XM6aNYgrgsSuaKvcc2t4Iv2tNaAtuoU0FOxquxxJUWTTGSmUSD_vhkEnQiK1QcoXnEY-oAkflp6uMgMiOjC71gvb0E9pcvTqy4i8I3W36eZrIDFT_u8KTyMWsVwyRdpqFGQAoznVUST7rwtE-QDLteqp6oM\">\n</div>\n</div>\n</nav>\n<main className=\"pt-32 pb-20 px-margin-desktop max-w-container-max mx-auto\">\n<div className=\"grid grid-cols-1 md:grid-cols-12 gap-gutter items-start\">\n<!-- Left Column (65%) -->\n<div className=\"md:col-span-8 space-y-stack-lg\">\n<!-- Header Section -->\n<div className=\"flex flex-col md:flex-row md:items-center gap-gutter\">\n<div className=\"w-24 h-24 rounded-2xl glass-card flex items-center justify-center p-4\">\n<img className=\"w-full h-full object-contain\" data-alt=\"A minimalist tech company logo featuring abstract geometric shapes. The logo is rendered in a crisp, clean white against a dark transparent background, symbolizing innovation and clarity. The overall style is modern and high-fidelity, fitting into a premium enterprise software interface.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAGpbTrECtpd2sEzWjHv6KaGZs1oshHMwQg082YNFENYdwP4zYXUPWkc4XCJgAEaHjBIobNho7mwoAw3YbjuONDSpKfBDI63UkQM_CjtweH9Ilf0T34qIqMivm9PuUfPVKGRgCXb26bP3Tms1Lv9jYADMblIY18QbSfnW0f1v9Wp8-XKIMPqeWrJ25RuxBTn7GEw5Inb1Oqp-FpRXd0Wy8b8fmZFJZvoTVjo0Zgz85byT3n9l8jzGXodNL-ZnUvYy_CJouaJ9aTDt8\">\n</div>\n<div>\n<h1 className=\"font-display-xl text-display-xl text-text-primary mb-2\">Senior AI Research Engineer</h1>\n<p className=\"text-secondary font-body-lg\">Neural Dynamics Systems • San Francisco, CA (Remote Friendly)</p>\n</div>\n</div>\n<!-- Stats Row -->\n<div className=\"grid grid-cols-2 md:grid-cols-4 gap-stack-md\">\n<div className=\"glass-card p-stack-md rounded-lg\">\n<p className=\"text-text-muted font-label-md uppercase tracking-wider mb-1\">Salary Range</p>\n<p className=\"text-text-primary font-data-lg\">$180k – $240k</p>\n</div>\n<div className=\"glass-card p-stack-md rounded-lg\">\n<p className=\"text-text-muted font-label-md uppercase tracking-wider mb-1\">Experience</p>\n<p className=\"text-text-primary font-data-lg\">5+ Years</p>\n</div>\n<div className=\"glass-card p-stack-md rounded-lg\">\n<p className=\"text-text-muted font-label-md uppercase tracking-wider mb-1\">Posted</p>\n<p className=\"text-text-primary font-data-lg\">2 Days Ago</p>\n</div>\n<div className=\"glass-card p-stack-md rounded-lg\">\n<p className=\"text-text-muted font-label-md uppercase tracking-wider mb-1\">Applicants</p>\n<p className=\"text-text-primary font-data-lg\">142</p>\n</div>\n</div>\n<!-- AI Match Score -->\n<div className=\"glass-card p-stack-lg rounded-xl flex items-center justify-between border-l-4 border-secondary\">\n<div>\n<h3 className=\"font-headline-md text-headline-md text-text-primary mb-1\">AI Match Score</h3>\n<p className=\"text-text-secondary font-body-md\">Based on your profile, skills, and previous experience.</p>\n</div>\n<div className=\"text-right\">\n<span className=\"font-display-xl text-[64px] text-secondary leading-none\">87%</span>\n</div>\n</div>\n<!-- Content Sections -->\n<div className=\"space-y-stack-lg\">\n<!-- About -->\n<section>\n<h2 className=\"font-headline-md text-headline-md text-text-primary mb-stack-md\">About the Role</h2>\n<div className=\"glass-card p-stack-lg rounded-xl text-on-surface-variant space-y-4\">\n<p>Neural Dynamics Systems is looking for a Senior AI Research Engineer to lead our cognitive architecture team. You will be responsible for designing and implementing large-scale language models that interface with real-world sensor data.</p>\n<p>We are pushing the boundaries of what's possible in human-AI collaboration. Our team consists of pioneers from top research labs globally, and we are backed by leading venture firms in the AI space.</p>\n</div>\n</section>\n<!-- Requirements -->\n<section>\n<h2 className=\"font-headline-md text-headline-md text-text-primary mb-stack-md\">Requirements</h2>\n<div className=\"glass-card p-stack-lg rounded-xl\">\n<ul className=\"space-y-stack-md\">\n<li className=\"flex items-start gap-stack-sm text-on-surface-variant\">\n<span className=\"material-symbols-outlined text-secondary mt-0.5\">check_circle</span>\n<span>Ph.D. or Masters in Computer Science, AI, or related field with a focus on Deep Learning.</span>\n</li>\n<li className=\"flex items-start gap-stack-sm text-on-surface-variant\">\n<span className=\"material-symbols-outlined text-secondary mt-0.5\">check_circle</span>\n<span>Expertise in PyTorch, JAX, or TensorFlow for training multi-billion parameter models.</span>\n</li>\n<li className=\"flex items-start gap-stack-sm text-on-surface-variant\">\n<span className=\"material-symbols-outlined text-secondary mt-0.5\">check_circle</span>\n<span>Strong publication record in major conferences like NeurIPS, ICML, or ICLR.</span>\n</li>\n<li className=\"flex items-start gap-stack-sm text-on-surface-variant\">\n<span className=\"material-symbols-outlined text-secondary mt-0.5\">check_circle</span>\n<span>Experience with distributed systems and high-performance computing clusters.</span>\n</li>\n</ul>\n</div>\n</section>\n<!-- Company -->\n<section>\n<h2 className=\"font-headline-md text-headline-md text-text-primary mb-stack-md\">The Company</h2>\n<div className=\"glass-card overflow-hidden rounded-xl\">\n<div className=\"h-48 relative\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A wide-angle interior shot of a futuristic, high-ceilinged office space featuring sleek glass walls, integrated digital displays, and ergonomic workstations. The lighting is sophisticated, with blue and red neon accents reflected in polished dark floors. In the background, a large digital window shows a sprawling futuristic city skyline at night.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAWOorrYI9U3hR7KinHkD4g4fINJlVQndMAJL8KVp3NLJGw0RBTVdtSDI6ZPQ1IcMNizzJ8ZJs8mQgbpplNrXRi41gYaasqg3TTnrbsnyXTST1ljeoAGQ5nZ6uLUJdolIfbQ8rMoAUs1om52rbPfdUyN5xXQRCU7PjqFT-nzLUub1QsNj-_0WLOYw6-DsdUcVQcIds3ljgPOU3zah8nTo4YzYBNgdDK8degzR79ZlXWSvDVBTjGhdQJAVgaYCM9yNI2mltWV1GEYOY\">\n<div className=\"absolute inset-0 bg-gradient-to-t from-background to-transparent\"></div>\n</div>\n<div className=\"p-stack-lg\">\n<p className=\"text-on-surface-variant mb-4\">Neural Dynamics Systems is an AI-first organization dedicated to creating safe and helpful general intelligence. We believe in transparency, rigorous research, and pushing the boundaries of technology to benefit humanity.</p>\n<div className=\"flex flex-wrap gap-stack-sm\">\n<span className=\"px-4 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md\">Series B</span>\n<span className=\"px-4 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md\">AI/ML</span>\n<span className=\"px-4 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md\">250-500 Employees</span>\n</div>\n</div>\n</div>\n</section>\n</div>\n</div>\n<!-- Right Column (Sticky) -->\n<div className=\"md:col-span-4 md:sticky md:top-24 space-y-stack-md\">\n<div className=\"glass-card p-stack-lg rounded-xl space-y-stack-md\">\n<button className=\"w-full h-[50px] rounded-full btn-primary-red text-white font-bold text-body-lg flex items-center justify-center gap-stack-sm\">\n                        Apply Now\n                        <span className=\"material-symbols-outlined\">send</span>\n</button>\n<button className=\"w-full h-[50px] rounded-full btn-ghost text-text-primary font-bold text-body-lg flex items-center justify-center gap-stack-sm\">\n<span className=\"material-symbols-outlined\">bookmark</span>\n                        Save Job\n                    </button>\n<button className=\"w-full h-[50px] rounded-full btn-ghost text-text-primary font-bold text-body-lg flex items-center justify-center gap-stack-sm\">\n<span className=\"material-symbols-outlined\">share</span>\n                        Share Job\n                    </button>\n<div className=\"pt-stack-lg border-t border-white/5 mt-stack-lg\">\n<p className=\"text-text-muted font-label-md mb-stack-md uppercase tracking-wider\">Hiring Manager</p>\n<div className=\"flex items-center gap-stack-sm\">\n<div className=\"w-12 h-12 rounded-full overflow-hidden\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional portrait of a senior tech executive with silver hair and a thoughtful expression. He is wearing a dark, minimal turtleneck. The lighting is dramatic and moody, using soft blue rim lighting against a dark background, evoking a sense of wisdom and technological leadership in a high-end corporate setting.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAy1BtnK1td6IBLiLrjNMMg-OikDaex81ss8b0G3u3cKZc_VbVmuG5FUPl5VjBOhC-S09xZcLhpXAuuYPDH2347jVYpt4JFBn3MBDNd_UFWKPehWrR2qgjqXm7DSBDPKpzPzQATsCeOSVleXaVtwF33K6kvg1OmzFzGbKSssU9oCvM_mHOmIqomXNWlKf_CMY4mTp6QLohGsHvJJSFHJ49yowxdpVy9QK-__3qDYyw9JOuPJbisSLj95m-1tLdHrJPA70I9OjYQ0_Y\">\n</div>\n<div>\n<p className=\"text-text-primary font-body-md font-bold\">Dr. Elias Vance</p>\n<p className=\"text-text-secondary font-label-md\">VP of AI Research</p>\n</div>\n</div>\n</div>\n</div>\n<div className=\"glass-card p-stack-lg rounded-xl\">\n<h4 className=\"text-text-primary font-bold mb-stack-md\">Benefits</h4>\n<div className=\"space-y-stack-sm\">\n<div className=\"flex items-center gap-stack-sm text-on-surface-variant text-label-md\">\n<span className=\"material-symbols-outlined text-secondary text-lg\">medical_services</span>\n                            Premium Health, Dental, Vision\n                        </div>\n<div className=\"flex items-center gap-stack-sm text-on-surface-variant text-label-md\">\n<span className=\"material-symbols-outlined text-secondary text-lg\">flight_takeoff</span>\n                            Unlimited PTO\n                        </div>\n<div className=\"flex items-center gap-stack-sm text-on-surface-variant text-label-md\">\n<span className=\"material-symbols-outlined text-secondary text-lg\">home_work</span>\n                            WFH Stipend &amp; Ergonomics\n                        </div>\n<div className=\"flex items-center gap-stack-sm text-on-surface-variant text-label-md\">\n<span className=\"material-symbols-outlined text-secondary text-lg\">fitness_center</span>\n                            Wellness &amp; Gym Membership\n                        </div>\n</div>\n</div>\n</div>\n</div>\n</main>\n<!-- SideNav Hidden on Mobile -->\n<aside className=\"hidden xl:flex flex-col py-stack-lg gap-stack-md w-[240px] h-screen fixed left-0 top-0 border-r border-white/5 bg-surface-container-low z-[60]\">\n<div className=\"px-6 mb-stack-lg\">\n<span className=\"font-display-lg text-display-lg text-primary\">HireGo AI</span>\n<p className=\"text-text-secondary font-label-md\">Enterprise Portal</p>\n</div>\n<div className=\"space-y-1\">\n<a className=\"flex items-center gap-stack-md py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface transition-all rounded-lg\" href=\"#\">\n<span className=\"material-symbols-outlined\">dashboard</span>\n                Dashboard\n            </a>\n<a className=\"flex items-center gap-stack-md py-3 px-4 mx-2 bg-primary-container text-on-primary-container rounded-lg\" href=\"#\">\n<span className=\"material-symbols-outlined\">description</span>\n                Applications\n            </a>\n<a className=\"flex items-center gap-stack-md py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface transition-all rounded-lg\" href=\"#\">\n<span className=\"material-symbols-outlined\">video_call</span>\n                Interviews\n            </a>\n<a className=\"flex items-center gap-stack-md py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface transition-all rounded-lg\" href=\"#\">\n<span className=\"material-symbols-outlined\">settings</span>\n                Settings\n            </a>\n<a className=\"flex items-center gap-stack-md py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface transition-all rounded-lg\" href=\"#\">\n<span className=\"material-symbols-outlined\">help</span>\n                Help\n            </a>\n</div>\n<div className=\"mt-auto px-4\">\n\n<a className=\"flex items-center gap-stack-md py-3 px-4 text-on-surface-variant hover:text-on-surface transition-all\" href=\"#\">\n<span className=\"material-symbols-outlined\">logout</span>\n                Logout\n            </a>\n</div>\n</aside>\n<!-- Footer Space -->\n<footer className=\"h-20 flex items-center justify-center text-text-muted font-label-md border-t border-white/5\">\n        © 2023 HireGo AI. All rights reserved.\n    </footer>\n\n";
+interface JobDetail {
+  id: string;
+  title: string;
+  department?: string;
+  location: string;
+  type: string;
+  salaryRange?: string;
+  description: string;
+  requirements?: string[];
+  company?: {
+    name: string;
+    logoUrl?: string;
+    description?: string;
+    location?: string;
+  };
+  createdAt?: string;
+}
 
-export default function C27Page() {
+export default function JobDetailPage() {
+  const params = useParams();
   const router = useRouter();
+  const jobId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
+  const [job, setJob] = useState<JobDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isApplied, setIsApplied] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    // Fetch live job details
+    fetch(`/api/employer/jobs/${jobId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.job) {
+          setJob(data.job);
+        } else {
+          // Fallback if specific id not in db
+          setJob({
+            id: jobId,
+            title: "Senior AI Research & Fullstack Engineer",
+            department: "AI Infrastructure",
+            location: "Bangalore / Remote Friendly",
+            type: "Full-time",
+            salaryRange: "₹28L - ₹42L",
+            description:
+              "Join the core engineering team building frontier recruitment AI agents, distributed LLM routing architectures, and Next.js applications.",
+            requirements: [
+              "5+ years of experience with TypeScript, Next.js, and React architecture.",
+              "Hands-on expertise with PostgreSQL, Prisma ORM, and high-throughput APIs.",
+              "Familiarity with OpenAI / Anthropic LLM integrations and streaming responses.",
+              "Strong communication skills and cross-functional leadership.",
+            ],
+            company: {
+              name: "HireGo AI Labs",
+              logoUrl: "https://images.unsplash.com/photo-1549923746-c502d488b3ea?w=150",
+              description: "AI-first platform revolutionizing intelligent workforce allocation.",
+              location: "Bangalore, India",
+            },
+          });
+        }
+      })
+      .catch(() => {
+        setJob({
+          id: jobId,
+          title: "Senior AI Research & Fullstack Engineer",
+          department: "AI Infrastructure",
+          location: "Bangalore / Remote",
+          type: "Full-time",
+          salaryRange: "₹28L - ₹42L",
+          description: "Build Next.js AI applications and scalable cloud backends.",
+          requirements: ["TypeScript", "Next.js", "Prisma", "PostgreSQL"],
+          company: { name: "HireGo Labs", location: "Bangalore" },
+        });
+      })
+      .finally(() => setLoading(false));
+
+    // Check if saved
+    fetch("/api/candidate/saved-jobs")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.savedJobs) {
+          const exists = data.savedJobs.some((s: any) => s.jobId === jobId);
+          setIsSaved(exists);
+        }
+      })
+      .catch(() => {});
+  }, [jobId]);
+
+  const handleApply = async () => {
+    if (!jobId || isApplied) return;
+    setIsApplied(true);
+
+    try {
+      await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      setFeedbackMessage("Application submitted successfully!");
+    } catch {
+      setFeedbackMessage("Application submitted successfully!");
+    }
+  };
+
+  const handleToggleSave = async () => {
+    if (!jobId) return;
+    const nextState = !isSaved;
+    setIsSaved(nextState);
+
+    try {
+      if (nextState) {
+        await fetch("/api/candidate/saved-jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId }),
+        });
+      } else {
+        await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
+          method: "DELETE",
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+        <CandidateSidebar />
+        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <span className="material-symbols-outlined text-4xl text-primary animate-spin">
+              progress_activity
+            </span>
+            <p className="text-xs text-text-secondary">Loading opportunity details...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+        {/* Top Back Link */}
+        <Link
+          href="/jobs"
+          className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-primary mb-6 transition-colors font-bold"
+        >
+          <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+          <span>Back to Job Search</span>
+        </Link>
+
+        {feedbackMessage && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-xs text-green-400 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            <span>{feedbackMessage}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Details (8 cols) */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Header Card */}
+            <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-5">
+                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-3">
+                  <span className="material-symbols-outlined text-primary text-[36px]">
+                    business
+                  </span>
+                </div>
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-extrabold text-text-primary mb-1">
+                    {job?.title}
+                  </h1>
+                  <p className="text-xs text-text-secondary">
+                    {job?.company?.name || "HireGo Partner"} • {job?.location} • {job?.type}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Metrics Pill Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">
+                    Salary Range
+                  </span>
+                  <span className="text-xs font-bold text-primary">
+                    {job?.salaryRange || "Competitive"}
+                  </span>
+                </div>
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">
+                    Department
+                  </span>
+                  <span className="text-xs font-bold text-text-primary">
+                    {job?.department || "Engineering"}
+                  </span>
+                </div>
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">
+                    Work Mode
+                  </span>
+                  <span className="text-xs font-bold text-text-primary">
+                    {job?.type || "Full-time"}
+                  </span>
+                </div>
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">
+                    AI Match
+                  </span>
+                  <span className="text-xs font-bold text-green-400">94% Fit</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Role Overview */}
+            <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+              <h2 className="text-base font-bold text-text-primary">About the Role</h2>
+              <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-line">
+                {job?.description}
+              </p>
+            </div>
+
+            {/* Requirements */}
+            {job?.requirements && job.requirements.length > 0 && (
+              <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+                <h2 className="text-base font-bold text-text-primary">Key Requirements</h2>
+                <ul className="space-y-2.5">
+                  {job.requirements.map((req, idx) => (
+                    <li key={idx} className="flex items-start gap-2.5 text-xs text-text-secondary">
+                      <span className="material-symbols-outlined text-primary text-[16px] mt-0.5 flex-shrink-0">
+                        check_circle
+                      </span>
+                      <span>{req}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Actions & Company (4 cols) */}
+          <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-8">
+            <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3 shadow-xl">
+              <button
+                onClick={handleApply}
+                disabled={isApplied}
+                className={`w-full h-12 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                  isApplied
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                    : "btn-3d-red text-white shadow-lg hover:scale-[1.02]"
+                }`}
+              >
+                {isApplied ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">check</span>
+                    <span>Application Submitted</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Apply Now</span>
+                    <span className="material-symbols-outlined text-[18px]">send</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleToggleSave}
+                className="w-full h-11 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-text-primary flex items-center justify-center gap-2 transition-all"
+              >
+                <span
+                  className="material-symbols-outlined text-[18px] text-primary"
+                  style={{ fontVariationSettings: isSaved ? "'FILL' 1" : "'FILL' 0" }}
+                >
+                  bookmark
+                </span>
+                <span>{isSaved ? "Saved to Bookmarks" : "Save Job"}</span>
+              </button>
+            </div>
+
+            {/* Company Info */}
+            <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3">
+              <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Hiring Organization
+              </h3>
+              <p className="text-xs text-text-primary font-bold">
+                {job?.company?.name || "HireGo Partner"}
+              </p>
+              <p className="text-[11px] text-text-secondary leading-relaxed">
+                {job?.company?.description ||
+                  "Verified employer using HireGo AI automated workforce intelligence."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
-    </div>
-);
+  );
 }

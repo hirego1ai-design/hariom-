@@ -27,7 +27,7 @@ export default function WelcomeOnboardingPage() {
 
         {/* Top Sticky Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -43,7 +43,7 @@ export default function WelcomeOnboardingPage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 1/10
+                Welcome
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 AI-Driven Career Vector Setup
@@ -57,7 +57,7 @@ export default function WelcomeOnboardingPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -66,7 +66,7 @@ export default function WelcomeOnboardingPage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 1 of 10
+              Start here
             </span>
           </div>
         </header>
@@ -147,21 +147,10 @@ export default function WelcomeOnboardingPage() {
                   <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                 </Link>
 
-                <Link
-                  href="/onboarding/personal-details"
-                  className="w-full h-11 rounded-full font-bold text-xs flex items-center justify-center transition-all border"
-                  style={{
-                    backgroundColor: "var(--surface-container-high)",
-                    borderColor: "var(--outline)",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  Skip to Profile Setup
-                </Link>
               </div>
 
               <p className="text-[11px] font-mono font-bold text-center md:text-left" style={{ color: "var(--text-muted)" }}>
-                Estimated completion time: 4 minutes • 10-step AI evaluation
+                You can save optional sections and finish them later.
               </p>
             </div>
           </div>

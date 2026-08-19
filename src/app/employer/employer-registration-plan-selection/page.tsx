@@ -1,25 +1,37 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 import { useRouter } from "next/navigation";
+
+async function readJsonResponse(response: Response) {
+  const body = await response.text();
+  if (!body.trim()) {
+    throw new Error(`The server returned an empty response (${response.status}).`);
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error(`The server returned an invalid response (${response.status}).`);
+  }
+}
 
 export default function EmployerPlanSelectionPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function fetchPlans() {
       try {
         const res = await fetch("/api/employer/subscribe");
-        const data = await res.json();
-        if (data.success) {
-          setPlans(data.plans || []);
-        }
+        const data = await readJsonResponse(res);
+        if (!res.ok || !data.success) throw new Error(data.error || "Unable to load plans.");
+        setPlans(data.plans || []);
       } catch (err) {
         console.error(err);
+        setError(err instanceof Error ? err.message : "Unable to load plans.");
       } finally {
         setLoading(false);
       }
@@ -35,14 +47,16 @@ export default function EmployerPlanSelectionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
+      if (!res.ok) throw new Error(data.error || "Subscription failed.");
       if (data.success) {
-        router.push("/employer/employer-registration-document-verification");
+        router.push("/employer/employer-registration-document-verification?model=subscription");
       } else {
         alert("Subscription failed: " + data.error);
       }
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : "Subscription failed.");
     } finally {
       setSubmitting(false);
     }
@@ -72,6 +86,10 @@ export default function EmployerPlanSelectionPage() {
             <div className="w-8 h-8 rounded-full bg-primary text-white border-2 border-primary flex items-center justify-center font-bold text-xs">
               4
             </div>
+            <div className="w-10 h-0.5 bg-white/10"></div>
+            <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center font-bold text-xs">
+              5
+            </div>
           </div>
         </div>
 
@@ -88,6 +106,13 @@ export default function EmployerPlanSelectionPage() {
         {loading ? (
           <div className="flex justify-center py-20">
             <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+          </div>
+        ) : error ? (
+          <div className="glass-card rounded-2xl p-8 text-center max-w-xl mx-auto">
+            <span className="material-symbols-outlined text-amber-400 text-4xl">cloud_off</span>
+            <h2 className="text-lg font-bold text-white mt-3">Plans could not be loaded</h2>
+            <p className="text-sm text-[#CBD5E1] mt-2">{error}</p>
+            <button type="button" onClick={() => window.location.reload()} className="btn-3d-blue mt-5 px-6 h-10 rounded-xl text-xs font-bold text-white">Try again</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

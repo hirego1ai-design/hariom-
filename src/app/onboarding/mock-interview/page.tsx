@@ -1,6 +1,6 @@
 "use client";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
+import React, { useEffect } from "react";
 import parse from "html-react-parser";
 import { useRouter } from "next/navigation";
 
@@ -8,6 +8,7 @@ const rawHtml = "\n<!-- Top Navigation Placeholder (Fixed context: Onboarding su
 
 export default function C86Page() {
   const router = useRouter();
+  useEffect(() => { router.replace("/ai/mock-interview/active"); }, [router]);
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">

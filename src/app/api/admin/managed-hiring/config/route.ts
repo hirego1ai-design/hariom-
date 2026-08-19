@@ -253,7 +253,7 @@ export let managedHiringGlobalConfig = {
   },
 };
 
-export let managedHiringAuditLogs: ManagedHiringAuditLog[] = [
+export const managedHiringAuditLogs: ManagedHiringAuditLog[] = [
   {
     id: "LOG-MH-901",
     timestamp: "2026-08-01 14:32:10",

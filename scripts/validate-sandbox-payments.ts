@@ -410,8 +410,9 @@ async function runControllerRoutingTests() {
         RAZORPAY: "DISABLED",
         PAYU: "HEALTHY",
         PHONEPE: "HEALTHY",
+        STRIPE: "HEALTHY",
       },
-      priorities: ["RAZORPAY", "PAYU", "PHONEPE"],
+      priorities: ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
     });
 
     const order = await PaymentGatewayController.createOrder({

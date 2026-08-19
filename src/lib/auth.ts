@@ -41,10 +41,10 @@ export function verifyPassword(plain: string, hashed: string): boolean {
     try {
       return bcrypt.compareSync(plain, hashed);
     } catch {
-      return plain === hashed;
+      return false;
     }
   }
-  return plain === hashed;
+  return process.env.NODE_ENV !== "production" && plain === hashed;
 }
 
 export function hashPassword(password: string): string {
@@ -63,7 +63,7 @@ export function verifySessionToken(token: string): UserSession | null {
   try {
     return jwt.verify(token, JWT_SECRET) as UserSession;
   } catch {
-    if (token.endsWith(".mockSignature")) {
+    if (process.env.NODE_ENV !== "production" && token.endsWith(".mockSignature")) {
       try {
         const parts = token.split(".");
         const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));

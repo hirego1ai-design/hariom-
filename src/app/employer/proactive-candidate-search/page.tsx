@@ -152,22 +152,6 @@ export default function CandidateMarketplace() {
   useEffect(() => { localStorage.setItem("hg_notes", JSON.stringify(candidateNotes)); }, [candidateNotes]);
   useEffect(() => { localStorage.setItem("hg_collections", JSON.stringify(collections)); }, [collections]);
 
-  // ─── Keyboard Shortcuts (Req #17) ───
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "s" || e.key === "S") { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "f" || e.key === "F") { e.preventDefault(); /* focus filter - handled via search */ searchRef.current?.focus(); }
-      if (e.key === "c" || e.key === "C") { if (selected.size >= 2) { e.preventDefault(); setCompareOpen(true); } }
-      if (e.key === "a" || e.key === "A") { e.preventDefault(); setSelected(new Set(filteredCandidates.map(c => c.id))); }
-      if (e.key === "Escape") { setPreviewId(null); setCompareOpen(false); setShortcutsOpen(false); setExportOpen(false); setTagDropdownId(null); }
-      if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
-      if (e.key === "i" || e.key === "I") { if (selected.size > 0) { e.preventDefault(); triggerToast(`Invited ${selected.size} candidates`); } }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  });
-
   // ─── Filtering & Sorting ───
   const filteredCandidates = useMemo(() => {
     let result = [...candidates];
@@ -227,6 +211,22 @@ export default function CandidateMarketplace() {
 
     return result;
   }, [candidates, searchQuery, activeFilters, stageFilter, sortCol, sortDir, activeCollection, collections, candidateTags]);
+
+  // ─── Keyboard Shortcuts (Req #17) ───
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === "f" || e.key === "F") { e.preventDefault(); /* focus filter - handled via search */ searchRef.current?.focus(); }
+      if (e.key === "c" || e.key === "C") { if (selected.size >= 2) { e.preventDefault(); setCompareOpen(true); } }
+      if (e.key === "a" || e.key === "A") { e.preventDefault(); setSelected(new Set(filteredCandidates.map(c => c.id))); }
+      if (e.key === "Escape") { setPreviewId(null); setCompareOpen(false); setShortcutsOpen(false); setExportOpen(false); setTagDropdownId(null); }
+      if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
+      if (e.key === "i" || e.key === "I") { if (selected.size > 0) { e.preventDefault(); triggerToast(`Invited ${selected.size} candidates`); } }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
 
   // ─── Pagination ───
   const totalPages = Math.ceil(filteredCandidates.length / pageSize);

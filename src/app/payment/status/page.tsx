@@ -26,7 +26,6 @@ function PaymentStatusContent() {
   const gateway = searchParams.get("gateway") || "RAZORPAY";
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
     let isMounted = true;
 
     async function checkStatus() {
@@ -73,7 +72,7 @@ function PaymentStatusContent() {
     checkStatus();
 
     // Poll every 2.5s if still pending
-    intervalId = setInterval(() => {
+    const intervalId = setInterval(() => {
       if (paymentState === "PENDING" && pollCount < 12) {
         checkStatus();
       }

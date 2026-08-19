@@ -5,6 +5,10 @@ export type WorkMode = 'On-site' | 'Remote' | 'Hybrid';
 export type ExperienceLevel = 'Entry-level' | 'Mid-level' | 'Senior' | 'Lead' | 'Director';
 export type ToneOfVoice = 'Professional' | 'Casual' | 'Academic' | 'Urgent';
 export type ProctoringLevel = 'Standard' | 'High Security';
+export type JobSkillRequirement = {
+  name: string;
+  priority: 'required' | 'preferred';
+};
 
 interface JobCreationState {
   // Step 1: Basic Info
@@ -35,6 +39,7 @@ interface JobCreationState {
   
   // Step 3: Requirements
   skillTags: string[];
+  skillRequirements: JobSkillRequirement[];
   educationRequirement: string;
   screeningQuestions: string[];
   
@@ -81,6 +86,7 @@ const initialState = {
   aiFocusAreas: '',
   
   skillTags: [],
+  skillRequirements: [],
   educationRequirement: "Bachelor's Degree",
   screeningQuestions: ['', ''],
   

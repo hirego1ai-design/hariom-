@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 
 export default function EmployerPageE9() {
@@ -14,9 +15,9 @@ export default function EmployerPageE9() {
 <header className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
 <div>
 <nav className="flex items-center gap-2 text-text-muted text-label-md mb-2">
-<a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/dashboard">Dashboard</a>
-<a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/hiring-pipeline">Talent</a>
-<a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/upcoming-interviews-list">Interviews</a>
+<Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/dashboard">Dashboard</Link>
+<Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/hiring-pipeline">Talent</Link>
+<Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/employer/upcoming-interviews-list">Interviews</Link>
     </nav>
 <h2 className="font-display-lg text-display-lg-mobile md:text-display-lg text-text-primary tracking-tight">Define Your Interview Rounds</h2>
 </div>
@@ -196,3 +197,5 @@ export default function EmployerPageE9() {
     </PageContainer>
   );
 }
+
+

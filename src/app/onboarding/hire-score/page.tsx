@@ -7,21 +7,21 @@ import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function HireScorePage() {
   const { state, calculateHireGoScore } = useOnboarding();
-  const [score, setScore] = useState<any>(state.hireGoScore || null);
+  const [score, setScore] = useState(state.hireGoScore);
 
   useEffect(() => {
     const calc = calculateHireGoScore();
     setScore(calc);
   }, []);
 
-  const overall = score?.overall || 88;
+  const overall = score?.overall ?? 0;
 
   const breakdown = [
-    { label: "Resume Quality", value: score?.resumeQuality || 84, color: "text-primary" },
-    { label: "Technical Baseline", value: score?.assessmentScore || 85, color: "text-green" },
-    { label: "Video Presentation", value: score?.videoAnalysis || 82, color: "text-yellow" },
-    { label: "Communication Score", value: score?.communicationScore || 86, color: "text-purple-300" },
-    { label: "Behavioural Score", value: score?.behaviourScore || 80, color: "text-blue-400" },
+    { label: "Resume Quality", value: score?.resumeQuality ?? 0, color: "text-primary" },
+    { label: "Technical Baseline", value: score?.assessmentScore ?? 0, color: "text-green" },
+    { label: "Video Presentation", value: score?.videoAnalysis ?? 0, color: "text-yellow" },
+    { label: "Communication Score", value: score?.communicationScore ?? 0, color: "text-purple-300" },
+    { label: "Behavioural Score", value: score?.behaviourScore ?? 0, color: "text-blue-400" },
   ];
 
   return (
@@ -38,7 +38,7 @@ export default function HireScorePage() {
           </div>
           <div className="flex items-center gap-3 font-mono text-xs">
             <span className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-text-muted">
-              Step 10 of 10
+              Completion
             </span>
           </div>
         </header>
@@ -56,10 +56,10 @@ export default function HireScorePage() {
 
               <div className="space-y-1 pt-2">
                 <span className="px-3 py-1 rounded-full bg-green/20 text-green text-xs font-mono font-bold">
-                  Top 8% Candidate Intelligence
+                  {overall >= 85 ? "Strong profile readiness" : "Complete more sections to improve readiness"}
                 </span>
                 <p className="text-xs text-text-muted max-w-[280px]">
-                  Verified market readiness score calculated across 2,400+ neural data points.
+                  This score uses only the resume, skills, experience, video, and assessment data you completed.
                 </p>
               </div>
             </div>

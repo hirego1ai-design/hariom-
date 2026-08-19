@@ -1,20 +1,172 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-const rawHtml = "\n<!-- Atmospheric Background Gradients -->\n<div className=\"fixed inset-0 pointer-events-none z-0 radial-glow-red\"></div>\n<div className=\"fixed inset-0 pointer-events-none z-0 radial-glow-blue\"></div>\n<!-- Navigation Shell (TopAppBar) -->\n<header className=\"fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-margin-desktop h-[64px] w-full border-b border-white/10 backdrop-blur-md bg-surface/80 shadow-md\">\n<div className=\"flex items-center gap-stack-lg\">\n<span className=\"font-display-lg text-[24px] font-bold tracking-tight text-primary\">HireGo AI</span>\n<nav className=\"hidden md:flex items-center gap-6\">\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"/dashboard\">Dashboard</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"/jobs\">Jobs</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"/ai/practice-hub\">AI Practice</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"/messages\">Messages</a>\n    </nav>\n</div>\n<div className=\"flex items-center gap-4\">\n<button className=\"material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors\">notifications</button>\n<button className=\"material-symbols-outlined text-primary\">settings</button>\n<div className=\"h-8 w-8 rounded-full overflow-hidden border border-white/20\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional headshot of a diverse user in a modern office environment, featuring cinematic lighting and a slight tech-focused blur. The aesthetic is high-fidelity and sophisticated, aligning with a premium AI platform's dark theme and professional color palette.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuD9f7ry8u54xyLUEePetrGOjgrp_5lrB8NkKTnHrHM4wcAwF0AP9ULMhd8vifmluwAOSPJawmZuQvatDWb5VqnlwINPg5mVsyJIN4YypexvYLTjj_0QpiDfUggtSGMEs9MVu9lm0dRJ33COMjqsLGpcl4nxWOxfKEMpFNvGDEdvEE-m10ETNR2vuFfXaS0ZCP0_KZd3hfLJGoNb_idfvI2Hf4GD0RKu4v5Uq_URMUHejkIOMr1Q1s427bvIe9Wf-gqqzhZ3a7lvue4\">\n</div>\n<button className=\"hidden md:block px-4 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md font-bold transition-transform active:scale-95\">Proctor Active</button>\n</div>\n</header>\n<div className=\"flex pt-[64px] min-h-screen relative z-10\">\n<!-- Sidebar Navigation (SideNavBar - Mapping Settings Tab) -->\n<aside className=\"w-[240px] h-[calc(100vh-64px)] fixed left-0 flex flex-col py-stack-lg gap-stack-md border-r border-white/5 bg-surface-container-low overflow-y-auto\">\n<div className=\"px-6 mb-6\">\n<h3 className=\"text-on-surface-variant font-label-md text-label-md uppercase tracking-wider mb-4 opacity-50\">Settings</h3>\n<nav className=\"flex flex-col gap-2\">\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/dashboard\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">dashboard</span>\n<span className=\"font-label-md text-label-md\">Dashboard</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/jobs\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">work</span>\n<span className=\"font-label-md text-label-md\">Jobs</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/applications\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">description</span>\n<span className=\"font-label-md text-label-md\">Applications</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/interviews\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">video_call</span>\n<span className=\"font-label-md text-label-md\">Interviews</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/ai/practice-hub\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">psychology</span>\n<span className=\"font-label-md text-label-md\">AI Practice Hub</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/profile\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">person</span>\n<span className=\"font-label-md text-label-md\">Profile</span>\n</a>\n<a className=\"flex items-center gap-3 py-3 px-4 mx-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all group\" href=\"/settings\">\n<span className=\"material-symbols-outlined group-hover:scale-110 transition-transform\">settings</span>\n<span className=\"font-label-md text-label-md\">Settings</span>\n</a>\n</nav>\n</div>\n<div className=\"mt-auto px-6\">\n<a className=\"flex items-center gap-3 py-3 px-4 text-on-surface-variant hover:text-on-surface hover:bg-white/5 mx-2 rounded-lg transition-all\" href=\"#\">\n<span className=\"material-symbols-outlined\">logout</span>\n<span className=\"font-label-md text-label-md\">Logout</span>\n</a>\n</div>\n</aside>\n<!-- Main Content Area -->\n<main className=\"flex-1 ml-[240px] px-margin-desktop py-stack-lg max-w-4xl\">\n<header className=\"mb-10\">\n<h1 className=\"font-display-xl text-display-xl text-primary mb-2\">Personal Information</h1>\n<p className=\"text-text-secondary font-body-lg text-body-lg\">Manage your account details and professional identity on HireGo AI.</p>\n</header>\n<section className=\"glass-card rounded-lg p-8\">\n<div className=\"flex items-center gap-8 mb-10 pb-10 border-b border-white/5\">\n<div className=\"relative group cursor-pointer\">\n<div className=\"w-24 h-24 rounded-full overflow-hidden border-2 border-primary ring-4 ring-primary/10\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A macro close-up of a digital profile avatar being edited, with neon light edges and holographic data overlays. The image emphasizes high-tech precision and identity management within a sophisticated AI career platform context. Deep blacks and vibrant red accents create a powerful visual impact.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuBEDnQojq7PkD-rlWnfjoMOcDBa7S5VM_MePrdg57ZP0k6xHmaFqPA4F3P2TLyzccnzT6UbJzSq9KJyRv3Yb5hegckrn_IGUrGGixjZFppw49AypEibhKKG7dm47C0nHooECkrjfB449GJrg45X1KX_pkmx4SNwLHIrQIFsvj1d1EBYypvtQ7zGQDS28uonJe37zoqSG14lNRRCoGGWh2kcOtHETjdWNFaxuQ6TgctuYfqNhZyGcXlee1SztfX7PyHNzDL6krbZwoU\">\n</div>\n<div className=\"absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity\">\n<span className=\"material-symbols-outlined text-white\">photo_camera</span>\n</div>\n</div>\n<div>\n<h2 className=\"font-headline-md text-headline-md text-on-surface mb-1\">Profile Photo</h2>\n<p className=\"text-text-muted font-label-md text-label-md mb-4\">Upload a high-resolution image for better interview recognition.</p>\n<div className=\"flex gap-4\">\n<button className=\"px-4 py-2 rounded-full border border-white/10 text-on-surface font-label-md text-label-md hover:bg-white/5 transition-all\">Change Photo</button>\n<button className=\"px-4 py-2 rounded-full text-red-light font-label-md text-label-md hover:bg-red-light/5 transition-all\">Remove</button>\n</div>\n</div>\n</div>\n<form className=\"space-y-8\">\n<div className=\"grid grid-cols-1 md:grid-cols-2 gap-stack-lg\">\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">First Name</label>\n<input className=\"input-pill w-full\" type=\"text\" value=\"Alexander\">\n</div>\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">Last Name</label>\n<input className=\"input-pill w-full\" type=\"text\" value=\"Russo\">\n</div>\n</div>\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">Email Address</label>\n<input className=\"input-pill w-full\" type=\"email\" value=\"alex.russo@designcorp.ai\">\n</div>\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">Professional Bio</label>\n<textarea className=\"bg-[#1E1E1E] border border-white/10 rounded-lg p-6 text-on-surface min-h-[120px] focus:outline-none focus:border-primary transition-all\" placeholder=\"Tell us about your expertise...\"></textarea>\n</div>\n<div className=\"grid grid-cols-1 md:grid-cols-2 gap-stack-lg\">\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">Job Title</label>\n<input className=\"input-pill w-full\" type=\"text\" value=\"Senior AI Architect\">\n</div>\n<div className=\"flex flex-col gap-2\">\n<label className=\"font-label-md text-label-md text-on-surface-variant ml-4\">Location</label>\n<input className=\"input-pill w-full\" type=\"text\" value=\"San Francisco, CA\">\n</div>\n</div>\n<div className=\"pt-6 border-t border-white/5 flex items-center justify-between\">\n<p className=\"text-text-muted font-label-md text-label-md\">Last updated: 2 hours ago</p>\n<div className=\"flex gap-4\">\n<button className=\"px-8 py-3 rounded-full border border-white/10 text-on-surface font-label-md text-label-md hover:bg-white/5 transition-all\" type=\"button\">Cancel</button>\n<button className=\"btn-primary-red h-[50px] px-10 rounded-full text-white font-label-md text-label-md font-bold uppercase tracking-wider\" type=\"submit\">Save Changes</button>\n</div>\n</div>\n</form>\n</section>\n<!-- Secondary Section (Bento Style) -->\n<section className=\"mt-10 grid grid-cols-1 md:grid-cols-2 gap-6\">\n<div className=\"glass-card rounded-lg p-6 flex flex-col justify-between group cursor-pointer hover:border-primary/30 transition-all\">\n<div>\n<div className=\"w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4\">\n<span className=\"material-symbols-outlined\">verified_user</span>\n</div>\n<h3 className=\"font-headline-md text-[20px] text-on-surface mb-2\">Account Verification</h3>\n<p className=\"text-text-secondary font-body-md text-body-md\">Your identity is verified. This helps you get matched with high-priority enterprise roles.</p>\n</div>\n<div className=\"mt-6 flex items-center text-primary font-bold gap-2\">\n<span className=\"font-label-md text-label-md\">View details</span>\n<span className=\"material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-1\">arrow_forward</span>\n</div>\n</div>\n<div className=\"glass-card rounded-lg p-6 flex flex-col justify-between group cursor-pointer hover:border-primary/30 transition-all\">\n<div>\n<div className=\"w-10 h-10 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary mb-4\">\n<span className=\"material-symbols-outlined\">visibility</span>\n</div>\n<h3 className=\"font-headline-md text-[20px] text-on-surface mb-2\">Profile Visibility</h3>\n<p className=\"text-text-secondary font-body-md text-body-md\">Control who can see your profile and current application status.</p>\n</div>\n<div className=\"mt-6 flex items-center text-tertiary font-bold gap-2\">\n<span className=\"font-label-md text-label-md\">Manage visibility</span>\n<span className=\"material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-1\">arrow_forward</span>\n</div>\n</div>\n</section>\n</main>\n</div>\n<!-- Micro-interaction Scripts -->\n\n";
+export default function CandidateSettingsPage() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [headline, setHeadline] = useState("");
+  const [location, setLocation] = useState("");
+  const [bio, setBio] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-export default function C75Page() {
-  const router = useRouter();
+  useEffect(() => {
+    fetch("/api/candidate/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.profile) {
+          setName(data.profile.name || "");
+          setEmail(data.profile.email || "");
+          setHeadline(data.profile.headline || "");
+          setLocation(data.profile.location || "");
+          setBio(data.profile.bio || "");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          headline,
+          location,
+          bio,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setToastMessage("Settings updated successfully!");
+      } else {
+        setToastMessage("Failed to update settings.");
+      }
+    } catch {
+      setToastMessage("Failed to update settings.");
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-primary text-white px-5 py-3 rounded-2xl shadow-2xl font-bold text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
+          <div>
+            <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
+              Personal Settings
+            </h1>
+            <p className="text-text-muted text-xs">Manage your account profile and matching preferences.</p>
+          </div>
+
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md border border-white/10"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            <span className="hidden sm:inline">Dashboard</span>
+          </Link>
+        </header>
+
+        <main className="flex-1 p-6 lg:p-10 space-y-6 max-w-4xl w-full mx-auto overflow-y-auto">
+          <form onSubmit={handleSave} className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div className="flex items-center gap-5 pb-6 border-b border-white/10">
+              <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-primary text-3xl">
+                <span className="material-symbols-outlined text-[32px]">person</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">{name || "Candidate"}</h3>
+                <p className="text-xs text-text-muted">{email || "candidate@hirego.ai"}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-text-muted">Full Name</label>
+                <input
+                  type="text"
+                  disabled
+                  value={name}
+                  className="input-pill w-full h-11 px-4 text-xs text-text-muted opacity-60 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-text-muted">Email Address</label>
+                <input
+                  type="email"
+                  disabled
+                  value={email}
+                  className="input-pill w-full h-11 px-4 text-xs text-text-muted opacity-60 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-text-muted">Professional Headline</label>
+                <input
+                  type="text"
+                  value={headline}
+                  onChange={(e) => setHeadline(e.target.value)}
+                  placeholder="e.g. Senior Software Architect"
+                  className="input-pill w-full h-11 px-4 text-xs text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-text-muted">Current Location</label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. San Francisco, CA / Bangalore"
+                  className="input-pill w-full h-11 px-4 text-xs text-white"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-text-muted">Professional Bio</label>
+              <textarea
+                rows={4}
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Share your experience, technical leadership, and goals..."
+                className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-white outline-none focus:border-primary resize-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-3d-red px-8 py-3 rounded-full text-xs font-bold text-white shadow-lg disabled:opacity-50"
+              >
+                {isLoading ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
     </div>
-    </div>
-);
+  );
 }

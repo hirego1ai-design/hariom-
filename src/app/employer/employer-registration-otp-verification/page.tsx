@@ -1,11 +1,17 @@
 "use client";
-import React, { useState } from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function EmployerOTPVerificationPage() {
   const router = useRouter();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setEmail(new URLSearchParams(window.location.search).get("email") || "");
+  }, []);
 
   const handleChange = (element: HTMLInputElement, index: number) => {
     if (isNaN(Number(element.value))) return false;
@@ -49,7 +55,7 @@ export default function EmployerOTPVerificationPage() {
             </div>
           </div>
 
-          {/* 4-Step Progress Tracker */}
+          {/* Registration progress */}
           <div className="relative z-10 space-y-3 pl-1">
             <div className="flex items-center gap-3 opacity-60">
               <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs text-white">
@@ -88,7 +94,7 @@ export default function EmployerOTPVerificationPage() {
                   Step 3
                 </p>
                 <p className="font-body-md text-xs text-text-secondary">
-                  Billing Setup
+                  Hiring Model
                 </p>
               </div>
             </div>
@@ -102,7 +108,21 @@ export default function EmployerOTPVerificationPage() {
                   Step 4
                 </p>
                 <p className="font-body-md text-xs text-text-secondary">
-                  AI Configuration
+                  Plan Setup (Subscription)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 opacity-60">
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs text-white">
+                5
+              </div>
+              <div>
+                <p className="font-label-md text-[10px] text-text-secondary uppercase">
+                  Final Step
+                </p>
+                <p className="font-body-md text-xs text-text-secondary">
+                  One-Document KYC
                 </p>
               </div>
             </div>
@@ -119,16 +139,25 @@ export default function EmployerOTPVerificationPage() {
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
                 We've sent a 6-digit verification code to{" "}
-                <span className="text-primary font-bold">hiring@company.com</span>
+                <span className="text-primary font-bold">{email || "your corporate email"}</span>
               </p>
             </div>
 
             {/* OTP Form */}
             <form
               className="space-y-5"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                router.push("/employer/employer-registration-complete");
+                const code = otp.join("");
+                if (!email || code.length !== 6) { setError("Enter the six-digit verification code."); return; }
+                setSubmitting(true); setError("");
+                try {
+                  const response = await fetch("/api/auth/verify-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, otp: code, type: "VERIFY_EMAIL" }) });
+                  const result = await response.json();
+                  if (!response.ok || !result.success) throw new Error(result.error || "Verification failed.");
+                  router.push("/employer/employer-registration-business-model");
+                } catch (err) { setError(err instanceof Error ? err.message : "Verification failed."); }
+                finally { setSubmitting(false); }
               }}
             >
               <div className="flex flex-col gap-2">
@@ -169,8 +198,9 @@ export default function EmployerOTPVerificationPage() {
                 <button
                   className="btn-3d-red w-full h-12 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group"
                   type="submit"
+                  disabled={submitting}
                 >
-                  <span>Verify and Continue</span>
+                  <span>{submitting ? "Verifying..." : "Verify and Continue"}</span>
                   <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
                     arrow_forward
                   </span>

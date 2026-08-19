@@ -85,6 +85,7 @@ export interface OnboardingState {
   completionPercent: number;
   candidateRole: CandidateRole | null;
   jobCategory: JobCategory | null;
+  targetRole: string;
   personalDetails: {
     fullName: string;
     email: string;
@@ -104,6 +105,8 @@ export interface OnboardingState {
   assessmentResults: AssessmentResult[];
   hireGoScore: HireGoScore | null;
   interviewEligibility: "ready-ai" | "needs-assessment" | "needs-improvement" | "ready-employer" | null;
+  userId: string | null;
+  companyName: string | null;
 }
 
 interface OnboardingContextValue {
@@ -120,6 +123,7 @@ const defaultState: OnboardingState = {
   completionPercent: 0,
   candidateRole: null,
   jobCategory: null,
+  targetRole: "",
   personalDetails: {
     fullName: "",
     email: "",
@@ -139,6 +143,8 @@ const defaultState: OnboardingState = {
   assessmentResults: [],
   hireGoScore: null,
   interviewEligibility: null,
+  userId: null,
+  companyName: null,
 };
 
 const STORAGE_KEY = "hirego_onboarding_v1";
@@ -146,21 +152,25 @@ const STORAGE_KEY = "hirego_onboarding_v1";
 const OnboardingContext = createContext<OnboardingContextValue | undefined>(undefined);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<OnboardingState>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return defaultState;
-  });
+  // Start with the same state on the server and browser. Restoring localStorage
+  // during the first browser render causes hydration mismatches with SSR.
+  const [state, setState] = useState<OnboardingState>(defaultState);
+  const [hasRestoredSavedState, setHasRestoredSavedState] = useState(false);
 
   useEffect(() => {
     try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setState(JSON.parse(saved));
+    } catch {}
+    setHasRestoredSavedState(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredSavedState) return;
+    try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {}
-  }, [state]);
+  }, [hasRestoredSavedState, state]);
 
   const updateState = (partial: Partial<OnboardingState>) => {
     setState((prev) => {
@@ -182,25 +192,25 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   };
 
   const calculateHireGoScore = (): HireGoScore => {
-    const resumeQuality = state.resumeAnalysis?.qualityScore ?? 84;
-    const skillsScore = Math.min(100, Math.max(70, state.skills.length * 15));
-    const experienceScore = Math.min(100, Math.max(70, state.experience.length * 25));
-    const educationScore = Math.min(100, Math.max(70, state.education.length * 35));
-    const videoScore = state.videoAnalysis?.overallScore ?? 82;
+    const resumeQuality = state.resumeAnalysis?.qualityScore ?? 0;
+    const skillsScore = Math.min(100, state.skills.length * 15);
+    const experienceScore = Math.min(100, state.experience.length * 25);
+    const educationScore = Math.min(100, state.education.length * 35);
+    const videoScore = state.videoAnalysis?.overallScore ?? 0;
     const assessmentScore =
       state.assessmentResults.length > 0
         ? Math.round(
             state.assessmentResults.reduce((sum, r) => sum + (r.correctAnswers / r.totalQuestions) * 100, 0) /
               state.assessmentResults.length
           )
-        : 85;
+        : 0;
     const communicationScore = state.videoAnalysis
       ? Math.round((state.videoAnalysis.communicationScore + state.videoAnalysis.clarityScore + state.videoAnalysis.fluencyScore) / 3)
-      : 86;
+      : 0;
     const technicalScore = assessmentScore;
     const behaviourScore = state.videoAnalysis
       ? Math.round((state.videoAnalysis.confidenceScore + state.videoAnalysis.professionalismScore + state.videoAnalysis.bodyLanguageScore) / 3)
-      : 80;
+      : 0;
 
     const overall = Math.round(
       resumeQuality * 0.15 +
@@ -249,24 +259,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 export function useOnboarding() {
   const ctx = useContext(OnboardingContext);
   if (!ctx) {
-    return {
-      state: defaultState,
-      updateState: () => {},
-      markStepComplete: () => {},
-      calculateHireGoScore: () => ({
-        overall: 88,
-        resumeQuality: 84,
-        skills: 80,
-        experience: 75,
-        education: 85,
-        videoAnalysis: 82,
-        assessmentScore: 85,
-        communicationScore: 86,
-        technicalScore: 85,
-        behaviourScore: 80,
-      }),
-      resetOnboarding: () => {},
-    };
+    throw new Error("useOnboarding must be used within an OnboardingProvider");
   }
   return ctx;
 }
+
+

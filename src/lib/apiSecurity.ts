@@ -10,7 +10,12 @@ type RateLimitEntry = {
   resetAt: number;
 };
 
-const rateLimitStore = new Map<string, RateLimitEntry>();
+function getRateLimitStore(): Map<string, RateLimitEntry> {
+  if (!(globalThis as any).__hirego_rate_limit_store) {
+    (globalThis as any).__hirego_rate_limit_store = new Map<string, RateLimitEntry>();
+  }
+  return (globalThis as any).__hirego_rate_limit_store;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -26,27 +31,63 @@ export function jsonError(message: string, status = 400) {
 }
 
 export function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
+  if (!request) return "unknown";
+  if (request.headers && typeof request.headers.get === "function") {
+    const forwardedFor = request.headers.get("x-forwarded-for") || request.headers.get("X-Forwarded-For");
+    if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
 
-  return request.headers.get("x-real-ip") || "unknown";
+    const realIp = request.headers.get("x-real-ip") || request.headers.get("X-Real-IP");
+    if (realIp) return realIp.trim();
+  } else if (request.headers) {
+    const h = request.headers as any;
+    const forwardedFor = h["x-forwarded-for"] || h["X-Forwarded-For"];
+    if (forwardedFor) return String(forwardedFor).split(",")[0]?.trim() || "unknown";
+
+    const realIp = h["x-real-ip"] || h["X-Real-IP"];
+    if (realIp) return String(realIp).trim();
+  }
+
+  return (request as any).ip || "unknown";
 }
 
-export function enforceRateLimit(request: Request, keyPrefix: string) {
+export function enforceRateLimit(
+  request: Request,
+  keyPrefix: string,
+  maxRequests: number = RATE_LIMIT_MAX_REQUESTS,
+  windowMs: number = RATE_LIMIT_WINDOW_MS
+) {
+  const store = getRateLimitStore();
   const now = Date.now();
-  const key = `${keyPrefix}:${getClientIp(request)}`;
-  const current = rateLimitStore.get(key);
+  const ip = getClientIp(request);
+  const key = `${keyPrefix}:${ip}`;
+  const current = store.get(key);
 
   if (!current || current.resetAt <= now) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    store.set(key, { count: 1, resetAt: now + windowMs });
     return;
   }
 
-  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
-    throw new ApiError("Too many requests. Please retry shortly.", 429);
+  if (current.count >= maxRequests) {
+    const error = new ApiError("Too many requests. Please retry shortly.", 429);
+    (error as any).status = 429;
+    throw error;
   }
 
   current.count += 1;
+  store.set(key, current);
+}
+
+export function resetRateLimitStore(keyPrefix?: string) {
+  const store = getRateLimitStore();
+  if (keyPrefix) {
+    for (const key of store.keys()) {
+      if (key.startsWith(`${keyPrefix}:`)) {
+        store.delete(key);
+      }
+    }
+  } else {
+    store.clear();
+  }
 }
 
 export function enforceInternalApiKey(request: Request) {
@@ -98,8 +139,8 @@ export async function readValidatedJson<T>(request: Request, schema: ZodSchema<T
 }
 
 export function handleApiError(error: unknown) {
-  if (error instanceof ApiError) {
-    return jsonError(error.message, error.status);
+  if (error instanceof ApiError || (error && typeof (error as any).status === "number")) {
+    return jsonError((error as any).message, (error as any).status);
   }
 
   console.error("Unhandled API error", error);

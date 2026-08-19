@@ -26,7 +26,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const roomId = searchParams.get("roomId") || "default-room";
 
-    const room = activeRooms.get(roomId) || {
+    let room = activeRooms.get(roomId);
+    if (!room) {
+      room = {
       roomId,
       interviewId: `int_${Date.now()}`,
       hostId: session.id,
@@ -35,7 +37,9 @@ export async function GET(req: NextRequest) {
       answers: [],
       candidates: [],
       status: "ACTIVE",
-    };
+      };
+      activeRooms.set(roomId, room);
+    }
 
     return NextResponse.json({
       success: true,

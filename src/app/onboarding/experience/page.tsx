@@ -13,7 +13,7 @@ export default function ExperiencePage() {
   const [expList, setExpList] = useState<ExperienceEntry[]>(
     state.experience && state.experience.length > 0
       ? state.experience
-      : [{ company: "TechNova Solutions", role: "Software Engineer", startDate: "2021-01", endDate: "Present", description: "Engineered scalable cloud services and microservices." }]
+      : []
   );
 
   const handleAdd = () => {
@@ -33,15 +33,33 @@ export default function ExperiencePage() {
   const handleAiDescribe = (index: number) => {
     const role = expList[index].role || "Software Engineer";
     const company = expList[index].company || "Tech Operations";
-    const aiText = `Spearheaded architecture & engineering at ${company} for high-availability systems. Reduced system latency by 32% and led cross-functional engineering teams.`;
+    const aiText = `Describe your impact as ${role} at ${company}: led projects, improved outcomes, and collaborated with cross-functional teams.`;
     handleChange(index, "description", aiText);
   };
 
   const handleNext = () => {
     updateState({ experience: expList });
     markStepComplete(5);
+
+    // Persist to backend
+    fetch("/api/candidate/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        experience: expList,
+        experienceYears: expList.length * 1.5,
+      }),
+    }).catch(() => {});
+
     router.push("/onboarding/skills");
   };
+
+  const handleSkip = () => {
+    updateState({ experience: [] });
+    markStepComplete(5);
+    router.push("/onboarding/skills");
+  };
+
 
   return (
     <div
@@ -65,7 +83,7 @@ export default function ExperiencePage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -81,7 +99,7 @@ export default function ExperiencePage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 5/10
+                Experience
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Career Trajectory & Accomplishments
@@ -95,7 +113,7 @@ export default function ExperiencePage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -104,7 +122,7 @@ export default function ExperiencePage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 5 of 10
+              Work history
             </span>
           </div>
         </header>
@@ -316,6 +334,15 @@ export default function ExperiencePage() {
               Back
             </Link>
 
+            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
+            >
+              Skip for now
+            </button>
             <button
               onClick={handleNext}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
@@ -327,6 +354,7 @@ export default function ExperiencePage() {
               <span>Next: Skills Matrix</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
+            </div>
           </div>
         </main>
       </div>

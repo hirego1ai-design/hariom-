@@ -10,12 +10,23 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres_secure_pass_2026@postgres:5432/hirego_prod?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=hirego_production_secure_jwt_signing_key_32chars_2026
-      - SESSION_SECRET=hirego_production_session_signing_secret_32chars_2026
-      - INTERNAL_API_KEY=hirego_internal_service_key_32chars_2026
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be configured}
+      DIRECT_URL: ${DIRECT_URL:-}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET must be configured}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be configured}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be configured}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY must be configured}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-}
+      ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
+      ZEPTOMAIL_FROM_EMAIL: ${ZEPTOMAIL_FROM_EMAIL:-}
+      EMAIL_CONFIG_ENCRYPTION_KEY: ${EMAIL_CONFIG_ENCRYPTION_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,15 +38,15 @@ services:
     container_name: hirego-postgres-db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_pass_2026
-      POSTGRES_DB: hirego_prod
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be configured}
+      POSTGRES_DB: ${POSTGRES_DB:-hirego_prod}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d hirego_prod"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hirego_prod}"]
       interval: 5s
       timeout: 5s
       retries: 5

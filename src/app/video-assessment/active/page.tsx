@@ -1,20 +1,271 @@
 "use client";
+
+import React, { useState, useEffect, useRef } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const rawHtml = "\n<!-- Atmospheric Gradients -->\n<div className=\"fixed bottom-0 left-0 w-[500px] h-[500px] bg-red-900/10 blur-[120px] -z-10\"></div>\n<div className=\"fixed top-0 right-0 w-[500px] h-[500px] bg-blue-900/10 blur-[120px] -z-10\"></div>\n<!-- Top Bar Component -->\n<nav className=\"fixed top-0 left-0 right-0 h-[64px] flex items-center justify-between px-margin-desktop bg-surface/80 backdrop-blur-md border-b border-white/10 z-50\">\n<div className=\"flex items-center gap-6\">\n<div className=\"flex items-center gap-3\">\n<span className=\"material-symbols-outlined text-primary text-[32px]\">hub</span>\n<span className=\"font-display-lg text-[24px] font-bold tracking-tight text-primary\">HireGo AI</span>\n</div>\n<div className=\"h-6 w-px bg-white/10\"></div>\n<div className=\"flex flex-col\">\n<span className=\"font-label-md text-text-secondary text-xs uppercase tracking-widest\">Assessment</span>\n<span className=\"font-body-md text-white font-bold\">Senior Product Designer</span>\n</div>\n</div>\n<!-- Progress Tracking -->\n<div className=\"flex items-center gap-8\">\n<div className=\"flex flex-col items-center\">\n<span className=\"font-label-md text-text-secondary text-xs mb-1\">Question 2 of 4</span>\n<div className=\"flex gap-1.5\">\n<div className=\"w-8 h-1.5 rounded-full bg-green\"></div>\n<div className=\"w-8 h-1.5 rounded-full bg-primary animate-pulse\"></div>\n<div className=\"w-8 h-1.5 rounded-full bg-white/10\"></div>\n<div className=\"w-8 h-1.5 rounded-full bg-white/10\"></div>\n</div>\n</div>\n</div>\n<div className=\"flex items-center gap-4\">\n<div className=\"flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10\">\n<span className=\"font-data-md text-text-secondary\">Session Timer:</span>\n<span className=\"font-data-md text-white font-bold\">14:22</span>\n</div>\n<div className=\"flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-900/20 border border-red-500/30\">\n<div className=\"w-2 h-2 rounded-full bg-red-light animate-rec\"></div>\n<span className=\"font-label-md text-red-light font-bold text-xs uppercase tracking-widest\">REC</span>\n</div>\n</div>\n</nav>\n<!-- Main Content Canvas -->\n<main className=\"pt-[100px] pb-8 px-margin-desktop h-screen flex flex-col items-center max-w-7xl mx-auto\">\n<!-- Question Section -->\n<div className=\"w-full text-center mb-8\">\n<div className=\"inline-flex items-center gap-2 px-4 py-1 rounded-full bg-surface-variant text-primary font-label-md text-xs uppercase tracking-widest mb-4\">\n<span className=\"material-symbols-outlined text-[14px]\">videocam</span>\n                Video Response\n            </div>\n<h1 className=\"font-headline-md text-[28px] leading-tight text-white max-w-3xl mx-auto\">\n                \"Describe a situation where you had to balance user needs with strict technical constraints. How did you align the team?\"\n            </h1>\n</div>\n<!-- Assessment Environment -->\n<div className=\"flex-1 w-full grid grid-cols-12 gap-8 items-start\">\n<!-- Sidebar: Proctoring Stats -->\n<div className=\"col-span-3 flex flex-col gap-4 h-full\">\n<div className=\"glass-card p-6 rounded-lg\">\n<h3 className=\"font-label-md text-text-secondary text-xs uppercase tracking-widest mb-4\">AI Proctoring Status</h3>\n<div className=\"flex flex-col gap-3\">\n<div className=\"flex items-center justify-between p-3 rounded-lg bg-green/10 border border-green/20\">\n<div className=\"flex items-center gap-2\">\n<span className=\"material-symbols-outlined text-green text-[18px]\">face</span>\n<span className=\"text-xs font-bold text-green\">Face Detected</span>\n</div>\n<span className=\"material-symbols-outlined text-green text-[16px]\">check_circle</span>\n</div>\n<div className=\"flex items-center justify-between p-3 rounded-lg bg-green/10 border border-green/20\">\n<div className=\"flex items-center gap-2\">\n<span className=\"material-symbols-outlined text-green text-[18px]\">person</span>\n<span className=\"text-xs font-bold text-green\">Single Person</span>\n</div>\n<span className=\"material-symbols-outlined text-green text-[16px]\">check_circle</span>\n</div>\n<div className=\"flex items-center justify-between p-3 rounded-lg bg-red-900/20 border border-red-500/20\">\n<div className=\"flex items-center gap-2\">\n<span className=\"material-symbols-outlined text-red-light text-[18px]\">videocam</span>\n<span className=\"text-xs font-bold text-red-light\">Recording Stream</span>\n</div>\n<div className=\"w-1.5 h-1.5 rounded-full bg-red-light animate-rec\"></div>\n</div>\n</div>\n</div>\n<div className=\"glass-card p-6 rounded-lg mt-auto\">\n<div className=\"text-center\">\n<span className=\"text-text-muted text-xs font-label-md uppercase tracking-widest block mb-2\">Question Time Remaining</span>\n<div className=\"font-data-lg text-[42px] font-medium text-yellow leading-none\">01:42</div>\n</div>\n<!-- Dynamic Progress Bar -->\n<div className=\"mt-6 h-2 w-full bg-white/5 rounded-full overflow-hidden\">\n<div className=\"h-full bg-gradient-to-r from-green via-yellow to-red-light w-[45%] transition-all duration-1000\"></div>\n</div>\n</div>\n</div>\n<!-- Main: Camera Feed -->\n<div className=\"col-span-9 flex flex-col h-full\">\n<div className=\"relative w-full aspect-video max-w-[800px] mx-auto bg-black rounded-[24px] border-2 border-red-light/30 camera-glow overflow-hidden group\">\n<!-- Placeholder for Camera Stream -->\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional young adult candidate sitting in a brightly lit, clean home office environment with a minimalist background. The lighting is soft and cinematic, highlighting the candidate's focused and confident expression. The overall aesthetic is high-end, AI-native, and professional with a subtle dark-mode tech atmosphere.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuAhT_44QGzm994i1nM3IbTL8oawfv92SfX5bSU15sFmRYWI24SdPS5Axs7M_rQZlrLNC01CZZ-Fot7NoAgg76viz9-oVwygXD2yeWVetqgLyMQkf3PCHA5zKIH67UrUi35H2Uabz57Pfc8RqbkFhbsSJzIIHRdsHG1w_60erxdRMg-_3OCPOXcwNhfz8lyeOZBcOnVaIhRZBuDl5G-awqvW-xRTE6PKeIyWvAYVBpwym9t6ZsE6TV8q1-qrnVL6k3yOeEDzk_qRSLo\"/>\n<!-- Overlay UI -->\n<div className=\"absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity\"></div>\n<div className=\"absolute top-6 left-6 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/10\">\n<span className=\"material-symbols-outlined text-red-light text-[18px]\" style=\"font-variation-settings: 'FILL' 1;\">circle</span>\n<span className=\"text-white text-xs font-bold uppercase tracking-widest\">Live Recording</span>\n</div>\n<div className=\"absolute bottom-6 right-6 px-4 py-2 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-white font-data-md text-sm\">\n                        HD 1080p • 30fps\n                    </div>\n</div>\n<!-- Control Bar -->\n<div className=\"mt-8 flex items-center justify-between w-full max-w-[800px] mx-auto\">\n<button className=\"px-8 h-[50px] rounded-full glass-card hover:bg-white/10 transition-all flex items-center gap-2 font-bold text-white\">\n<span className=\"material-symbols-outlined\">play_circle</span>\n                        Play Back\n                    </button>\n<div className=\"flex items-center gap-4\">\n<button className=\"px-10 h-[50px] rounded-full btn-danger-red text-white font-bold flex items-center gap-2\">\n<span className=\"material-symbols-outlined\">stop_circle</span>\n                            Stop and Submit\n                        </button>\n<button className=\"px-10 h-[50px] rounded-full btn-primary-blue text-white font-bold flex items-center gap-2\">\n                            Next Question\n                            <span className=\"material-symbols-outlined\">arrow_forward</span>\n</button>\n</div>\n</div>\n</div>\n</div>\n</main>\n<!-- Micro-interaction Scripts -->\n\n";
-
-export default function C66Page() {
+export default function VideoAssessmentActivePage() {
   const router = useRouter();
+  const [isRecording, setIsRecording] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [timerSeconds, setTimerSeconds] = useState(120);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const questions = [
+    {
+      id: 1,
+      title: "Architecture & System Scalability",
+      text: "Describe a scenario where you had to design or refactor a high-throughput microservices architecture to handle sudden 10x traffic spikes.",
+      timeLimit: 120,
+    },
+    {
+      id: 2,
+      title: "Conflict Resolution & Technical Leadership",
+      text: "How do you align cross-functional engineering stakeholders when there is a deadlock regarding technical stack choices or schema design?",
+      timeLimit: 120,
+    },
+    {
+      id: 3,
+      title: "AI Integration & Performance Optimization",
+      text: "Explain your methodology for streaming LLM responses to a client with low latency while managing edge authentication and rate limits.",
+      timeLimit: 120,
+    },
+  ];
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    navigator.mediaDevices
+      ?.getUserMedia({ video: true, audio: true })
+      .then((s) => {
+        stream = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+        }
+      })
+      .catch((err) => {
+        console.warn("Camera/mic access unavailable:", err);
+      });
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (isRecording && timerSeconds > 0) {
+      interval = setInterval(() => setTimerSeconds((prev) => prev - 1), 1000);
+    } else if (timerSeconds === 0 && isRecording) {
+      handleNextQuestion();
+    }
+    return () => clearInterval(interval);
+  }, [isRecording, timerSeconds]);
+
+  const handleStartRecording = () => {
+    setIsRecording(true);
+    setTimerSeconds(questions[currentQuestionIndex].timeLimit);
+  };
+
+  async function handleNextQuestion() {
+    setIsRecording(false);
+    setIsAnalyzing(true);
+
+    try {
+      const res = await fetch("/api/agents/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: "VIDEO_INTERVIEW_EVALUATION",
+          prompt: `Evaluate candidate video response for question: ${questions[currentQuestionIndex].title}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || typeof data.summary !== "string") {
+        throw new Error(data.error || "Evaluation service returned an invalid response.");
+      }
+      setAiFeedback(data.summary);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Evaluation is temporarily unavailable.";
+      setAiFeedback(`Evaluation unavailable: ${message}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+
+    if (currentQuestionIndex + 1 < questions.length) {
+      setTimeout(() => {
+        setCurrentQuestionIndex((prev) => prev + 1);
+        setAiFeedback(null);
+        setTimerSeconds(questions[currentQuestionIndex + 1].timeLimit);
+      }, 2500);
+    } else {
+      setIsCompleted(true);
+    }
+  }
+
+  const formatTimer = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const remainder = secs % 60;
+    return `${mins}:${remainder < 10 ? "0" : ""}${remainder}`;
+  };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+    <div className="min-h-screen bg-[#0A0A0C] text-white flex">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <div className="flex-1 ml-[100px] lg:ml-[116px] min-h-screen flex flex-col">
+        <header className="h-16 px-8 flex items-center justify-between border-b border-white/10 bg-[#0A0A0C]/90 backdrop-blur-xl">
+          <div className="flex items-center gap-3">
+            <h1 className="text-sm font-bold text-white tracking-wide uppercase">
+              AI Video Assessment Session
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 text-[10px] font-bold">
+              Proctored
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-mono font-bold text-gray-300">
+                {formatTimer(timerSeconds)}
+              </span>
+            </div>
+            <span className="text-xs text-gray-400 font-mono">
+              Question {currentQuestionIndex + 1} / {questions.length}
+            </span>
+          </div>
+        </header>
+
+        <main className="flex-1 p-6 lg:p-10 max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Video Feed (7 Cols) */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="relative aspect-video rounded-3xl overflow-hidden bg-black/60 border border-white/10 shadow-2xl flex items-center justify-center">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+
+              {/* Status overlay */}
+              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isRecording ? "bg-red-500 animate-pulse" : "bg-yellow-400"
+                  }`}
+                />
+                <span className="text-[11px] font-bold">
+                  {isRecording ? "RECORDING" : "STANDBY"}
+                </span>
+              </div>
+
+              {isAnalyzing && (
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-6 text-center">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  <p className="text-xs font-bold text-primary">
+                    AI Neural Engine analyzing acoustic & semantic coherence...
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Video Controls */}
+            <div className="flex items-center justify-between p-4 glass-card rounded-2xl border border-white/10 bg-white/5">
+              {!isRecording ? (
+                <button
+                  onClick={handleStartRecording}
+                  className="btn-3d-red px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[16px]">radio_button_checked</span>
+                  <span>Start Recording Answer</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleNextQuestion}
+                  className="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white flex items-center gap-2 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[16px]">stop</span>
+                  <span>Submit & Next Question</span>
+                </button>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="material-symbols-outlined text-green-400 text-sm">mic</span>
+                <span>Audio Stream HD</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Question & Feedback (5 Cols) */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-4 bg-white/5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
+                  {questions[currentQuestionIndex].title}
+                </span>
+                <span className="text-xs text-gray-400 font-mono">
+                  {questions[currentQuestionIndex].timeLimit}s Max
+                </span>
+              </div>
+
+              <h2 className="text-base font-bold text-white leading-snug">
+                {questions[currentQuestionIndex].text}
+              </h2>
+
+              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">
+                  AI Evaluation Tips
+                </span>
+                <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
+                  <li>Structure using the STAR framework (Situation, Task, Action, Result).</li>
+                  <li>Focus on architectural trade-offs and performance metrics.</li>
+                  <li>Maintain steady eye contact with the lens.</li>
+                </ul>
+              </div>
+            </div>
+
+            {aiFeedback && (
+              <div className="p-5 rounded-3xl border border-primary/30 bg-primary/10 space-y-2 animate-fadeIn">
+                <div className="flex items-center gap-2 text-primary font-bold text-xs">
+                  <span className="material-symbols-outlined text-[18px]">psychology</span>
+                  <span>AI Real-time Sentiment Score</span>
+                </div>
+                <p className="text-xs text-gray-200">{aiFeedback}</p>
+              </div>
+            )}
+
+            {isCompleted && (
+              <div className="glass-card p-6 rounded-3xl border border-green-500/30 bg-green-500/10 space-y-4 text-center">
+                <span className="material-symbols-outlined text-4xl text-green-400">
+                  check_circle
+                </span>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    Video Assessment Completed!
+                  </h3>
+                  <p className="text-xs text-gray-300 mt-1">
+                    Your assessment has been submitted for AI scoring and recruiter review.
+                  </p>
+                </div>
+                <Link
+                  href="/applications/timeline"
+                  className="inline-block btn-3d-red px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg"
+                >
+                  View Application Timeline
+                </Link>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
-    </div>
-);
+  );
 }

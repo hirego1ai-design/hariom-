@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/context/ThemeContext";
 
 interface AdminHeaderProps {
@@ -11,12 +12,33 @@ interface AdminHeaderProps {
 }
 
 export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(3);
   const [themeOpen, setThemeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const [admin, setAdmin] = useState({ name: "Administrator", email: "" });
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((result) => {
+        if (active && result.user?.role === "ADMIN") {
+          setAdmin({ name: result.user.name || "Administrator", email: result.user.email || "" });
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    router.replace("/admin/login");
+    router.refresh();
+  };
 
   const notifications = [
     { id: 1, title: "Risk Flag Detected", text: "Candidate 'Rahul S.' triggered plagiarism alert in Coding Test.", time: "5m ago", type: "error" },
@@ -190,12 +212,12 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
             className="flex items-center gap-3 pl-1 cursor-pointer select-none focus:outline-none"
           >
             <div className="text-right hidden md:block">
-              <p className="text-xs font-bold text-white leading-none">Super Admin</p>
-              <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">Role Level 10</p>
+              <p className="text-xs font-bold text-white leading-none">{admin.name}</p>
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">Administrator</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-secondary p-0.5">
               <div className="w-full h-full rounded-full bg-[#141418] flex items-center justify-center font-bold text-primary text-sm">
-                SA
+                {admin.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "A"}
               </div>
             </div>
           </button>
@@ -203,8 +225,8 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
           {profileOpen && (
             <div className="absolute right-0 mt-3 w-56 bg-[#17171C] border border-white/10 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-200">
               <div className="px-2.5 py-2">
-                <p className="text-xs font-bold text-white leading-none">Super Admin</p>
-                <p className="text-[10px] text-text-muted mt-1">admin@hirego.ai</p>
+                <p className="text-xs font-bold text-white leading-none">{admin.name}</p>
+                <p className="text-[10px] text-text-muted mt-1">{admin.email}</p>
               </div>
               <div className="h-[1px] bg-white/5 my-2" />
               
@@ -263,14 +285,14 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
               
               <div className="h-[1px] bg-white/5 my-2" />
               
-              <Link
-                href="/admin/login"
-                onClick={() => setProfileOpen(false)}
+              <button
+                type="button"
+                onClick={handleLogout}
                 className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-red-500/10 text-xs font-semibold text-red-400 hover:text-red-300 flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-[16px]">logout</span>
                 Logout
-              </Link>
+              </button>
             </div>
           )}
         </div>

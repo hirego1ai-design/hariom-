@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         const applications = await prisma.application.findMany({
           where: { job: { companyId } },
           include: {
-            candidateProfile: true,
+            candidateProfile: { include: { user: { select: { name: true } } } },
             job: {
               select: {
                 title: true,
@@ -41,22 +41,17 @@ export async function GET(req: NextRequest) {
           const job = app.job;
           
           // Determine stage based on application status
-          let stage = "Applied";
-          if (app.status === "SHORTLISTED") stage = "AI Screening";
-          else if (app.status === "ASSESSMENT") stage = "Assessment";
-          else if (app.status === "AI_INTERVIEW") stage = "AI Interview";
-          else if (app.status === "SCREENING") stage = "Video Resume Review";
-          else if (app.status === "HIRED") stage = "Joined";
-          else if (app.status === "REJECTED") stage = "Rejected";
+          const stage = app.status === "APPLIED" ? "SCREENING" : app.status;
 
           // Calculate match score from the application's matchScore field
           const matchScore = app.matchScore || 0;
 
           // Use available profile data with defaults
-          const name = profile.headline?.split(" ")[0] || "Unknown";
+          const name = profile.user?.name || profile.headline || "Unknown";
           
           return {
             id: profile.id,
+            applicationId: app.id,
             name: name,
             matchScore,
             experience: `${Math.round(profile.experienceYears)}y Exp`,
@@ -87,6 +82,9 @@ export async function GET(req: NextRequest) {
       }
     } catch (dbError) {
       console.error("Candidates DB error:", dbError);
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Candidate pipeline database is unavailable.");
+      }
     }
 
     return NextResponse.json({ success: true, candidates });

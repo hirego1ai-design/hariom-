@@ -1,15 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function OTPPage() {
   const router = useRouter();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [targetEmail, setTargetEmail] = useState("candidate@hirego.ai");
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [resendStatus, setResendStatus] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("pending_otp_email");
+      if (stored) {
+        setTargetEmail(stored);
+      }
+    }
+  }, []);
 
   const handleChange = (element: HTMLInputElement, index: number) => {
     if (isNaN(Number(element.value))) return false;
+    if (errorMessage) setErrorMessage("");
 
     const newOtp = [...otp];
     newOtp[index] = element.value;
@@ -27,12 +41,66 @@ export default function OTPPage() {
     }
   };
 
+  const handleVerify = async () => {
+    const code = otp.join("").trim();
+    if (code.length < 6) {
+      setErrorMessage("Please enter all 6 digits of the verification code.");
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage("");
+
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: targetEmail,
+          otp: code,
+          type: "VERIFY_EMAIL",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || "Invalid or expired verification code.");
+        setIsLoading(false);
+        return;
+      }
+
+      router.push("/onboarding/welcome");
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to verify code. Please try again.");
+      setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendStatus("Sending new code...");
+    try {
+      const res = await fetch("/api/auth/send-verification-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      if (res.ok) {
+        setResendStatus("New code sent to your email!");
+      } else {
+        setResendStatus("Failed to resend code.");
+      }
+    } catch {
+      setResendStatus("Failed to resend code.");
+    }
+    setTimeout(() => setResendStatus(""), 4000);
+  };
+
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center p-3 sm:p-5 relative overflow-hidden"
       style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}
     >
-      {/* Google-Style Ambient Lining & Quad Glows */}
       <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30" />
       <div
         className="fixed inset-0 pointer-events-none -z-10"
@@ -42,7 +110,6 @@ export default function OTPPage() {
         }}
       />
 
-      {/* Main Centered 3D Bento Card */}
       <div
         className="w-full max-w-[780px] flex flex-col md:flex-row overflow-hidden relative z-10 my-auto"
         style={{
@@ -52,7 +119,6 @@ export default function OTPPage() {
           boxShadow: "0 20px 40px -15px rgba(0,0,0,0.12), 0 0 0 1px var(--outline)",
         }}
       >
-        {/* Google 4-Color Top Accent Line */}
         <div
           className="absolute top-0 left-0 right-0 h-1 z-20"
           style={{
@@ -69,7 +135,6 @@ export default function OTPPage() {
             borderRight: "1px solid var(--outline)",
           }}
         >
-          {/* Logo & Headline */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5">
               <div
@@ -106,14 +171,12 @@ export default function OTPPage() {
               </p>
             </div>
 
-            {/* Stepper Roadmap */}
             <div className="space-y-2 pt-2">
               <span className="text-[10px] font-extrabold uppercase tracking-wider block" style={{ color: "var(--text-muted)" }}>
                 Progress
               </span>
 
               <div className="space-y-2">
-                {/* Step 1 */}
                 <div className="flex items-center gap-2.5 opacity-65">
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0"
@@ -127,7 +190,6 @@ export default function OTPPage() {
                   </div>
                 </div>
 
-                {/* Step 2 (ACTIVE) */}
                 <div className="flex items-center gap-2.5">
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center font-extrabold text-[11px] text-white shadow-sm flex-shrink-0"
@@ -141,7 +203,6 @@ export default function OTPPage() {
                   </div>
                 </div>
 
-                {/* Step 3 */}
                 <div className="flex items-center gap-2.5 opacity-65">
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0"
@@ -158,7 +219,6 @@ export default function OTPPage() {
             </div>
           </div>
 
-          {/* AI Support Info */}
           <div
             className="mt-5 p-2.5 rounded-xl border flex items-center gap-2"
             style={{
@@ -182,7 +242,6 @@ export default function OTPPage() {
           style={{ backgroundColor: "var(--bg-card)" }}
         >
           <div className="max-w-[340px] mx-auto w-full space-y-4">
-            {/* Header */}
             <div>
               <span className="text-[10px] font-extrabold uppercase tracking-wider block" style={{ color: "var(--primary)" }}>
                 Security Verification
@@ -194,11 +253,23 @@ export default function OTPPage() {
                 Enter 6-Digit Code
               </h2>
               <p className="text-[11px] font-medium leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                Sent to <strong style={{ color: "var(--text-primary)" }}>alex.rivera@hirego.ai</strong>
+                Sent to <strong style={{ color: "var(--text-primary)" }}>{targetEmail}</strong>
               </p>
             </div>
 
-            {/* 6 3D Digit Inputs */}
+            {errorMessage && (
+              <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px]">error</span>
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {resendStatus && (
+              <div className="p-2 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-400 text-center">
+                {resendStatus}
+              </div>
+            )}
+
             <div className="flex gap-2 justify-center py-2">
               {otp.map((data, index) => (
                 <input
@@ -226,19 +297,25 @@ export default function OTPPage() {
               ))}
             </div>
 
-            {/* Resend & Actions */}
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={() => router.push("/onboarding/welcome")}
-                className="w-full h-10 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md hover:scale-[1.01] active:scale-[0.99]"
+                onClick={handleVerify}
+                disabled={isLoading}
+                className="w-full h-10 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                 style={{
                   background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                   boxShadow: "0 4px 14px rgba(255,82,82,0.35)",
                 }}
               >
-                <span>Verify & Continue</span>
-                <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                {isLoading ? (
+                  <span>Verifying Code...</span>
+                ) : (
+                  <>
+                    <span>Verify & Continue</span>
+                    <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                  </>
+                )}
               </button>
 
               <div className="flex items-center justify-between text-[11px] font-semibold" style={{ color: "var(--text-secondary)" }}>
@@ -251,16 +328,15 @@ export default function OTPPage() {
                 </Link>
                 <button
                   type="button"
-                  onClick={() => alert("Verification code re-sent to your email!")}
+                  onClick={handleResend}
                   className="hover:underline transition-colors font-bold"
                   style={{ color: "var(--primary)" }}
                 >
-                  Resend Code (0:45)
+                  Resend Code
                 </button>
               </div>
             </div>
 
-            {/* Footer */}
             <div className="pt-2 border-t flex justify-center" style={{ borderColor: "var(--outline)" }}>
               <Link
                 href="/login"

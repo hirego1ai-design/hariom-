@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import Select from "react-select";
 import { useJobCreationStore, JobType, WorkMode, ExperienceLevel } from "@/store/useJobCreationStore";
 import { PageContainer } from "@/components/employer/LayoutSystem";
+import { ROLE_MASTER } from "@/lib/skill-master";
+import { INDIA_US_LOCATION_MASTER } from "@/lib/location-master";
 
 // Comprehensive Roles Taxonomy (Role Dictionary)
-const COMPREHENSIVE_ROLES = [
+const LEGACY_ROLE_OPTIONS = [
   // Engineering & Tech
   { value: "Software Engineer", label: "Software Engineer", category: "Engineering" },
   { value: "Frontend Developer", label: "Frontend Developer", category: "Engineering" },
@@ -78,11 +80,11 @@ const COMPREHENSIVE_ROLES = [
 // Group the roles by category for react-select
 const getGroupedOptions = () => {
   const groups: Record<string, any[]> = {};
-  COMPREHENSIVE_ROLES.forEach(role => {
-    if (!groups[role.category]) {
-      groups[role.category] = [];
+  ROLE_MASTER.forEach(role => {
+    if (!groups[role.department]) {
+      groups[role.department] = [];
     }
-    groups[role.category].push({ value: role.value, label: role.label });
+    groups[role.department].push({ value: role.title, label: role.title });
   });
   return Object.entries(groups).map(([category, options]) => ({
     label: category,
@@ -93,7 +95,7 @@ const getGroupedOptions = () => {
 const groupedOptions = getGroupedOptions();
 
 // Comprehensive list of popular Indian locations & global tech hubs for autocomplete
-const COMPREHENSIVE_LOCATIONS = [
+const LEGACY_LOCATION_OPTIONS = [
   // India - Tier 1 & 2 Tech Hubs
   "Bangalore, Karnataka, India",
   "Hyderabad, Telangana, India",
@@ -140,6 +142,11 @@ const COMPREHENSIVE_LOCATIONS = [
   "Vancouver, BC, Canada",
   "Montreal, QC, Canada",
 ];
+
+const COMPREHENSIVE_LOCATIONS = Array.from(new Set([
+  ...LEGACY_LOCATION_OPTIONS,
+  ...INDIA_US_LOCATION_MASTER,
+]));
 
 // React-Select custom styles for glassmorphic dark-mode with burned-red accent
 const customSelectStyles = (hasError: boolean) => ({
@@ -378,9 +385,9 @@ export default function EmployerPageE6() {
     // Auto-update categories based on selection
     const categoriesSet = new Set<string>();
     rolesArray.forEach((r: string) => {
-      COMPREHENSIVE_ROLES.forEach(role => {
-        if (role.value === r) {
-          categoriesSet.add(role.category);
+      ROLE_MASTER.forEach(role => {
+        if (role.title === r || role.aliases?.includes(r)) {
+          categoriesSet.add(role.department);
         }
       });
     });

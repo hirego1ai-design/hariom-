@@ -6,3 +6,4 @@ export * from "./subscriptions-db";
 export * from "./agreements-db";
 export * from "./invoices-db";
 export * from "./email";
+export * from "./otp";

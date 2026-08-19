@@ -4,12 +4,14 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-
 import { syncCandidateRegistrationData } from "@/services/candidateProfileService";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -20,26 +22,73 @@ export default function RegisterPage() {
     password: "",
   });
 
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref) {
+        setReferralCode(ref.toUpperCase());
+        document.cookie = `hirego_ref=${ref.toUpperCase()}; path=/; max-age=${30 * 86400}`;
+      }
+    }
+  }, []);
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errorMessage) setErrorMessage("");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName || !formData.email || !formData.password) {
-      alert("Please fill in all required fields.");
+      setErrorMessage("Please fill in all required fields.");
       return;
     }
-    syncCandidateRegistrationData({
-      fullName: formData.fullName,
-      email: formData.email,
-      phone: formData.phone,
-      location: formData.city ? `${formData.city}, ${formData.country}` : formData.country,
-      userId: `USR-${Math.floor(100000 + Math.random() * 900000)}`,
-    });
-    router.push("/otp");
+
+    setIsLoading(true);
+    setErrorMessage("");
+
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          role: "CANDIDATE",
+          referralCode: referralCode || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || "Registration failed. Please try again.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Synchronize client profile data
+      syncCandidateRegistrationData({
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        location: formData.city ? `${formData.city}, ${formData.country}` : formData.country,
+        userId: data.user?.id || `USR-${Date.now()}`,
+      });
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("pending_otp_email", formData.email);
+      }
+
+      router.push("/otp");
+    } catch (err: any) {
+      setErrorMessage(err.message || "An unexpected error occurred during registration.");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -48,14 +97,12 @@ export default function RegisterPage() {
       <div className="w-full max-w-[1050px] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto ml-[116px] lg:ml-auto">
         {/* Left Side: Visual & Progress */}
         <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-8 justify-between relative">
-          {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
               HireGo AI
             </span>
           </div>
 
-          {/* Futuristic Isometric 3D Illustration */}
           <div className="relative flex-grow flex items-center justify-center my-4">
             <div className="relative w-full max-w-[200px] aspect-square">
               <div className="absolute inset-0 bg-primary/20 blur-[80px] rounded-full scale-75 animate-pulse"></div>
@@ -66,7 +113,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* 4-Step Progress Tracker */}
           <div className="relative z-10 space-y-3 pl-1">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-white font-bold">
@@ -129,7 +175,6 @@ export default function RegisterPage() {
         {/* Right Side: Registration Form */}
         <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-6 lg:p-8">
           <div className="w-full max-w-[560px]">
-            {/* Header */}
             <div className="mb-5">
               <h1 className="font-display-xl text-headline-md text-primary mb-1">
                 Create Account
@@ -139,9 +184,24 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            {/* Form */}
+            {referralCode && (
+              <div className="mb-4 p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-xs text-green-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <span className="material-symbols-outlined text-[16px]">verified</span>
+                  <span>Referral Invite Applied: <span className="font-mono text-white">{referralCode}</span></span>
+                </span>
+                <span className="text-[10px] text-green-300 font-medium">₹250 Welcome Bonus Active</span>
+              </div>
+            )}
+
+            {errorMessage && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">error</span>
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             <form className="space-y-4" onSubmit={handleSubmit}>
-              {/* Row 1: Full Name & Email */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-label-md text-xs text-on-surface-variant ml-2">
@@ -174,7 +234,6 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Row 2: Phone & Date of Birth */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-label-md text-xs text-on-surface-variant ml-2">
@@ -204,7 +263,6 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Row 3: Country & City */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-label-md text-xs text-on-surface-variant ml-2">
@@ -245,7 +303,6 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div className="space-y-1">
                 <label className="font-label-md text-xs text-on-surface-variant ml-2">
                   Password *
@@ -272,20 +329,25 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Submit Action */}
               <div className="pt-2">
                 <button
-                  className="btn-3d-red w-full h-12 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group"
+                  className="btn-3d-red w-full h-12 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group disabled:opacity-50"
                   type="submit"
+                  disabled={isLoading}
                 >
-                  <span>Continue to Verification</span>
-                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                    arrow_forward
-                  </span>
+                  {isLoading ? (
+                    <span>Creating Account...</span>
+                  ) : (
+                    <>
+                      <span>Continue to Verification</span>
+                      <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+                        arrow_forward
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
 
-              {/* Secondary Options */}
               <p className="text-center font-body-md text-xs text-text-secondary mt-3">
                 Already have an account?{" "}
                 <Link

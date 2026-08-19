@@ -1,20 +1,346 @@
 "use client";
+
+import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 
-const rawHtml = "\n<!-- TopNavBar (Shared Component) -->\n<nav className=\"fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-margin-desktop h-[64px] w-full border-b border-white/10 bg-background/80 backdrop-blur-md shadow-md\">\n<div className=\"flex items-center gap-stack-md\">\n<span className=\"font-display-lg text-[24px] md:text-display-lg font-bold tracking-tight text-primary\">HireGo AI</span>\n<div className=\"hidden md:flex gap-stack-md ml-stack-lg\">\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Dashboard</a>\n<a className=\"font-body-md text-body-md text-primary border-b-2 border-primary pb-1\" href=\"#\">Jobs</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Messages</a>\n<a className=\"font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors\" href=\"#\">Analytics</a>\n</div>\n</div>\n<div className=\"flex items-center gap-stack-md\">\n<div className=\"hidden md:flex items-center px-4 py-1.5 rounded-full bg-surface-container-low border border-white/5 text-primary text-label-md font-medium\">\n        Proctor Active\n      </div>\n<button className=\"material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors\">notifications</button>\n<button className=\"material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors\">settings</button>\n<div className=\"w-8 h-8 rounded-full overflow-hidden border border-white/20\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional user profile avatar in a sleek, minimalist dark-mode interface. The person has a friendly expression and is framed in a soft, studio-quality light that emphasizes clean lines and high-end aesthetic. The background is a soft blue-to-black gradient consistent with a technical, high-trust AI platform environment.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuDcz5LfYSaij4vdFHQNEH7v1sdHrAevnvM-70au18Yn5uL2C5L29yy8HyyT77NF3RZLQMSLHTGZgoafIicJJEUcnpOdvkWtq73enUBKGrT6a4L3T6ci6dkmLr1APmLLE6wmiZ_lCz3RJ33JWY1gXs5QMYxVLbyYhu7RqxSzxkkKwOzFFiBBypJ4cu845hWbyWvAWNeCdBo_fIy_TSWfundLPqu_w_aL7Y2lnRGiP7oKX3eMdGr66oGyiiQKSxdVpfRa1QUj85VBX9Q\">\n</div>\n</div>\n</nav>\n<main className=\"pt-[100px] pb-margin-desktop px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto\">\n<!-- Multi-Step Progress Bar -->\n<section className=\"mb-stack-lg max-w-3xl mx-auto\">\n<div className=\"flex items-center justify-between\">\n<div className=\"flex flex-col items-center gap-2\">\n<div className=\"w-10 h-10 rounded-full bg-primary-container text-white flex items-center justify-center font-bold shadow-lg\">1</div>\n<span className=\"font-label-md text-primary\">Confirm Details</span>\n</div>\n<div className=\"step-line\"></div>\n<div className=\"flex flex-col items-center gap-2\">\n<div className=\"w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold\">2</div>\n<span className=\"font-label-md text-on-surface-variant\">Screening Questions</span>\n</div>\n<div className=\"step-line\"></div>\n<div className=\"flex flex-col items-center gap-2\">\n<div className=\"w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold\">3</div>\n<span className=\"font-label-md text-on-surface-variant\">Assessment</span>\n</div>\n<div className=\"step-line\"></div>\n<div className=\"flex flex-col items-center gap-2\">\n<div className=\"w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold\">4</div>\n<span className=\"font-label-md text-on-surface-variant\">Submit</span>\n</div>\n</div>\n</section>\n<!-- Main Content Area -->\n<div className=\"grid grid-cols-1 lg:grid-cols-12 gap-gutter\">\n<!-- Step 1 Content: Confirm Details -->\n<div className=\"lg:col-span-8 space-y-stack-lg\">\n<header>\n<h1 className=\"font-display-lg text-display-lg text-primary mb-2\">Apply for Senior AI Engineer</h1>\n<p className=\"text-on-surface-variant font-body-md\">Step 1: Please confirm your profile details and select your resume for this application.</p>\n</header>\n<!-- Profile Preview Card -->\n<div className=\"glass-card rounded-lg p-stack-lg relative overflow-hidden group\">\n<div className=\"absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity\">\n<button className=\"ghost-btn !h-10 !px-4 text-label-md\">Edit Profile</button>\n</div>\n<div className=\"flex flex-col md:flex-row gap-stack-md items-start\">\n<div className=\"w-24 h-24 rounded-2xl overflow-hidden border-2 border-primary/20 shrink-0\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional portrait of a senior software engineer in a high-fidelity workspace. The lighting is dramatic yet clear, utilizing the blue and red atmospheric glows of the brand. The style is modern, cinematic, and professional, reflecting a high-trust technical career environment with glass textures in the background.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuCZlazJZ4Hl43YoBGq2UCHOz9bOPdIfC4JX1O7lULguPWv1GO7giNghDqsQE3MKT9KTljBm2R4CaC3DuXs6O_N12xnn9u9S_dAS4NnVW1b2wCLU2AybI19FqXuuBWRbMaZOeTR6XjaOaaMqRBxOmix3f-TMsUJTMugSjOyc5NbFezcG-WQnpBzW_8OGoxqc5u3dlqbtO1A1yiRPaM3sB-GCXBr7NiyFHmfFnL5Y_SGMue78eqnBma5lN6hH-KQFNSIGpV9f3aJfurA\">\n</div>\n<div className=\"space-y-stack-sm\">\n<h2 className=\"font-headline-md text-headline-md text-white\">Alex Rivera</h2>\n<p className=\"text-primary font-body-md font-medium\">Senior Software Engineer • AI Systems</p>\n<div className=\"flex flex-wrap gap-2 mt-2\">\n<span className=\"bg-surface-container-high px-3 py-1 rounded-full text-label-md text-on-surface-variant border border-white/5\">Python</span>\n<span className=\"bg-surface-container-high px-3 py-1 rounded-full text-label-md text-on-surface-variant border border-white/5\">PyTorch</span>\n<span className=\"bg-surface-container-high px-3 py-1 rounded-full text-label-md text-on-surface-variant border border-white/5\">LLMOps</span>\n<span className=\"bg-surface-container-high px-3 py-1 rounded-full text-label-md text-on-surface-variant border border-white/5\">Distributed Systems</span>\n</div>\n</div>\n</div>\n<div className=\"mt-stack-lg grid grid-cols-1 md:grid-cols-2 gap-stack-md border-t border-white/10 pt-stack-lg\">\n<div>\n<p className=\"text-text-muted text-label-md mb-1\">Email</p>\n<p className=\"text-white font-body-md\">alex.rivera@engineers.ai</p>\n</div>\n<div>\n<p className=\"text-text-muted text-label-md mb-1\">Location</p>\n<p className=\"text-white font-body-md\">San Francisco, CA (Remote Friendly)</p>\n</div>\n</div>\n</div>\n<!-- Resume Selector -->\n<section className=\"space-y-stack-md\">\n<h3 className=\"font-headline-md text-white text-[20px]\">Select Resume</h3>\n<div className=\"grid grid-cols-1 md:grid-cols-2 gap-stack-md\">\n<!-- Active Option -->\n<label className=\"relative flex items-center p-stack-md glass-card rounded-lg border-primary/50 cursor-pointer hover:bg-white/5 transition-all\">\n<input checked=\"\" className=\"hidden\" name=\"resume\" type=\"radio\">\n<div className=\"w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center mr-stack-md shrink-0\">\n<span className=\"material-symbols-outlined text-primary\">description</span>\n</div>\n<div className=\"flex-grow\">\n<p className=\"text-white font-medium\">Alex_Rivera_AI_2024.pdf</p>\n<p className=\"text-text-muted text-label-md\">Updated 2 days ago</p>\n</div>\n<div className=\"w-6 h-6 rounded-full border-2 border-primary flex items-center justify-center\">\n<div className=\"w-3 h-3 rounded-full bg-primary\"></div>\n</div>\n</label>\n<!-- Option 2 -->\n<label className=\"relative flex items-center p-stack-md glass-card rounded-lg cursor-pointer hover:bg-white/5 transition-all\">\n<input className=\"hidden\" name=\"resume\" type=\"radio\">\n<div className=\"w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center mr-stack-md shrink-0\">\n<span className=\"material-symbols-outlined text-on-surface-variant\">description</span>\n</div>\n<div className=\"flex-grow\">\n<p className=\"text-white font-medium\">Rivera_General_Dev.pdf</p>\n<p className=\"text-text-muted text-label-md\">Updated 1 month ago</p>\n</div>\n<div className=\"w-6 h-6 rounded-full border-2 border-white/10\"></div>\n</label>\n</div>\n<button className=\"ghost-btn w-full flex items-center justify-center gap-2\">\n<span className=\"material-symbols-outlined\">upload_file</span>\n            Upload New Resume\n          </button>\n</section>\n<!-- Navigation Actions -->\n<div className=\"flex items-center justify-between pt-stack-lg border-t border-white/10\">\n<button className=\"ghost-btn\">Cancel Application</button>\n<button className=\"primary-btn flex items-center gap-2\">\n            Next: Screening Questions\n            <span className=\"material-symbols-outlined\">arrow_forward</span>\n</button>\n</div>\n</div>\n<!-- Sidebar / Context Panel -->\n<aside className=\"lg:col-span-4 space-y-stack-lg\">\n<div className=\"glass-card rounded-lg p-stack-lg sticky top-[100px]\">\n<h4 className=\"font-headline-md text-white mb-stack-md\">Job Highlights</h4>\n<div className=\"space-y-stack-md\">\n<div className=\"flex items-start gap-3\">\n<div className=\"w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center shrink-0\">\n<span className=\"material-symbols-outlined text-primary text-[20px]\">payments</span>\n</div>\n<div>\n<p className=\"text-white font-medium text-label-md\">$180k – $240k</p>\n<p className=\"text-text-muted text-[12px]\">Annual Base + Equity</p>\n</div>\n</div>\n<div className=\"flex items-start gap-3\">\n<div className=\"w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center shrink-0\">\n<span className=\"material-symbols-outlined text-primary text-[20px]\">location_on</span>\n</div>\n<div>\n<p className=\"text-white font-medium text-label-md\">San Francisco / Hybrid</p>\n<p className=\"text-text-muted text-[12px]\">3 days in-office</p>\n</div>\n</div>\n<div className=\"flex items-start gap-3\">\n<div className=\"w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center shrink-0\">\n<span className=\"material-symbols-outlined text-primary text-[20px]\">verified</span>\n</div>\n<div>\n<p className=\"text-white font-medium text-label-md\">AI-Powered Proctoring</p>\n<p className=\"text-text-muted text-[12px]\">Active for this application</p>\n</div>\n</div>\n</div>\n<div className=\"mt-stack-lg p-stack-md bg-primary/10 rounded-lg border border-primary/20\">\n<div className=\"flex items-center gap-2 mb-2\">\n<span className=\"material-symbols-outlined text-primary\">info</span>\n<span className=\"font-bold text-primary text-label-md\">HireGo AI Insight</span>\n</div>\n<p className=\"text-on-surface-variant text-[13px] leading-relaxed\">\n              Your profile matches 94% of the core requirements. Completing the \"Assessment\" step efficiently will significantly increase your visibility to the hiring manager.\n            </p>\n</div>\n</div>\n</aside>\n</div>\n</main>\n\n";
-
-export default function C35Page() {
+export default function JobApplyPage() {
+  const params = useParams();
   const router = useRouter();
+  const jobId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
+  const [step, setStep] = useState(1);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [answers, setAnswers] = useState({
+    noticePeriod: "Immediate / 15 Days",
+    experienceYears: "4",
+    whyJoin: "",
+  });
+
+  useEffect(() => {
+    fetch("/api/candidate/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.profile) {
+          setProfile(data.profile);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmitApplication = async () => {
+    if (!jobId) return;
+    setSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId,
+          answers,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || "Failed to submit application. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      router.push("/jobs/apply/success");
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to submit application.");
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+
+      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-5xl">
+        {/* Stepper Progress */}
+        <div className="max-w-2xl mx-auto mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                step >= 1 ? "bg-primary text-white shadow-md" : "bg-white/10 text-text-muted"
+              }`}
+            >
+              1
+            </div>
+            <span className="text-xs font-bold text-text-primary hidden sm:inline">
+              Profile Review
+            </span>
+          </div>
+          <div className="flex-1 h-0.5 bg-white/10 mx-3" />
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                step >= 2 ? "bg-primary text-white shadow-md" : "bg-white/10 text-text-muted"
+              }`}
+            >
+              2
+            </div>
+            <span className="text-xs font-bold text-text-primary hidden sm:inline">
+              Screening Questions
+            </span>
+          </div>
+          <div className="flex-1 h-0.5 bg-white/10 mx-3" />
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                step >= 3 ? "bg-primary text-white shadow-md" : "bg-white/10 text-text-muted"
+              }`}
+            >
+              3
+            </div>
+            <span className="text-xs font-bold text-text-primary hidden sm:inline">
+              Submit
+            </span>
+          </div>
+        </div>
+
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-400 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px]">error</span>
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 shadow-2xl">
+          {step === 1 && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-xl lg:text-2xl font-extrabold text-primary mb-1">
+                  Confirm Your Profile Details
+                </h1>
+                <p className="text-xs text-text-secondary">
+                  Your verified HireGo credentials will be submitted to the hiring team.
+                </p>
+              </div>
+
+              <div className="p-5 bg-white/5 rounded-2xl border border-white/5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-text-muted block text-[10px] uppercase font-bold">
+                      Full Name
+                    </span>
+                    <span className="text-text-primary font-bold text-sm">
+                      {profile?.name || "Candidate"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[10px] uppercase font-bold">
+                      Email Address
+                    </span>
+                    <span className="text-text-primary font-bold text-sm">
+                      {profile?.email || profile?.user?.email || "candidate@hirego.ai"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[10px] uppercase font-bold">
+                      Headline
+                    </span>
+                    <span className="text-text-primary">
+                      {profile?.headline || "Senior Software Professional"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[10px] uppercase font-bold">
+                      HireGo Score™
+                    </span>
+                    <span className="text-green-400 font-bold">
+                      {profile?.hireGoScore || 92} / 100
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[10px] uppercase font-bold mb-2">
+                    Verified Skills
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {(profile?.skills || ["React", "TypeScript", "Next.js", "AI"]).map(
+                      (skill: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-3 py-1 bg-primary/10 border border-primary/20 text-primary text-xs rounded-full font-semibold"
+                        >
+                          {skill}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Link
+                  href={`/jobs/${jobId}`}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold text-text-muted hover:text-white transition-colors"
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="btn-3d-red px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
+                >
+                  <span>Continue</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-xl lg:text-2xl font-extrabold text-primary mb-1">
+                  Screening Questions
+                </h1>
+                <p className="text-xs text-text-secondary">
+                  Please provide preliminary information for the hiring team.
+                </p>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="space-y-1">
+                  <label className="text-text-muted font-bold block">
+                    What is your current notice period?
+                  </label>
+                  <select
+                    value={answers.noticePeriod}
+                    onChange={(e) =>
+                      setAnswers({ ...answers, noticePeriod: e.target.value })
+                    }
+                    className="input-pill w-full h-11 px-4 text-xs text-text-primary"
+                  >
+                    <option value="Immediate" className="bg-[#181818]">Immediate</option>
+                    <option value="15 Days" className="bg-[#181818]">15 Days</option>
+                    <option value="30 Days" className="bg-[#181818]">30 Days</option>
+                    <option value="60+ Days" className="bg-[#181818]">60+ Days</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-text-muted font-bold block">
+                    Total relevant years of experience in this role:
+                  </label>
+                  <input
+                    type="number"
+                    value={answers.experienceYears}
+                    onChange={(e) =>
+                      setAnswers({ ...answers, experienceYears: e.target.value })
+                    }
+                    className="input-pill w-full h-11 px-4 text-xs text-text-primary"
+                    placeholder="e.g. 5"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-text-muted font-bold block">
+                    Why are you interested in this position? (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={answers.whyJoin}
+                    onChange={(e) =>
+                      setAnswers({ ...answers, whyJoin: e.target.value })
+                    }
+                    className="w-full p-3 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-primary outline-none focus:border-primary transition-all"
+                    placeholder="Tell the hiring manager why you'd be a great fit..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold text-text-muted hover:text-white"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="btn-3d-red px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
+                >
+                  <span>Review & Submit</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-xl lg:text-2xl font-extrabold text-primary mb-1">
+                  Ready to Submit
+                </h1>
+                <p className="text-xs text-text-secondary">
+                  Your application will be processed by HireGo AI pipeline and forwarded directly to the employer.
+                </p>
+              </div>
+
+              <div className="p-5 bg-white/5 rounded-2xl border border-white/5 space-y-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Target Job:</span>
+                  <span className="text-text-primary font-bold">Senior Engineering Role</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Applicant:</span>
+                  <span className="text-text-primary font-bold">{profile?.name || "Candidate"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Notice Period:</span>
+                  <span className="text-text-primary">{answers.noticePeriod}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Experience:</span>
+                  <span className="text-text-primary">{answers.experienceYears} Years</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold text-text-muted hover:text-white"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitApplication}
+                  disabled={submitting}
+                  className="btn-3d-red px-10 py-3 rounded-full text-xs font-bold text-white flex items-center gap-2 shadow-lg disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <span>Submitting Application...</span>
+                  ) : (
+                    <>
+                      <span>Submit Application</span>
+                      <span className="material-symbols-outlined text-[18px]">send</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
-    </div>
-);
+  );
 }

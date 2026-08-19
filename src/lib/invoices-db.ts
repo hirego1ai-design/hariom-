@@ -1,6 +1,8 @@
 import { Invoice, PaymentStatus } from "@/types";
 import { prisma } from "./prisma";
 
+const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
+
 export interface InvoiceRecord extends Invoice {
   candidateName?: string;
   jobTitle?: string;
@@ -52,8 +54,8 @@ class InvoicesDb {
           };
         });
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
     return this.invoices;
   }
@@ -96,8 +98,8 @@ class InvoicesDb {
           updatedAt: r.updatedAt ? r.updatedAt.toISOString() : undefined,
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
     return this.invoices.find((i) => i.id === id || i.invoiceNumber === id) || null;
   }
@@ -132,8 +134,8 @@ class InvoicesDb {
         },
       });
       newInvoice.createdAt = r.createdAt.toISOString();
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
 
     this.invoices.unshift(newInvoice);
@@ -178,8 +180,8 @@ class InvoicesDb {
           updatedAt: r.updatedAt ? r.updatedAt.toISOString() : undefined,
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
 
     const inv = this.invoices.find((i) => i.id === id || i.invoiceNumber === id);
@@ -223,8 +225,8 @@ class InvoicesDb {
           updatedAt: r.updatedAt ? r.updatedAt.toISOString() : undefined,
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
 
     const inv = this.invoices.find((i) => i.id === id || i.invoiceNumber === id);
@@ -262,8 +264,8 @@ class InvoicesDb {
         }
         return this.getInvoiceById(r.id);
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowMockFallbacks) throw error;
     }
 
     const inv = this.invoices.find((i) => i.id === id || i.invoiceNumber === id);

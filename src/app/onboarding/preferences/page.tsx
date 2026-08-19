@@ -10,13 +10,38 @@ export default function PreferencesPage() {
   const router = useRouter();
   const { state, updateState, markStepComplete } = useOnboarding();
 
-  const [desiredCategory, setDesiredCategory] = useState("Software Engineering");
-  const [preferredTitles, setPreferredTitles] = useState(["Senior Fullstack Engineer", "System Architect"]);
+  const [desiredCategory, setDesiredCategory] = useState("");
+  const [preferredTitles, setPreferredTitles] = useState<string[]>([]);
   const [newTitle, setNewTitle] = useState("");
-  const [preferredLocations, setPreferredLocations] = useState(["San Francisco, CA", "Remote - Global"]);
+  const [preferredLocations, setPreferredLocations] = useState<string[]>([]);
   const [newLocation, setNewLocation] = useState("");
-  const [employmentBasis, setEmploymentBasis] = useState<"Permanent" | "Contractual" | "Part-time" | "Freelance">("Permanent");
-  const [shiftTiming, setShiftTiming] = useState<"Day" | "Night" | "Flexible">("Day");
+  const [employmentBasis, setEmploymentBasis] = useState<"Permanent" | "Contractual" | "Part-time" | "Freelance" | "">("");
+  const [shiftTiming, setShiftTiming] = useState<"Day" | "Night" | "Flexible" | "">("");
+  const [availabilityDate, setAvailabilityDate] = useState("");
+  const [timeZone, setTimeZone] = useState("");
+  const [interviewLanguage, setInterviewLanguage] = useState("");
+  const [salaryCurrency, setSalaryCurrency] = useState("");
+  const [salaryExpectation, setSalaryExpectation] = useState("");
+
+  React.useEffect(() => {
+    fetch("/api/candidate/profile")
+      .then((res) => res.json())
+      .then((data) => {
+        const preferences = data.profile?.preferences;
+        if (!preferences) return;
+        setDesiredCategory(preferences.desiredCategory || "");
+        setPreferredTitles(Array.isArray(preferences.preferredTitles) ? preferences.preferredTitles : []);
+        setPreferredLocations(Array.isArray(preferences.preferredLocations) ? preferences.preferredLocations : []);
+        setEmploymentBasis(preferences.employmentBasis || "");
+        setShiftTiming(preferences.shiftTiming || "");
+        setAvailabilityDate(preferences.availabilityDate || "");
+        setTimeZone(preferences.timeZone || "");
+        setInterviewLanguage(preferences.interviewLanguage || "");
+        setSalaryCurrency(preferences.salaryCurrency || "");
+        setSalaryExpectation(preferences.salaryExpectation || "");
+      })
+      .catch(() => {});
+  }, []);
 
   const handleAddTitle = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +59,35 @@ export default function PreferencesPage() {
     }
   };
 
-  const handleNext = () => {
+  const savePreferences = async () => {
+    const preferences = {
+      desiredCategory,
+      preferredTitles,
+      preferredLocations,
+      employmentBasis,
+      shiftTiming,
+      availabilityDate,
+      timeZone,
+      interviewLanguage,
+      salaryCurrency,
+      salaryExpectation,
+    };
+    updateState({});
+    await fetch("/api/candidate/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferences }),
+    });
+  };
+
+  const handleNext = async () => {
+    await savePreferences();
+    markStepComplete(9);
+    router.push("/onboarding/baseline-assessment");
+  };
+
+  const handleSkip = async () => {
+    await savePreferences();
     markStepComplete(9);
     router.push("/onboarding/baseline-assessment");
   };
@@ -61,7 +114,7 @@ export default function PreferencesPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -77,7 +130,7 @@ export default function PreferencesPage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 9/10
+                Preferences
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Target Compensation, Work Type & Location
@@ -91,7 +144,7 @@ export default function PreferencesPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -100,7 +153,7 @@ export default function PreferencesPage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 9 of 10
+              Availability & role
             </span>
           </div>
         </header>
@@ -281,6 +334,35 @@ export default function PreferencesPage() {
                 })}
               </div>
             </div>
+
+            {/* Availability & interview setup */}
+            <div className="space-y-4 pt-4 border-t" style={{ borderColor: "var(--outline)" }}>
+              <div>
+                <h3 className="font-extrabold text-sm" style={{ color: "var(--text-primary)" }}>Availability & Interview Setup</h3>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Optional now. You can update these details later from your profile.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="space-y-1 text-xs font-bold" style={{ color: "var(--text-secondary)" }}>
+                  Available from
+                  <input type="date" value={availabilityDate} onChange={(e) => setAvailabilityDate(e.target.value)} className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold" style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }} />
+                </label>
+                <label className="space-y-1 text-xs font-bold" style={{ color: "var(--text-secondary)" }}>
+                  Time zone
+                  <input type="text" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} placeholder="e.g. Asia/Kolkata or America/New_York" className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold" style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }} />
+                </label>
+                <label className="space-y-1 text-xs font-bold" style={{ color: "var(--text-secondary)" }}>
+                  Interview language
+                  <input type="text" value={interviewLanguage} onChange={(e) => setInterviewLanguage(e.target.value)} placeholder="e.g. English, Spanish, Hindi" className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold" style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }} />
+                </label>
+                <label className="space-y-1 text-xs font-bold" style={{ color: "var(--text-secondary)" }}>
+                  Salary expectation
+                  <div className="flex gap-2">
+                    <input type="text" value={salaryCurrency} onChange={(e) => setSalaryCurrency(e.target.value.toUpperCase())} placeholder="USD" className="w-24 h-11 px-4 rounded-full outline-none text-xs font-semibold" style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }} />
+                    <input type="text" value={salaryExpectation} onChange={(e) => setSalaryExpectation(e.target.value)} placeholder="Annual or hourly range" className="flex-1 h-11 px-4 rounded-full outline-none text-xs font-semibold" style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }} />
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Bottom Actions */}
@@ -298,6 +380,15 @@ export default function PreferencesPage() {
               Back
             </Link>
 
+            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
+            >
+              Skip for now
+            </button>
             <button
               onClick={handleNext}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
@@ -309,6 +400,7 @@ export default function PreferencesPage() {
               <span>Next: AI Baseline Assessment</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
+            </div>
           </div>
         </main>
       </div>

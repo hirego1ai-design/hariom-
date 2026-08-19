@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import { createDevDocumentVerification, getDevDocumentVerifications } from "@/lib/document-verification-store";
 
 // Document types that require admin verification
 const DOCUMENT_TYPES = [
   "GST Certificate",
+  "MSME Certificate",
   "Certificate of Incorporation",
   "PAN Card",
   "Tax Residency",
@@ -56,26 +58,32 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    let where: any = {};
+    const where: any = {};
     if (status) {
       where.status = status as any;
     }
 
-    const documents = await prisma.documentVerification.findMany({
-      where,
-      include: {
-        employerProfile: {
-          include: {
-            company: true,
-          },
-        },
-      },
-      orderBy: { submittedAt: "desc" },
-      take: limit,
-      skip: offset,
-    });
-
-    const total = await prisma.documentVerification.count({ where });
+    let documents;
+    let total;
+    try {
+      documents = await prisma.documentVerification.findMany({
+        where,
+        include: { employerProfile: { include: { company: true, user: true } } },
+        orderBy: { submittedAt: "desc" },
+        take: limit,
+        skip: offset,
+      });
+      total = await prisma.documentVerification.count({ where });
+    } catch {
+      if (process.env.NODE_ENV === "production") throw new Error("Document verification database is unavailable.");
+      const devDocuments = getDevDocumentVerifications().filter((doc) => !status || doc.status === status);
+      total = devDocuments.length;
+      return NextResponse.json({
+        success: true,
+        documents: devDocuments.slice(offset, offset + limit),
+        pagination: { total, limit, offset, hasMore: offset + limit < total },
+      });
+    }
 
     const formattedDocuments: DocumentRecord[] = documents.map((doc) => {
       const companyProfile = doc.employerProfile?.company;
@@ -118,7 +126,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { docType, fileUrl, fileName, employerId, companyName } = body;
+    const { docType, fileUrl, fileName, companyName } = body;
 
     // Validate document type
     if (!DOCUMENT_TYPES.includes(docType as DocumentType)) {
@@ -129,28 +137,53 @@ export async function POST(req: NextRequest) {
       return jsonError("File URL and filename are required", 400);
     }
 
-    // Find employer profile
-    const employerProfile = await prisma.employerProfile.findUnique({
-      where: { userId: employerId },
-      include: { company: true, user: true },
-    });
-
-    if (!employerProfile) {
-      return jsonError("Employer profile not found", 404);
+    // Employers may submit only for their own account. Admins may submit on behalf
+    // of an employer when an employerId is explicitly provided.
+    const employerId = session.role === "ADMIN" && body.employerId ? String(body.employerId) : session.id;
+    let employerProfile;
+    let databaseAvailable = true;
+    try {
+      employerProfile = await prisma.employerProfile.findUnique({
+        where: { userId: employerId },
+        include: { company: true, user: true },
+      });
+    } catch {
+      if (process.env.NODE_ENV === "production") throw new Error("Document verification database is unavailable.");
+      databaseAvailable = false;
+      employerProfile = null;
     }
 
-    // Calculate risk score
     const riskScore = calculateRiskScore(docType as DocumentType, employerProfile);
 
-    // Create document verification record
+    if (!employerProfile) {
+      if (databaseAvailable) {
+        return jsonError("Employer profile not found", 404);
+      }
+      const devDocument = createDevDocumentVerification({
+        employerId,
+        employerName: session.name || session.email,
+        companyName: String(companyName || session.name || "Pending company profile"),
+        docType: docType as DocumentType,
+        fileUrl: String(fileUrl),
+        fileName: String(fileName),
+        riskScore,
+      });
+      return NextResponse.json({
+        success: true,
+        message: "Document submitted for verification",
+        document: devDocument,
+      }, { status: 201 });
+    }
+
     const documentRecord = await prisma.documentVerification.create({
       data: {
-        employerId: employerId,
+        // DocumentVerification relates to EmployerProfile.id, not User.id.
+        employerId: employerProfile.id,
         docType: docType as DocumentType,
-        fileUrl: fileUrl,
-        fileName: fileName,
+        fileUrl: String(fileUrl),
+        fileName: String(fileName),
         status: "Pending Audit",
-        riskScore: riskScore,
+        riskScore,
       },
     });
 
@@ -168,3 +201,4 @@ export async function POST(req: NextRequest) {
     return handleApiError(error);
   }
 }
+

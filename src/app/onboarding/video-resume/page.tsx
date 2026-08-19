@@ -1,65 +1,164 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function VideoResumePage() {
   const router = useRouter();
+  const { updateState, markStepComplete } = useOnboarding();
   const [mode, setMode] = useState<"idle" | "recording" | "recorded" | "uploading" | "analyzing" | "complete">("idle");
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const timerRef = useRef<any>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
-  const startRecording = () => {
-    setMode("recording");
-    setTimeElapsed(0);
-    timerRef.current = setInterval(() => {
-      setTimeElapsed((prev) => {
-        if (prev >= 120) {
-          clearInterval(timerRef.current);
-          setMode("recorded");
-          return 120;
-        }
-        return prev + 1;
-      });
-    }, 1000);
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const startRecording = async () => {
+    setUploadError(null);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setUploadError("Camera recording is not supported in this browser. Please upload a video instead.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksRef.current = [];
+      streamRef.current = stream;
+      recorderRef.current = recorder;
+      if (videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream;
+        videoPreviewRef.current.muted = true;
+        await videoPreviewRef.current.play().catch(() => {});
+      }
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
+        const file = new File([blob], `hirego-video-resume-${Date.now()}.webm`, { type: blob.type });
+        setVideoFile(file);
+        setPreviewUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return URL.createObjectURL(blob);
+        });
+        setMode("recorded");
+      };
+      recorder.start();
+      setMode("recording");
+      setTimeElapsed(0);
+      timerRef.current = setInterval(() => {
+        setTimeElapsed((prev) => {
+          if (prev >= 120) {
+            stopRecording();
+            return 120;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch {
+      setUploadError("Camera and microphone access was not granted. You can upload a video instead.");
+    }
   };
 
   const stopRecording = () => {
-    clearInterval(timerRef.current);
-    setMode("recorded");
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    recorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
   };
 
   const reRecord = () => {
+    setUploadError(null);
     setMode("idle");
     setTimeElapsed(0);
     setAnalysisResult(null);
+    setVideoFile(null);
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
   };
 
-  const handleUpload = () => {
+  const handleVideoFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    if (!file.type.startsWith("video/") || file.size > 10 * 1024 * 1024) {
+      setUploadError("Please upload an MP4 or WebM video up to 10MB.");
+      return;
+    }
+    setVideoFile(file);
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return URL.createObjectURL(file);
+    });
+    setMode("recorded");
+  };
+
+  const handleUpload = async () => {
+    if (!videoFile) {
+      setUploadError("Record or choose a video before saving.");
+      return;
+    }
     setMode("uploading");
-    setTimeout(() => {
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", videoFile);
+      formData.append("category", "video-resumes");
+      const uploadResponse = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadJson = await uploadResponse.json();
+      if (!uploadResponse.ok || !uploadJson.file?.url) throw new Error(uploadJson.error || "Video upload failed");
+
       setMode("analyzing");
-      setTimeout(() => {
-        setAnalysisResult({
-          communicationScore: 82,
-          clarityScore: 88,
-          confidenceScore: 76,
-          professionalismScore: 90,
-          bodyLanguageScore: 74,
-          fluencyScore: 85,
-          toneScore: 80,
-          energyLevel: 78,
-          overallScore: 82,
-        });
-        setMode("complete");
-      }, 2500);
-    }, 1800);
+      const saveResponse = await fetch("/api/candidate/video-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoUrl: uploadJson.file.url,
+          durationSeconds: Math.max(1, timeElapsed || 60),
+        }),
+      });
+      const saveJson = await saveResponse.json();
+      if (!saveResponse.ok || !saveJson.success) throw new Error(saveJson.error || "Video could not be saved");
+
+      updateState({ videoRecorded: true, videoAnalysis: null });
+      markStepComplete(8);
+      setMode("complete");
+    } catch (error) {
+      setMode("recorded");
+      setUploadError(error instanceof Error ? error.message : "Video could not be saved. Please try again.");
+    }
   };
 
   const handleNext = () => {
+    markStepComplete(8);
+    router.push("/onboarding/preferences");
+  };
+
+  const handleSkip = () => {
+    updateState({ videoRecorded: false, videoAnalysis: null });
+    markStepComplete(8);
     router.push("/onboarding/preferences");
   };
 
@@ -85,7 +184,7 @@ export default function VideoResumePage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-between"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -101,7 +200,7 @@ export default function VideoResumePage() {
                   border: "1px solid var(--primary)",
                 }}
               >
-                Onboarding Step 8/10
+                Video resume
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 AI Speech & Presentation Pitch Vector
@@ -115,7 +214,7 @@ export default function VideoResumePage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden" aria-hidden="true">
             <span
               className="px-3.5 py-1.5 rounded-full text-xs font-mono font-bold"
               style={{
@@ -124,7 +223,7 @@ export default function VideoResumePage() {
                 color: "var(--text-primary)",
               }}
             >
-              Step 8 of 10
+              Record or upload
             </span>
           </div>
         </header>
@@ -164,6 +263,12 @@ export default function VideoResumePage() {
                 borderColor: "var(--outline)",
               }}
             >
+              {mode === "recording" && (
+                <video ref={videoPreviewRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted />
+              )}
+              {(mode === "recorded" || mode === "uploading" || mode === "analyzing" || mode === "complete") && previewUrl && (
+                <video src={previewUrl} className="absolute inset-0 w-full h-full object-cover" controls playsInline />
+              )}
               {mode === "idle" && (
                 <div className="text-center space-y-3 p-6">
                   <div
@@ -191,6 +296,15 @@ export default function VideoResumePage() {
                   >
                     Start Camera Recording
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="block mx-auto text-xs font-bold underline underline-offset-4"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Upload a video instead
+                  </button>
+                  <input ref={fileInputRef} type="file" accept="video/mp4,video/webm" onChange={handleVideoFile} className="hidden" />
                 </div>
               )}
 
@@ -218,7 +332,7 @@ export default function VideoResumePage() {
                     check_circle
                   </span>
                   <h3 className="font-extrabold text-base" style={{ color: "var(--text-primary)" }}>
-                    Pitch Recorded Successfully!
+                    {mode === "complete" ? "Video resume saved" : "Video ready to save"}
                   </h3>
                   {mode === "recorded" && (
                     <div className="flex items-center gap-3 justify-center pt-2">
@@ -231,7 +345,7 @@ export default function VideoResumePage() {
                           color: "var(--text-primary)",
                         }}
                       >
-                        Re-record Pitch
+                        Record again
                       </button>
                       <button
                         onClick={handleUpload}
@@ -241,13 +355,19 @@ export default function VideoResumePage() {
                           boxShadow: "var(--shadow-btn-red)",
                         }}
                       >
-                        Analyze & Save Pitch
+                        Upload & Save Video
                       </button>
                     </div>
                   )}
                 </div>
               )}
             </div>
+
+            {uploadError && (
+              <div className="p-3 rounded-2xl border text-xs font-semibold" style={{ backgroundColor: "rgba(229,57,53,0.08)", borderColor: "var(--primary)", color: "var(--primary)" }}>
+                {uploadError}
+              </div>
+            )}
 
             {/* AI Speech Analysis Results */}
             {analysisResult && (
@@ -321,6 +441,14 @@ export default function VideoResumePage() {
             >
               <span>Next: Job Preferences</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
+            >
+              Skip for now
             </button>
           </div>
         </main>

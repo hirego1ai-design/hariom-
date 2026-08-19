@@ -1,10 +1,11 @@
 "use client";
 import React from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function EmployerRegistrationCompletePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isManagedHiring = searchParams.get("model") === "managed";
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
@@ -57,12 +58,11 @@ export default function EmployerRegistrationCompletePage() {
 
               {/* High Contrast Readability Text */}
               <p className="text-sm text-slate-100 leading-relaxed font-medium">
-                Thank you for submitting your verification documents. The{" "}
-                <strong className="text-amber-300 font-bold">HireGo AI team</strong> is manually reviewing your{" "}
+                Thank you for submitting your selected business certificate. The{" "}
+                <strong className="text-amber-300 font-bold">HireGo AI team</strong> is manually reviewing it. Your{" "}
                 <strong className="text-white font-bold underline decoration-amber-400/60 underline-offset-4">
-                  GST, PAN, MSME, and corporate credentials
-                </strong>. Your{" "}
-                <strong className="text-emerald-300 font-bold">14-day trial is fully active</strong> and unlocked while review is under way (typically completed within 2–4 hours).
+                  employer workspace access is active
+                </strong> while the review is under way (typically completed within 2–4 hours).
               </p>
             </div>
           </div>
@@ -74,15 +74,15 @@ export default function EmployerRegistrationCompletePage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-amber-400 flex items-center gap-1.5 font-bold uppercase tracking-wider">
                   <span className="material-symbols-outlined text-[18px]">timer</span>
-                  Free Trial
+                  Onboarding Access
                 </span>
                 <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                   Active
                 </span>
               </div>
               <div className="flex flex-col mb-3">
-                <span className="text-xl sm:text-2xl font-bold text-white">14 Days Left</span>
-                <span className="text-xs text-text-secondary">Access to all premium AI features</span>
+                <span className="text-xl sm:text-2xl font-bold text-white">Active</span>
+                <span className="text-xs text-text-secondary">Your workspace is ready for the next step</span>
               </div>
               <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                 <div className="bg-amber-400 h-full w-full rounded-full" />
@@ -94,16 +94,16 @@ export default function EmployerRegistrationCompletePage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-primary flex items-center gap-1.5 font-bold uppercase tracking-wider">
                   <span className="material-symbols-outlined text-[18px]">work</span>
-                  Job Slots
+                  Next Action
                 </span>
-                <span className="text-xs text-text-secondary">Trial Limit</span>
+                <span className="text-xs text-text-secondary">Workspace setup</span>
               </div>
               <div className="flex flex-col mb-3">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl sm:text-2xl font-bold text-white">0/5</span>
-                  <span className="text-xs text-text-secondary">Jobs Used</span>
+                  <span className="text-xl sm:text-2xl font-bold text-white">Ready</span>
+                  <span className="text-xs text-text-secondary">First job posting</span>
                 </div>
-                <span className="text-xs text-text-secondary">Ready for your first job posting</span>
+                <span className="text-xs text-text-secondary">Create your first hiring requirement</span>
               </div>
               <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                 <div className="bg-primary h-full w-0 rounded-full" />
@@ -132,10 +132,10 @@ export default function EmployerRegistrationCompletePage() {
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 w-full items-center justify-center pt-1">
             <button
-              onClick={() => router.push("/employer/employer-onboarding-first-job-prompt")}
+              onClick={() => router.push(isManagedHiring ? "/employer/managed-hiring/request" : "/employer/employer-onboarding-first-job-prompt")}
               className="btn-3d-red h-11 px-6 rounded-xl flex items-center justify-center gap-2 font-bold text-xs text-white w-full sm:w-auto min-w-[220px] group shadow-md"
             >
-              <span>Post Your First Job</span>
+              <span>{isManagedHiring ? "Submit Hiring Requirement" : "Post Your First Job"}</span>
               <span className="material-symbols-outlined text-[17px] group-hover:translate-x-1 transition-transform">
                 arrow_forward
               </span>

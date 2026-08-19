@@ -19,6 +19,7 @@ const employerNavItems: NavRailItem[] = [
   { id: "pipeline", label: "Hiring Pipeline", href: "/employer/hiring-pipeline", icon: "view_kanban" },
   { id: "candidate-search", label: "Candidate Search", href: "/employer/proactive-candidate-search", icon: "person_search" },
   { id: "interviews", label: "Live Interviews", href: "/employer/upcoming-interviews-list", icon: "video_call" },
+  { id: "managed-hiring", label: "Managed Hiring Tracker", href: "/employer/managed-hiring/candidate-tracking", icon: "track_changes" },
   { id: "analytics", label: "Analytics", href: "/employer/employer-analytics-dashboard", icon: "analytics" },
   { id: "billing", label: "Revenue & Billing", href: "/employer/revenue-and-billing-management", icon: "receipt_long" },
   { id: "subscriptions", label: "Subscriptions & Credits", href: "/employer/subscriptions", icon: "credit_score" },
