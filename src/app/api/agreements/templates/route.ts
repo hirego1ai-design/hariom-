@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
+    requireEmployerOrAdminSession(req);
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get("includeArchived") === "true";
     const templates = await agreementsDb.getTemplates(includeArchived);
     return NextResponse.json({ success: true, count: templates.length, templates });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const body = await req.json();
 
     if (!body.name || !body.category) {
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
       message: "Agreement template created successfully",
       template: newTpl,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

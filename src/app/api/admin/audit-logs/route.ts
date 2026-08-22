@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuditLogs } from "@/lib/auditLogger";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const logs = await getAuditLogs();
     return NextResponse.json({
       success: true,

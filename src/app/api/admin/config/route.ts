@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 let platformConfig = {
   // Feature Flags
@@ -23,16 +25,18 @@ let platformConfig = {
   lastUpdated: new Date().toISOString(),
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     return NextResponse.json({ success: true, config: platformConfig });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const session = requireAdminSession(req);
     const body = await req.json();
 
     platformConfig = {
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
     logAuditEvent({
       action: "ADMIN_CONFIG_UPDATED",
       resource: "Platform Configuration",
-      userId: body.updatedBy || "admin-1",
+      userId: session.id,
       ipAddress: req.headers.get("x-forwarded-for") || "127.0.0.1",
       details: "Platform configuration updated by Super Admin",
     });
@@ -54,7 +58,7 @@ export async function POST(req: NextRequest) {
       message: "Platform configuration updated successfully.",
       config: platformConfig,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

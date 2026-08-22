@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { assertCompanyIdAccess, requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = requireEmployerOrAdminSession(req);
     const { id } = await params;
     const agreement = await agreementsDb.getAgreementById(id);
     if (!agreement) {
       return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
     }
+    await assertCompanyIdAccess(session, agreement.companyId);
 
     const events = await agreementsDb.getEventsByAgreementId(agreement.id);
     let linkedRequirement = null;
     if (agreement.requirementId) {
       linkedRequirement = await agreementsDb.getRequirementById(agreement.requirementId);
+      if (linkedRequirement?.companyId !== agreement.companyId) linkedRequirement = null;
     }
 
     return NextResponse.json({
@@ -24,8 +29,8 @@ export async function GET(
       events,
       linkedRequirement,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -34,9 +39,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = requireEmployerOrAdminSession(req);
     const { id } = await params;
     const body = await req.json();
-    const performedBy = body.performedBy || "Sales Executive";
+    const performedBy = session.name || session.email;
     const note = body.note || undefined;
 
     const updated = await agreementsDb.updateAgreement(id, body.updates || body, performedBy, note);
@@ -49,8 +55,8 @@ export async function PUT(
       message: "Agreement updated successfully",
       agreement: updated,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -59,13 +65,22 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = requireAdminSession(req);
     const { id } = await params;
     const body = await req.json();
     const action = body.action;
+    const agreement = await agreementsDb.getAgreementById(id);
+    if (!agreement) {
+      return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
+    }
+    await assertCompanyIdAccess(session, agreement.companyId);
 
     if (action === "accept") {
-      const signerName = body.signedByName || "Authorized Signatory";
-      const designation = body.signedByDesignation || "Director / Talent Leader";
+      if (session.role !== "ADMIN" && agreement.status !== "SENT_TO_EMPLOYER") {
+        return NextResponse.json({ success: false, error: "Agreement must be sent to the employer before acceptance." }, { status: 409 });
+      }
+      const signerName = session.name || "Authorized Signatory";
+      const designation = session.role === "ADMIN" ? "Administrator" : "Authorized Employer Representative";
       const ipAddress =
         req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "127.0.0.1";
 
@@ -82,8 +97,11 @@ export async function POST(
     }
 
     if (action === "request_amendment") {
+      if (session.role !== "ADMIN" && agreement.status !== "SENT_TO_EMPLOYER") {
+        return NextResponse.json({ success: false, error: "Agreement must be sent to the employer before requesting an amendment." }, { status: 409 });
+      }
       const notes = body.amendmentNotes || "Requested commercial terms adjustment.";
-      const performedBy = body.performedBy || "Employer Representative";
+      const performedBy = session.name || session.email;
 
       const amended = await agreementsDb.requestAmendment(id, notes, performedBy);
       if (!amended) {
@@ -98,10 +116,13 @@ export async function POST(
     }
 
     if (action === "send_to_employer") {
+      if (session.role !== "ADMIN") {
+        return NextResponse.json({ success: false, error: "Administrator access required." }, { status: 403 });
+      }
       const updated = await agreementsDb.updateAgreement(
         id,
         { status: "SENT_TO_EMPLOYER" },
-        body.performedBy || "Sales Lead",
+        session.name || session.email,
         "Dispatched finalized commercial agreement to client."
       );
       if (!updated) {
@@ -116,7 +137,7 @@ export async function POST(
     }
 
     return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

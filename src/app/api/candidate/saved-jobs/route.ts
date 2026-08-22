@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
+    }
 
     try {
       const saved = await (prisma as any).savedJob?.findMany?.({
@@ -76,6 +79,9 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
+    }
 
     const body = await req.json();
     const jobId = body.jobId;
@@ -128,6 +134,9 @@ export async function DELETE(req: NextRequest) {
     const session = getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
+    }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
     }
 
     const { searchParams } = new URL(req.url);

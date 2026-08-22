@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export interface SubscriptionPlanSummary {
   id: string;
@@ -145,7 +146,8 @@ export const subscriptionPlans: SubscriptionPlanSummary[] = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  requireAdminSession(req);
   return NextResponse.json({
     success: true,
     totalPlans: subscriptionPlans.length,

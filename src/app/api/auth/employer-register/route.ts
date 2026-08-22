@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { generateAndSendOtp } from "@/lib/otp";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { referralDb } from "@/lib/referral-db";
@@ -17,6 +17,10 @@ export async function POST(request: Request) {
   try {
     enforceRateLimit(request, "employer_register");
     const body = await readValidatedJson(request, schema);
+    const passwordStrength = validatePasswordStrength(body.password);
+    if (!passwordStrength.valid) {
+      return NextResponse.json({ success: false, error: passwordStrength.message }, { status: 422 });
+    }
     const email = body.email.toLowerCase().trim();
     const referralCode = body.referralCode?.trim().toUpperCase() || null;
 

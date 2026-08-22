@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
@@ -16,9 +16,28 @@ const jobSchema = z.object({
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED"]).default("ACTIVE"),
 });
 
-export async function GET() {
-  const jobs = await db.getJobs();
-  return NextResponse.json({ success: true, count: jobs.length, jobs });
+export async function GET(request: NextRequest) {
+  try {
+    const session = getCurrentSession(request.headers);
+    if (!session || (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN")) {
+      throw new ApiError("Employer, recruiter, or administrator access required.", 403);
+    }
+
+    if (session.role === "ADMIN") {
+      const jobs = await prisma.jobListing.findMany({ orderBy: { createdAt: "desc" } });
+      return NextResponse.json({ success: true, count: jobs.length, jobs });
+    }
+
+    const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
+    if (!profile?.companyId) throw new ApiError("Employer profile not found.", 403);
+    const jobs = await prisma.jobListing.findMany({
+      where: { companyId: profile.companyId },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json({ success: true, count: jobs.length, jobs });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function POST(request: Request) {
@@ -30,18 +49,14 @@ export async function POST(request: Request) {
       throw new ApiError("Forbidden: Employer or Admin role required.", 403);
     }
 
-    // Resolve companyId (default to "comp-1")
-    let companyId = "comp-1";
-    try {
-      const profile = await prisma.employerProfile.findUnique({
-        where: { userId: session.id },
-      });
-      if (profile) {
-        companyId = profile.companyId;
-      }
-    } catch {
-      // Ignore
+    // Resolve authoritative companyId
+    const profile = await prisma.employerProfile.findUnique({
+      where: { userId: session.id },
+    });
+    if (!profile?.companyId) {
+      throw new ApiError("Employer profile not found. Please complete employer setup.", 403);
     }
+    const companyId = profile.companyId!;
 
     const body = await readValidatedJson(request, jobSchema);
     const isPublishing = body.status === "ACTIVE";
@@ -122,7 +137,7 @@ export async function POST(request: Request) {
           jobTitle: body.title,
           salaryRange: body.salary,
           location: body.location,
-          type: body.type,
+          type: body.type ?? "Full-time",
         },
         tx
       );

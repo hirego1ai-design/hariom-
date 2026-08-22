@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const profile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const body = await request.json();
     const videoUrl = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";

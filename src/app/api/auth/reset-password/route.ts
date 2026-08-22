@@ -48,7 +48,10 @@ export async function POST(request: Request) {
         where: { id: user.id },
         data: { passwordHash: newHashed },
       });
-    } catch {
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Failed to update password. Please try again later.");
+      }
       (user as any).passwordHash = newHashed;
     }
 

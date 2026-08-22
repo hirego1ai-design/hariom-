@@ -2,11 +2,15 @@
   "name": "hirego-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx src/tests/suite.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -28,7 +32,7 @@
     "react-hook-form": "^7.83.0",
     "react-select": "^5.10.2",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3",
+    "zod": "^3.25.76",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -44,9 +48,11 @@
     "glob": "^13.0.6",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   },
   "overrides": {
+    "nanoid": "^3.3.18",
     "postcss": "8.5.23",
     "sharp": "0.35.3"
   }

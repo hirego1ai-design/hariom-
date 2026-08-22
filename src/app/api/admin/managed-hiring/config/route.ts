@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export interface PPHPricingRule {
   method: "percentage_ctc" | "fixed_fee" | "hybrid_higher";
@@ -289,16 +291,22 @@ export const managedHiringAuditLogs: ManagedHiringAuditLog[] = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
+  try {
+    requireAdminSession(req);
   return NextResponse.json({
     success: true,
     config: managedHiringGlobalConfig,
     auditLogs: managedHiringAuditLogs,
   });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function POST(req: Request) {
   try {
+    const session = requireAdminSession(req);
     const body = await req.json();
     const { updatedConfig, config, auditEntry, adminActor, reason } = body;
 
@@ -315,8 +323,8 @@ export async function POST(req: Request) {
     const logEntry: ManagedHiringAuditLog = {
       id: `LOG-MH-${Date.now().toString().slice(-4)}`,
       timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-      adminUser: auditEntry?.adminUser || adminActor || "admin@hirego.ai",
-      adminRole: auditEntry?.adminRole || "Super Administrator",
+      adminUser: session.email,
+      adminRole: "Administrator",
       category: auditEntry?.category || "Pricing",
       action: auditEntry?.action || "Commercial Configuration Update",
       oldValue: String(auditEntry?.oldValue || "Active Ruleset"),
@@ -332,9 +340,6 @@ export async function POST(req: Request) {
       auditLogs: managedHiringAuditLogs,
     });
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: (error as Error).message },
-      { status: 400 }
-    );
+    return handleApiError(error);
   }
 }

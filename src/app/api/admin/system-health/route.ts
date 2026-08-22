@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const memoryUsage = process.memoryUsage();
     
     // DB health check
@@ -74,7 +77,7 @@ export async function GET() {
       uptimePercent: 99.98,
       services,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

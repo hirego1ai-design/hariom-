@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 let securityPolicy = {
   minPasswordLength: 8,
@@ -15,8 +17,9 @@ let securityPolicy = {
   vulnerabilitiesFound: 0,
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     let calculatedScore = 40;
 
     // Check real security layers
@@ -47,13 +50,14 @@ export async function GET() {
       },
       securityPolicy,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const body = await req.json();
     securityPolicy = { ...securityPolicy, ...body };
     return NextResponse.json({
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
       message: "Security policy updated successfully.",
       securityPolicy,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

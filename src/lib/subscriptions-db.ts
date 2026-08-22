@@ -217,7 +217,15 @@ class SubscriptionsDb {
           updatedAt: r.updatedAt.toISOString(),
         }));
       }
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      return [];
+    }
 
     const plans = Array.from(this.inMemoryPlans.values());
     return includeArchived ? plans : plans.filter((p) => !p.isArchived);
@@ -246,7 +254,15 @@ class SubscriptionsDb {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      return null;
+    }
 
     return this.inMemoryPlans.get(id) || null;
   }
@@ -284,7 +300,11 @@ class SubscriptionsDb {
           isArchived: false,
         },
       });
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
 
     return newPlan;
   }
@@ -304,7 +324,11 @@ class SubscriptionsDb {
         where: { id },
         data: updates as any,
       });
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
 
     return updated;
   }
@@ -329,7 +353,11 @@ class SubscriptionsDb {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
 
     let credits = this.inMemoryCredits.get(companyId);
     if (!credits) {
@@ -371,7 +399,11 @@ class SubscriptionsDb {
           aiInterviewsLeft: credits.aiInterviewsLeft,
         },
       });
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
 
     return credits;
   }
@@ -436,7 +468,15 @@ class SubscriptionsDb {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      return null;
+    }
 
     return this.inMemorySubs.get(companyId) || null;
   }
@@ -454,7 +494,11 @@ class SubscriptionsDb {
         where: { companyId, status: "ACTIVE" },
         data: { status: "CANCELLED" },
       });
-    } catch {}
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
 
     return true;
   }
