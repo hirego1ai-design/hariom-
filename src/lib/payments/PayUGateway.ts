@@ -65,11 +65,21 @@ export class PayUGateway implements PaymentGateway {
       const key = jsonPayload?.key || process.env.PAYU_MERCHANT_KEY || "";
       const hashFromPayload = jsonPayload?.hash || params.signature || "";
 
+      if (!hashFromPayload) {
+        return {
+          isValid: false,
+          gatewayTxId,
+          status: "REJECTED",
+          rawPayload: jsonPayload,
+          error: "Missing PayU webhook signature",
+        };
+      }
+
       // Reverse hash formula: sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
       const reverseHashSequence = `${merchantSalt}|${statusStr}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
       const calculatedHash = crypto.createHash("sha512").update(reverseHashSequence).digest("hex");
 
-      if (hashFromPayload && calculatedHash.toLowerCase() !== hashFromPayload.toLowerCase()) {
+      if (calculatedHash.toLowerCase() !== hashFromPayload.toLowerCase()) {
         return {
           isValid: false,
           gatewayTxId,

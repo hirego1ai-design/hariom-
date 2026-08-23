@@ -13,8 +13,17 @@ const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/webp",
   "video/mp4",
-  "video/webm",
 ];
+
+const MIME_TO_EXT_MAP: Record<string, string[]> = {
+  "application/pdf": ["pdf"],
+  "application/msword": ["docx", "doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+  "image/png": ["png"],
+  "image/jpeg": ["jpg"],
+  "image/webp": ["webp"],
+  "video/mp4": ["mp4"],
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +67,12 @@ export async function POST(req: NextRequest) {
     else if (header.startsWith("504B0304") || header.startsWith("D0CF")) serverExt = "docx";
     else {
       return jsonError("Invalid file signature", 415);
+    }
+
+    // Verify claimed MIME type matches detected signature
+    const validExtensions = MIME_TO_EXT_MAP[file.type] || [];
+    if (!validExtensions.includes(serverExt)) {
+      return jsonError("File content does not match claimed MIME type", 415);
     }
 
     const baseDir = path.resolve(path.join(process.cwd(), "public", "uploads"));

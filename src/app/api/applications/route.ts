@@ -8,6 +8,9 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
+    }
 
     let applications: any[] = [];
 
@@ -49,6 +52,9 @@ export async function POST(req: NextRequest) {
     const session = getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
+    }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
     }
 
     const body = await req.json();

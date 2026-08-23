@@ -6,6 +6,9 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const isProduction = process.env.NODE_ENV === "production";
+if (isProduction && process.env.MOCK_DB === "true") {
+  throw new Error("FATAL: MOCK_DB cannot be enabled in production. This is a critical configuration error.");
+}
 const allowMockFallbacks = !isProduction || process.env.MOCK_DB === "true";
 
 const createMockPrisma = () => {
@@ -136,12 +139,12 @@ export const db = {
     }
   },
 
-  async createJob(data: { title: string; company: string; location: string; type: string; salary: string; status: string }) {
+  async createJob(data: { title: string; company: string; location: string; type: string; salary: string; status: string; companyId: string }) {
     try {
       const job = await prisma.jobListing.create({
         data: {
           title: data.title,
-          companyId: "comp-1",
+          companyId: data.companyId,
           location: data.location,
           type: data.type,
           salaryRange: data.salary,
@@ -151,7 +154,10 @@ export const db = {
         },
       });
       return job;
-    } catch {
+    } catch (error) {
+      if (isProduction) {
+        throw error;
+      }
       const newJob = {
         id: `job-${Date.now()}`,
         ...data,

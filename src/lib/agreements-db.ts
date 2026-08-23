@@ -98,6 +98,7 @@ class AgreementsStore {
           return {
             id: r.id,
             referenceCode: r.referenceCode,
+            companyId: r.companyId || undefined,
             companyName: r.companyName,
             contactPerson: r.contactPerson,
             email: r.email,
@@ -145,6 +146,7 @@ class AgreementsStore {
         return {
           id: r.id,
           referenceCode: r.referenceCode,
+          companyId: r.companyId || undefined,
           companyName: r.companyName,
           contactPerson: r.contactPerson,
           email: r.email,
@@ -198,6 +200,7 @@ class AgreementsStore {
         data: {
           id,
           referenceCode,
+          companyId: payload.companyId || null,
           companyName: payload.companyName,
           contactPerson: payload.contactPerson,
           email: payload.email,
@@ -259,6 +262,7 @@ class AgreementsStore {
         return {
           id: r.id,
           referenceCode: r.referenceCode,
+          companyId: r.companyId || undefined,
           companyName: r.companyName,
           contactPerson: r.contactPerson,
           email: r.email,
@@ -506,6 +510,7 @@ class AgreementsStore {
         return records.map((r) => ({
           id: r.id,
           agreementNumber: r.agreementNumber,
+          companyId: r.companyId || undefined,
           requirementId: r.requirementId || undefined,
           templateId: r.templateId || undefined,
           companyName: r.companyName,
@@ -551,6 +556,7 @@ class AgreementsStore {
         return {
           id: r.id,
           agreementNumber: r.agreementNumber,
+          companyId: r.companyId || undefined,
           requirementId: r.requirementId || undefined,
           templateId: r.templateId || undefined,
           companyName: r.companyName,
@@ -605,6 +611,7 @@ class AgreementsStore {
         data: {
           id,
           agreementNumber,
+          companyId: payload.companyId || null,
           requirementId: payload.requirementId || null,
           templateId: payload.templateId || null,
           companyName: payload.companyName,

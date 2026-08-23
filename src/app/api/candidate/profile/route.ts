@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
+    }
 
     try {
       const candidateProfile = await prisma.candidateProfile.findUnique({
@@ -91,6 +94,9 @@ export async function PUT(req: NextRequest) {
     const session = getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
+    }
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Candidate access required", 403);
     }
 
     const body = await req.json();

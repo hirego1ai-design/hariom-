@@ -5,8 +5,6 @@ import { dispatchAiTask } from "@/utils/aiRouter";
 import { generateAndSendOtp, verifyOtpCode } from "@/lib/otp";
 import { validatePasswordStrength, hasRoleAccess, sanitizeUserInput } from "@/lib/auth";
 
-
-
 export interface TestResult {
   name: string;
   category: string;
@@ -20,6 +18,7 @@ export async function runAllTests(): Promise<{
   failedCount: number;
   results: TestResult[];
 }> {
+  process.env.MOCK_DB = process.env.MOCK_DB ?? "true";
   const results: TestResult[] = [];
 
   // 1. Commercial Pricing Engine Tests
@@ -172,5 +171,24 @@ export async function runAllTests(): Promise<{
     failedCount,
     results,
   };
+}
+
+// Direct CLI execution support for CI & npm test
+if (process.argv[1]?.includes("suite.test")) {
+  runAllTests()
+    .then((res) => {
+      console.log("\n========================================");
+      console.log(`HireGo Test Suite Summary:`);
+      console.log(`Total: ${res.total} | Passed: ${res.passedCount} | Failed: ${res.failedCount}`);
+      console.log("========================================\n");
+      for (const r of res.results) {
+        console.log(`  [${r.passed ? "PASS" : "FAIL"}] [${r.category}] ${r.name}${r.message ? ` - ${r.message}` : ""}`);
+      }
+      process.exit(res.failedCount > 0 ? 1 : 0);
+    })
+    .catch((err) => {
+      console.error("Test runner execution failed:", err);
+      process.exit(1);
+    });
 }
 

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export const mockInterviewSummary = {
   totalRevenue: 520000,
@@ -84,7 +85,8 @@ export const mockInterviewLogs = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  requireAdminSession(req);
   return NextResponse.json({
     success: true,
     summary: mockInterviewSummary,

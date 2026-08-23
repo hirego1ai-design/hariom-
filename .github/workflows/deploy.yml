@@ -31,7 +31,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Run Automated Suite Tests
-        run: npx tsx src/tests/suite.test.ts
+        run: npm test
 
       - name: Build Next.js Standalone Production Output
         run: npm run build

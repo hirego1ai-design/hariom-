@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { assertCompanyIdAccess, requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = requireEmployerOrAdminSession(req);
     const { id } = await params;
     const requirement = await agreementsDb.getRequirementById(id);
     if (!requirement) {
@@ -14,9 +17,10 @@ export async function GET(
         { status: 404 }
       );
     }
+    await assertCompanyIdAccess(session, requirement.companyId);
     return NextResponse.json({ success: true, requirement });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -25,6 +29,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireAdminSession(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -47,7 +52,7 @@ export async function PATCH(
       message: "Requirement updated successfully",
       requirement: updated,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

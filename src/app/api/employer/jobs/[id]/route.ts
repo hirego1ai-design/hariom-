@@ -21,12 +21,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = getCurrentSession(request.headers);
+    if (!session || (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN")) {
+      throw new ApiError("Employer, recruiter, or administrator access required.", 403);
+    }
     const { id } = await params;
     const job = await prisma.jobListing.findUnique({
       where: { id },
     });
     if (!job) {
       throw new ApiError("Job listing not found.", 404);
+    }
+    if (session.role !== "ADMIN") {
+      const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
+      if (!profile?.companyId || job.companyId !== profile.companyId) {
+        throw new ApiError("Forbidden: job listing does not belong to your company.", 403);
+      }
     }
     return NextResponse.json({ success: true, job });
   } catch (error) {
@@ -49,18 +59,13 @@ export async function PUT(
 
     const body = await readValidatedJson(request, updateJobSchema);
 
-    // Resolve companyId (default to "comp-1")
-    let companyId = "comp-1";
-    try {
-      const profile = await prisma.employerProfile.findUnique({
-        where: { userId: session.id },
-      });
-      if (profile) {
-        companyId = profile.companyId;
-      }
-    } catch {
-      // Ignore
+    const profile = session.role === "ADMIN"
+      ? null
+      : await prisma.employerProfile.findUnique({ where: { userId: session.id } });
+    if (session.role !== "ADMIN" && !profile?.companyId) {
+      throw new ApiError("Employer profile not found.", 403);
     }
+    const companyId = profile?.companyId;
 
     // Load existing job state
     const oldJob = await prisma.jobListing.findUnique({
@@ -69,12 +74,15 @@ export async function PUT(
     if (!oldJob) {
       throw new ApiError("Job listing not found.", 404);
     }
+    if (session.role !== "ADMIN" && oldJob.companyId !== companyId) {
+      throw new ApiError("Forbidden: job listing does not belong to your company.", 403);
+    }
 
     const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
 
     // Check active credits quota if publishing a draft
     if (isPublishingDraft && session.role !== "ADMIN") {
-      const credits = await subscriptionsDb.getCompanyCredits(companyId);
+      const credits = await subscriptionsDb.getCompanyCredits(companyId!);
       if (credits.jobPostsLeft <= 0) {
         throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
       }
@@ -94,7 +102,7 @@ export async function PUT(
 
     // Deduct credit if draft is published as active
     if (isPublishingDraft && session.role !== "ADMIN") {
-      await subscriptionsDb.updateCompanyCredits(companyId, -1, 0, 0);
+      await subscriptionsDb.updateCompanyCredits(companyId!, -1, 0, 0);
     }
 
     logAuditEvent({

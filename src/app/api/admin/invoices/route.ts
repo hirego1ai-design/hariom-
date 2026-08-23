@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { invoicesDb } from "@/lib/invoices-db";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const invoices = await invoicesDb.getInvoices();
     const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
     const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
@@ -13,13 +16,14 @@ export async function GET() {
       summary: { totalBilled, totalCollected, totalOverdue, count: invoices.length },
       invoices,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const body = await req.json();
 
     if (body.action === "mark_paid") {
@@ -72,7 +76,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, message: "Invoice created successfully", invoice: created });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

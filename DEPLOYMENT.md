@@ -20,8 +20,7 @@
 ## 3. Database Migration
 Run Prisma migration to provision production database tables:
 ```bash
-npx prisma db push
-npx prisma db seed
+npx prisma migrate deploy
 ```
 
 ---

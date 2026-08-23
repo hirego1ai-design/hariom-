@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export interface RevenueAuditLogRecord {
   id: string;
@@ -98,7 +99,8 @@ export const auditLogs: RevenueAuditLogRecord[] = [
   },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  requireAdminSession(req);
   return NextResponse.json({
     success: true,
     total: auditLogs.length,

@@ -90,6 +90,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    if (paymentOrder && (!paymentOrder.gateway || paymentOrder.gateway !== providerHeader)) {
+      throw new ApiError("Webhook provider does not match the payment order gateway", 400);
+    }
+
     // We can extract basic company/plan data if order missing but required for failure cases
     const baseCompanyId = verification.companyId || payload?.companyId || payload?.metadata?.companyId;
 
@@ -149,7 +153,15 @@ export async function POST(req: NextRequest) {
       }
 
       // Amount Integrity Enforcement
-      if (verification.amount !== undefined && verification.amount > 0 && Math.abs(verification.amount - expectedAmount) > 0.01) {
+      if (
+        verification.amount === undefined ||
+        !Number.isFinite(verification.amount) ||
+        verification.amount <= 0
+      ) {
+        throw new ApiError("Gateway payment amount missing or invalid", 400);
+      }
+
+      if (Math.abs(verification.amount - expectedAmount) > 0.01) {
         throw new ApiError(`Payment amount mismatch. Gateway: ₹${verification.amount}, Plan: ₹${expectedAmount}`, 400);
       }
 
@@ -175,6 +187,18 @@ export async function POST(req: NextRequest) {
           where: { orderId: paymentOrder.orderId },
           data: { status: "SUCCESS", gatewayTxId }
         });
+
+        // Increment Promo Code usage on committed successful payment
+        if (paymentOrder.promoCode) {
+          try {
+            await tx.promoCode.update({
+              where: { code: paymentOrder.promoCode.toUpperCase() },
+              data: { usageCount: { increment: 1 } },
+            });
+          } catch {
+            // Ignore if promo code not in DB
+          }
+        }
 
         // Step 2: Payment status is recorded
         await tx.paymentTransaction.upsert({

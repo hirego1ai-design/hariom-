@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadRevenueTransactions, revenueUnavailable } from "../_shared";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(request: NextRequest) {
   try {
+    requireAdminSession(request);
     const { searchParams } = request.nextUrl;
     const search = searchParams.get("search")?.trim().toLowerCase() || "";
     const source = searchParams.get("source") || "All";
@@ -24,6 +26,9 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ success: true, total: data.length, data, source: "database" });
   } catch (error) {
+    if (error instanceof Error && "status" in error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: (error as any).status });
+    }
     return revenueUnavailable(error, "Revenue transactions");
   }
 }

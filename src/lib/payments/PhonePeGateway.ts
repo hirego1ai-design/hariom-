@@ -103,7 +103,16 @@ export class PhonePeGateway implements PaymentGateway {
       throw new Error("PhonePe salt key missing in production environment.");
     }
 
-    if (saltKey && params.signature) {
+    if (saltKey) {
+      if (!params.signature) {
+        return {
+          isValid: false,
+          gatewayTxId: "",
+          status: "REJECTED",
+          rawPayload: {},
+          error: "Missing PhonePe X-VERIFY signature",
+        };
+      }
       const stringToHash = params.rawBody + saltKey;
       const sha256 = crypto.createHash("sha256").update(stringToHash).digest("hex");
       const expectedVerify = `${sha256}###${saltIndex}`;

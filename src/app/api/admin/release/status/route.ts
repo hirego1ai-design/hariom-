@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const phases = [
       { id: 1, name: "Phase 1: Architecture Cleanup & Standardized Codebase", status: "COMPLETED", score: 100 },
       { id: 2, name: "Phase 2: HireGo Managed Hiring Wizard & Pipeline", status: "COMPLETED", score: 100 },
@@ -31,7 +34,7 @@ export async function GET() {
       phases,
       signedOffAt: new Date().toISOString(),
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

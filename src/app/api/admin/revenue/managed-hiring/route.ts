@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { loadManagedHiringRevenue, revenueUnavailable } from "../_shared";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const data = await loadManagedHiringRevenue();
     const activeAgreements = data.agreements.filter((agreement) => agreement.status === "ACTIVE");
     return NextResponse.json({

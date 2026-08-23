@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateCommercialFee, CommercialPricingModel } from "@/utils";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export async function POST(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const body = await req.json();
 
     const ctcAnnual = Number(body.ctcAnnual || body.ctc) || 1500000;
@@ -27,7 +30,7 @@ export async function POST(req: NextRequest) {
       success: true,
       calculation,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

@@ -6,6 +6,7 @@ import { MemoryManager } from '../memory/MemoryManager';
 import { MemoryScopeLevel } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { dispatchAiTask } from '@/utils/aiRouter';
+import { validateTenantAccess, TenantAccessError } from '../security/TenantContext';
 
 // 1. Resume Evaluator Agent (Resume HireScore Evaluator)
 export class ResumeEvaluatorAgent extends BaseAgent {
@@ -31,8 +32,41 @@ export class ResumeEvaluatorAgent extends BaseAgent {
         include: { user: true },
       });
       jobData = await prisma.jobListing.findUnique({ where: { id: jobId } });
-    } catch {
-      // Database fallback
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
+    }
+
+    if (jobData && jobData.companyId) {
+      validateTenantAccess(context.tenantContext, jobData.companyId);
+    } else if (process.env.NODE_ENV === "production" && !jobData) {
+      throw new TenantAccessError(`Job listing not found: ${jobId}`);
+    }
+
+    const companyId = context.tenantContext.companyId;
+    if (companyId && profileData) {
+      // Authorize candidate access: verify candidate has applied to a job belonging to this employer company
+      let hasAuthorizedRelationship = false;
+      try {
+        const application = await prisma.application.findFirst({
+          where: {
+            candidateProfileId,
+            job: { companyId },
+          },
+        });
+        hasAuthorizedRelationship = !!application;
+      } catch (error) {
+        if (process.env.NODE_ENV === "production") {
+          throw error;
+        }
+      }
+
+      if (process.env.NODE_ENV === "production" && !hasAuthorizedRelationship) {
+        throw new TenantAccessError(
+          `Candidate profile ${candidateProfileId} is not authorized for tenant ${companyId}. An active application is required.`
+        );
+      }
     }
 
     const candidateSkills = profileData?.skills || ['TypeScript', 'React', 'Node.js', 'PostgreSQL'];
@@ -252,14 +286,21 @@ export class CandidateMatchmakerAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
+    const companyId = context.tenantContext.companyId;
     let candidateProfiles: any[] = [];
+
     try {
       candidateProfiles = await prisma.candidateProfile.findMany({
+        where: companyId
+          ? { applications: { some: { job: { companyId } } } }
+          : undefined,
         take: 5,
         include: { user: true },
       });
-    } catch {
-      // Database fallback
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
     }
 
     const matches = candidateProfiles.map((c, index) => ({
@@ -268,14 +309,18 @@ export class CandidateMatchmakerAgent extends BaseAgent {
       compatibilityScore: 90 - index * 4,
     }));
 
+    const fallbackMatches = process.env.NODE_ENV !== "production"
+      ? [
+          { candidateProfileId: 'cand-101', candidateName: 'Rohit Kumar', compatibilityScore: 92 },
+          { candidateProfileId: 'cand-102', candidateName: 'Priya Sharma', compatibilityScore: 88 },
+        ]
+      : [];
+
     return {
       agentId: this.agentId,
       status: 'SUCCESS',
-      matchedCandidateCount: matches.length || 2,
-      topMatches: matches.length > 0 ? matches : [
-        { candidateProfileId: 'cand-101', candidateName: 'Rohit Kumar', compatibilityScore: 92 },
-        { candidateProfileId: 'cand-102', candidateName: 'Priya Sharma', compatibilityScore: 88 },
-      ],
+      matchedCandidateCount: matches.length || fallbackMatches.length,
+      topMatches: matches.length > 0 ? matches : fallbackMatches,
     };
   }
 }

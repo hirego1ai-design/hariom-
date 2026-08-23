@@ -26,6 +26,7 @@ export type AgreementStatus =
 export interface HiringRequirementRecord {
   id: string;
   referenceCode: string;
+  companyId?: string;
   companyName: string;
   contactPerson: string;
   email: string;
@@ -106,6 +107,7 @@ export interface AgreementTemplateRecord {
 export interface CommercialAgreementRecord {
   id: string;
   agreementNumber: string;
+  companyId?: string;
   requirementId?: string;
   templateId?: string;
   companyName: string;

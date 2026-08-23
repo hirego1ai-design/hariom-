@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { referralDb } from "@/lib/referral-db";
@@ -9,9 +9,8 @@ import { generateAndSendOtp } from "@/lib/otp";
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  role: z.enum(["CANDIDATE", "EMPLOYER", "RECRUITER", "ADMIN"]).default("CANDIDATE"),
   referralCode: z.string().optional(),
 });
 
@@ -19,6 +18,10 @@ export async function POST(request: Request) {
   try {
     enforceRateLimit(request, "auth_register");
     const body = await readValidatedJson(request, registerSchema);
+    const passwordStrength = validatePasswordStrength(body.password);
+    if (!passwordStrength.valid) {
+      return NextResponse.json({ success: false, error: passwordStrength.message }, { status: 422 });
+    }
 
     const existing = await db.findUserByEmail(body.email);
     if (existing) {
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       email: body.email,
       passwordHash: hashedPassword,
       name: body.name,
-      role: body.role,
+      role: "CANDIDATE",
     });
 
     // Referral Attribution Capture (Rule 11, 12, 13)

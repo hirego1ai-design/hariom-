@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!plan) {
-      // Fallback plan tier mapping
+      if (isProduction) {
+        return jsonError("Subscription plan not found", 404);
+      }
+
+      // Development-only fallback plan tier mapping
       const planPrices: Record<string, { name: string; price: number; credits: number }> = {
         bootstrapped: { name: "Bootstrapped", price: 4999, credits: 3 },
         hypergrowth: { name: "Hypergrowth", price: 14999, credits: 10 },
@@ -66,6 +70,10 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    if (plan.isArchived) {
+      return jsonError("This subscription plan has been archived and is no longer available", 400);
+    }
+
     let finalPrice = plan.price;
     let discountApplied = 0;
 
@@ -73,13 +81,20 @@ export async function POST(req: NextRequest) {
       const promo = await prisma.promoCode.findUnique({
         where: { code: promoCode.toUpperCase() },
       });
-      if (promo && !promo.isArchived) {
+
+      const now = new Date();
+      const isExpired = promo?.validUntil && new Date(promo.validUntil) < now;
+      const isUsageExceeded = promo && promo.usageCount >= promo.maxUsage;
+
+      if (promo && !promo.isArchived && !isExpired && !isUsageExceeded) {
         if (promo.discountType === "PERCENTAGE") {
-          discountApplied = (plan.price * promo.discountValue) / 100;
+          discountApplied = (plan.price * Math.min(100, Math.max(0, promo.discountValue))) / 100;
         } else {
-          discountApplied = promo.discountValue;
+          discountApplied = Math.min(plan.price, Math.max(0, promo.discountValue));
         }
         finalPrice = Math.max(0, plan.price - discountApplied);
+      } else if (promoCode) {
+        return jsonError("Invalid, expired, or exhausted promo code.", 400);
       }
     }
 

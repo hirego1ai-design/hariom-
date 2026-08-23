@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { formatMoney, loadRevenueTransactions, revenueUnavailable } from "../_shared";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    requireAdminSession(req);
     const transactions = await loadRevenueTransactions();
     const successful = transactions.filter((transaction) => transaction.status === "Success");
     const pending = transactions.filter((transaction) => transaction.status === "Pending");

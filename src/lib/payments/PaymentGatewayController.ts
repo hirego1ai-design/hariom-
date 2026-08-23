@@ -21,6 +21,10 @@ export interface GatewayConfigState {
   priorities: GatewayName[];
 }
 
+// Production safety invariant: Incomplete providers CANNOT be enabled in production
+// under any circumstances (even if DB config marks them as healthy) to prevent risk.
+const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "PHONEPE", "STRIPE"]);
+
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
     RAZORPAY: new RazorpayGateway(),
@@ -53,26 +57,42 @@ export class PaymentGatewayController {
           gatewaysStatus: configRecord.gatewaysStatus as any,
           priorities: configRecord.priorities as any,
         };
+        if (process.env.NODE_ENV === "production") {
+          for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
+            this.cachedConfig.gatewaysStatus[gw] = "DISABLED";
+          }
+        }
         return this.cachedConfig;
       }
-    } catch {
-      // Fallback to default
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("Failed to load gateway config from DB:", error);
+      }
     }
 
-    // Default configuration
-    return {
+    // Default configuration (only live production-ready providers are enabled in production)
+    const isProduction = process.env.NODE_ENV === "production";
+    const defaultConfig: GatewayConfigState = {
       mode: "AUTO",
       primaryGateway: "RAZORPAY",
       autoFailover: true,
       allowEmployerSelection: true,
       gatewaysStatus: {
         RAZORPAY: "HEALTHY",
-        PAYU: "HEALTHY",
-        PHONEPE: "HEALTHY",
-        STRIPE: "HEALTHY",
+        PAYU: isProduction ? "DISABLED" : "HEALTHY",
+        PHONEPE: isProduction ? "DISABLED" : "HEALTHY",
+        STRIPE: isProduction ? "DISABLED" : "HEALTHY",
       },
-      priorities: ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
+      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
     };
+
+    if (isProduction) {
+      for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
+        defaultConfig.gatewaysStatus[gw] = "DISABLED";
+      }
+    }
+    
+    return defaultConfig;
   }
 
   /**
@@ -83,7 +103,19 @@ export class PaymentGatewayController {
     const updated: GatewayConfigState = {
       ...current,
       ...newConfig,
+      gatewaysStatus: {
+        ...current.gatewaysStatus,
+        ...(newConfig.gatewaysStatus || {})
+      }
     };
+
+    // Enforce production safety invariant
+    if (process.env.NODE_ENV === "production") {
+      for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
+        updated.gatewaysStatus[gw] = "DISABLED";
+      }
+    }
+    
     this.cachedConfig = updated;
 
     try {
@@ -107,8 +139,10 @@ export class PaymentGatewayController {
           priorities: updated.priorities as any,
         },
       });
-    } catch {
-      // Offline / test fallback
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") {
+        throw error;
+      }
     }
 
     return updated;
@@ -152,6 +186,13 @@ export class PaymentGatewayController {
 
     for (let i = 0; i < candidateSequence.length; i++) {
       const gwName = candidateSequence[i];
+
+      // Final production safety guard before payment creation
+      if (process.env.NODE_ENV === "production" && PRODUCTION_BLOCKED_GATEWAYS.has(gwName)) {
+        console.warn(`[Safe Guard] Skipped blocked provider in production: ${gwName}`);
+        continue;
+      }
+
       const provider = this.providers[gwName];
 
       try {

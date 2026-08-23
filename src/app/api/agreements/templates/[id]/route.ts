@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
+import { requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
+import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireEmployerOrAdminSession(req);
     const { id } = await params;
     const template = await agreementsDb.getTemplateById(id);
     if (!template) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
     return NextResponse.json({ success: true, template });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -22,6 +25,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireAdminSession(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -35,8 +39,8 @@ export async function PUT(
       message: "Template updated successfully",
       template: updated,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -45,6 +49,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireAdminSession(req);
     const { id } = await params;
     const { action } = await req.json();
 
@@ -61,8 +66,8 @@ export async function POST(
     }
 
     return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -71,6 +76,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    requireAdminSession(req);
     const { id } = await params;
     const archived = await agreementsDb.archiveTemplate(id);
     if (!archived) {
@@ -81,7 +87,7 @@ export async function DELETE(
       message: "Template archived successfully",
       template: archived,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

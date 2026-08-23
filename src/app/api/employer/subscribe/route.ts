@@ -87,31 +87,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST purchase/activate a plan
+// POST purchase/activate a plan is blocked to prevent payment bypass
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession(request.headers);
   if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const body = await request.json();
-    const { planId } = body;
-    if (!planId) {
-      return NextResponse.json({ success: false, error: "Missing planId" }, { status: 400 });
-    }
-
-    const companyId = await resolveCompanyId(session.id);
-
-    const paymentId = crypto.randomUUID();
-    const subscription = await subscriptionsDb.subscribeCompanyToPlan(companyId, planId, paymentId);
-
-    return NextResponse.json({
-      success: true,
-      message: "Subscription activated successfully!",
-      subscription,
-    });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Direct subscription activation is disabled for security. Please initiate payment through the checkout flow at /api/payments/checkout.",
+      redirectTo: "/api/payments/checkout",
+    },
+    { status: 403 }
+  );
 }
