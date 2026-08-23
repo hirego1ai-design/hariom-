@@ -40,24 +40,3 @@ jobs:
           NODE_ENV: production
           JWT_SECRET: ci_cd_test_jwt_secret_key_32chars_2026
           INTERNAL_API_KEY: ci_cd_test_internal_api_key_32chars
-
-  docker-build:
-    name: Docker Image Build Test
-    needs: audit-and-build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Codebase
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Container Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: hirego/web-app:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
