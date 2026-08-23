@@ -23,6 +23,26 @@ import { logAuditEvent } from "@/lib/auditLogger";
 
 export const MAX_WEBHOOK_BODY_BYTES = 256 * 1024; // 256 KB
 
+class BodyTooLargeError extends Error {}
+
+async function readBoundedBody(request: NextRequest): Promise<string> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_WEBHOOK_BODY_BYTES) {
+      await reader.cancel();
+      throw new BodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 // ─── GET — Hub challenge verification ────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -55,7 +75,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Read raw body with size enforcement
-  const rawBody = await req.text();
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedBody(req);
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+    return NextResponse.json({ error: "Unable to read payload" }, { status: 400 });
+  }
   if (Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_BODY_BYTES) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });
   }
@@ -106,8 +134,9 @@ export async function POST(req: NextRequest) {
   // 5. Ingest and enqueue entries
   try {
     await ingestWebhookEntries(body);
-  } catch (err: any) {
-    console.error("[WhatsApp webhook] Ingestion error:", err?.message);
+  } catch (err) {
+    console.error("WHATSAPP_WEBHOOK_DURABLE_ACCEPTANCE_FAILURE", { error: err });
+    return NextResponse.json({ error: "Webhook acceptance failed" }, { status: 503 });
   }
 
   // 6. Return fast 200 OK to Meta
@@ -129,9 +158,7 @@ async function ingestWebhookEntries(body: any): Promise<void> {
       const messages: any[] = value?.messages ?? [];
 
       for (const message of messages) {
-        await ingestSingleMessage(message).catch((err: any) => {
-          console.error("[WhatsApp webhook] Message ingestion error:", err?.message, "messageId:", message?.id);
-        });
+        await ingestSingleMessage(message);
       }
     }
   }
@@ -145,7 +172,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
   if (!messageId || !waId) return;
 
   // 1. Per-waId rate limit check
-  const rateLimitResult = checkWaRateLimit(waId, 20, 60_000);
+  const rateLimitResult = await checkWaRateLimit(waId, 20, 60_000);
   if (!rateLimitResult.allowed) {
     console.warn(`[WhatsApp webhook] Rate limit exceeded for waId ${waId}`);
     return;
@@ -173,6 +200,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
     providerEventId: messageId,
     waId,
     messageType,
+    messageText: textBody,
     rawPayload: message,
   });
 
@@ -181,12 +209,5 @@ async function ingestSingleMessage(message: any): Promise<void> {
   }
 
   // 4. Enqueue into background worker queue for asynchronous processing
-  enqueueWhatsAppInboundJob({
-    eventId,
-    messageId,
-    waId,
-    messageType,
-    textBody,
-    enqueuedAt: Date.now(),
-  });
+  await enqueueWhatsAppInboundJob(eventId);
 }

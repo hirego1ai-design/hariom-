@@ -259,6 +259,7 @@ export async function persistInboundEvent(params: {
   providerEventId: string;
   waId: string;
   messageType: string;
+  messageText?: string;
   rawPayload: object;
 }): Promise<{ isDuplicate: boolean; eventId: string }> {
   const existing = await prisma.whatsAppInboundEvent.findUnique({
@@ -282,6 +283,7 @@ export async function persistInboundEvent(params: {
         providerEventId: params.providerEventId,
         waId: params.waId,
         messageType: params.messageType,
+        messageText: params.messageText?.slice(0, 4_000) || null,
         rawPayload: sanitized as any,
         processed: false,
       },

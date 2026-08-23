@@ -8,7 +8,7 @@ const schema = z.object({ email: z.string().email("Invalid email address") });
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_send_verification_otp", 5, 15 * 60_000);
+    await enforceRateLimit(request, "auth_send_verification_otp", 5, 15 * 60_000);
     const { email } = await readValidatedJson(request, schema);
     const user = await db.findUserByEmail(email);
     // Keep the response indistinguishable for unknown addresses.

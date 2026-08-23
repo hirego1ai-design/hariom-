@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const admin = getCurrentSession(request.headers);
     if (!admin || admin.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
-    enforceRateLimit(request, `admin_email_delivery_test:${admin.id}`, 3, 10 * 60_000);
+    await enforceRateLimit(request, `admin_email_delivery_test:${admin.id}`, 3, 10 * 60_000);
     const body = await readValidatedJson(request, testSchema);
     const result = await sendEmail({
       to: body.email,

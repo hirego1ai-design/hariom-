@@ -27,7 +27,7 @@ export class StripeGateway implements PaymentGateway {
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     const secret = process.env.STRIPE_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET;
-    if (process.env.NODE_ENV === "production" && !secret) {
+    if (!secret) {
       return {
         isValid: false,
         gatewayTxId: "",
@@ -38,7 +38,7 @@ export class StripeGateway implements PaymentGateway {
     }
 
     const signature = params.signature || params.headers?.["stripe-signature"] || "";
-    if (!signature && (secret || process.env.NODE_ENV === "production")) {
+    if (!signature) {
       return {
         isValid: false,
         gatewayTxId: "",
@@ -106,10 +106,7 @@ export class StripeGateway implements PaymentGateway {
             error: "Invalid Stripe signature",
           };
         }
-      } else {
-        isVerified = true;
       }
-
       eventPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     } catch (err: any) {
       return {

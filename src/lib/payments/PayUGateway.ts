@@ -46,11 +46,17 @@ export class PayUGateway implements PaymentGateway {
     const status = jsonPayload?.status === "success" ? "SUCCESS" : "FAILED";
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
 
-    if (process.env.NODE_ENV === "production" && !merchantSalt) {
-      throw new Error("PayU merchant salt missing in production environment.");
+    if (!merchantSalt) {
+      return {
+        isValid: false,
+        gatewayTxId,
+        status: "REJECTED",
+        rawPayload: jsonPayload,
+        error: "PayU webhook verification is not configured",
+      };
     }
 
-    if (merchantSalt) {
+    {
       const statusStr = jsonPayload?.status || "";
       const txnid = jsonPayload?.txnid || "";
       const amount = jsonPayload?.amount || "";

@@ -15,7 +15,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "employer_register");
+    await enforceRateLimit(request, "employer_register");
     const body = await readValidatedJson(request, schema);
     const passwordStrength = validatePasswordStrength(body.password);
     if (!passwordStrength.valid) {

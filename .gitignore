@@ -21,6 +21,7 @@ hirego-app/
 
 # production
 /build
+/.data/
 
 # misc
 .DS_Store

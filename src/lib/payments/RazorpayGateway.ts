@@ -71,7 +71,7 @@ export class RazorpayGateway implements PaymentGateway {
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
-    if (process.env.NODE_ENV === "production" && !secret) {
+    if (!secret) {
       return {
         isValid: false,
         gatewayTxId: "",
@@ -81,7 +81,7 @@ export class RazorpayGateway implements PaymentGateway {
       };
     }
 
-    if (!params.signature && (secret || process.env.NODE_ENV === "production")) {
+    if (!params.signature) {
       return {
         isValid: false,
         gatewayTxId: "",

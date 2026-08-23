@@ -71,8 +71,10 @@ export async function generateHandoffToken(
         collectedData: { ...data, handoffJti: jti, handoffIssuedAt: new Date().toISOString() } as any,
       },
     });
-  } catch {
-    // Session write fallback
+  } catch (error) {
+    // A token whose one-time state was not committed must never be delivered.
+    console.error("WHATSAPP_HANDOFF_PERSISTENCE_FAILURE", error);
+    throw new Error("Unable to create a secure sign-in link. Please try again.");
   }
 
   return token;
@@ -101,7 +103,7 @@ export async function consumeHandoffToken(token: string): Promise<HandoffResult>
     return { valid: false, reason: "Invalid token purpose." };
   }
 
-  let user: { id: string; email: string; name: string; role: string } | null = null;
+  let user: { id: string; email: string; name: string; role: string; sessionVersion: number } | null = null;
 
   try {
     user = await prisma.$transaction(async (tx) => {
@@ -128,7 +130,7 @@ export async function consumeHandoffToken(token: string): Promise<HandoffResult>
 
       return tx.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, email: true, name: true, role: true },
+        select: { id: true, email: true, name: true, role: true, sessionVersion: true },
       });
     }, { isolationLevel: "Serializable" });
   } catch {
@@ -144,6 +146,7 @@ export async function consumeHandoffToken(token: string): Promise<HandoffResult>
     email: user.email,
     name: user.name,
     role: user.role as any,
+    sessionVersion: user.sessionVersion,
   });
 
   await logAuditEvent({

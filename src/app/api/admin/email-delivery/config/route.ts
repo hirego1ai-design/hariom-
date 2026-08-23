@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const admin = requireAdmin(request);
-    enforceRateLimit(request, `admin_email_delivery_config:${admin.id}`, 10, 60_000);
+    await enforceRateLimit(request, `admin_email_delivery_config:${admin.id}`, 10, 60_000);
     const body = await readValidatedJson(request, updateSchema);
     const config = await saveEmailDeliverySettings(body);
     logAuditEvent({

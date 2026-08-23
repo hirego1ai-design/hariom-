@@ -10,7 +10,7 @@ const forgotPasswordSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_forgot_password");
+    await enforceRateLimit(request, "auth_forgot_password");
     const body = await readValidatedJson(request, forgotPasswordSchema);
 
     const user = await db.findUserByEmail(body.email);

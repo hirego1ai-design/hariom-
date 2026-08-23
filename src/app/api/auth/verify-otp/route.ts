@@ -14,7 +14,7 @@ const verifyOtpSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_verify_otp");
+    await enforceRateLimit(request, "auth_verify_otp");
     const body = await readValidatedJson(request, verifyOtpSchema);
 
     const verification = await verifyOtpCode(body.email, body.otp, body.type);
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         email: user.email,
         name: user.name,
         role: user.role,
+        sessionVersion: "sessionVersion" in user ? user.sessionVersion : 0,
       });
 
       response.cookies.set(AUTH_COOKIE_NAME, token, {

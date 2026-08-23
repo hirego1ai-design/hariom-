@@ -31,6 +31,38 @@ interface SessionPayload {
   name: string;
   role: "ADMIN" | "EMPLOYER" | "RECRUITER" | "CANDIDATE";
   exp?: number;
+  jti?: string;
+  sessionVersion?: number;
+}
+
+type DistributedSessionState = "valid" | "revoked" | "unavailable";
+
+async function getRedisValue(key: string): Promise<string | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) throw new Error("Redis session store is not configured");
+  const response = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Redis session store request failed");
+  const body = await response.json() as { result?: string | null };
+  return body.result ?? null;
+}
+
+async function getDistributedSessionState(session: SessionPayload): Promise<DistributedSessionState> {
+  if (process.env.NODE_ENV !== "production") return "valid";
+  if (!session.jti) return "revoked"; // invalidate all legacy tokens on production rollout
+  try {
+    const [revoked, version] = await Promise.all([
+      getRedisValue(`session:revoked:${session.jti}`),
+      getRedisValue(`session:version:${session.id}`),
+    ]);
+    if (revoked || (version !== null && Number(version) > (session.sessionVersion ?? 0))) return "revoked";
+    return "valid";
+  } catch {
+    return "unavailable";
+  }
 }
 
 function decodeBase64Url(value: string): ArrayBuffer {
@@ -94,8 +126,21 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const token = bearer || request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const session = token ? await parseSessionToken(token) : null;
+
+  if (session && !pathname.startsWith("/_next") && !pathname.includes(".")) {
+    const sessionState = await getDistributedSessionState(session);
+    if (sessionState !== "valid") {
+      const response = NextResponse.json(
+        { success: false, error: sessionState === "revoked" ? "Session has expired. Please sign in again." : "Session validation is temporarily unavailable." },
+        { status: sessionState === "revoked" ? 401 : 503 },
+      );
+      response.cookies.set(AUTH_COOKIE_NAME, "", { httpOnly: true, expires: new Date(0), path: "/" });
+      return response;
+    }
+  }
 
   // Every admin API requires a verified ADMIN session.
   if (pathname.startsWith("/api/admin")) {

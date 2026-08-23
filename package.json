@@ -13,7 +13,10 @@
     "test": "tsx src/tests/suite.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@aws-sdk/s3-request-presigner": "^3.1116.0",
     "@prisma/client": "^5.22.0",
+    "@upstash/redis": "^1.38.2",
     "autoprefixer": "^10.5.4",
     "bcryptjs": "^2.4.3",
     "canvas-confetti": "^1.9.4",

@@ -13,7 +13,7 @@ const loginSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_login");
+    await enforceRateLimit(request, "auth_login");
     const body = await readValidatedJson(request, loginSchema);
 
     const user = await db.findUserByEmail(body.email);
@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name,
       role: user.role,
+      sessionVersion: "sessionVersion" in user ? user.sessionVersion : 0,
     });
 
     logAuditEvent({

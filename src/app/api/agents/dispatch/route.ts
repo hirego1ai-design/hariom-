@@ -7,7 +7,7 @@ import { Role } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
-    enforceRateLimit(req, "agent_dispatch");
+    await enforceRateLimit(req, "agent_dispatch");
 
     const session = getCurrentSession(req.headers);
     if (!session) {

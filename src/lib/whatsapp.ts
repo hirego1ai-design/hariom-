@@ -7,7 +7,12 @@
 export const DEFAULT_META_GRAPH_VERSION = "v21.0";
 
 export function getMetaGraphVersion(): string {
-  return process.env.META_GRAPH_VERSION || DEFAULT_META_GRAPH_VERSION;
+  const version = process.env.META_GRAPH_VERSION || DEFAULT_META_GRAPH_VERSION;
+  if (!/^v\d+\.\d+$/.test(version)) {
+    if (process.env.NODE_ENV === "production") throw new Error("META_GRAPH_VERSION must use the format vNN.N.");
+    return DEFAULT_META_GRAPH_VERSION;
+  }
+  return version;
 }
 
 export function getMetaGraphBaseUrl(): string {
@@ -113,8 +118,10 @@ export async function fetchWithRetry(
       }
 
       attempt++;
+      const retryAfter = Number(response.headers.get("retry-after") || "0");
+      const retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 0;
       const jitter = Math.random() * 100;
-      const sleepMs = Math.min(delay, maxDelayMs) + jitter;
+      const sleepMs = Math.max(retryAfterMs, Math.min(delay, maxDelayMs) + jitter);
       await new Promise((resolve) => setTimeout(resolve, sleepMs));
       delay *= backoffFactor;
     } catch (error: any) {
@@ -167,8 +174,7 @@ export async function sendWhatsAppTextMessage(
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return { sent: false, reason: `WhatsApp API returned ${response.status}: ${errText}` };
+      return { sent: false, reason: `WhatsApp API returned ${response.status}` };
     }
 
     const data = await response.json();
@@ -223,8 +229,7 @@ export async function sendWhatsAppInteractiveList(
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return { sent: false, reason: `WhatsApp API returned ${response.status}: ${errText}` };
+      return { sent: false, reason: `WhatsApp API returned ${response.status}` };
     }
 
     const data = await response.json();
@@ -279,8 +284,7 @@ export async function sendWhatsAppButtonMessage(
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return { sent: false, reason: `WhatsApp API returned ${response.status}: ${errText}` };
+      return { sent: false, reason: `WhatsApp API returned ${response.status}` };
     }
 
     const data = await response.json();

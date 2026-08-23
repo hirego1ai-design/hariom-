@@ -6,7 +6,7 @@ import { FraudStatus } from "@/types/referral";
 
 export async function GET(request: Request) {
   try {
-    enforceRateLimit(request, "referrals_get", 30, 60000);
+    await enforceRateLimit(request, "referrals_get", 30, 60000);
 
     const session = getCurrentSession(request.headers);
     if (!session) {
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "referrals_invite", 10, 60000);
+    await enforceRateLimit(request, "referrals_invite", 10, 60000);
 
     const session = getCurrentSession(request.headers);
     if (!session) {

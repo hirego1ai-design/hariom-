@@ -1,190 +1,76 @@
-/**
- * HireGo WhatsApp — Durable Inbound Queue & Worker
- *
- * Decouples webhook receipt from asynchronous domain processing.
- * When Meta delivers an event:
- * 1. Webhook verifies signature & deduplicates in PostgreSQL.
- * 2. Webhook enqueues the job and responds HTTP 200 immediately.
- * 3. Inbound worker processes the message, runs onboarding state machine,
- *    sends outbound reply with exponential backoff, and marks completion.
- * 4. Permanent failures are logged to DeadLetterJob / AuditLog.
- */
-
-import { processWhatsAppMessage } from "./whatsapp-onboarding";
-import { sendWhatsAppTextMessage, markWhatsAppMessageRead } from "./whatsapp";
-import { markEventProcessed } from "./whatsapp-identity";
-import { logAuditEvent } from "./auditLogger";
 import { prisma } from "./prisma";
 
-export interface WhatsAppInboundJob {
-  eventId: string;
-  messageId: string;
-  waId: string;
-  messageType: string;
-  textBody: string;
-  retryCount?: number;
-  enqueuedAt: number;
+const MAX_ATTEMPTS = 3;
+
+export class WhatsAppQueueUnavailableError extends Error {}
+
+function workerUrl() {
+  const appUrl = process.env.APP_URL?.replace(/\/$/, "");
+  const key = process.env.INTERNAL_API_KEY;
+  if (!appUrl || !key || !process.env.QSTASH_TOKEN) return null;
+  return `${appUrl}/api/internal/whatsapp/process`;
 }
 
-const inMemoryQueue: WhatsAppInboundJob[] = [];
-let isProcessingQueue = false;
-const MAX_JOB_RETRIES = 3;
-
 /**
- * Enqueue an inbound WhatsApp message for asynchronous background processing.
- * Spawns worker immediately in background without blocking the caller.
+ * Dispatches an already-persisted inbound event. QStash supplies durable retry
+ * outside the Vercel request process; no event data is kept in local memory.
  */
-export function enqueueWhatsAppInboundJob(job: WhatsAppInboundJob): void {
-  inMemoryQueue.push({
-    ...job,
-    retryCount: job.retryCount ?? 0,
-    enqueuedAt: job.enqueuedAt || Date.now(),
+export async function enqueueWhatsAppInboundJob(eventId: string): Promise<void> {
+  const destination = workerUrl();
+  if (!destination) {
+    if (process.env.NODE_ENV === "production") {
+      throw new WhatsAppQueueUnavailableError("QStash, APP_URL, and INTERNAL_API_KEY are required for WhatsApp processing.");
+    }
+    return;
+  }
+
+  const response = await fetch(`https://qstash.upstash.io/v2/publish/${encodeURIComponent(destination)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.QSTASH_TOKEN}`,
+      "Content-Type": "application/json",
+      "Upstash-Forward-x-api-key": process.env.INTERNAL_API_KEY!,
+    },
+    body: JSON.stringify({ eventId }),
   });
-
-  // Schedule background processing without blocking webhook ack
-  if (typeof setImmediate !== "undefined") {
-    setImmediate(() => {
-      processInboundQueue().catch((err) => {
-        console.error("[WhatsApp Queue] Worker unhandled error:", err?.message);
-      });
-    });
-  } else {
-    setTimeout(() => {
-      processInboundQueue().catch((err) => {
-        console.error("[WhatsApp Queue] Worker unhandled error:", err?.message);
-      });
-    }, 0);
+  if (!response.ok) {
+    throw new WhatsAppQueueUnavailableError(`QStash rejected WhatsApp dispatch with status ${response.status}.`);
   }
 }
 
-/**
- * Worker execution loop to process enqueued jobs.
- */
-export async function processInboundQueue(): Promise<{ processed: number; failed: number }> {
-  if (isProcessingQueue) return { processed: 0, failed: 0 };
-  isProcessingQueue = true;
-
-  let processedCount = 0;
-  let failedCount = 0;
-
-  try {
-    while (inMemoryQueue.length > 0) {
-      const job = inMemoryQueue.shift();
-      if (!job) break;
-
-      const success = await executeSingleJob(job);
-      if (success) {
-        processedCount++;
-      } else {
-        failedCount++;
-      }
-    }
-  } finally {
-    isProcessingQueue = false;
-  }
-
-  return { processed: processedCount, failed: failedCount };
+export async function claimWhatsAppInboundEvent(eventId: string) {
+  const now = new Date();
+  const claim = await prisma.whatsAppInboundEvent.updateMany({
+    where: {
+      id: eventId,
+      processed: false,
+      processingStatus: { in: ["PENDING", "RETRY"] },
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+    },
+    data: { processingStatus: "PROCESSING", processingStartedAt: now, attemptCount: { increment: 1 } },
+  });
+  if (claim.count !== 1) return null;
+  return prisma.whatsAppInboundEvent.findUnique({ where: { id: eventId } });
 }
 
-/**
- * Execute a single inbound WhatsApp job with retry and dead-letter handling.
- */
-export async function executeSingleJob(job: WhatsAppInboundJob): Promise<boolean> {
-  const { eventId, messageId, waId, textBody } = job;
-
-  // 1. Mark message read (non-blocking)
-  markWhatsAppMessageRead(messageId).catch(() => {});
-
-  // 2. Process message through onboarding state machine
-  try {
-    let reply: string;
-    if (!textBody.trim()) {
-      reply = "Please send a text message to continue. Reply *help* for options.";
-    } else {
-      const result = await processWhatsAppMessage(waId, textBody);
-      reply = result.reply;
-    }
-
-    // 3. Send reply via Meta Cloud API
-    const sendResult = await sendWhatsAppTextMessage(waId, reply);
-    if (!sendResult.sent) {
-      console.warn(`[WhatsApp Queue] Failed to send reply to ${waId}: ${sendResult.reason}`);
-    }
-
-    // 4. Mark event processed successfully
-    await markEventProcessed(eventId);
-    return true;
-  } catch (err: any) {
-    const errorMsg = err?.message || "Unknown processing error";
-    const currentRetries = (job.retryCount ?? 0) + 1;
-
-    console.error(`[WhatsApp Queue] Error processing event ${eventId} (attempt ${currentRetries}/${MAX_JOB_RETRIES}): ${errorMsg}`);
-
-    if (currentRetries < MAX_JOB_RETRIES) {
-      // Re-enqueue with incremented retry count
-      job.retryCount = currentRetries;
-      inMemoryQueue.push(job);
-      return false;
-    }
-
-    // Max retries exceeded: Mark as failed and record dead-letter job
-    await markEventProcessed(eventId, errorMsg);
-
-    try {
-      await prisma.deadLetterJob.create({
-        data: {
-          sourceType: "WHATSAPP_INBOUND",
-          sourceId: eventId,
-          correlationId: messageId,
-          errorType: "PROCESSING_FAILURE",
-          errorMessage: errorMsg,
-          payload: {
-            waId,
-            messageId,
-            textBody,
-            retries: currentRetries,
-          } as any,
-          retryCount: currentRetries,
-          status: "OPEN",
-        },
-      });
-    } catch {
-      // Non-critical fallback
-    }
-
-    await logAuditEvent({
-      action: "WHATSAPP_JOB_FAILED_PERMANENTLY",
-      resource: "WhatsAppQueue",
-      details: `Event ${eventId} failed permanently after ${currentRetries} retries: ${errorMsg}`,
-    });
-
-    // Notify user of failure
-    await sendWhatsAppTextMessage(
-      waId,
-      "Something went wrong on our end. Please try again in a moment. 🙏"
-    ).catch(() => {});
-
-    return false;
-  }
+export async function markWhatsAppJobRetry(eventId: string, error: string, attemptCount: number, retryable = true) {
+  const delayMs = Math.min(15 * 60_000, 1_000 * 2 ** Math.max(0, attemptCount - 1));
+  const terminal = !retryable || attemptCount >= MAX_ATTEMPTS;
+  await prisma.whatsAppInboundEvent.update({
+    where: { id: eventId },
+    data: {
+      processingStatus: terminal ? "FAILED" : "RETRY",
+      processingError: error.slice(0, 500),
+      nextAttemptAt: terminal ? null : new Date(Date.now() + delayMs),
+      processingStartedAt: null,
+    },
+  });
+  return terminal;
 }
 
-/**
- * Queue inspection helper for tests and diagnostics.
- */
-export function getWhatsAppQueueStatus(): {
-  pendingJobs: number;
-  isProcessing: boolean;
-} {
-  return {
-    pendingJobs: inMemoryQueue.length,
-    isProcessing: isProcessingQueue,
-  };
-}
-
-/**
- * Clear queue (useful for test isolation).
- */
-export function clearWhatsAppQueue(): void {
-  inMemoryQueue.length = 0;
-  isProcessingQueue = false;
+export async function markWhatsAppJobProcessed(eventId: string) {
+  await prisma.whatsAppInboundEvent.update({
+    where: { id: eventId },
+    data: { processed: true, processingStatus: "PROCESSED", processingError: null, processedAt: new Date() },
+  });
 }

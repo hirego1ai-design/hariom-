@@ -4,7 +4,7 @@ import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(request: Request) {
   try {
-    enforceRateLimit(request, "referral_code_validate", 20, 300000);
+    await enforceRateLimit(request, "referral_code_validate", 20, 300000);
 
     const url = new URL(request.url);
     const code = url.searchParams.get("code");

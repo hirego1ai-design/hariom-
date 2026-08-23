@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, prisma } from "@/lib/prisma";
 import { verifyOtpCode } from "@/lib/otp";
-import { hashPassword, validatePasswordStrength } from "@/lib/auth";
+import { hashPassword, revokeAllUserSessions, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -14,7 +14,7 @@ const resetPasswordSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_reset_password");
+    await enforceRateLimit(request, "auth_reset_password");
     const body = await readValidatedJson(request, resetPasswordSchema);
 
     const otpValidation = await verifyOtpCode(body.email, body.otp, "RESET_PASSWORD");
@@ -44,10 +44,12 @@ export async function POST(request: Request) {
     const newHashed = hashPassword(body.newPassword);
 
     try {
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash: newHashed },
+        data: { passwordHash: newHashed, sessionVersion: { increment: 1 } },
+        select: { sessionVersion: true },
       });
+      await revokeAllUserSessions(user.id, updatedUser.sessionVersion);
     } catch (error) {
       if (process.env.NODE_ENV === "production") {
         throw new Error("Failed to update password. Please try again later.");
