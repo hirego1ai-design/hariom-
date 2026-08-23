@@ -77,11 +77,12 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
       fn: async (provider, model) => {
+        if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
         const prompt = `Evaluate candidate resume: "${headline}" with skills [${candidateSkills.join(', ')}] against job requirements [${jobRequirements.join(', ')}]. Output score (0-100) and skills matching.`;
         const aiTask = await dispatchAiTask({
           task: 'RESUME_SCORE',
           prompt,
-          primaryProvider: provider as any,
+          primaryProvider: provider,
         });
         return aiTask.resultText;
       },
@@ -135,10 +136,11 @@ export class MockInterviewCopilotAgent extends BaseAgent {
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'mock-interview',
       fn: async (provider) => {
+        if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
         const aiTask = await dispatchAiTask({
           task: 'INTERVIEW_EVALUATION',
           prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Candidate profile ID: ${candidateProfileId}`,
-          primaryProvider: provider as any,
+          primaryProvider: provider,
         });
         return aiTask.resultText;
       },
@@ -250,10 +252,11 @@ export class JdGeneratorAgent extends BaseAgent {
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'jd-generator',
       fn: async (provider) => {
+        if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
         const aiTask = await dispatchAiTask({
           task: 'JD_GENERATION',
           prompt: `Generate job description for: ${jobTitle}`,
-          primaryProvider: provider as any,
+          primaryProvider: provider,
         });
         return aiTask.resultText;
       },
