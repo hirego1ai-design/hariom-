@@ -33,11 +33,20 @@ import {
   resetWaRateLimiter,
 } from "@/lib/whatsapp-rate-limiter";
 import {
-  generateHandoffToken,
-  consumeHandoffToken,
   HANDOFF_EXPIRY_SECS,
 } from "@/lib/whatsapp-auth";
-import { MAX_WEBHOOK_BODY_BYTES } from "@/app/api/whatsapp/webhook/route";
+import { MAX_WEBHOOK_BODY_BYTES, POST as handleWhatsAppWebhook } from "@/app/api/whatsapp/webhook/route";
+import { POST as processWhatsAppInboundEvent } from "@/app/api/internal/whatsapp/process/route";
+import {
+  claimWhatsAppInboundEvent,
+  deferRateLimitedWhatsAppEvent,
+  markWhatsAppJobProcessed,
+  markWhatsAppJobRetry,
+  scheduleWhatsAppInboundRetry,
+  WHATSAPP_MAX_ATTEMPTS,
+} from "@/lib/whatsapp-queue";
+import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
 
 export interface WhatsAppTestResult {
   name: string;
@@ -286,6 +295,186 @@ export async function runWhatsAppTestSuite(): Promise<{
   assert("WA-41: PII Sanitizer preserves message ID and type", sanitized.id === rawMetaWebhookMessage.id && sanitized.type === "text", "id and type preserved");
   assert("WA-42: PII Sanitizer masks phone number", sanitized.from === "9198***210", "phone number masked: 9198***210");
   assert("WA-43: PII Sanitizer strips raw text body & sensitive tokens", sanitized.text === undefined && sanitized.extraSensitiveTokens === undefined && sanitized.hasText === true, "raw sensitive data stripped from payload log");
+
+  // ─── Section 11: Durable Webhook Queue & Worker Lifecycle ──────────────────
+
+  const lifecycleTests = [
+    ["WA-44: Transient worker failure schedules retry without terminal failure", "retry state and delayed queue invocation are persisted"],
+    ["WA-45: Exhausted worker failure creates one DeadLetterJob and marks FAILED", "terminal failures have one durable DLQ record"],
+    ["WA-46: Duplicate worker invocation has no duplicate DLQ or external side effects", "a terminal event cannot be claimed twice"],
+    ["WA-47: Worker rejects an invalid INTERNAL_API_KEY", "the worker cannot be invoked without its internal credential"],
+    ["WA-48: Persisted webhook event is acknowledged then processed asynchronously", "the webhook and worker use the durable event record"],
+    ["WA-49: Rate-limited sender is persisted and deferred", "a throttled event is retained with a scheduled retry"],
+    ["WA-50: Early RETRY invocation remains recoverable and cannot get stuck", "an early queue delivery leaves the event retryable until it is due"],
+  ] as const;
+
+  let databaseReady = process.env.MOCK_DB !== "true";
+  let databaseReason = process.env.MOCK_DB === "true" ? "MOCK_DB is enabled" : "";
+  if (databaseReady) {
+    try {
+      await prisma.$queryRawUnsafe("SELECT 1");
+    } catch (error) {
+      databaseReady = false;
+      databaseReason = error instanceof Error ? error.message : "database health check failed";
+    }
+  }
+
+  if (!databaseReady) {
+    const allowedToSkip = !process.env.CI;
+    for (const [name, requirement] of lifecycleTests) {
+      assert(name, allowedToSkip, `${allowedToSkip ? "SKIPPED outside CI" : "FAILED in CI"}: a real PostgreSQL database is required because ${requirement} (${databaseReason}).`);
+    }
+  } else {
+    const lifecycleEnv = {
+      nodeEnv: process.env.NODE_ENV,
+      qstashToken: process.env.QSTASH_TOKEN,
+      appUrl: process.env.APP_URL,
+      internalApiKey: process.env.INTERNAL_API_KEY,
+      apiToken: process.env.WHATSAPP_API_TOKEN,
+      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    };
+    const mutableEnv = process.env as Record<string, string | undefined>;
+    const originalFetch = globalThis.fetch;
+    const lifecycleEventIds: string[] = [];
+    const lifecycleWaIds: string[] = [];
+    const runId = `${Date.now()}${Math.floor(Math.random() * 10_000)}`;
+    let sequence = 0;
+    let queuePublishCount = 0;
+    let providerSideEffectCount = 0;
+
+    const nextWaId = () => `919${runId.slice(-8)}${String(++sequence).padStart(2, "0")}`;
+    const createStoredEvent = async (name: string, attemptCount = 0) => {
+      const waId = nextWaId();
+      const providerEventId = `wamid.lifecycle.${runId}.${name}`;
+      lifecycleWaIds.push(waId);
+      await prisma.whatsAppContact.create({
+        data: { waId, normalizedPhone: `+${waId}`, verificationStatus: "UNVERIFIED", linkStatus: "UNLINKED", optInStatus: "OPTED_IN" },
+      });
+      const event = await prisma.whatsAppInboundEvent.create({
+        data: {
+          providerEventId,
+          waId,
+          messageType: "text",
+          messageText: "hello",
+          rawPayload: { id: providerEventId, type: "text" },
+          attemptCount,
+        },
+      });
+      lifecycleEventIds.push(event.id);
+      return event;
+    };
+
+    try {
+      mutableEnv.NODE_ENV = "test";
+      mutableEnv.QSTASH_TOKEN = "qstash_lifecycle_test_token";
+      mutableEnv.APP_URL = "https://hirego.test";
+      mutableEnv.INTERNAL_API_KEY = "internal_lifecycle_test_key";
+      mutableEnv.WHATSAPP_API_TOKEN = "EAA_LIFECYCLE_TEST_TOKEN";
+      mutableEnv.WHATSAPP_PHONE_NUMBER_ID = "109823471092";
+
+      (globalThis as any).fetch = async (url: string) => {
+        if (url.startsWith("https://qstash.upstash.io/")) {
+          queuePublishCount++;
+          return new Response("", { status: 202 });
+        }
+        providerSideEffectCount++;
+        return new Response(JSON.stringify({ messages: [{ id: "wamid.outbound.lifecycle" }] }), { status: 200 });
+      };
+
+      const transientEvent = await createStoredEvent("wa44");
+      const transientClaim = await claimWhatsAppInboundEvent(transientEvent.id);
+      const transientDecision = await markWhatsAppJobRetry(transientClaim!, "WhatsApp provider returned HTTP 503.", true, "TRANSIENT_PROVIDER");
+      await scheduleWhatsAppInboundRetry(transientEvent.id, transientDecision.delayMs!);
+      const transientStored = await prisma.whatsAppInboundEvent.findUnique({ where: { id: transientEvent.id } });
+      assert("WA-44: Transient worker failure schedules retry without terminal failure", transientDecision.terminal === false && !!transientDecision.delayMs && transientStored?.processingStatus === "RETRY" && transientStored.nextAttemptAt !== null && transientStored.processed === false && queuePublishCount === 1, "transient failure persists RETRY and creates one delayed QStash invocation without a terminal state");
+
+      const terminalEvent = await createStoredEvent("wa45", WHATSAPP_MAX_ATTEMPTS - 1);
+      const terminalClaim = await claimWhatsAppInboundEvent(terminalEvent.id);
+      const terminalDecision = await markWhatsAppJobRetry(terminalClaim!, "WhatsApp provider returned HTTP 503.", true, "TRANSIENT_PROVIDER");
+      await markWhatsAppJobRetry(terminalClaim!, "WhatsApp provider returned HTTP 503.", true, "TRANSIENT_PROVIDER");
+      const terminalStored = await prisma.whatsAppInboundEvent.findUnique({ where: { id: terminalEvent.id } });
+      const terminalDlqCount = await prisma.deadLetterJob.count({ where: { sourceType: "WHATSAPP_INBOUND", sourceId: terminalEvent.id } });
+      assert("WA-45: Exhausted worker failure creates one DeadLetterJob and marks FAILED", terminalDecision.terminal === true && terminalStored?.processingStatus === "FAILED" && terminalStored.processed === false && terminalDlqCount === 1, "the final attempt persists FAILED and the DLQ uniqueness key permits exactly one job");
+
+      const effectsBeforeDuplicate = providerSideEffectCount;
+      const duplicateWorkerResponse = await processWhatsAppInboundEvent(new Request("https://hirego.test/api/internal/whatsapp/process", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": "internal_lifecycle_test_key" },
+        body: JSON.stringify({ eventId: terminalEvent.id }),
+      }));
+      const duplicateWorkerBody = await duplicateWorkerResponse.json() as { skipped?: boolean };
+      const duplicateDlqCount = await prisma.deadLetterJob.count({ where: { sourceType: "WHATSAPP_INBOUND", sourceId: terminalEvent.id } });
+      assert("WA-46: Duplicate worker invocation has no duplicate DLQ or external side effects", duplicateWorkerResponse.status === 200 && duplicateWorkerBody.skipped === true && duplicateDlqCount === 1 && providerSideEffectCount === effectsBeforeDuplicate, "the terminal event cannot be claimed again, so it produces neither another DLQ record nor provider call");
+
+      const invalidKeyResponse = await processWhatsAppInboundEvent(new Request("https://hirego.test/api/internal/whatsapp/process", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": "wrong_internal_key" },
+        body: JSON.stringify({ eventId: transientEvent.id }),
+      }));
+      assert("WA-47: Worker rejects an invalid INTERNAL_API_KEY", invalidKeyResponse.status === 401, "invalid internal credentials are rejected before the event can be claimed");
+
+      const webhookWaId = nextWaId();
+      const webhookProviderEventId = `wamid.lifecycle.${runId}.wa48`;
+      lifecycleWaIds.push(webhookWaId);
+      const webhookPayload = JSON.stringify({
+        entry: [{ changes: [{ field: "messages", value: { messages: [{ id: webhookProviderEventId, from: webhookWaId, type: "text", text: { body: "hello" } }] } }] }],
+      });
+      const webhookResponse = await handleWhatsAppWebhook(new NextRequest("https://hirego.test/api/whatsapp/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: webhookPayload,
+      }));
+      const persistedWebhookEvent = await prisma.whatsAppInboundEvent.findUnique({ where: { providerEventId: webhookProviderEventId } });
+      if (persistedWebhookEvent) lifecycleEventIds.push(persistedWebhookEvent.id);
+      const workerResponse = persistedWebhookEvent ? await processWhatsAppInboundEvent(new Request("https://hirego.test/api/internal/whatsapp/process", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": "internal_lifecycle_test_key" },
+        body: JSON.stringify({ eventId: persistedWebhookEvent.id }),
+      })) : null;
+      const processedWebhookEvent = persistedWebhookEvent ? await prisma.whatsAppInboundEvent.findUnique({ where: { id: persistedWebhookEvent.id } }) : null;
+      assert("WA-48: Persisted webhook event is acknowledged then processed asynchronously", webhookResponse.status === 200 && persistedWebhookEvent?.processingStatus === "PENDING" && workerResponse?.status === 200 && processedWebhookEvent?.processingStatus === "PROCESSED" && processedWebhookEvent.processed === true, "the webhook ACK follows persistence, while the protected worker separately claims and completes the event");
+
+      const rateLimitedEvent = await createStoredEvent("wa49");
+      await resetWaRateLimiter(rateLimitedEvent.waId);
+      const initialRateCheck = await checkWaRateLimit(rateLimitedEvent.waId, 1, 60_000);
+      const limitedRateCheck = await checkWaRateLimit(rateLimitedEvent.waId, 1, 60_000);
+      const queuePublishesBeforeDeferral = queuePublishCount;
+      await deferRateLimitedWhatsAppEvent(rateLimitedEvent.id, Math.max(1, limitedRateCheck.retryAfterSecs || 1) * 1_000);
+      const deferredEvent = await prisma.whatsAppInboundEvent.findUnique({ where: { id: rateLimitedEvent.id } });
+      assert("WA-49: Rate-limited sender is persisted and deferred", initialRateCheck.allowed && !limitedRateCheck.allowed && deferredEvent?.processingStatus === "RETRY" && deferredEvent.nextAttemptAt !== null && deferredEvent.attemptCount === 0 && queuePublishCount === queuePublishesBeforeDeferral + 1, "the throttled sender's event remains durable and is rescheduled instead of discarded");
+      await resetWaRateLimiter(rateLimitedEvent.waId);
+
+      const earlyRetryEvent = await createStoredEvent("wa50");
+      const earlyRetryClaim = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
+      await markWhatsAppJobRetry(earlyRetryClaim!, "WhatsApp provider returned HTTP 503.", true, "TRANSIENT_PROVIDER");
+      const earlyInvocation = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
+      const retryBeforeDue = await prisma.whatsAppInboundEvent.findUnique({ where: { id: earlyRetryEvent.id } });
+      await prisma.whatsAppInboundEvent.update({ where: { id: earlyRetryEvent.id }, data: { nextAttemptAt: new Date(Date.now() - 1) } });
+      const dueInvocation = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
+      if (dueInvocation) await markWhatsAppJobProcessed(dueInvocation.id);
+      assert("WA-50: Early RETRY invocation remains recoverable and cannot get stuck", earlyInvocation === null && retryBeforeDue?.processingStatus === "RETRY" && retryBeforeDue.nextAttemptAt !== null && dueInvocation !== null, "an early delivery does not steal or fail the retry; the event remains claimable once its scheduled time arrives");
+    } catch (error: any) {
+      assert("WA-44–WA-50: Durable lifecycle integration exception", false, error.message);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await Promise.all([
+        prisma.deadLetterJob.deleteMany({ where: { sourceType: "WHATSAPP_INBOUND", sourceId: { in: lifecycleEventIds } } }).catch(() => undefined),
+        prisma.whatsAppContact.deleteMany({ where: { waId: { in: lifecycleWaIds } } }).catch(() => undefined),
+      ]);
+      if (lifecycleEnv.nodeEnv === undefined) delete mutableEnv.NODE_ENV;
+      else mutableEnv.NODE_ENV = lifecycleEnv.nodeEnv;
+      if (lifecycleEnv.qstashToken === undefined) delete process.env.QSTASH_TOKEN;
+      else process.env.QSTASH_TOKEN = lifecycleEnv.qstashToken;
+      if (lifecycleEnv.appUrl === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = lifecycleEnv.appUrl;
+      if (lifecycleEnv.internalApiKey === undefined) delete process.env.INTERNAL_API_KEY;
+      else process.env.INTERNAL_API_KEY = lifecycleEnv.internalApiKey;
+      if (lifecycleEnv.apiToken === undefined) delete process.env.WHATSAPP_API_TOKEN;
+      else process.env.WHATSAPP_API_TOKEN = lifecycleEnv.apiToken;
+      if (lifecycleEnv.phoneNumberId === undefined) delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+      else process.env.WHATSAPP_PHONE_NUMBER_ID = lifecycleEnv.phoneNumberId;
+    }
+  }
 
   // ─── Summary ────────────────────────────────────────────────────────────────
 

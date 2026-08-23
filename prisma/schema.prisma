@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -38,28 +39,28 @@ enum CustomSkillStatus {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String
+  id             String   @id @default(uuid())
+  email          String   @unique
+  passwordHash   String
   sessionVersion Int      @default(0)
-  name          String
-  role          Role     @default(CANDIDATE)
-  phoneNumber   String?
-  avatarUrl     String?
-  emailVerified Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  name           String
+  role           Role     @default(CANDIDATE)
+  phoneNumber    String?
+  avatarUrl      String?
+  emailVerified  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  candidateProfile   CandidateProfile?
-  employerProfile    EmployerProfile?
-  auditLogs          AuditLog[]
-  notifications      Notification[]
-  aiUsages           AiUsage[]
-  proctoringEvents   ProctoringTelemetry[]
-  storedFiles        StoredFile[]
-  savedJobs          SavedJob[]
-  referralsInitiated ReferralAttribution[] @relation("UserReferrer")
-  referralReceived   ReferralAttribution?  @relation("UserReferred")
+  candidateProfile      CandidateProfile?
+  employerProfile       EmployerProfile?
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  aiUsages              AiUsage[]
+  proctoringEvents      ProctoringTelemetry[]
+  storedFiles           StoredFile[]
+  savedJobs             SavedJob[]
+  referralsInitiated    ReferralAttribution[] @relation("UserReferrer")
+  referralReceived      ReferralAttribution?  @relation("UserReferred")
   referralPayouts       ReferralPayout[]
   referralRewards       ReferralReward[]      @relation("UserReferralRewards")
   referralLedgerEntries ReferralLedgerEntry[]
@@ -103,26 +104,26 @@ model Company {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  employers        EmployerProfile[]
-  jobs             JobListing[]
-  subscriptions    CompanySubscription[]
-  credits          CompanyCredits?
-  referralReceived ReferralAttribution?  @relation("CompanyReferred")
-  hiringRequirements HiringRequirement[]
+  employers            EmployerProfile[]
+  jobs                 JobListing[]
+  subscriptions        CompanySubscription[]
+  credits              CompanyCredits?
+  referralReceived     ReferralAttribution?  @relation("CompanyReferred")
+  hiringRequirements   HiringRequirement[]
   commercialAgreements CommercialAgreement[]
-  storedFiles      StoredFile[]
+  storedFiles          StoredFile[]
 }
 
 model EmployerProfile {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String                 @id @default(uuid())
+  userId      String                 @unique
+  user        User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
+  company     Company                @relation(fields: [companyId], references: [id])
   designation String?
   documents   DocumentVerification[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
 }
 
 model JobListing {
@@ -147,13 +148,13 @@ model JobListing {
 // Shared role-to-skill catalog used by candidate profiles, job creation,
 // matching, skill-gap analysis, interviews, and course recommendations.
 model SkillMaster {
-  id          String             @id @default(uuid())
-  name        String             @unique
-  slug        String             @unique
-  category    String
-  isActive    Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           String             @id @default(uuid())
+  name         String             @unique
+  slug         String             @unique
+  category     String
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
   roleMappings RoleSkillMapping[]
 }
 
@@ -203,15 +204,15 @@ model SavedJob {
 }
 
 model OtpVerification {
-  id        String   @id @default(uuid())
-  email     String
-  otp       String
-  type      String   @default("VERIFY_EMAIL")
-  expiresAt DateTime
-  verified  Boolean  @default(false)
-  attempts  Int      @default(0)
+  id          String    @id @default(uuid())
+  email       String
+  otp         String
+  type        String    @default("VERIFY_EMAIL")
+  expiresAt   DateTime
+  verified    Boolean   @default(false)
+  attempts    Int       @default(0)
   lockedUntil DateTime?
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([email, type])
 }
@@ -246,18 +247,18 @@ model VideoResume {
 }
 
 model Interview {
-  id            String      @id @default(uuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  scheduledAt   DateTime
-  durationMins  Int         @default(30)
-  status        String      @default("SCHEDULED")
-  roomUrl       String?
-  transcript    String?
-  aiFeedback    String?
+  id               String                @id @default(uuid())
+  applicationId    String
+  application      Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  scheduledAt      DateTime
+  durationMins     Int                   @default(30)
+  status           String                @default("SCHEDULED")
+  roomUrl          String?
+  transcript       String?
+  aiFeedback       String?
   proctoringEvents ProctoringTelemetry[]
   signals          InterviewSignal[]
-  createdAt     DateTime    @default(now())
+  createdAt        DateTime              @default(now())
 }
 
 // Short-lived, database-backed WebRTC signaling. This deliberately replaces
@@ -539,25 +540,25 @@ model PaymentGatewayConfig {
   primaryGateway         String   @default("RAZORPAY") // RAZORPAY | PAYU | PHONEPE
   autoFailover           Boolean  @default(true)
   allowEmployerSelection Boolean  @default(true)
-  gatewaysStatus         Json     // { RAZORPAY: "HEALTHY", PAYU: "HEALTHY", PHONEPE: "HEALTHY" }
-  priorities             Json     // ["RAZORPAY", "PAYU", "PHONEPE"]
+  gatewaysStatus         Json // { RAZORPAY: "HEALTHY", PAYU: "HEALTHY", PHONEPE: "HEALTHY" }
+  priorities             Json // ["RAZORPAY", "PAYU", "PHONEPE"]
   updatedAt              DateTime @updatedAt
 }
 
 // Global transactional-email delivery policy. API credentials are encrypted
 // before storage and are never returned by the admin API.
 model EmailDeliveryConfig {
-  id                        String   @id @default("global-email-delivery")
-  primaryProvider           String   @default("SENDGRID")
-  fallbackProvider          String   @default("ZEPTOMAIL")
-  autoFailover              Boolean  @default(true)
-  sendgridEnabled           Boolean  @default(true)
-  zeptoMailEnabled          Boolean  @default(false)
-  sendgridFromEmail         String?
-  zeptoMailFromEmail        String?
-  sendgridApiKeyEncrypted   String?
-  zeptoMailApiKeyEncrypted  String?
-  updatedAt                 DateTime @updatedAt
+  id                       String   @id @default("global-email-delivery")
+  primaryProvider          String   @default("SENDGRID")
+  fallbackProvider         String   @default("ZEPTOMAIL")
+  autoFailover             Boolean  @default(true)
+  sendgridEnabled          Boolean  @default(true)
+  zeptoMailEnabled         Boolean  @default(false)
+  sendgridFromEmail        String?
+  zeptoMailFromEmail       String?
+  sendgridApiKeyEncrypted  String?
+  zeptoMailApiKeyEncrypted String?
+  updatedAt                DateTime @updatedAt
 }
 
 model AiExecutionLog {
@@ -1026,6 +1027,7 @@ model DeadLetterJob {
   resolvedAt    DateTime?
   resolvedBy    String?
 
+  @@unique([sourceType, sourceId])
   @@index([status, createdAt])
   @@index([correlationId])
 }
@@ -1066,15 +1068,15 @@ model TraceRecord {
 // ================================================================
 
 model DocumentVerification {
-  id              String   @id @default(uuid())
+  id              String                    @id @default(uuid())
   employerId      String
-  employerProfile EmployerProfile @relation(fields: [employerId], references: [id], onDelete: Cascade)
-  docType         String   // GST Certificate, PAN Card, Certificate of Incorporation, Tax Residency
+  employerProfile EmployerProfile           @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  docType         String // GST Certificate, PAN Card, Certificate of Incorporation, Tax Residency
   fileUrl         String
   fileName        String
-  submittedAt     DateTime @default(now())
-  status          String   @default("Pending Audit") // Pending Audit, Verified, Rejected
-  riskScore       String   @default("Low") // Low, Medium, High
+  submittedAt     DateTime                  @default(now())
+  status          String                    @default("Pending Audit") // Pending Audit, Verified, Rejected
+  riskScore       String                    @default("Low") // Low, Medium, High
   verifiedBy      String?
   verifiedAt      DateTime?
   logs            DocumentVerificationLog[]
@@ -1089,13 +1091,13 @@ model DocumentVerification {
 // ================================================================
 
 model DocumentVerificationLog {
-  id              String   @id @default(uuid())
-  documentId      String
-  document        DocumentVerification @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  action          String   // VERIFY, REJECT
-  performedBy     String
-  notes           String?
-  createdAt       DateTime @default(now())
+  id          String               @id @default(uuid())
+  documentId  String
+  document    DocumentVerification @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  action      String // VERIFY, REJECT
+  performedBy String
+  notes       String?
+  createdAt   DateTime             @default(now())
 
   @@index([documentId])
   @@index([performedBy])
@@ -1128,22 +1130,22 @@ enum ReferralProductType {
 }
 
 model ReferralAttribution {
-  id                String          @id @default(uuid())
+  id                String           @id @default(uuid())
   referrerId        String
-  referrer          User            @relation("UserReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
-  referredUserId    String?         @unique
-  referredUser      User?           @relation("UserReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
-  referredCompanyId String?         @unique
-  referredCompany   Company?        @relation("CompanyReferred", fields: [referredCompanyId], references: [id], onDelete: SetNull)
+  referrer          User             @relation("UserReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId    String?          @unique
+  referredUser      User?            @relation("UserReferred", fields: [referredUserId], references: [id], onDelete: SetNull)
+  referredCompanyId String?          @unique
+  referredCompany   Company?         @relation("CompanyReferred", fields: [referredCompanyId], references: [id], onDelete: SetNull)
   referralCode      String
   attributionSource String
-  attributionDate   DateTime        @default(now())
+  attributionDate   DateTime         @default(now())
   userType          Role
   metadata          Json?
   rewards           ReferralReward[]
 
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([referrerId])
   @@index([referralCode])
@@ -1255,7 +1257,6 @@ model ReferralProgramConfig {
   updatedAt                          DateTime @updatedAt
 }
 
-
 // ================================================================
 // WHATSAPP CHANNEL — Identity, Session, Event Models
 // Migration: add_whatsapp_channel
@@ -1268,26 +1269,26 @@ model ReferralProgramConfig {
 // One HireGo User can have at most ONE WhatsApp contact (@unique on userId).
 
 model WhatsAppContact {
-  id               String   @id @default(uuid())
-  waId             String   @unique  // Meta WABA contact ID — digits only e.g. "919876543210"
-  normalizedPhone  String            // E.164 format e.g. "+919876543210"
-  userId           String?  @unique  // Null until verified link; @unique prevents 1-user-many-contacts
-  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id              String  @id @default(uuid())
+  waId            String  @unique // Meta WABA contact ID — digits only e.g. "919876543210"
+  normalizedPhone String // E.164 format e.g. "+919876543210"
+  userId          String? @unique // Null until verified link; @unique prevents 1-user-many-contacts
+  user            User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Link / verification state
-  verificationStatus String  @default("UNVERIFIED")
+  verificationStatus String @default("UNVERIFIED")
   // UNVERIFIED | OTP_SENT | VERIFIED | AMBIGUOUS
 
-  linkStatus         String  @default("UNLINKED")
+  linkStatus String @default("UNLINKED")
   // UNLINKED | PENDING_VERIFICATION | LINKED | REJECTED
 
-  optInStatus        String  @default("OPTED_IN")
+  optInStatus String @default("OPTED_IN")
   // OPTED_IN | OPTED_OUT
 
-  firstSeenAt      DateTime @default(now())
-  lastSeenAt       DateTime @updatedAt
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   onboardingSession WhatsAppOnboardingSession?
   inboundEvents     WhatsAppInboundEvent[]
@@ -1308,25 +1309,25 @@ model WhatsAppOnboardingSession {
   whatsAppContactId String          @unique
   contact           WhatsAppContact @relation(fields: [whatsAppContactId], references: [id], onDelete: Cascade)
 
-  userId      String?  // Populated after User creation
-  candidateId String?  // Populated after CandidateProfile creation
+  userId      String? // Populated after User creation
+  candidateId String? // Populated after CandidateProfile creation
 
-  currentStep String   @default("START")
+  currentStep String @default("START")
   // START | NAME | EMAIL | ROLE | EXPERIENCE | LOCATION | CONFIRMATION
   // | EXISTING_USER_VERIFY | CREATING | COMPLETE | CANCELLED | EXPIRED
 
-  status      String   @default("ACTIVE")
+  status String @default("ACTIVE")
   // ACTIVE | COMPLETE | CANCELLED | EXPIRED
 
-  collectedData   Json     @default("{}")   // Staged slot values
-  referralCode    String?                   // Captured from ?ref= or WhatsApp message
+  collectedData     Json    @default("{}") // Staged slot values
+  referralCode      String? // Captured from ?ref= or WhatsApp message
   attributionSource String? @default("whatsapp")
-  campaignMeta    Json?                     // QR / UTM attribution metadata
+  campaignMeta      Json? // QR / UTM attribution metadata
 
-  startedAt      DateTime @default(now())
-  lastActivityAt DateTime @updatedAt
+  startedAt      DateTime  @default(now())
+  lastActivityAt DateTime  @updatedAt
   completedAt    DateTime?
-  expiresAt      DateTime              // Computed: startedAt + 7 days
+  expiresAt      DateTime // Computed: startedAt + 7 days
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1341,21 +1342,21 @@ model WhatsAppOnboardingSession {
 // duplicate Meta deliveries of the same message are detected and skipped.
 
 model WhatsAppInboundEvent {
-  id              String          @id @default(uuid())
-  providerEventId String          @unique   // Meta message_id
-  waId            String
-  contact         WhatsAppContact @relation(fields: [waId], references: [waId], onDelete: Cascade)
-  messageType     String          // text | interactive | image | document | audio | video | location
-  messageText     String?
-  rawPayload      Json
-  processed       Boolean         @default(false)
-  processingError String?
-  processingStatus String         @default("PENDING")
-  attemptCount    Int             @default(0)
-  nextAttemptAt   DateTime?
+  id                  String          @id @default(uuid())
+  providerEventId     String          @unique // Meta message_id
+  waId                String
+  contact             WhatsAppContact @relation(fields: [waId], references: [waId], onDelete: Cascade)
+  messageType         String // text | interactive | image | document | audio | video | location
+  messageText         String?
+  rawPayload          Json
+  processed           Boolean         @default(false)
+  processingError     String?
+  processingStatus    String          @default("PENDING")
+  attemptCount        Int             @default(0)
+  nextAttemptAt       DateTime?
   processingStartedAt DateTime?
-  receivedAt      DateTime        @default(now())
-  processedAt     DateTime?
+  receivedAt          DateTime        @default(now())
+  processedAt         DateTime?
 
   @@index([waId, receivedAt])
   @@index([processed, receivedAt])
@@ -1363,20 +1364,20 @@ model WhatsAppInboundEvent {
 }
 
 model PaymentOrder {
-  id              String   @id @default(uuid())
-  orderId         String   @unique
-  companyId       String
-  planId          String
-  originalAmount  Float
-  discountAmount  Float    @default(0)
-  expectedAmount  Float
-  gateway         String?
-  gatewayOrderId  String?  @unique
-  gatewayTxId     String?
-  promoCode       String?
-  status          String   @default("INITIATED") // INITIATED | CREATED | SUCCESS | FAILED | REJECTED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  orderId        String   @unique
+  companyId      String
+  planId         String
+  originalAmount Float
+  discountAmount Float    @default(0)
+  expectedAmount Float
+  gateway        String?
+  gatewayOrderId String?  @unique
+  gatewayTxId    String?
+  promoCode      String?
+  status         String   @default("INITIATED") // INITIATED | CREATED | SUCCESS | FAILED | REJECTED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([companyId])
   @@index([gatewayOrderId])

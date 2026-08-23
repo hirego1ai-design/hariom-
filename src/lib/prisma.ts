@@ -9,7 +9,9 @@ const isProduction = process.env.NODE_ENV === "production";
 if (isProduction && process.env.MOCK_DB === "true") {
   throw new Error("FATAL: MOCK_DB cannot be enabled in production. This is a critical configuration error.");
 }
-const allowMockFallbacks = !isProduction || process.env.MOCK_DB === "true";
+// Mock persistence is opt-in only. CI and normal development use the configured
+// PostgreSQL database, so a missing database cannot make verification appear to pass.
+const allowMockFallbacks = process.env.MOCK_DB === "true";
 
 const createMockPrisma = () => {
   return new Proxy({}, {

@@ -18,7 +18,7 @@ import crypto from "crypto";
 import { persistInboundEvent, ensureWhatsAppContact } from "@/lib/whatsapp-identity";
 import { isPlaceholderSecret, validateWhatsAppConfig } from "@/lib/whatsapp";
 import { checkWaRateLimit } from "@/lib/whatsapp-rate-limiter";
-import { enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
+import { deferRateLimitedWhatsAppEvent, enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
 import { logAuditEvent } from "@/lib/auditLogger";
 
 export const MAX_WEBHOOK_BODY_BYTES = 256 * 1024; // 256 KB
@@ -134,8 +134,10 @@ export async function POST(req: NextRequest) {
   // 5. Ingest and enqueue entries
   try {
     await ingestWebhookEntries(body);
-  } catch (err) {
-    console.error("WHATSAPP_WEBHOOK_DURABLE_ACCEPTANCE_FAILURE", { error: err });
+  } catch {
+    // Do not log provider payloads or exception details here; either may carry
+    // sender PII. The caller receives a retryable response instead.
+    console.error("WHATSAPP_WEBHOOK_DURABLE_ACCEPTANCE_FAILURE");
     return NextResponse.json({ error: "Webhook acceptance failed" }, { status: 503 });
   }
 
@@ -171,14 +173,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
 
   if (!messageId || !waId) return;
 
-  // 1. Per-waId rate limit check
-  const rateLimitResult = await checkWaRateLimit(waId, 20, 60_000);
-  if (!rateLimitResult.allowed) {
-    console.warn(`[WhatsApp webhook] Rate limit exceeded for waId ${waId}`);
-    return;
-  }
-
-  // 2. Extract text body depending on message type
+  // 1. Extract text body depending on message type
   let textBody = "";
   if (messageType === "text") {
     textBody = message?.text?.body ?? "";
@@ -195,7 +190,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
     textBody = "";
   }
 
-  // 3. Persist and deduplicate (PostgreSQL unique providerEventId)
+  // 2. Persist before rate limiting so a sender's valid message is never lost.
   const { isDuplicate, eventId } = await persistInboundEvent({
     providerEventId: messageId,
     waId,
@@ -205,9 +200,21 @@ async function ingestSingleMessage(message: any): Promise<void> {
   });
 
   if (isDuplicate) {
+    // If the previous enqueue was interrupted, a duplicate Meta delivery
+    // safely restores asynchronous processing. The worker claim is idempotent.
+    await enqueueWhatsAppInboundJob(eventId);
     return; // Duplicate delivery — silently skip
   }
 
-  // 4. Enqueue into background worker queue for asynchronous processing
+  // 3. Per-sender rate limiting happens after durable persistence. A throttled
+  // event is delayed internally rather than discarded.
+  const rateLimitResult = await checkWaRateLimit(waId, 20, 60_000);
+  if (!rateLimitResult.allowed) {
+    console.warn("[WhatsApp webhook] Rate limit exceeded; event deferred.");
+    await deferRateLimitedWhatsAppEvent(eventId, Math.max(1, rateLimitResult.retryAfterSecs || 1) * 1_000);
+    return;
+  }
+
+  // 4. Enqueue into background worker queue for asynchronous processing.
   await enqueueWhatsAppInboundJob(eventId);
 }

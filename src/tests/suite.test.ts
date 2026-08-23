@@ -1,5 +1,3 @@
-process.env.MOCK_DB = process.env.MOCK_DB ?? "true";
-
 import { calculateCommercialFee } from "@/utils/pricing";
 import { agreementsDb } from "@/lib/agreements-db";
 import { invoicesDb } from "@/lib/invoices-db";

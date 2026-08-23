@@ -10,6 +10,24 @@ jobs:
   audit-and-build:
     name: Build, Typecheck & Validate
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hirego_ci?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/hirego_ci?schema=public
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirego_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hirego_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Codebase
@@ -26,6 +44,9 @@ jobs:
 
       - name: Generate Prisma Client
         run: npx prisma generate
+
+      - name: Apply Prisma Migrations
+        run: npx prisma migrate deploy
 
       - name: Run TypeScript Typecheck
         run: npx tsc --noEmit

@@ -138,7 +138,7 @@ export async function resolveWhatsAppIdentity(waId: string): Promise<ResolvedIde
     await logAuditEvent({
       action: "WHATSAPP_IDENTITY_AMBIGUOUS",
       resource: "WhatsAppIdentity",
-      details: `Phone ${normalizedPhone} matched ${matchingUsers.length} User records`,
+      details: `Multiple user records matched a WhatsApp contact (${matchingUsers.length} records).`,
     });
     return { ...base, status: "ambiguous", waContact: null, user: null, candidateProfileId: null };
   }
@@ -226,7 +226,7 @@ export async function linkContactToUser(
     userId,
     action: "WHATSAPP_CONTACT_LINKED",
     resource: "WhatsAppContact",
-    details: `waId ${waId} linked to user ${userId}`,
+    details: "Verified WhatsApp contact linked to user.",
   });
 }
 

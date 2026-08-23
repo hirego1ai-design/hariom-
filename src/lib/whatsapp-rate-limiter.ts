@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { deleteRedisKey, incrementWithTtl, RedisUnavailableError, resetDevelopmentRedisStore } from "./redis";
 
 export interface RateLimitCheckResult {
@@ -28,13 +29,26 @@ export function cleanWaId(waId: string): string {
   return value;
 }
 
+function waRateKey(waId: string, purpose: "rate" | "otp"): string {
+  const canonicalWaId = cleanWaId(waId);
+  const secret = process.env.RATE_LIMIT_HMAC_SECRET || process.env.INTERNAL_API_KEY;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new RedisUnavailableError("RATE_LIMIT_HMAC_SECRET or INTERNAL_API_KEY is required for production WhatsApp limits.");
+  }
+  const digest = crypto.createHmac("sha256", secret || "hirego-development-rate-limit-key")
+    .update(canonicalWaId)
+    .digest("base64url")
+    .slice(0, 32);
+  return `wa:${purpose}:${digest}`;
+}
+
 /** Meta requests are limited by verified sender ID, never Meta edge IP. */
 export function checkWaRateLimit(waId: string, maxRequests = 20, windowMs = 60_000) {
-  return checkLimit(`wa:rate:${cleanWaId(waId)}`, maxRequests, windowMs);
+  return checkLimit(waRateKey(waId, "rate"), maxRequests, windowMs);
 }
 
 export function checkWaOtpLimit(waId: string, maxAttempts = 5, windowMs = 15 * 60_000) {
-  return checkLimit(`wa:otp:${cleanWaId(waId)}`, maxAttempts, windowMs);
+  return checkLimit(waRateKey(waId, "otp"), maxAttempts, windowMs);
 }
 
 export async function resetWaRateLimiter(waId?: string) {
@@ -42,6 +56,5 @@ export async function resetWaRateLimiter(waId?: string) {
     resetDevelopmentRedisStore();
     return;
   }
-  const clean = cleanWaId(waId);
-  await Promise.all([deleteRedisKey(`wa:rate:${clean}`), deleteRedisKey(`wa:otp:${clean}`)]);
+  await Promise.all([deleteRedisKey(waRateKey(waId, "rate")), deleteRedisKey(waRateKey(waId, "otp"))]);
 }

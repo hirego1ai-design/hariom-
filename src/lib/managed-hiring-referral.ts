@@ -177,7 +177,7 @@ export async function processManagedHiringPlacementReferralReward(
     });
 
     if (!validation.isValid) {
-      logAuditEvent({
+      await logAuditEvent({
         userId: input.actorId || "AUTHORITATIVE_PIPELINE",
         action: "MANAGED_HIRING_REWARD_REJECTED",
         resource: `/requirements/${input.hiringRequirementId}`,
@@ -213,14 +213,14 @@ export async function processManagedHiringPlacementReferralReward(
 
     // 4. Audit Trail Logging
     if (reward && reward.status === ReferralStatus.LOCKED) {
-      logAuditEvent({
+      await logAuditEvent({
         userId: input.actorId || "SYSTEM",
         action: "MANAGED_HIRING_REWARD_LOCKED",
         resource: `/referral-rewards/${reward.id}`,
         details: `HireGo Managed Hiring™ referral reward ${reward.id} (₹5,000) created and LOCKED for ${agreementWarrantyDays}-day replacement warranty. Referrer: ${reward.referrerId}, Company: ${input.companyId}, Req: ${input.hiringRequirementId}`,
       });
     } else if (reward && reward.status === ReferralStatus.LIMIT_REACHED) {
-      logAuditEvent({
+      await logAuditEvent({
         userId: input.actorId || "SYSTEM",
         action: "MANAGED_HIRING_REWARD_LIMIT_REACHED",
         resource: `/requirements/${input.hiringRequirementId}`,
@@ -314,7 +314,7 @@ export async function handleManagedHiringCandidateEarlyExit(
           });
           reversedCount++;
 
-          logAuditEvent({
+          await logAuditEvent({
             userId: input.actorId || "AUTHORITATIVE_WARRANTY_SYSTEM",
             action: "MANAGED_HIRING_REWARD_REVERSED",
             resource: `/referral-rewards/${r.id}`,
@@ -324,7 +324,7 @@ export async function handleManagedHiringCandidateEarlyExit(
           // PAID Reward: Financial Policy Check — Do NOT silently deduct cash
           paidAdjustmentCount++;
 
-          logAuditEvent({
+          await logAuditEvent({
             userId: input.actorId || "FINANCIAL_AUDIT_SYSTEM",
             action: "REFERRAL_FINANCIAL_ADJUSTMENT_REQUIRED",
             resource: `/referral-rewards/${r.id}`,
@@ -364,7 +364,7 @@ export async function handleManagedHiringCandidateEarlyExit(
             memoryStore.set(id, r);
             reversedCount++;
 
-            logAuditEvent({
+            await logAuditEvent({
               userId: input.actorId || "AUTHORITATIVE_WARRANTY_SYSTEM",
               action: "MANAGED_HIRING_REWARD_REVERSED",
               resource: `/referral-rewards/${id}`,
@@ -372,7 +372,7 @@ export async function handleManagedHiringCandidateEarlyExit(
             });
           } else if (r.status === ReferralStatus.PAID) {
             paidAdjustmentCount++;
-            logAuditEvent({
+            await logAuditEvent({
               userId: input.actorId || "FINANCIAL_AUDIT_SYSTEM",
               action: "REFERRAL_FINANCIAL_ADJUSTMENT_REQUIRED",
               resource: `/referral-rewards/${id}`,
@@ -457,7 +457,7 @@ export async function reconcileManagedHiringWarrantyLocks(): Promise<ReconcileWa
           unlockedAt: now.toISOString(),
         });
 
-        logAuditEvent({
+        await logAuditEvent({
           userId: "SCHEDULED_RECONCILIATION_CRON",
           action: "REFERRAL_WARRANTY_LOCK_EXPIRED_UNLOCKED",
           resource: `/referral-rewards/${rew.id}`,
@@ -503,7 +503,7 @@ export async function reconcileManagedHiringWarrantyLocks(): Promise<ReconcileWa
               unlockedAt: now.toISOString(),
             });
 
-            logAuditEvent({
+            await logAuditEvent({
               userId: "SCHEDULED_RECONCILIATION_CRON",
               action: "REFERRAL_WARRANTY_LOCK_EXPIRED_UNLOCKED",
               resource: `/referral-rewards/${rew.id}`,
