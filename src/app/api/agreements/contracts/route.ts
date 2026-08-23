@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 // Guard: Tenant isolation enforced via authoritative EmployerProfile.companyId → Company FK boundary
 export async function GET(req: NextRequest) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     const { searchParams } = new URL(req.url);
     const company = searchParams.get("company");
     const status = searchParams.get("status");
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const body = await req.json();
 
     const targetCompany = await prisma.company.findUnique({ where: { id: String(body.companyId || "") } });

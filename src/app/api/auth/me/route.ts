@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 
 export async function GET(request: Request) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
 
   if (!session) {
     return NextResponse.json(

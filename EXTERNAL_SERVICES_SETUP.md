@@ -1,75 +1,79 @@
-# External Services Setup
+# HireGo external services setup
 
-This document is intentionally based on the environment variables used by the current code. Do not add credentials to Git, local screenshots, or chat. Add secrets in Vercel **Production** first; use separate resources and values for Preview and Development when those environments are used.
+This document reflects the environment variables currently read by the application. Add secrets only in Vercel's encrypted environment-variable settings; never commit them to `.env`, Git, or a browser bundle.
 
-## 1. Upstash Redis
+## 1. PostgreSQL (Supabase or another managed PostgreSQL provider)
 
-| Item | Value |
-| --- | --- |
-| Create | An Upstash Redis database in the region nearest to the Vercel production region. |
-| Variables | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
-| Secret/public | Both are **secret**. |
-| Vercel environment | Production, Preview, and Development with different databases/tokens. |
-| Verify | Deploy, sign in, then make more than the configured number of requests to a rate-limited endpoint. A `429` must include `Retry-After`. Logout must invalidate the old cookie; password reset must invalidate all old cookies. |
-| Blocked verification enabled | Distributed rate-limit, session-revocation, OTP/WhatsApp limiter, concurrency, and multi-instance tests. |
+Create one production PostgreSQL database and a separate staging database. The application uses Prisma and connects through `DATABASE_URL`.
 
-## 2. Cloudflare R2 or S3-compatible private storage
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | Yes | Production, Preview/Staging | Pooled PostgreSQL connection string used by the app. |
+| `DIRECT_URL` | Yes | Production, Preview/Staging | Direct PostgreSQL connection string used by Prisma migrations. |
 
-| Item | Value |
-| --- | --- |
-| Create | A private bucket, for example `hirego-production-private`. Keep public access disabled. Create a least-privilege object read/write/delete API token for that bucket only. |
-| Variables | `S3_BUCKET_NAME`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, optional `S3_FORCE_PATH_STYLE`, `S3_SIGNED_URL_TTL_SECONDS` |
-| Secret/public | Bucket, region, endpoint, force-path-style and TTL are configuration values; access key ID and secret access key are **secret**. |
-| Vercel environment | Production, Preview, and Development with separate buckets/credentials. |
-| Verify | Upload a valid document while signed in. Its returned URL must be `/api/files/<id>`, must reject another tenant with `403`, and in production must redirect only an authorized user to a short-lived signed object URL. Confirm the bucket has no public listing. |
-| Blocked verification enabled | R2/S3 upload, signed-download, delete, retention, and cross-tenant storage tests. |
+After adding the values, run `npx prisma migrate deploy` against the intended database. This makes the tenant-ownership, application uniqueness, AI usage, and queue schema changes live. The CI database is disposable and does not update production.
 
-## 3. Upstash QStash
+Verify: sign in, create a test candidate and application, then check that the single application is persisted. The real database concurrency test becomes runnable in CI when `HIREGO_TEST_DATABASE=1` points at its disposable database.
 
-| Item | Value |
-| --- | --- |
-| Create | An Upstash QStash account/project. Use the QStash token for the same deployment environment. |
-| Variables | `QSTASH_TOKEN`, `APP_URL`, `INTERNAL_API_KEY` |
-| Secret/public | `QSTASH_TOKEN` and `INTERNAL_API_KEY` are **secret**. `APP_URL` is configuration, not secret. |
-| Vercel environment | Production, Preview, and Development. `APP_URL` must be that environment's HTTPS base URL with no trailing slash. |
-| Verify | Configure the Meta webhook, send a test WhatsApp message, and confirm an inbound event becomes `PROCESSED`; temporarily cause a transient send failure and confirm `RETRY` then bounded retry/`FAILED`. The worker endpoint must reject a request without the internal key. |
-| Blocked verification enabled | Durable WhatsApp dispatch, retry, duplicate delivery, and dead-letter operational tests. |
+## 2. Upstash Redis
 
-## 4. Supabase Realtime (optional current signalling upgrade)
+Create an Upstash Redis database in the region nearest the application. It is required in production for rate limits, session revocation, and distributed state.
 
-The current secure fallback uses shared PostgreSQL signaling with short-lived records. A Supabase Realtime implementation is not yet selected, so no code path consumes these variables today.
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `UPSTASH_REDIS_REST_URL` | Yes | Production, Preview/Staging | Upstash REST endpoint. |
+| `UPSTASH_REDIS_REST_TOKEN` | Yes | Production, Preview/Staging | Upstash REST token. |
+| `RATE_LIMIT_HMAC_SECRET` | Yes | Production, Preview/Staging | Independent high-entropy HMAC secret for privacy-preserving rate-limit keys. |
 
-| Item | Value |
-| --- | --- |
-| Create | If lower-latency realtime signaling is required, create/use the existing Supabase project and enable Realtime for a deliberately designed, RLS-protected signaling channel. |
-| Reserved variables | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
-| Secret/public | `SUPABASE_SERVICE_ROLE_KEY` is **secret**; `SUPABASE_URL` is configuration. |
-| Vercel environment | Production and separate Preview/Development projects. |
-| Verify | After a dedicated Realtime adapter is implemented, verify both authorized participants receive signals and an unrelated user receives none. |
-| Blocked verification enabled | Future managed-Realtime end-to-end test. |
+Verify: call a protected endpoint with a valid session, sign out, then confirm the same token is rejected. The app fails closed if Redis is unavailable in production.
+
+## 3. Cloudflare R2 or S3-compatible private object storage
+
+Create a private bucket for uploads and media. The app uses the S3-compatible API; do not make the bucket public.
+
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `S3_BUCKET_NAME` | No | Production, Preview/Staging | Private bucket name. |
+| `S3_REGION` | No | Production, Preview/Staging | Provider region; use `auto` for R2 when applicable. |
+| `S3_ACCESS_KEY_ID` | Yes | Production, Preview/Staging | Access key limited to this bucket. |
+| `S3_SECRET_ACCESS_KEY` | Yes | Production, Preview/Staging | Matching secret key. |
+| `S3_ENDPOINT` | No | Production, Preview/Staging | S3-compatible endpoint; required for R2. |
+| `S3_FORCE_PATH_STYLE` | No | Production, Preview/Staging | Set only if the provider requires path-style addressing. |
+| `S3_SIGNED_URL_TTL_SECONDS` | No | Production, Preview/Staging | Private-download URL lifetime; default is 300 seconds. |
+
+Verify: upload a non-sensitive test file through the app, open its signed URL while authenticated, and confirm the direct public bucket URL is denied.
+
+## 4. QStash
+
+Create an Upstash QStash project for durable WhatsApp background dispatch and retry triggering.
+
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `QSTASH_TOKEN` | Yes | Production, Preview/Staging | QStash API token. |
+| `APP_URL` | No | Production, Preview/Staging | Public server origin used to construct dispatch callbacks. |
+
+Verify: send a test WhatsApp event, confirm a QStash message is created, and confirm the signed callback reaches the application once. The WhatsApp queue lifecycle test becomes externally verifiable after these values and WhatsApp credentials are present.
 
 ## 5. TURN for WebRTC interviews
 
-| Item | Value |
-| --- | --- |
-| Create | A TURN provider account or a managed coturn deployment with TLS and time-limited credentials. |
-| Variables | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` |
-| Secret/public | All are **secret** except the non-sensitive hostname portion of the URL; keep the full URL in protected configuration. |
-| Vercel environment | Production, Preview, and Development with environment-appropriate credentials. |
-| Verify | Deploy production, join the same authorized interview from two different networks/NATs, and confirm media connects via relay when direct P2P is blocked. Missing TURN settings intentionally make a production interview room unavailable. |
-| Blocked verification enabled | Cross-NAT WebRTC/TURN connectivity test. |
+Provision a managed TURN service or a secured coturn deployment with TLS and time-limited credentials where supported. TURN credentials must not be published as browser environment variables; the authorized interview-room endpoint returns them only to permitted participants.
 
-## 6. Staging and load testing
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `TURN_URL` | No | Production, Preview/Staging | `turn:` or `turns:` server URL. |
+| `TURN_USERNAME` | Yes | Production, Preview/Staging | TURN user name. |
+| `TURN_CREDENTIAL` | Yes | Production, Preview/Staging | TURN credential. |
 
-| Item | Value |
-| --- | --- |
-| Create | A staging Vercel project connected to a staging Postgres database, separate Redis, storage bucket, QStash token, and non-production WhatsApp/AI/payment credentials. |
-| Variables | The same variables above, plus `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`, WhatsApp variables, and payment secrets when each provider is deliberately enabled. |
-| Secret/public | Database URLs, all secrets, and provider tokens are **secret**. `NEXT_PUBLIC_APP_URL` and `APP_URL` are configuration. |
-| Vercel environment | Preview or a dedicated Staging project; never reuse production secrets. |
-| Verify | Run the staged 100 → 250 → 500 → 1000-user scenarios only after smoke tests and provider health checks pass. Record actual latency/error/DB-pool data; do not claim a capacity number without this evidence. |
-| Blocked verification enabled | Full provider integration and load-test evidence. |
+Verify: run a two-party interview while one participant is on a restrictive mobile or office network. In production, the room endpoint refuses to start if TURN is not configured.
 
-## Required application secrets not tied to a new provider
+## 6. Supabase Realtime
 
-Set `JWT_SECRET` or `NEXTAUTH_SECRET` to a distinct high-entropy secret, and set a separate high-entropy `INTERNAL_API_KEY`. Configure actual provider variables only for providers intentionally enabled. Production checks fail closed for missing Redis, private storage, QStash, and TURN at the relevant protected operation rather than silently using local memory.
+The present interview signaling implementation persists signals in PostgreSQL and does not yet use a Supabase Realtime client. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` remain listed for planned Realtime work but are not consumed by application code, so do not create or add them merely for this version.
+
+When Realtime is implemented, use a server-only service-role key and a separate public anonymous key only if the browser client genuinely requires it, protected by Row Level Security. A code change will define the exact variables and verification test first.
+
+## Common application secrets
+
+Add these separately for every production-like environment: `NEXTAUTH_SECRET`, `JWT_SECRET`, `INTERNAL_API_KEY`, `EMAIL_CONFIG_ENCRYPTION_KEY`, payment-provider credentials, email-provider credentials, `WHATSAPP_API_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, and `OPENAI_API_KEY` if AI features are enabled. All are secrets except provider identifiers such as a phone-number ID.
+
+Set `NEXT_PUBLIC_APP_URL` to the public application URL. It is intentionally public and must contain no credential.

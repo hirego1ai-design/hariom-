@@ -19,7 +19,7 @@ export class PayUGateway implements PaymentGateway {
       throw new Error("PayU merchant credentials missing in production environment.");
     }
 
-    const gatewayOrderId = `payu_tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const gatewayOrderId = `payu_tx_${crypto.randomUUID()}`;
     let hash = "";
 
     if (merchantKey && merchantSalt) {
@@ -42,7 +42,7 @@ export class PayUGateway implements PaymentGateway {
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
-    const gatewayTxId = jsonPayload?.txnid || jsonPayload?.mihpayid || `payu_${Date.now()}`;
+    const gatewayTxId = jsonPayload?.txnid || jsonPayload?.mihpayid || "";
     const status = jsonPayload?.status === "success" ? "SUCCESS" : "FAILED";
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
 

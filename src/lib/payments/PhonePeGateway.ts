@@ -20,7 +20,7 @@ export class PhonePeGateway implements PaymentGateway {
       throw new Error("PhonePe merchant credentials missing in production environment.");
     }
 
-    const merchantTransactionId = `phonepe_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const merchantTransactionId = `phonepe_${crypto.randomUUID()}`;
     const hostUrl = process.env.NEXT_PUBLIC_APP_URL || "https://hirego.ai";
 
     const payloadObj = {
@@ -125,7 +125,7 @@ export class PhonePeGateway implements PaymentGateway {
     }
 
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
-    const gatewayTxId = jsonPayload?.data?.transactionId || `phonepe_${Date.now()}`;
+    const gatewayTxId = jsonPayload?.data?.transactionId || "";
     const status = jsonPayload?.code === "PAYMENT_SUCCESS" ? "SUCCESS" : "FAILED";
     const gatewayOrderId = jsonPayload?.data?.merchantTransactionId;
 

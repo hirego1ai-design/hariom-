@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const invoices = await invoicesDb.getInvoices();
     const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
     const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const body = await req.json();
 
     if (body.action === "mark_paid") {

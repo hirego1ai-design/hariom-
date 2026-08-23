@@ -17,7 +17,7 @@ const feedbackSchema = z.object({
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const { id } = await params;

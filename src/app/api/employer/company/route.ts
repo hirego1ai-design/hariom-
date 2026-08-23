@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { getCurrentSession, handleApiError, jsonError, type UserSession } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
-const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
+const allowMockFallbacks = process.env.NODE_ENV === "development" && process.env.MOCK_DB === "true";
+
+function isEmployerSession(session: UserSession | null): session is UserSession {
+  return !!session && (session.role === "EMPLOYER" || session.role === "RECRUITER");
+}
 
 // Fallback in-memory company store
 let inMemoryCompany = {
@@ -18,9 +22,9 @@ let inMemoryCompany = {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = await getCurrentSession(req.headers);
+    if (!isEmployerSession(session)) {
+      return jsonError("Employer or recruiter access required", 403);
     }
 
     try {
@@ -68,9 +72,9 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = await getCurrentSession(req.headers);
+    if (!isEmployerSession(session)) {
+      return jsonError("Employer or recruiter access required", 403);
     }
 
     const body = await req.json();
@@ -107,6 +111,10 @@ export async function PUT(req: NextRequest) {
       if (!allowMockFallbacks) {
         throw new Error("Failed to update employer company profile.");
       }
+    }
+
+    if (!allowMockFallbacks) {
+      return jsonError("Employer company profile not found.", 404);
     }
 
     inMemoryCompany = {

@@ -7,6 +7,19 @@ import { MemoryScopeLevel } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { dispatchAiTask } from '@/utils/aiRouter';
 import { validateTenantAccess, TenantAccessError } from '../security/TenantContext';
+import { z } from 'zod';
+
+const resumeEvaluationSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  summary: z.string().trim().min(1).max(5_000),
+  matchingSkills: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+}).strict();
+
+const mockInterviewSchema = z.object({
+  nextQuestion: z.string().trim().min(1).max(5_000),
+  evalScore: z.number().int().min(0).max(100).optional(),
+  feedback: z.string().trim().min(1).max(5_000).optional(),
+}).strict();
 
 // 1. Resume Evaluator Agent (Resume HireScore Evaluator)
 export class ResumeEvaluatorAgent extends BaseAgent {
@@ -19,8 +32,11 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
-    const candidateProfileId = (taskInput.candidateProfileId as string) || 'cand-default';
-    const jobId = (taskInput.jobId as string) || 'job-default';
+    const candidateProfileId = taskInput.candidateProfileId;
+    const jobId = taskInput.jobId;
+    if (typeof candidateProfileId !== 'string' || typeof jobId !== 'string') {
+      throw new TenantAccessError('candidateProfileId and jobId are required.');
+    }
 
     // Fetch Candidate Profile and Job Listing from database
     let profileData = null;
@@ -38,47 +54,44 @@ export class ResumeEvaluatorAgent extends BaseAgent {
       }
     }
 
-    if (jobData && jobData.companyId) {
-      validateTenantAccess(context.tenantContext, jobData.companyId);
-    } else if (process.env.NODE_ENV === "production" && !jobData) {
-      throw new TenantAccessError(`Job listing not found: ${jobId}`);
-    }
+    if (!profileData || !jobData?.companyId) throw new TenantAccessError('Candidate profile or job listing was not found.');
+    validateTenantAccess(context.tenantContext, jobData.companyId);
 
     const companyId = context.tenantContext.companyId;
-    if (companyId && profileData) {
-      // Authorize candidate access: verify candidate has applied to a job belonging to this employer company
+    if (companyId) {
+      const isTrustedSubmission = taskInput.authorizationContext === 'APPLICATION_SUBMISSION';
+      if (isTrustedSubmission) {
+        if (context.tenantContext.userRole !== 'CANDIDATE' || profileData.userId !== context.tenantContext.userId) {
+          throw new TenantAccessError('Application submission candidate ownership could not be verified.');
+        }
+      } else {
+        // Employer-side evaluation still requires a persisted, tenant-scoped
+        // candidate relationship.  The first-application path above is the
+        // only deliberate exception.
       let hasAuthorizedRelationship = false;
-      try {
         const application = await prisma.application.findFirst({
-          where: {
-            candidateProfileId,
-            job: { companyId },
-          },
+          where: { candidateProfileId, job: { companyId } },
+          select: { id: true },
         });
         hasAuthorizedRelationship = !!application;
-      } catch (error) {
-        if (process.env.NODE_ENV === "production") {
-          throw error;
+        if (!hasAuthorizedRelationship) {
+          throw new TenantAccessError(
+            `Candidate profile ${candidateProfileId} is not authorized for tenant ${companyId}. An active application is required.`,
+          );
         }
-      }
-
-      if (process.env.NODE_ENV === "production" && !hasAuthorizedRelationship) {
-        throw new TenantAccessError(
-          `Candidate profile ${candidateProfileId} is not authorized for tenant ${companyId}. An active application is required.`
-        );
       }
     }
 
-    const candidateSkills = profileData?.skills || ['TypeScript', 'React', 'Node.js', 'PostgreSQL'];
-    const jobRequirements = jobData?.requirements || ['TypeScript', 'Next.js', 'AI Architecture'];
-    const headline = profileData?.headline || 'Senior Full Stack Software Engineer';
+    const candidateSkills = Array.isArray(profileData.skills) ? profileData.skills : [];
+    const jobRequirements = Array.isArray(jobData.requirements) ? jobData.requirements : [];
+    const headline = profileData.headline || '';
 
     // Execute LLM via ModelRouter with multi-provider fallback
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
       fn: async (provider, model) => {
         if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
-        const prompt = `Evaluate candidate resume: "${headline}" with skills [${candidateSkills.join(', ')}] against job requirements [${jobRequirements.join(', ')}]. Output score (0-100) and skills matching.`;
+        const prompt = `Evaluate candidate resume: "${headline}" with skills [${candidateSkills.join(', ')}] against job requirements [${jobRequirements.join(', ')}]. Return strict JSON only: {"score": integer 0-100, "summary": string, "matchingSkills": string[]}.`;
         const aiTask = await dispatchAiTask({
           task: 'RESUME_SCORE',
           prompt,
@@ -88,12 +101,11 @@ export class ResumeEvaluatorAgent extends BaseAgent {
       },
     });
 
-    let score = 88;
+    let evaluation: z.infer<typeof resumeEvaluationSchema>;
     try {
-      const parsed = JSON.parse(result);
-      if (typeof parsed.score === 'number') score = parsed.score;
-    } catch {
-      score = 85;
+      evaluation = resumeEvaluationSchema.parse(JSON.parse(result));
+    } catch (error) {
+      throw new Error(`Resume evaluator returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
     }
 
     // Write DOMAIN memory layer (computed score)
@@ -104,17 +116,17 @@ export class ResumeEvaluatorAgent extends BaseAgent {
       companyId: context.tenantContext.companyId,
       agentId: this.agentId,
       key: 'latest_hirego_score',
-      value: { score, evaluatedAt: new Date().toISOString() },
+      value: { score: evaluation.score, evaluatedAt: new Date().toISOString() },
     });
 
     return {
       agentId: this.agentId,
       candidateProfileId,
       jobId,
-      candidateScore: score,
+      candidateScore: evaluation.score,
       extractedSkills: candidateSkills,
-      matchingSkills: candidateSkills.filter((s) => jobRequirements.includes(s)),
-      summary: `HireGo Score ${score}/100. Candidate demonstrates strong technical alignment.`,
+      matchingSkills: evaluation.matchingSkills || candidateSkills.filter((s) => jobRequirements.includes(s)),
+      summary: evaluation.summary,
       evaluatedAt: new Date().toISOString(),
     };
   }
@@ -131,7 +143,8 @@ export class MockInterviewCopilotAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
-    const candidateProfileId = (taskInput.candidateProfileId as string) || 'cand-default';
+    const candidateProfileId = taskInput.candidateProfileId;
+    if (typeof candidateProfileId !== 'string') throw new Error('candidateProfileId is required.');
 
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'mock-interview',
@@ -139,20 +152,26 @@ export class MockInterviewCopilotAgent extends BaseAgent {
         if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
         const aiTask = await dispatchAiTask({
           task: 'INTERVIEW_EVALUATION',
-          prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Candidate profile ID: ${candidateProfileId}`,
+          prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Candidate profile ID: ${candidateProfileId}. Return strict JSON only: {"nextQuestion": string, "evalScore": integer 0-100 optional, "feedback": string optional}.`,
           primaryProvider: provider,
         });
         return aiTask.resultText;
       },
     });
 
+    let interview: z.infer<typeof mockInterviewSchema>;
+    try {
+      interview = mockInterviewSchema.parse(JSON.parse(result));
+    } catch (error) {
+      throw new Error(`Mock interview returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
+    }
+
     return {
       agentId: this.agentId,
       status: 'SUCCESS',
-      nextQuestion: 'How do you design deterministic outbox processing with FOR UPDATE SKIP LOCKED in PostgreSQL?',
-      evalScore: 92,
-      feedback: 'Excellent response demonstrating clear understanding of database concurrency controls.',
-      llmOutput: result,
+      nextQuestion: interview.nextQuestion,
+      evalScore: interview.evalScore ?? null,
+      feedback: interview.feedback ?? null,
     };
   }
 }
@@ -214,13 +233,17 @@ export class CommunicationCoachAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
-    const transcript = (taskInput.transcript as string) || 'Um, I think that building microservices with Node.js and TypeScript is, uh, very efficient for scalability.';
+    const transcript = taskInput.transcript;
+    const durationSeconds = taskInput.durationSeconds;
+    if (typeof transcript !== 'string' || !transcript.trim() || typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      throw new Error('A non-empty transcript and measured durationSeconds are required for communication analysis.');
+    }
     
     // Count filler words
     const fillerRegex = /\b(um|uh|like|you know|basically|so)\b/gi;
     const matches = transcript.match(fillerRegex) || [];
-    const wordCount = transcript.split(/\s+/).length;
-    const wpm = Math.round((wordCount / 30) * 60); // Simulated 30 sec sample
+    const wordCount = transcript.trim().split(/\s+/).length;
+    const wpm = Math.round((wordCount / durationSeconds) * 60);
 
     const clarityScore = Math.max(50, 100 - matches.length * 10);
 

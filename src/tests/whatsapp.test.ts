@@ -452,6 +452,14 @@ export async function runWhatsAppTestSuite(): Promise<{
       await prisma.whatsAppInboundEvent.update({ where: { id: earlyRetryEvent.id }, data: { nextAttemptAt: new Date(Date.now() - 1) } });
       const dueInvocation = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
       if (dueInvocation) await markWhatsAppJobProcessed(dueInvocation.id);
+      console.log("WA-50 Debug Log:", {
+        earlyInvocationIsNull: earlyInvocation === null,
+        earlyInvocation,
+        retryBeforeDueStatus: retryBeforeDue?.processingStatus,
+        retryBeforeDueNextAttemptAt: retryBeforeDue?.nextAttemptAt,
+        dueInvocationIsNotNull: dueInvocation !== null,
+        dueInvocation
+      });
       assert("WA-50: Early RETRY invocation remains recoverable and cannot get stuck", earlyInvocation === null && retryBeforeDue?.processingStatus === "RETRY" && retryBeforeDue.nextAttemptAt !== null && dueInvocation !== null, "an early delivery does not steal or fail the retry; the event remains claimable once its scheduled time arrives");
     } catch (error: any) {
       assert("WA-44–WA-50: Durable lifecycle integration exception", false, error.message);

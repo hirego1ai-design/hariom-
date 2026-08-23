@@ -26,7 +26,7 @@ const MIME_TO_EXT_MAP: Record<string, string[]> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }

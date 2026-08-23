@@ -129,8 +129,9 @@ class AgreementsStore {
           };
         });
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.requirements;
   }
@@ -176,8 +177,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.requirements.find((r) => r.id === id || r.referenceCode === id) || null;
   }
@@ -228,8 +230,9 @@ class AgreementsStore {
       });
       newReq.createdAt = r.createdAt.toISOString();
       newReq.updatedAt = r.updatedAt.toISOString();
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     this.requirements.unshift(newReq);
@@ -292,8 +295,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     const req = this.requirements.find((r) => r.id === id || r.referenceCode === id);
@@ -336,8 +340,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         }));
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     if (includeArchived) return this.templates;
     return this.templates.filter((t) => !t.isArchived);
@@ -371,8 +376,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.templates.find((t) => t.id === idOrSlug || t.slug === idOrSlug) || null;
   }
@@ -413,8 +419,9 @@ class AgreementsStore {
       });
       newTpl.createdAt = r.createdAt.toISOString();
       newTpl.updatedAt = r.updatedAt.toISOString();
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     this.templates.unshift(newTpl);
@@ -462,8 +469,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     const tpl = this.templates.find((t) => t.id === id);
@@ -541,8 +549,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         }));
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.agreements;
   }
@@ -587,8 +596,9 @@ class AgreementsStore {
           updatedAt: r.updatedAt.toISOString(),
         };
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.agreements.find((a) => a.id === id || a.agreementNumber === id) || null;
   }
@@ -637,8 +647,9 @@ class AgreementsStore {
       });
       newAgr.createdAt = r.createdAt.toISOString();
       newAgr.updatedAt = r.updatedAt.toISOString();
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     this.agreements.unshift(newAgr);
@@ -701,8 +712,9 @@ class AgreementsStore {
 
         return this.getAgreementById(r.id);
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     const agr = this.agreements.find((a) => a.id === id || a.agreementNumber === id);
@@ -738,9 +750,9 @@ class AgreementsStore {
       const agr = await prisma.commercialAgreement.findFirst({
         where: { OR: [{ id }, { agreementNumber: id }] }
       });
-      if (agr) {
-        const r = await prisma.commercialAgreement.update({
-          where: { id: agr.id },
+      if (agr && agr.status === "SENT_TO_EMPLOYER") {
+        const accepted = await prisma.commercialAgreement.updateMany({
+          where: { id: agr.id, status: "SENT_TO_EMPLOYER" },
           data: {
             status: "ACTIVE",
             signedByName: signerName,
@@ -749,6 +761,8 @@ class AgreementsStore {
             signerIpAddress: ipAddress
           }
         });
+        if (accepted.count !== 1) return null;
+        const r = await prisma.commercialAgreement.findUniqueOrThrow({ where: { id: agr.id } });
 
         // Sync local memory fallback
         const idx = this.agreements.findIndex(a => a.id === agr.id || a.agreementNumber === agr.agreementNumber);
@@ -774,8 +788,9 @@ class AgreementsStore {
 
         return this.getAgreementById(r.id);
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     const agr = this.agreements.find((a) => a.id === id || a.agreementNumber === id);
@@ -833,8 +848,9 @@ class AgreementsStore {
 
         return this.getAgreementById(r.id);
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     const agr = this.agreements.find((a) => a.id === id || a.agreementNumber === id);
@@ -871,8 +887,9 @@ class AgreementsStore {
           timestamp: r.createdAt.toISOString()
         }));
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
     return this.events.filter((e) => e.agreementId === agreementId);
   }
@@ -899,8 +916,9 @@ class AgreementsStore {
         }
       });
       newEvent.timestamp = r.createdAt.toISOString();
-    } catch {
-      // Fallback
+    } catch (error) {
+      // Development/test fallback only.
+      if (process.env.NODE_ENV === "production") throw error;
     }
 
     this.events.unshift(newEvent);

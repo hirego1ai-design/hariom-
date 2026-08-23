@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const stats = await getAiUsageStats();
     return NextResponse.json({
       success: true,

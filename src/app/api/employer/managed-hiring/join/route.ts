@@ -7,7 +7,7 @@ import { invoicesDb } from "@/lib/invoices-db";
 const schema = z.object({ applicationId: z.string().min(1), agreementId: z.string().min(1), candidateName: z.string().min(1), jobTitle: z.string().min(1), annualCtc: z.number().positive(), feePercentage: z.number().positive().max(100).default(8.33), taxRatePct: z.number().min(0).max(100).default(18), idempotencyKey: z.string().min(8) });
 
 export async function POST(req: NextRequest) {
-  const session = getCurrentSession(req.headers);
+  const session = await getCurrentSession(req.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const body = schema.parse(await req.json());

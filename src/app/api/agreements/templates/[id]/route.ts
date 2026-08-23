@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireEmployerOrAdminSession(req);
+    await requireEmployerOrAdminSession(req);
     const { id } = await params;
     const template = await agreementsDb.getTemplateById(id);
     if (!template) {
@@ -25,7 +25,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -49,7 +49,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const { id } = await params;
     const { action } = await req.json();
 
@@ -76,7 +76,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const { id } = await params;
     const archived = await agreementsDb.archiveTemplate(id);
     if (!archived) {

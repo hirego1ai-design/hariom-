@@ -71,7 +71,7 @@ export const jobBoostLogs = [
 ];
 
 export async function GET(req: NextRequest) {
-  requireAdminSession(req);
+  await requireAdminSession(req);
   return NextResponse.json({
     success: true,
     summary: jobBoostSummary,

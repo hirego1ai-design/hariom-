@@ -5,18 +5,18 @@ import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const memoryUsage = process.memoryUsage();
     
     // DB health check
-    let dbStatus = "HEALTHY";
+    let dbStatus: "HEALTHY" | "UNAVAILABLE" = "HEALTHY";
     let dbLatencyMs = 0;
     const dbStartTime = Date.now();
     try {
       await prisma.$queryRaw`SELECT 1`;
       dbLatencyMs = Date.now() - dbStartTime;
     } catch {
-      dbStatus = "DEGRADED (In-Memory Fallback Active)";
+      dbStatus = "UNAVAILABLE";
       dbLatencyMs = Date.now() - dbStartTime;
     }
 
@@ -26,35 +26,30 @@ export async function GET(req: NextRequest) {
         type: "DATABASE",
         provider: "Supabase (AWS ap-south-1)",
         status: dbStatus,
-        latencyMs: Math.max(1, dbLatencyMs),
-        activeConnections: 1,
-        maxConnections: 100,
-        details: dbStatus.includes("HEALTHY") ? "PgBouncer pooler active & connected" : "Local in-memory fallback active",
+        latencyMs: dbLatencyMs,
+        details: dbStatus === "HEALTHY" ? "Database query succeeded." : "Database query failed; no in-memory fallback is used.",
       },
       {
         name: "Cloudflare R2 Object Storage",
         type: "STORAGE",
         provider: "Cloudflare R2",
-        status: process.env.R2_ACCESS_KEY_ID ? "HEALTHY" : "CONFIGURED (Pending Bucket Setup)",
-        latencyMs: 38,
-        bucketName: process.env.R2_BUCKET_NAME || "hirego-production-assets",
-        details: "Edge CDN asset bucket integration",
+        status: process.env.S3_BUCKET_NAME && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
+        bucketName: process.env.S3_BUCKET_NAME || null,
+        details: "Credentials are configured; a storage probe is not performed by this endpoint.",
       },
       {
         name: "Upstash Redis Queue & Cache",
         type: "CACHE",
         provider: "Upstash Redis",
-        status: process.env.UPSTASH_REDIS_REST_URL ? "HEALTHY" : "CONFIGURED",
-        latencyMs: 8,
+        status: process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? "CONFIGURED" : "NOT_CONFIGURED",
         memoryUsedMb: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-        details: "Rate limiting & session cache",
+        details: "Credentials are configured; a Redis probe is not performed by this endpoint.",
       },
       {
         name: "Node.js Compute Runtime",
         type: "COMPUTE",
         provider: "Next.js Engine",
         status: "HEALTHY",
-        latencyMs: 2,
         uptimeSeconds: Math.round(process.uptime()),
         memoryHeapMb: Math.round(memoryUsage.heapUsed / 1024 / 1024),
         details: `Node.js runtime active (${Math.round(memoryUsage.rss / 1024 / 1024)}MB RSS)`,
@@ -62,19 +57,16 @@ export async function GET(req: NextRequest) {
       {
         name: "Multi-LLM Router Gateway",
         type: "AI_GATEWAY",
-        provider: "OpenAI + Fallback Gateway",
-        status: "HEALTHY",
-        latencyMs: 120,
-        fallbackChainActive: true,
-        details: process.env.OPENAI_API_KEY ? "Live API Key Active" : "Intelligent Local Fallback Gateway Active",
+        provider: "OpenAI",
+        status: process.env.OPENAI_API_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
+        details: process.env.OPENAI_API_KEY ? "API key is configured; no model call is made by this endpoint." : "No AI provider is configured.",
       },
     ];
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      overallStatus: dbStatus.includes("HEALTHY") ? "HEALTHY" : "OPERATIONAL",
-      uptimePercent: 99.98,
+      overallStatus: dbStatus === "HEALTHY" ? "HEALTHY" : "DEGRADED",
       services,
     });
   } catch (error) {

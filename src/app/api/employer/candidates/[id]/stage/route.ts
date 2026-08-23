@@ -5,7 +5,7 @@ import { getCurrentSession } from "@/lib/auth";
 
 const schema = z.object({ stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"]) });
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = getCurrentSession(req.headers);
+  const session = await getCurrentSession(req.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const { id } = await params;

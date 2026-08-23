@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
-    requireEmployerOrAdminSession(req);
+    await requireEmployerOrAdminSession(req);
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get("includeArchived") === "true";
     const templates = await agreementsDb.getTemplates(includeArchived);
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const body = await req.json();
 
     if (!body.name || !body.category) {

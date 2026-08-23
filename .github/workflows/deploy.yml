@@ -56,6 +56,8 @@ jobs:
 
       - name: Run Automated Suite Tests
         run: npm test
+        env:
+          HIREGO_TEST_DATABASE: "1"
 
       - name: Build Next.js Standalone Production Output
         run: npm run build

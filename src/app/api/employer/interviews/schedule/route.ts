@@ -22,7 +22,7 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const body = schema.parse(await request.json());

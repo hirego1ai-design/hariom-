@@ -56,7 +56,7 @@ export class RazorpayGateway implements PaymentGateway {
     }
 
     // Sandbox / Test fallback order
-    const mockGatewayOrderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const mockGatewayOrderId = `order_rzp_${crypto.randomUUID()}`;
     return {
       success: true,
       gateway: "RAZORPAY",
@@ -119,7 +119,7 @@ export class RazorpayGateway implements PaymentGateway {
 
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const entity = jsonPayload?.payload?.payment?.entity || jsonPayload;
-    const gatewayTxId = entity?.id || `pay_rzp_${Date.now()}`;
+    const gatewayTxId = entity?.id || "";
     const status = entity?.status === "captured" || jsonPayload?.event === "payment.captured" ? "SUCCESS" : "FAILED";
     const gatewayOrderId = entity?.order_id || jsonPayload?.order_id || jsonPayload?.payload?.payment?.entity?.order_id;
 

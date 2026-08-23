@@ -18,7 +18,7 @@ const jobSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session || (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN")) {
       throw new ApiError("Employer, recruiter, or administrator access required.", 403);
     }
@@ -43,10 +43,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     await enforceRateLimit(request, "employer_jobs_post");
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
 
-    if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
-      throw new ApiError("Forbidden: Employer or Admin role required.", 403);
+    if (!session || (session.role !== "EMPLOYER" && session.role !== "RECRUITER")) {
+      throw new ApiError("Forbidden: Employer or recruiter role required.", 403);
     }
 
     // Resolve authoritative companyId

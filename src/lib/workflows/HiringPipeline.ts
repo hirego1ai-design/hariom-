@@ -3,7 +3,6 @@ import { ExecutionLoop } from '../agents/ExecutionLoop';
 import { TenantContext } from '../security/TenantContext';
 import { RbacGuard } from '../security/RbacGuard';
 import { OutboxPublisher } from '../events/Outbox';
-import { TraceRecorder } from '../telemetry/TraceRecorder';
 
 export interface HiringPipelineInput {
   tenantContext: TenantContext;
@@ -166,20 +165,6 @@ export class HiringPipeline {
       correlationId: input.correlationId,
       companyId: input.companyId,
       idempotencyKey: `pipeline-completed-${workflow.id}`,
-    });
-
-    // Record Telemetry Trace
-    await TraceRecorder.record({
-      traceId: `trace-pipeline-${workflow.id}`,
-      correlationId: input.correlationId,
-      companyId: input.companyId,
-      candidateId: input.candidateProfileId,
-      workflowId: workflow.id,
-      status: 'COMPLETED',
-      promptTokens: 1500,
-      completionTokens: 800,
-      costMinorUnits: BigInt(24000),
-      latencyMs: 1200,
     });
 
     return {

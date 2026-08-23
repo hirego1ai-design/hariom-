@@ -13,7 +13,7 @@ function metadata(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }

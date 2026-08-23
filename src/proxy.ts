@@ -79,11 +79,6 @@ async function parseSessionToken(token: string): Promise<SessionPayload | null> 
     const parts = token.split(".");
     if (parts.length !== 3) return null;
 
-    if (process.env.NODE_ENV !== "production" && parts[2] === "mockSignature") {
-      const payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1]))) as SessionPayload;
-      return payload.exp && payload.exp * 1000 < Date.now() ? null : payload;
-    }
-
     const secret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
     if (!secret) return null;
     const header = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0]))) as { alg?: string };
@@ -115,16 +110,6 @@ async function parseSessionToken(token: string): Promise<SessionPayload | null> 
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // Developer Bypass Gate
-  const bypassParam = request.nextUrl.searchParams.get("bypass");
-  if (process.env.NODE_ENV !== "production" && bypassParam === "true") {
-    const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItYWRtaW4tMSIsImVtYWlsIjoiYWRtaW5AaGlyZWdvLmFpIiwicm9sZSI6IkFETUlOIiwibmFtZSI6IkRldmVsb3BlciBCeXBhc3MifQ.mockSignature";
-    const cleanUrl = new URL(pathname, request.url);
-    const response = NextResponse.redirect(cleanUrl);
-    response.cookies.set(AUTH_COOKIE_NAME, mockToken, { maxAge: 12 * 60 * 60 });
-    return response;
-  }
 
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const token = bearer || request.cookies.get(AUTH_COOKIE_NAME)?.value;

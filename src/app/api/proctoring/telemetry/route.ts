@@ -35,7 +35,7 @@ async function getInterviewWithOwner(interviewId: string) {
 type InterviewWithOwner = Awaited<ReturnType<typeof getInterviewWithOwner>>;
 
 async function assertInterviewAccess(
-  session: NonNullable<ReturnType<typeof getCurrentSession>>,
+  session: NonNullable<Awaited<ReturnType<typeof getCurrentSession>>>,
   interviewId: string,
   purpose: "read" | "write",
 ): Promise<NonNullable<InterviewWithOwner>> {
@@ -72,7 +72,7 @@ async function assertInterviewAccess(
 
 export async function GET(request: NextRequest) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
 
     await enforceRateLimit(request, "proctoring_telemetry_read", 60, 60_000);
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") {
       return jsonError("Only candidates may submit proctoring telemetry.", 403);

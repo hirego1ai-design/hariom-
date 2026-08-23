@@ -4,7 +4,7 @@ import { referralDb } from "@/lib/referral-db";
 
 export async function GET(request: Request) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Authentication required" },
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Authentication required" },

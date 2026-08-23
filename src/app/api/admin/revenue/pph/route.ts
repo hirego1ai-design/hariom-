@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const data = await loadManagedHiringRevenue();
     return NextResponse.json({ success: true, source: "database", summary: data.summary, data: data.placements });
   } catch (error) {

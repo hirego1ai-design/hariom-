@@ -69,7 +69,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const gatewayTxId = verification.gatewayTxId || payload?.paymentId || payload?.id || `tx_${Date.now()}`;
+    // Gateways normalize their native transaction identifier in the verified
+    // result. Never accept a separately supplied client/body identifier.
+    const gatewayTxId = verification.gatewayTxId;
 
     // 2. Strict Gateway Transaction Idempotency Pre-Check
     if (gatewayTxId) {
@@ -143,8 +145,14 @@ export async function POST(req: NextRequest) {
       event === "payment_intent.succeeded";
 
     if (isPaymentSuccess) {
+      if (!gatewayTxId || !verification.gatewayOrderId) {
+        throw new ApiError("Gateway success webhook is missing its authoritative transaction or order identifier", 400);
+      }
       if (!paymentOrder) {
         throw new ApiError("Authoritative payment order not found", 400);
+      }
+      if (!paymentOrder.gatewayOrderId || paymentOrder.gatewayOrderId !== verification.gatewayOrderId) {
+        throw new ApiError("Gateway order does not match the authoritative payment order", 400);
       }
       
       const companyId = paymentOrder.companyId;
@@ -154,6 +162,12 @@ export async function POST(req: NextRequest) {
       const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
       if (!plan) {
         return NextResponse.json({ success: false, error: "Subscription plan not found" }, { status: 404 });
+      }
+      if (verification.currency && verification.currency !== plan.currency) {
+        throw new ApiError("Gateway payment currency does not match the subscription plan", 400);
+      }
+      if (verification.companyId && verification.companyId !== companyId) {
+        throw new ApiError("Gateway payment company does not match the payment order", 400);
       }
 
       // Amount Integrity Enforcement
@@ -194,14 +208,23 @@ export async function POST(req: NextRequest) {
 
         // Increment Promo Code usage on committed successful payment
         if (paymentOrder.promoCode) {
-          try {
-            await tx.promoCode.update({
-              where: { code: paymentOrder.promoCode.toUpperCase() },
-              data: { usageCount: { increment: 1 } },
-            });
-          } catch {
-            // Ignore if promo code not in DB
+          // Lock the promotion row before checking its remaining capacity so
+          // simultaneous gateway deliveries cannot exceed maxUsage.
+          const claimablePromos = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT "id"
+            FROM "PromoCode"
+            WHERE "code" = ${paymentOrder.promoCode.toUpperCase()}
+              AND "isArchived" = false
+              AND "usageCount" < "maxUsage"
+            FOR UPDATE
+          `;
+          if (claimablePromos.length !== 1) {
+            throw new ApiError("Promo code is no longer available.", 409);
           }
+          await tx.promoCode.update({
+            where: { id: claimablePromos[0].id },
+            data: { usageCount: { increment: 1 } },
+          });
         }
 
         // Step 2: Payment status is recorded

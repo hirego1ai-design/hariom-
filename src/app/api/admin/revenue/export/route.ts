@@ -8,7 +8,7 @@ function csvCell(value: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    requireAdminSession(request);
+    await requireAdminSession(request);
   const format = request.nextUrl.searchParams.get("format") || "csv";
   if (format !== "csv") {
     return NextResponse.json(

@@ -4,9 +4,9 @@ import { KillSwitchManager } from '../security/KillSwitchManager';
 import { BudgetManager } from '../governance/BudgetManager';
 import { ExecutionLoop } from '../agents/ExecutionLoop';
 import { OutboxPublisher } from '../events/Outbox';
-import { TraceRecorder } from '../telemetry/TraceRecorder';
 import { Role, KillSwitchType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import crypto from 'crypto';
 
 export interface DispatchJobCreationParams {
   userId: string;
@@ -23,6 +23,13 @@ export interface DispatchApplicationParams {
   jobId: string;
   candidateProfileId: string;
   companyId: string;
+}
+
+export class DuplicateApplicationError extends Error {
+  constructor() {
+    super("You have already applied to this job.");
+    this.name = "DuplicateApplicationError";
+  }
 }
 
 export class RosGateway {
@@ -42,8 +49,8 @@ export class RosGateway {
     RbacGuard.assertRole(tenantContext, [Role.EMPLOYER, Role.ADMIN]);
     await this.killSwitchManager.assertNotKilled(KillSwitchType.AGENT, 'jd-generator');
 
-    const correlationId = `corr-job-${Date.now()}`;
-    const executionId = `exec-jd-${Date.now()}`;
+    const correlationId = crypto.randomUUID();
+    const executionId = crypto.randomUUID();
 
     // Execute JdGeneratorAgent via ROS ExecutionLoop (asynchronous AI task preparation)
     const generatedJd = await ExecutionLoop.runTask({
@@ -93,24 +100,6 @@ export class RosGateway {
       tx
     );
 
-    // Record Telemetry Trace (using transaction handle tx if provided)
-    await TraceRecorder.record(
-      {
-        traceId: `trace-jd-${job.id}`,
-        correlationId,
-        executionId,
-        companyId: params.companyId,
-        jobId: job.id,
-        agentId: 'jd-generator',
-        status: 'SUCCESS',
-        promptTokens: 250,
-        completionTokens: 180,
-        costMinorUnits: BigInt(2000),
-        latencyMs: 350,
-      },
-      tx
-    );
-
     return { job, generatedJd };
   }
 
@@ -118,70 +107,92 @@ export class RosGateway {
    * 7.1 Flow 2: Candidate Applies -> Matchmaker + Resume Evaluator Agent -> Business State -> Outbox -> Trace
    */
   static async handleApplicationSubmission(params: DispatchApplicationParams): Promise<{
-    application: unknown;
-    evalResult: Record<string, unknown>;
+    application: { id: string; jobId: string; candidateProfileId: string; status: string; matchScore: number; aiSummary: string | null };
+    evaluation: "COMPLETED" | "PENDING";
   }> {
     const tenantContext = createTenantContext(params.companyId, params.userId, Role.CANDIDATE);
     await this.killSwitchManager.assertNotKilled(KillSwitchType.AGENT, 'resume-evaluator');
 
-    const correlationId = `corr-app-${Date.now()}`;
-    const executionId = `exec-eval-${Date.now()}`;
+    const candidate = await prisma.candidateProfile.findUnique({
+      where: { id: params.candidateProfileId },
+      select: { id: true, userId: true },
+    });
+    if (!candidate || candidate.userId !== params.userId) {
+      throw new Error("Candidate profile ownership could not be verified.");
+    }
 
-    // Execute ResumeEvaluatorAgent via ROS ExecutionLoop
-    const evalResult = await ExecutionLoop.runTask({
-      agentId: 'resume-evaluator',
-      taskInput: {
-        candidateProfileId: params.candidateProfileId,
-        jobId: params.jobId,
-      },
-      context: {
-        tenantContext,
-        correlationId,
-        executionId,
+    const job = await prisma.jobListing.findUnique({
+      where: { id: params.jobId },
+      select: { id: true, companyId: true, status: true },
+    });
+    if (!job || job.companyId !== params.companyId || job.status !== "ACTIVE") {
+      throw new Error("Job is unavailable for application.");
+    }
+
+    const correlationId = crypto.randomUUID();
+    let application: { id: string; jobId: string; candidateProfileId: string; status: string; matchScore: number; aiSummary: string | null };
+    try {
+      application = await prisma.$transaction(async (tx) => {
+        const created = await tx.application.create({
+          data: {
+            jobId: job.id,
+            candidateProfileId: candidate.id,
+            status: 'APPLIED',
+            matchScore: 0,
+            aiSummary: null,
+          },
+          select: { id: true, jobId: true, candidateProfileId: true, status: true, matchScore: true, aiSummary: true },
+        });
+
+        await OutboxPublisher.publish({
+          eventType: 'APPLICATION_SUBMITTED',
+          payload: { applicationId: created.id, jobId: created.jobId },
+          correlationId,
+          companyId: job.companyId,
+          idempotencyKey: `application-submitted:${created.id}`,
+        }, tx);
+        return created;
+      });
+    } catch (error: any) {
+      if (error?.code === "P2002") throw new DuplicateApplicationError();
+      throw error;
+    }
+
+    // The durable business record and its outbox event are committed before an
+    // external model call.  A disconnected response cannot create a second
+    // application or charge the candidate twice on retry.
+    const executionId = `application-evaluation:${application.id}`;
+
+    try {
+      const evalResult = await ExecutionLoop.runTask({
         agentId: 'resume-evaluator',
-      },
-      companyId: params.companyId,
-      estimatedSpendMinor: BigInt(5000),
-    });
+        taskInput: {
+          candidateProfileId: candidate.id,
+          jobId: job.id,
+          authorizationContext: 'APPLICATION_SUBMISSION',
+        },
+        context: { tenantContext, correlationId, executionId, agentId: 'resume-evaluator' },
+        companyId: job.companyId,
+        estimatedSpendMinor: BigInt(5000),
+      });
 
-    const matchScore = (evalResult.candidateScore as number) ?? 85;
+      const matchScore = evalResult.candidateScore;
+      const summary = evalResult.summary;
+      if (typeof matchScore !== "number" || !Number.isInteger(matchScore) || matchScore < 0 || matchScore > 100 || typeof summary !== "string") {
+        throw new Error("Resume evaluation returned an invalid result.");
+      }
 
-    // Create Application in PostgreSQL business table
-    const application = await prisma.application.create({
-      data: {
-        jobId: params.jobId,
-        candidateProfileId: params.candidateProfileId,
-        status: 'APPLIED',
-        matchScore,
-        aiSummary: (evalResult.summary as string) || 'Evaluated profile successfully.',
-      },
-    });
-
-    // Publish System Event via Outbox
-    await OutboxPublisher.publish({
-      eventType: 'APPLICATION_SUBMITTED',
-      payload: { applicationId: application.id, jobId: params.jobId, matchScore },
-      correlationId,
-      companyId: params.companyId,
-      idempotencyKey: `outbox-app-${application.id}`,
-    });
-
-    // Record Telemetry Trace
-    await TraceRecorder.record({
-      traceId: `trace-app-${application.id}`,
-      correlationId,
-      executionId,
-      companyId: params.companyId,
-      jobId: params.jobId,
-      candidateId: params.candidateProfileId,
-      agentId: 'resume-evaluator',
-      status: 'SUCCESS',
-      promptTokens: 400,
-      completionTokens: 250,
-      costMinorUnits: BigInt(5000),
-      latencyMs: 420,
-    });
-
-    return { application, evalResult };
+      application = await prisma.application.update({
+        where: { id: application.id },
+        data: { matchScore, aiSummary: summary },
+        select: { id: true, jobId: true, candidateProfileId: true, status: true, matchScore: true, aiSummary: true },
+      });
+      return { application, evaluation: "COMPLETED" };
+    } catch {
+      // The application remains durably submitted and the outbox event allows
+      // controlled retry/operations follow-up.  Do not invent an AI score or
+      // turn a completed user action into a duplicate application.
+      return { application, evaluation: "PENDING" };
+    }
   }
 }

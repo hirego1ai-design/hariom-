@@ -20,7 +20,7 @@ const inMemoryNotifications: Map<
 
 export async function GET(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }

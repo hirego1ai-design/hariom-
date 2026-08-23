@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     await enforceRateLimit(req, "agent_dispatch");
 
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }

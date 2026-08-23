@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 
 export type LlmProvider = "openai" | "gemini" | "claude" | "deepseek";
@@ -18,20 +19,22 @@ export interface AiExecutionLog {
   task: string;
   provider: LlmProvider;
   model: string;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
   latencyMs: number;
-  costEstUsd: number;
+  costEstUsd: number | null;
   status: "SUCCESS" | "FALLBACK" | "FAILED" | "CACHED";
   timestamp: string;
 }
 
-// In-memory cache for repeated prompt signatures
+// Development-only cache. Production must not present per-process cache state
+// as durable provider telemetry or billing information.
 const promptResponseCache = new Map<string, { resultText: string; timestamp: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache TTL
 
 const executionLogsStore: AiExecutionLog[] = [];
+const allowLocalAiCache = process.env.NODE_ENV !== "production";
 
 let openaiClient: OpenAI | null = null;
 if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("sk-proj-hirego-openai-production-key")) {
@@ -52,7 +55,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
 
   // Check cache unless explicitly bypassed
   const cacheKey = `${request.task}:${request.prompt.trim().toLowerCase()}`;
-  if (!request.bypassCache && promptResponseCache.has(cacheKey)) {
+  if (allowLocalAiCache && !request.bypassCache && promptResponseCache.has(cacheKey)) {
     const cachedEntry = promptResponseCache.get(cacheKey)!;
     if (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS) {
       const cachedLog: AiExecutionLog = {
@@ -82,8 +85,8 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   const providerUsed: LlmProvider = primaryProvider;
   const status = "SUCCESS" as const;
   let responseText = "";
-  let actualPromptTokens = 0;
-  let actualCompletionTokens = 0;
+  let actualPromptTokens: number | null = null;
+  let actualCompletionTokens: number | null = null;
 
   const hasRealKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("sk-") && !process.env.OPENAI_API_KEY.includes("dummy");
   // Try real OpenAI API call if client is configured and real key present
@@ -97,8 +100,8 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
       });
 
       responseText = response.choices[0]?.message?.content || "";
-      actualPromptTokens = response.usage?.prompt_tokens || 0;
-      actualCompletionTokens = response.usage?.completion_tokens || 0;
+      actualPromptTokens = response.usage?.prompt_tokens ?? null;
+      actualCompletionTokens = response.usage?.completion_tokens ?? null;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown provider error";
       throw new Error(`AI provider ${primaryProvider} failed: ${message}`);
@@ -106,35 +109,28 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   }
 
   if (!responseText) {
-    if (process.env.NODE_ENV !== "production") {
-      responseText = `Simulated AI task output for ${request.task}: High compatibility score (88/100).`;
-      actualPromptTokens = Math.max(10, Math.floor(request.prompt.length / 4));
-      actualCompletionTokens = 35;
-    } else {
-      throw new Error(
-        primaryProvider === "openai"
-          ? "AI service is not configured. Set a valid OPENAI_API_KEY."
-          : `AI provider ${primaryProvider} is not configured.`,
-      );
-    }
+    throw new Error(
+      primaryProvider === "openai"
+        ? "AI service is not configured. Set a valid OPENAI_API_KEY."
+        : `AI provider ${primaryProvider} is not configured.`,
+    );
   }
 
-  const latencyMs = Math.max(120, Date.now() - startTime);
-  const promptTokens = actualPromptTokens || Math.max(10, Math.floor(request.prompt.length / 4));
-  const completionTokens = actualCompletionTokens || Math.max(20, Math.floor(responseText.length / 4));
-  const totalTokens = promptTokens + completionTokens;
-  const costEstUsd = Number(((totalTokens / 1000) * 0.002).toFixed(5));
+  const latencyMs = Date.now() - startTime;
+  const totalTokens = actualPromptTokens === null || actualCompletionTokens === null
+    ? null
+    : actualPromptTokens + actualCompletionTokens;
 
   const log: AiExecutionLog = {
-    id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    id: crypto.randomUUID(),
     task: request.task,
     provider: providerUsed,
     model: modelMap[providerUsed],
-    promptTokens,
-    completionTokens,
+    promptTokens: actualPromptTokens,
+    completionTokens: actualCompletionTokens,
     totalTokens,
     latencyMs,
-    costEstUsd,
+    costEstUsd: null,
     status,
     timestamp: new Date().toISOString(),
   };
@@ -159,10 +155,10 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     // Database fallback
   }
 
-  // Populate cache
-  promptResponseCache.set(cacheKey, { resultText: responseText, timestamp: Date.now() });
-
-  executionLogsStore.unshift(log);
+  if (allowLocalAiCache) {
+    promptResponseCache.set(cacheKey, { resultText: responseText, timestamp: Date.now() });
+    executionLogsStore.unshift(log);
+  }
 
   return {
     success: true,
@@ -201,8 +197,8 @@ export async function getAiUsageStats() {
   }
 
   const totalRequests = logs.length;
-  const totalTokens = logs.reduce((acc, l) => acc + l.totalTokens, 0);
-  const totalCost = logs.reduce((acc, l) => acc + l.costEstUsd, 0);
+  const totalTokens = logs.reduce((acc, l) => acc + (l.totalTokens ?? 0), 0);
+  const totalCost = logs.reduce((acc, l) => acc + (l.costEstUsd ?? 0), 0);
   const avgLatency = totalRequests > 0 ? Math.round(logs.reduce((acc, l) => acc + l.latencyMs, 0) / totalRequests) : 0;
 
   const providerCounts = logs.reduce((acc, l) => {

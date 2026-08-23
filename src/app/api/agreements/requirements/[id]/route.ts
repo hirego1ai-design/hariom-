@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     const { id } = await params;
     const requirement = await agreementsDb.getRequirementById(id);
     if (!requirement) {
@@ -29,7 +29,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const { id } = await params;
     const body = await req.json();
 

@@ -293,7 +293,7 @@ export const managedHiringAuditLogs: ManagedHiringAuditLog[] = [
 
 export async function GET(req: Request) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
   return NextResponse.json({
     success: true,
     config: managedHiringGlobalConfig,
@@ -306,7 +306,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const session = requireAdminSession(req);
+    const session = await requireAdminSession(req);
     const body = await req.json();
     const { updatedConfig, config, auditEntry, adminActor, reason } = body;
 

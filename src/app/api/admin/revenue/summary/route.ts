@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const transactions = await loadRevenueTransactions();
     const successful = transactions.filter((transaction) => transaction.status === "Success");
     const pending = transactions.filter((transaction) => transaction.status === "Pending");

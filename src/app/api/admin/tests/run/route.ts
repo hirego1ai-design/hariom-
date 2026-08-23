@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/apiSecurity";
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const report = await runAllTests();
     return NextResponse.json({
       success: true,

@@ -156,12 +156,15 @@ export class ExecutionLoop {
       shadowFn: async () => ({ shadowNote: 'Shadow execution verified OK' }),
     });
 
-    // 9. Reconcile Budget
-    const actualSpend = BigInt(1000); // Nominal actual spend in minor units
-    await BudgetManager.reconcileBudget({
-      executionId: params.context.executionId,
-      actualMinor: actualSpend,
-    });
+    // 9. Reconcile only provider-authoritative spend.  When a provider does
+    // not report billable usage, release the estimate rather than recording a
+    // fabricated "actual" amount.
+    const actualSpend = result.actualCostMinorUnits;
+    if (typeof actualSpend === 'bigint' && actualSpend >= BigInt(0)) {
+      await BudgetManager.reconcileBudget({ executionId: params.context.executionId, actualMinor: actualSpend });
+    } else {
+      await BudgetManager.releaseBudget(params.context.executionId);
+    }
 
     return result;
   }

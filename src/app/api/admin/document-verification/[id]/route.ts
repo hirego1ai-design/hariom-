@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session || session.role !== "ADMIN") {
       return jsonError("Unauthorized access", 401);
     }

@@ -56,7 +56,7 @@ function iceServers() {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     const roomId = new URL(req.url).searchParams.get("roomId");
     if (!roomId || roomId.length > 256) return jsonError("roomId is required", 400);
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     const body = await readValidatedJson(req, roomActionSchema, 64 * 1024);
     const interview = await findAuthorizedInterview(session, body.roomId);

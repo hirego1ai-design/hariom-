@@ -4,7 +4,6 @@ import { db } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
-import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 
 const updateJobSchema = z.object({
@@ -21,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session || (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN")) {
       throw new ApiError("Employer, recruiter, or administrator access required.", 403);
     }
@@ -51,7 +50,7 @@ export async function PUT(
   try {
     const { id } = await params;
     await enforceRateLimit(request, "employer_jobs_put");
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
 
     if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
       throw new ApiError("Forbidden: Employer or Admin role required.", 403);
@@ -80,30 +79,29 @@ export async function PUT(
 
     const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
 
-    // Check active credits quota if publishing a draft
-    if (isPublishingDraft && session.role !== "ADMIN") {
-      const credits = await subscriptionsDb.getCompanyCredits(companyId!);
-      if (credits.jobPostsLeft <= 0) {
-        throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
-      }
-    }
+    const updateData = {
+      title: body.title !== undefined ? body.title : undefined,
+      location: body.location !== undefined ? body.location : undefined,
+      type: body.type !== undefined ? body.type : undefined,
+      salaryRange: body.salary !== undefined ? body.salary : undefined,
+      status: body.status !== undefined ? (body.status as any) : undefined,
+    };
 
-    // Update job listing details
-    const updatedJob = await prisma.jobListing.update({
-      where: { id },
-      data: {
-        title: body.title !== undefined ? body.title : undefined,
-        location: body.location !== undefined ? body.location : undefined,
-        type: body.type !== undefined ? body.type : undefined,
-        salaryRange: body.salary !== undefined ? body.salary : undefined,
-        status: body.status !== undefined ? (body.status as any) : undefined,
-      },
-    });
-
-    // Deduct credit if draft is published as active
-    if (isPublishingDraft && session.role !== "ADMIN") {
-      await subscriptionsDb.updateCompanyCredits(companyId!, -1, 0, 0);
-    }
+    // Publishing consumes a credit and changes the job state in one database
+    // transaction.  A concurrent publish can therefore never create a second
+    // active job without an available credit.
+    const updatedJob = isPublishingDraft && session.role !== "ADMIN"
+      ? await prisma.$transaction(async (tx) => {
+          const debited = await tx.companyCredits.updateMany({
+            where: { companyId: companyId!, jobPostsLeft: { gt: 0 } },
+            data: { jobPostsLeft: { decrement: 1 } },
+          });
+          if (debited.count !== 1) {
+            throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
+          }
+          return tx.jobListing.update({ where: { id }, data: updateData });
+        })
+      : await prisma.jobListing.update({ where: { id }, data: updateData });
 
     logAuditEvent({
       userId: session.id,

@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/apiSecurity";
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const body = await req.json();
 
     const ctcAnnual = Number(body.ctcAnnual || body.ctc) || 1500000;

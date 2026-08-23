@@ -180,8 +180,9 @@ export async function runAuditFixesTests(): Promise<{
       body: JSON.stringify(fakeAdminPayload),
     });
 
-    const res = await POST(req);
+     const res = await POST(req);
     const json = await res.json();
+    console.log("Registration Test Response JSON:", json);
     const passCandidateOnly = json.success && json.user?.role === "CANDIDATE";
 
     results.push({

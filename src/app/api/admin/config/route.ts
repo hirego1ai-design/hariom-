@@ -27,7 +27,7 @@ let platformConfig = {
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     return NextResponse.json({ success: true, config: platformConfig });
   } catch (error) {
     return handleApiError(error);
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = requireAdminSession(req);
+    const session = await requireAdminSession(req);
     const body = await req.json();
 
     platformConfig = {

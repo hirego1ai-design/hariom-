@@ -1,14 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { agreementsDb } from "@/lib/agreements-db";
 import { assertCompanyIdAccess, requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+
+const agreementUpdateSchema = z.object({
+  companyName: z.string().min(1).max(200).optional(),
+  clientLegalName: z.string().min(1).max(200).optional(),
+  contactPerson: z.string().min(1).max(200).optional(),
+  clientEmail: z.string().email().optional(),
+  clientPhone: z.string().max(40).optional(),
+  feeType: z.enum(["PERCENTAGE", "FIXED", "SLAB"]).optional(),
+  feeValue: z.number().finite().nonnegative().optional(),
+  invoiceRule: z.string().min(1).max(200).optional(),
+  replacementDays: z.number().int().min(0).max(365).optional(),
+  validityStartDate: z.string().datetime().optional(),
+  validityEndDate: z.string().datetime().optional(),
+  advancePaymentAmount: z.number().finite().nonnegative().optional(),
+  discountPercentage: z.number().finite().min(0).max(100).optional(),
+  creditDays: z.number().int().min(0).max(365).optional(),
+  taxRatePct: z.number().finite().min(0).max(100).optional(),
+  customClauses: z.array(z.string().max(10_000)).max(100).optional(),
+  commercialNotes: z.string().max(10_000).optional(),
+  salesExecutiveNotes: z.string().max(10_000).optional(),
+  note: z.string().max(2_000).optional(),
+}).strict();
+
+const agreementActionSchema = z.object({
+  action: z.enum(["accept", "request_amendment", "send_to_employer"]),
+  signedByName: z.string().trim().min(2).max(200).optional(),
+  signedByDesignation: z.string().trim().min(2).max(200).optional(),
+  amendmentNotes: z.string().trim().min(2).max(10_000).optional(),
+}).strict();
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     const { id } = await params;
     const agreement = await agreementsDb.getAgreementById(id);
     if (!agreement) {
@@ -39,13 +69,19 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireAdminSession(req);
     const { id } = await params;
-    const body = await req.json();
+    const agreement = await agreementsDb.getAgreementById(id);
+    if (!agreement) {
+      return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
+    }
+    await assertCompanyIdAccess(session, agreement.companyId);
+    const body = await readValidatedJson(req, agreementUpdateSchema);
     const performedBy = session.name || session.email;
     const note = body.note || undefined;
 
-    const updated = await agreementsDb.updateAgreement(id, body.updates || body, performedBy, note);
+    const { note: _note, ...updates } = body;
+    const updated = await agreementsDb.updateAgreement(id, updates, performedBy, note);
     if (!updated) {
       return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
     }
@@ -65,9 +101,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = requireAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     const { id } = await params;
-    const body = await req.json();
+    const body = await readValidatedJson(req, agreementActionSchema);
     const action = body.action;
     const agreement = await agreementsDb.getAgreementById(id);
     if (!agreement) {
@@ -76,11 +112,15 @@ export async function POST(
     await assertCompanyIdAccess(session, agreement.companyId);
 
     if (action === "accept") {
-      if (session.role !== "ADMIN" && agreement.status !== "SENT_TO_EMPLOYER") {
+      if (session.role === "ADMIN") {
+        throw new ApiError("Administrators may send agreements but cannot sign on behalf of an employer.", 403);
+      }
+      if (agreement.status !== "SENT_TO_EMPLOYER") {
         return NextResponse.json({ success: false, error: "Agreement must be sent to the employer before acceptance." }, { status: 409 });
       }
-      const signerName = session.name || "Authorized Signatory";
-      const designation = session.role === "ADMIN" ? "Administrator" : "Authorized Employer Representative";
+      const signerName = body.signedByName;
+      const designation = body.signedByDesignation;
+      if (!signerName || !designation) throw new ApiError("Signer name and designation are required.", 422);
       const ipAddress =
         req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "127.0.0.1";
 
@@ -97,10 +137,14 @@ export async function POST(
     }
 
     if (action === "request_amendment") {
-      if (session.role !== "ADMIN" && agreement.status !== "SENT_TO_EMPLOYER") {
+      if (session.role === "ADMIN") {
+        throw new ApiError("Administrators may revise and resend agreements; they cannot request employer amendments.", 403);
+      }
+      if (agreement.status !== "SENT_TO_EMPLOYER") {
         return NextResponse.json({ success: false, error: "Agreement must be sent to the employer before requesting an amendment." }, { status: 409 });
       }
-      const notes = body.amendmentNotes || "Requested commercial terms adjustment.";
+      const notes = body.amendmentNotes;
+      if (!notes) throw new ApiError("Amendment notes are required.", 422);
       const performedBy = session.name || session.email;
 
       const amended = await agreementsDb.requestAmendment(id, notes, performedBy);

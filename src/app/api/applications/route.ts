@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { z } from "zod";
+import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
+
+const applicationSchema = z.object({
+  jobId: z.string().uuid(),
+  answers: z.object({
+    noticePeriod: z.string().trim().max(200).optional(),
+    experienceYears: z.string().trim().max(20).optional(),
+    whyJoin: z.string().trim().max(5_000).optional(),
+  }).strict().optional(),
+}).strict();
 
 export async function GET(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
@@ -49,7 +59,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
@@ -57,48 +67,45 @@ export async function POST(req: NextRequest) {
       return jsonError("Candidate access required", 403);
     }
 
-    const body = await req.json();
-    const { jobId } = body;
-
-    if (!jobId) {
-      return jsonError("jobId is required", 400);
-    }
+    const { jobId } = await readValidatedJson(req, applicationSchema);
 
     const job = await prisma.jobListing.findUnique({ where: { id: jobId } });
     if (!job) {
       return jsonError("Job listing not found", 404);
     }
-
-    let application: any = null;
+    if (job.status !== "ACTIVE") {
+      return jsonError("This job is no longer accepting applications", 409);
+    }
 
     try {
-      let candidate = await prisma.candidateProfile.findUnique({
+      const candidate = await prisma.candidateProfile.findUnique({
         where: { userId: session.id },
       });
-
       if (!candidate) {
-        candidate = await prisma.candidateProfile.create({
-          data: {
-            userId: session.id,
-            headline: "Candidate",
-            location: "India",
-          },
-        });
+        return jsonError("Complete your candidate profile before applying.", 409);
       }
 
       const { RosGateway } = await import("@/lib/ros/RosGateway");
-      const { application: newApp, evalResult } = await RosGateway.handleApplicationSubmission({
+      const submission = await RosGateway.handleApplicationSubmission({
         userId: session.id,
         jobId,
         candidateProfileId: candidate.id,
         companyId: job.companyId,
       });
-      application = newApp;
-    } catch (e: any) {
-      return jsonError(e.message || "Failed to submit application", 500);
-    }
 
-    return NextResponse.json({ success: true, application, message: "Application submitted successfully" });
+      return NextResponse.json({
+        success: true,
+        application: submission.application,
+        evaluation: submission.evaluation,
+        message: "Application submitted successfully",
+      }, { status: 201 });
+    } catch (e: any) {
+      if (e?.code === "P2002" || e?.name === "DuplicateApplicationError") {
+        return jsonError("You have already applied to this job.", 409);
+      }
+      if (e instanceof ApiError) throw e;
+      return jsonError("Application could not be submitted. Please try again.", 503);
+    }
   } catch (error) {
     return handleApiError(error);
   }

@@ -3,7 +3,7 @@ import { AUTH_COOKIE_NAME, getCurrentSession, revokeSessionToken } from "@/lib/a
 import { logAuditEvent } from "@/lib/auditLogger";
 
 export async function POST(request: Request) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || request.headers.get("cookie")?.match(/(?:^|;\s*)hirego_session=([^;]+)/)?.[1];
 
   if (token) await revokeSessionToken(token);

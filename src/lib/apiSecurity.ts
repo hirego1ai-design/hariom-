@@ -49,7 +49,7 @@ export async function enforceRateLimit(
   maxRequests: number = RATE_LIMIT_MAX_REQUESTS,
   windowMs: number = RATE_LIMIT_WINDOW_MS
 ) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   const subject = session ? `user:${session.id}` : `ip:${getClientIp(request)}`;
   const key = `ratelimit:${keyPrefix}:${subject}`;
 

@@ -230,6 +230,8 @@ model Application {
   updatedAt          DateTime          @updatedAt
 
   interviews Interview[]
+
+  @@unique([candidateProfileId, jobId])
 }
 
 model VideoResume {
@@ -566,11 +568,11 @@ model AiExecutionLog {
   task             String
   provider         String
   model            String
-  promptTokens     Int
-  completionTokens Int
-  totalTokens      Int
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
   latencyMs        Int
-  costEstUsd       Float
+  costEstUsd       Float?
   status           String
   timestamp        DateTime @default(now())
 }

@@ -68,11 +68,23 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Invoices Engine - Creation & Payment", category: "Invoices", passed: false, message: e.message });
   }
 
-  // 4. Multi-LLM Router Tests
+  // 4. Multi-LLM Router safety test. A missing provider is an explicit error;
+  // it must never turn into a simulated production score or fake usage data.
   try {
-    const aiRes = await dispatchAiTask({ task: "RESUME_SCORE", prompt: "Test prompt" });
-    const pass6 = aiRes.success && aiRes.log.totalTokens > 0;
-    results.push({ name: "Multi-LLM Router - Dispatch & Telemetry Logging", category: "AI Router", passed: pass6 });
+    const isPlaceholder = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes("sk-proj-hirego-openai-production-key") || process.env.OPENAI_API_KEY.includes("placeholder");
+    if (isPlaceholder) {
+      let rejected = false;
+      try {
+        await dispatchAiTask({ task: "RESUME_SCORE", prompt: "Test prompt" });
+      } catch {
+        rejected = true;
+      }
+      results.push({ name: "AI Router - Missing provider fails explicitly without simulated output", category: "AI Router", passed: rejected });
+    } else {
+      const aiRes = await dispatchAiTask({ task: "RESUME_SCORE", prompt: "Test prompt" });
+      const pass6 = aiRes.success && aiRes.log.costEstUsd === null;
+      results.push({ name: "AI Router - Provider telemetry does not invent cost", category: "AI Router", passed: pass6 });
+    }
   } catch (e: any) {
     results.push({ name: "Multi-LLM Router - Dispatch & Telemetry Logging", category: "AI Router", passed: false, message: e.message });
   }
@@ -170,6 +182,16 @@ export async function runAllTests(): Promise<{
     }
   } catch (e: any) {
     results.push({ name: "WhatsApp Meta Cloud API Suite", category: "WhatsApp Meta Cloud API", passed: false, message: e.message });
+  }
+
+  // 11. Production hardening regressions. Database integration coverage only
+  // runs in the disposable PostgreSQL service provisioned by CI.
+  try {
+    const { runProductionHardeningTests } = await import("./production-hardening.test");
+    const hardening = await runProductionHardeningTests();
+    results.push(...hardening.results);
+  } catch (e: any) {
+    results.push({ name: "Production hardening regression suite", category: "Production hardening", passed: false, message: e.message });
   }
 
   const passedCount = results.filter((r) => r.passed).length;

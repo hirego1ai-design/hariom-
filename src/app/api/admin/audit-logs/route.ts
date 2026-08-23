@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const logs = await getAuditLogs();
     return NextResponse.json({
       success: true,

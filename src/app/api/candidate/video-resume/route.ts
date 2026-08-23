@@ -11,7 +11,7 @@ const videoAnalysisSchema = {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 

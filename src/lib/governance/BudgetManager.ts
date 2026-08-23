@@ -70,7 +70,9 @@ export class BudgetManager {
       });
     } catch (err) {
       if (err instanceof BudgetExceededError) throw err;
-      // Offline test fallback
+      if (process.env.NODE_ENV === "production") throw err;
+      // Development/test-only fallback. It is never available to production
+      // callers, where a failed budget reservation must fail closed.
       return {
         id: `res-${Date.now()}`,
         companyId,
@@ -124,8 +126,8 @@ export class BudgetManager {
           });
         }
       });
-    } catch {
-      // Offline fallback
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") throw error;
     }
   }
 

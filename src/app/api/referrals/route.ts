@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     await enforceRateLimit(request, "referrals_get", 30, 60000);
 
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Authentication required" },
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   try {
     await enforceRateLimit(request, "referrals_invite", 10, 60000);
 
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Authentication required" },

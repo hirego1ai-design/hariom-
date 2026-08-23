@@ -12,7 +12,11 @@ export class StripeGateway implements PaymentGateway {
   name: GatewayName = "STRIPE";
 
   async createOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
-    const mockGatewayOrderId = `cs_test_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Stripe checkout is not configured for production.");
+    }
+
+    const mockGatewayOrderId = `cs_test_${crypto.randomUUID()}`;
     return {
       success: true,
       gateway: "STRIPE",
@@ -119,7 +123,7 @@ export class StripeGateway implements PaymentGateway {
     }
 
     const dataObj = eventPayload?.data?.object || eventPayload;
-    const gatewayTxId = dataObj?.id || eventPayload?.id || `stripe_${Date.now()}`;
+    const gatewayTxId = dataObj?.id || eventPayload?.id || "";
     const eventType = eventPayload?.type || "";
     const isSuccess =
       eventType === "checkout.session.completed" ||

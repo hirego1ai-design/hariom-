@@ -100,7 +100,7 @@ export const auditLogs: RevenueAuditLogRecord[] = [
 ];
 
 export async function GET(req: NextRequest) {
-  requireAdminSession(req);
+  await requireAdminSession(req);
   return NextResponse.json({
     success: true,
     total: auditLogs.length,

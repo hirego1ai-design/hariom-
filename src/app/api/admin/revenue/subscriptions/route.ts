@@ -147,7 +147,7 @@ export const subscriptionPlans: SubscriptionPlanSummary[] = [
 ];
 
 export async function GET(req: NextRequest) {
-  requireAdminSession(req);
+  await requireAdminSession(req);
   return NextResponse.json({
     success: true,
     totalPlans: subscriptionPlans.length,

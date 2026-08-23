@@ -146,6 +146,8 @@ async function terminallyFailWhatsAppJob(params: {
       },
       update: {},
     });
+  }, {
+    timeout: 15000
   });
 }
 

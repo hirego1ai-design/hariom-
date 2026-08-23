@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { getCurrentSession, handleApiError, jsonError, type UserSession } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
-const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
+const allowMockFallbacks = process.env.NODE_ENV === "development" && process.env.MOCK_DB === "true";
+
+function isEmployerSession(session: UserSession | null): session is UserSession {
+  return !!session && (session.role === "EMPLOYER" || session.role === "RECRUITER");
+}
 
 // Fallback in-memory team members store
 const inMemoryTeamMembers: Array<{
@@ -45,9 +49,9 @@ const inMemoryTeamMembers: Array<{
 
 export async function GET(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = await getCurrentSession(req.headers);
+    if (!isEmployerSession(session)) {
+      return jsonError("Employer or recruiter access required", 403);
     }
 
     try {
@@ -104,9 +108,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = await getCurrentSession(req.headers);
+    if (!isEmployerSession(session)) {
+      return jsonError("Employer or recruiter access required", 403);
     }
 
     const body = await req.json();
@@ -144,9 +148,9 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = await getCurrentSession(req.headers);
+    if (!isEmployerSession(session)) {
+      return jsonError("Employer or recruiter access required", 403);
     }
 
     const { searchParams } = new URL(req.url);

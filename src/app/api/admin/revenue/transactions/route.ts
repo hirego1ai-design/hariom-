@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(request: NextRequest) {
   try {
-    requireAdminSession(request);
+    await requireAdminSession(request);
     const { searchParams } = request.nextUrl;
     const search = searchParams.get("search")?.trim().toLowerCase() || "";
     const source = searchParams.get("source") || "All";

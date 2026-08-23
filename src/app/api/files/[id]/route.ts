@@ -16,7 +16,7 @@ async function canAccessFile(userId: string, role: string, file: { ownerId: stri
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = getCurrentSession(req.headers);
+    const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
 
     const { id } = await params;

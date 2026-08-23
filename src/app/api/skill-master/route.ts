@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = getCurrentSession(request.headers);
+  const session = await getCurrentSession(request.headers);
   if (!session) return NextResponse.json({ error: "Sign in to suggest a new skill." }, { status: 401 });
 
   const body = await request.json().catch(() => null);

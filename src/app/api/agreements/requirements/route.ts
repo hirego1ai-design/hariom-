@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 // Guard: Tenant isolation enforced via authoritative EmployerProfile.companyId → Company FK boundary
 export async function GET(req: NextRequest) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     let requirements = await agreementsDb.getRequirements();
     if (session.role !== "ADMIN") {
       const company = await getSessionCompany(session);
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
     const body = await req.json();
 
     // Validation for core fields

@@ -19,7 +19,7 @@ let securityPolicy = {
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     let calculatedScore = 40;
 
     // Check real security layers
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const body = await req.json();
     securityPolicy = { ...securityPolicy, ...body };
     return NextResponse.json({

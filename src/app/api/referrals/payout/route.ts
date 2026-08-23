@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     await enforceRateLimit(request, "referrals_payout", 5, 60000);
 
-    const session = getCurrentSession(request.headers);
+    const session = await getCurrentSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized: Authentication required" },

@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminSession(req);
+    await requireAdminSession(req);
     const data = await loadManagedHiringRevenue();
     const activeAgreements = data.agreements.filter((agreement) => agreement.status === "ACTIVE");
     return NextResponse.json({

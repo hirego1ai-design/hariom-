@@ -32,15 +32,15 @@ const updateSchema = z.object({
   }
 });
 
-function requireAdmin(request: Request) {
-  const session = getCurrentSession(request.headers);
+async function requireAdmin(request: Request) {
+  const session = await getCurrentSession(request.headers);
   if (!session || session.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
   return session;
 }
 
 export async function GET(request: Request) {
   try {
-    requireAdmin(request);
+    await requireAdmin(request);
     return NextResponse.json({ success: true, config: await getEmailDeliverySettings() });
   } catch (error) {
     return handleApiError(error);
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const admin = requireAdmin(request);
+    const admin = await requireAdmin(request);
     await enforceRateLimit(request, `admin_email_delivery_config:${admin.id}`, 10, 60_000);
     const body = await readValidatedJson(request, updateSchema);
     const config = await saveEmailDeliverySettings(body);

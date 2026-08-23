@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = getCurrentSession(req.headers);
+  const session = await getCurrentSession(req.headers);
   if (!session) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const interview = await prisma.interview.findUnique({ include: { application: { include: { job: true } } }, where: { id } });

@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { z } from "zod";
+import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
+
+const checkoutSchema = z.object({
+  planId: z.string().uuid(),
+  paymentMethod: z.enum(["RAZORPAY", "STRIPE", "PAYU", "PHONEPE", "AUTO"]).optional(),
+  promoCode: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
+}).strict();
 
 export async function POST(req: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
+    const session = await getCurrentSession(req.headers);
+    if (!session || !["EMPLOYER", "RECRUITER"].includes(session.role)) {
       return jsonError("Unauthorized access", 401);
     }
 
@@ -18,8 +25,7 @@ export async function POST(req: NextRequest) {
     }
     const companyId = profile.companyId;
 
-    const body = await req.json();
-    const { planId, paymentMethod, promoCode } = body;
+    const { planId, paymentMethod, promoCode } = await readValidatedJson(req, checkoutSchema);
 
     const isProduction = process.env.NODE_ENV === "production";
     const gatewaySecret = process.env.RAZORPAY_KEY_SECRET || process.env.STRIPE_SECRET_KEY || process.env.PAYMENT_WEBHOOK_SECRET;
