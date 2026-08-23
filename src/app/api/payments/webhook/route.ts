@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { handleApiError, ApiError, readBoundedTextBody } from "@/lib";
 import { prisma } from "@/lib/prisma";
-import { logAuditEvent } from "@/lib/auditLogger";
 import type { GatewayName } from "@/lib/payments/PaymentGatewayInterface";
 
 export async function POST(req: NextRequest) {
@@ -106,28 +105,55 @@ export async function POST(req: NextRequest) {
     // 3. Handle Payment Failure / Rejection Events
     if (verification.status === "FAILED" || verification.status === "REJECTED" || event === "payment.failed") {
       const failCompanyId = paymentOrder?.companyId || baseCompanyId;
-      if (gatewayTxId && failCompanyId) {
-        await prisma.paymentTransaction.upsert({
-          where: { gatewayTxId },
-          update: { status: "FAILED", errorMessage: "Payment gateway failed event received" },
-          create: {
-            gatewayTxId,
-            companyId: failCompanyId,
-            planId: paymentOrder?.planId || null,
-            amount: verification.amount || 0,
-            status: "FAILED",
-            provider: providerHeader,
-            errorMessage: "Payment gateway failed event received",
-          },
+      if (failCompanyId) {
+        await prisma.$transaction(async (tx) => {
+          const currentOrder = paymentOrder
+            ? await tx.paymentOrder.findUnique({ where: { orderId: paymentOrder.orderId } })
+            : null;
+          if (currentOrder?.promoReservationState === "RESERVED" && currentOrder.promoCode) {
+            const promos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
+              SELECT "id", "reservedUsage"
+              FROM "PromoCode"
+              WHERE "code" = ${currentOrder.promoCode}
+              FOR UPDATE
+            `;
+            const promo = promos[0];
+            if (promo?.reservedUsage && promo.reservedUsage > 0) {
+              await tx.promoCode.update({ where: { id: promo.id }, data: { reservedUsage: { decrement: 1 } } });
+            }
+            await tx.paymentOrder.update({
+              where: { orderId: currentOrder.orderId },
+              data: { status: "FAILED", gatewayTxId: gatewayTxId || null, promoReservationState: "RELEASED" },
+            });
+          }
+
+          if (gatewayTxId) {
+            await tx.paymentTransaction.upsert({
+              where: { gatewayTxId },
+              update: { status: "FAILED", errorMessage: "Payment gateway failed event received" },
+              create: {
+                gatewayTxId,
+                companyId: failCompanyId,
+                planId: currentOrder?.planId || paymentOrder?.planId || null,
+                amount: verification.amount || 0,
+                status: "FAILED",
+                provider: providerHeader,
+                errorMessage: "Payment gateway failed event received",
+              },
+            });
+          }
+
+          await tx.auditLog.create({
+            data: {
+              userId: null,
+              companyId: failCompanyId,
+              action: "PAYMENT_FAILED",
+              resource: "/api/payments/webhook",
+              details: `Payment failed for gateway transaction ${gatewayTxId || "unknown"}.`,
+            },
+          });
         });
       }
-
-      logAuditEvent({
-        userId: failCompanyId || "SYSTEM",
-        action: "PAYMENT_FAILED",
-        resource: "/api/payments/webhook",
-        details: `Payment failed for order ${gatewayTxId} (Company: ${failCompanyId})`,
-      });
 
       return NextResponse.json({
         success: true,
@@ -206,24 +232,29 @@ export async function POST(req: NextRequest) {
           data: { status: "SUCCESS", gatewayTxId }
         });
 
-        // Increment Promo Code usage on committed successful payment
+        // A discount capacity slot was atomically reserved before the gateway
+        // order was created. Convert that exact reservation to usage; never
+        // reject a captured payment because another checkout used the last slot.
         if (paymentOrder.promoCode) {
-          // Lock the promotion row before checking its remaining capacity so
-          // simultaneous gateway deliveries cannot exceed maxUsage.
-          const claimablePromos = await tx.$queryRaw<Array<{ id: string }>>`
-            SELECT "id"
+          if (paymentOrder.promoReservationState !== "RESERVED") {
+            throw new ApiError("Payment order has no active promo reservation.", 409);
+          }
+          const reservedPromos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
+            SELECT "id", "reservedUsage"
             FROM "PromoCode"
             WHERE "code" = ${paymentOrder.promoCode.toUpperCase()}
-              AND "isArchived" = false
-              AND "usageCount" < "maxUsage"
             FOR UPDATE
           `;
-          if (claimablePromos.length !== 1) {
-            throw new ApiError("Promo code is no longer available.", 409);
+          if (reservedPromos.length !== 1 || reservedPromos[0].reservedUsage < 1) {
+            throw new ApiError("Promo reservation is unavailable for this payment order.", 409);
           }
           await tx.promoCode.update({
-            where: { id: claimablePromos[0].id },
-            data: { usageCount: { increment: 1 } },
+            where: { id: reservedPromos[0].id },
+            data: { usageCount: { increment: 1 }, reservedUsage: { decrement: 1 } },
+          });
+          await tx.paymentOrder.update({
+            where: { orderId: paymentOrder.orderId },
+            data: { promoReservationState: "CONSUMED" },
           });
         }
 
@@ -328,18 +359,15 @@ export async function POST(req: NextRequest) {
           // Schema fallback if systemEvent model not available in current DB mode
         }
 
-        try {
-          await tx.auditLog.create({
-            data: {
-              userId: companyId,
-              action: "PAYMENT_AND_REFERRAL_COMMITTED",
-              resource: "/api/payments/webhook",
-              details: `Payment SUCCESS for plan ${plan.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
-            },
-          });
-        } catch {
-          // Fallback for offline test harness
-        }
+        await tx.auditLog.create({
+          data: {
+            userId: null,
+            companyId,
+            action: "PAYMENT_AND_REFERRAL_COMMITTED",
+            resource: "/api/payments/webhook",
+            details: `Payment SUCCESS for plan ${plan.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+          },
+        });
 
         return {
           duplicate: false,

@@ -38,6 +38,27 @@ enum CustomSkillStatus {
   REJECTED
 }
 
+enum CodingDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum SubmissionStatus {
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  RUNTIME_ERROR
+  COMPILE_ERROR
+  PENDING
+}
+
+enum MockInterviewStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
 model User {
   id             String   @id @default(uuid())
   email          String   @unique
@@ -88,8 +109,11 @@ model CandidateProfile {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  videoResumes VideoResume[]
-  applications Application[]
+  videoResumes        VideoResume[]
+  applications        Application[]
+  codingSubmissions   CodingSubmission[]
+  typingAssessments   TypingAssessment[]
+  mockInterviewSessions MockInterviewSession[]
 }
 
 model Company {
@@ -112,6 +136,7 @@ model Company {
   hiringRequirements   HiringRequirement[]
   commercialAgreements CommercialAgreement[]
   storedFiles          StoredFile[]
+  auditLogs            AuditLog[]
 }
 
 model EmployerProfile {
@@ -134,12 +159,16 @@ model JobListing {
   department   String?
   location     String
   type         String    @default("Full-time")
-  salaryRange  String?
-  description  String
-  requirements String[]  @default([])
-  status       JobStatus @default(ACTIVE)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  salaryRange        String?
+  description        String
+  requirements       String[]  @default([])
+  matchingConfig     Json?
+  screeningQuestions String[]  @default([])
+  aiFocusAreas       String?
+  skillRequirements  Json?
+  status             JobStatus @default(ACTIVE)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   applications Application[]
   savedBy      SavedJob[]
@@ -241,10 +270,10 @@ model VideoResume {
   videoUrl           String
   durationSeconds    Int
   transcript         String?
-  communicationScore Int              @default(0)
-  confidenceScore    Int              @default(0)
-  clarityScore       Int              @default(0)
-  professionalism    Int              @default(0)
+  communicationScore Int?
+  confidenceScore    Int?
+  clarityScore       Int?
+  professionalism    Int?
   createdAt          DateTime         @default(now())
 }
 
@@ -309,11 +338,15 @@ model AuditLog {
   id        String   @id @default(uuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   action    String
   resource  String
   ipAddress String?
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
 }
 
 model StoredFile {
@@ -632,6 +665,7 @@ model PromoCode {
   discountValue Float
   maxUsage      Int       @default(9999)
   usageCount    Int       @default(0)
+  reservedUsage Int       @default(0)
   validUntil    DateTime?
   isArchived    Boolean   @default(false)
   createdAt     DateTime  @default(now())
@@ -1366,22 +1400,136 @@ model WhatsAppInboundEvent {
 }
 
 model PaymentOrder {
-  id             String   @id @default(uuid())
-  orderId        String   @unique
-  companyId      String
-  planId         String
-  originalAmount Float
-  discountAmount Float    @default(0)
-  expectedAmount Float
-  gateway        String?
-  gatewayOrderId String?  @unique
-  gatewayTxId    String?
-  promoCode      String?
-  status         String   @default("INITIATED") // INITIATED | CREATED | SUCCESS | FAILED | REJECTED
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  orderId               String   @unique
+  companyId             String
+  planId                String
+  originalAmount        Float
+  discountAmount        Float    @default(0)
+  expectedAmount        Float
+  gateway               String?
+  gatewayOrderId        String?  @unique
+  gatewayTxId           String?
+  promoCode             String?
+  promoReservationState String?
+  status                String   @default("INITIATED") // INITIATED | CREATED | SUCCESS | FAILED | REJECTED
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([companyId])
   @@index([gatewayOrderId])
   @@index([gatewayTxId])
+}
+
+// ── Assessment Engine: Coding Problems ────────────────────────────────────────
+model CodingProblem {
+  id               String            @id @default(uuid())
+  slug             String            @unique
+  title            String
+  difficulty       CodingDifficulty  @default(MEDIUM)
+  category         String            @default("algorithms")
+  description      String
+  starterCode      Json              // { python3: "...", javascript: "...", typescript: "..." }
+  solutionTemplate Json?             // Reference solutions keyed by language
+  timeLimitMs      Int               @default(2000)
+  memoryLimitMb    Int               @default(128)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  testCases   TestCase[]
+  submissions CodingSubmission[]
+
+  @@index([difficulty, isActive])
+  @@index([category, isActive])
+}
+
+model TestCase {
+  id             String        @id @default(uuid())
+  problemId      String
+  problem        CodingProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  input          String
+  expectedOutput String
+  isHidden       Boolean       @default(false)
+  weight         Int           @default(1)
+  orderIndex     Int           @default(0)
+
+  @@index([problemId, isHidden])
+}
+
+model CodingSubmission {
+  id                 String           @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  problemId          String
+  problem            CodingProblem    @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  language           String
+  code               String
+  status             SubmissionStatus @default(PENDING)
+  score              Int              @default(0)
+  passedTests        Int              @default(0)
+  totalTests         Int              @default(0)
+  runtimeMs          Int?
+  memoryMb           Float?
+  stdout             String?
+  stderr             String?
+  createdAt          DateTime         @default(now())
+
+  @@index([candidateProfileId, problemId])
+  @@index([candidateProfileId, createdAt])
+}
+
+// ── Assessment Engine: Typing Speed ───────────────────────────────────────────
+model TypingAssessment {
+  id                 String           @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  wpm                Int
+  accuracy           Float
+  errorCount         Int
+  durationSeconds    Int
+  promptText         String
+  typedText          String
+  certificateId      String           @unique
+  createdAt          DateTime         @default(now())
+
+  @@index([candidateProfileId, createdAt])
+}
+
+// ── AI Mock Interview Engine ──────────────────────────────────────────────────
+model MockInterviewSession {
+  id                   String              @id @default(uuid())
+  candidateProfileId   String
+  candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  roleTarget           String
+  status               MockInterviewStatus @default(IN_PROGRESS)
+  totalQuestions        Int                 @default(5)
+  currentQuestionIndex Int                 @default(0)
+  overallScore         Int?
+  communicationScore   Int?
+  technicalScore       Int?
+  integrityScore       Int?
+  aiFeedback           String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  turns MockInterviewTurn[]
+
+  @@index([candidateProfileId, status])
+  @@index([candidateProfileId, createdAt])
+}
+
+model MockInterviewTurn {
+  id                       String               @id @default(uuid())
+  sessionId                String
+  session                  MockInterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionIndex            Int
+  questionText             String
+  candidateAnswerTranscript String?
+  score                    Int?
+  feedback                 String?
+  turnLatencyMs            Int?
+  createdAt                DateTime              @default(now())
+
+  @@index([sessionId, questionIndex])
 }

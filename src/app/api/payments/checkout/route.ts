@@ -1,14 +1,121 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
-import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import type { CreateOrderResult } from "@/lib/payments/PaymentGatewayInterface";
 
 const checkoutSchema = z.object({
   planId: z.string().uuid(),
   paymentMethod: z.enum(["RAZORPAY", "STRIPE", "PAYU", "PHONEPE", "AUTO"]).optional(),
   promoCode: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
 }).strict();
+
+type CheckoutPlan = {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+};
+
+type PromoReservation = {
+  code: string;
+  discountApplied: number;
+  finalPrice: number;
+};
+
+async function createPaymentOrderWithPromoReservation(params: {
+  orderId: string;
+  companyId: string;
+  plan: CheckoutPlan;
+  promoCode?: string;
+}): Promise<PromoReservation> {
+  const { orderId, companyId, plan, promoCode } = params;
+  return prisma.$transaction(async (tx) => {
+    let reservation: PromoReservation = {
+      code: "",
+      discountApplied: 0,
+      finalPrice: plan.price,
+    };
+
+    if (promoCode) {
+      // A row lock makes availability check + reservation one operation. The
+      // reservation is later converted to usage only by a verified webhook.
+      const promos = await tx.$queryRaw<Array<{
+        id: string;
+        code: string;
+        discountType: string;
+        discountValue: number;
+        maxUsage: number;
+        usageCount: number;
+        reservedUsage: number;
+        validUntil: Date | null;
+        isArchived: boolean;
+      }>>`
+        SELECT "id", "code", "discountType", "discountValue", "maxUsage", "usageCount", "reservedUsage", "validUntil", "isArchived"
+        FROM "PromoCode"
+        WHERE "code" = ${promoCode.toUpperCase()}
+        FOR UPDATE
+      `;
+      const promo = promos[0];
+      const isExpired = promo?.validUntil && promo.validUntil < new Date();
+      if (!promo || promo.isArchived || isExpired || promo.usageCount + promo.reservedUsage >= promo.maxUsage) {
+        throw new ApiError("Invalid, expired, or exhausted promo code.", 400);
+      }
+
+      const discountApplied = promo.discountType === "PERCENTAGE"
+        ? (plan.price * Math.min(100, Math.max(0, promo.discountValue))) / 100
+        : Math.min(plan.price, Math.max(0, promo.discountValue));
+      reservation = {
+        code: promo.code,
+        discountApplied,
+        finalPrice: Math.max(0, plan.price - discountApplied),
+      };
+
+      await tx.promoCode.update({
+        where: { id: promo.id },
+        data: { reservedUsage: { increment: 1 } },
+      });
+    }
+
+    await tx.paymentOrder.create({
+      data: {
+        orderId,
+        companyId,
+        planId: plan.id,
+        originalAmount: plan.price,
+        discountAmount: reservation.discountApplied,
+        expectedAmount: reservation.finalPrice,
+        promoCode: reservation.code || null,
+        promoReservationState: reservation.code ? "RESERVED" : null,
+        status: "INITIATED",
+      },
+    });
+    return reservation;
+  });
+}
+
+async function releasePromoReservation(orderId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.paymentOrder.findUnique({ where: { orderId } });
+    if (!order || order.promoReservationState !== "RESERVED" || !order.promoCode) return;
+
+    const promos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
+      SELECT "id", "reservedUsage"
+      FROM "PromoCode"
+      WHERE "code" = ${order.promoCode}
+      FOR UPDATE
+    `;
+    const promo = promos[0];
+    if (promo && promo.reservedUsage > 0) {
+      await tx.promoCode.update({ where: { id: promo.id }, data: { reservedUsage: { decrement: 1 } } });
+    }
+    await tx.paymentOrder.update({
+      where: { orderId },
+      data: { status: "FAILED", promoReservationState: "RELEASED" },
+    });
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -80,67 +187,36 @@ export async function POST(req: NextRequest) {
       return jsonError("This subscription plan has been archived and is no longer available", 400);
     }
 
-    let finalPrice = plan.price;
-    let discountApplied = 0;
-
-    if (promoCode) {
-      const promo = await prisma.promoCode.findUnique({
-        where: { code: promoCode.toUpperCase() },
-      });
-
-      const now = new Date();
-      const isExpired = promo?.validUntil && new Date(promo.validUntil) < now;
-      const isUsageExceeded = promo && promo.usageCount >= promo.maxUsage;
-
-      if (promo && !promo.isArchived && !isExpired && !isUsageExceeded) {
-        if (promo.discountType === "PERCENTAGE") {
-          discountApplied = (plan.price * Math.min(100, Math.max(0, promo.discountValue))) / 100;
-        } else {
-          discountApplied = Math.min(plan.price, Math.max(0, promo.discountValue));
-        }
-        finalPrice = Math.max(0, plan.price - discountApplied);
-      } else if (promoCode) {
-        return jsonError("Invalid, expired, or exhausted promo code.", 400);
-      }
-    }
-
     const orderId = 'ord_' + crypto.randomUUID();
-
-    await prisma.paymentOrder.create({
-      data: {
-        orderId,
-        companyId,
-        planId: plan.id,
-        originalAmount: plan.price,
-        discountAmount: discountApplied,
-        expectedAmount: finalPrice,
-        promoCode: promoCode || null,
-        status: "INITIATED"
-      }
-    });
+    const reservation = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan, promoCode });
 
     // Invoke PaymentGatewayController for multi-provider routing & safe failover
     const { PaymentGatewayController } = await import("@/lib/payments/PaymentGatewayController");
-    const gatewayResult = await PaymentGatewayController.createOrder(
-      {
-        orderId,
-        amount: finalPrice,
-        currency: plan.currency,
-        planName: plan.name,
-        planId: plan.id,
-        companyId,
-      },
-      paymentMethod
-    );
-
-    await prisma.paymentOrder.update({
-      where: { orderId },
-      data: {
-        gateway: gatewayResult.gateway,
-        gatewayOrderId: gatewayResult.gatewayOrderId,
-        status: "CREATED"
-      }
-    });
+    let gatewayResult: CreateOrderResult;
+    try {
+      gatewayResult = await PaymentGatewayController.createOrder(
+        {
+          orderId,
+          amount: reservation.finalPrice,
+          currency: plan.currency,
+          planName: plan.name,
+          planId: plan.id,
+          companyId,
+        },
+        paymentMethod,
+      );
+      await prisma.paymentOrder.update({
+        where: { orderId },
+        data: {
+          gateway: gatewayResult.gateway,
+          gatewayOrderId: gatewayResult.gatewayOrderId,
+          status: "CREATED",
+        },
+      });
+    } catch (error) {
+      await releasePromoReservation(orderId).catch(() => undefined);
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
@@ -151,12 +227,12 @@ export async function POST(req: NextRequest) {
         planId: plan.id,
         planName: plan.name,
         originalPrice: plan.price,
-        discountAmount: discountApplied,
-        finalAmount: finalPrice,
+        discountAmount: reservation.discountApplied,
+        finalAmount: reservation.finalPrice,
         currency: plan.currency,
         paymentMethod: gatewayResult.gateway,
         status: "CREATED",
-        checkoutUrl: gatewayResult.checkoutUrl || `/payment/status?orderId=${orderId}&amount=${finalPrice}`,
+        checkoutUrl: gatewayResult.checkoutUrl || `/payment/status?orderId=${orderId}&amount=${reservation.finalPrice}`,
       },
     });
   } catch (error) {

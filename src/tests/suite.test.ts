@@ -9,6 +9,7 @@ export interface TestResult {
   name: string;
   category: string;
   passed: boolean;
+  skipped?: boolean;
   message?: string;
 }
 
@@ -16,6 +17,7 @@ export async function runAllTests(): Promise<{
   total: number;
   passedCount: number;
   failedCount: number;
+  skippedCount: number;
   results: TestResult[];
 }> {
   const results: TestResult[] = [];
@@ -195,12 +197,14 @@ export async function runAllTests(): Promise<{
   }
 
   const passedCount = results.filter((r) => r.passed).length;
-  const failedCount = results.length - passedCount;
+  const skippedCount = results.filter((r) => r.skipped).length;
+  const failedCount = results.length - passedCount - skippedCount;
 
   return {
     total: results.length,
     passedCount,
     failedCount,
+    skippedCount,
     results,
   };
 }
@@ -211,10 +215,10 @@ if (process.argv[1]?.includes("suite.test")) {
     .then((res) => {
       console.log("\n========================================");
       console.log(`HireGo Test Suite Summary:`);
-      console.log(`Total: ${res.total} | Passed: ${res.passedCount} | Failed: ${res.failedCount}`);
+      console.log(`Total: ${res.total} | Passed: ${res.passedCount} | Skipped: ${res.skippedCount} | Failed: ${res.failedCount}`);
       console.log("========================================\n");
       for (const r of res.results) {
-        console.log(`  [${r.passed ? "PASS" : "FAIL"}] [${r.category}] ${r.name}${r.message ? ` - ${r.message}` : ""}`);
+        console.log(`  [${r.skipped ? "SKIP" : r.passed ? "PASS" : "FAIL"}] [${r.category}] ${r.name}${r.message ? ` - ${r.message}` : ""}`);
       }
       process.exit(res.failedCount > 0 ? 1 : 0);
     })

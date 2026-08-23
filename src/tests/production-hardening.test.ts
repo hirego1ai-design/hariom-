@@ -7,6 +7,7 @@ export type HardeningTestResult = {
   name: string;
   category: string;
   passed: boolean;
+  skipped?: boolean;
   message?: string;
 };
 
@@ -14,6 +15,14 @@ const result = (name: string, passed: boolean, message?: string): HardeningTestR
   name,
   category: "Production hardening",
   passed,
+  message,
+});
+
+const skipped = (name: string, message: string): HardeningTestResult => ({
+  name,
+  category: "Production hardening",
+  passed: false,
+  skipped: true,
   message,
 });
 
@@ -57,9 +66,8 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
   }
 
   if (process.env.HIREGO_TEST_DATABASE !== "1") {
-    results.push(result(
+    results.push(skipped(
       "Concurrent application submission database invariant",
-      true,
       "Not run outside the disposable CI database (set HIREGO_TEST_DATABASE=1).",
     ));
     return { results };
@@ -106,6 +114,27 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       statuses[0] === 201 && statuses[1] === 409 && count === 1,
       `statuses=${statuses.join(",")}, applicationRows=${count}`,
     ));
+
+    const { POST: submitVideo } = await import("@/app/api/candidate/video-resume/route");
+    const videoResponse = await submitVideo(new Request("https://hirego.test/api/candidate/video-resume", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        videoUrl: "https://storage.hirego.test/videos/test.mp4",
+        durationSeconds: 45,
+        analysis: { communicationScore: 100, clarityScore: 100, confidenceScore: 100, professionalismScore: 100 },
+      }),
+    }) as any);
+    const videoJson = await videoResponse.json();
+    const video = videoJson.video;
+    results.push(result(
+      "Candidate-controlled video scores are never persisted",
+      videoResponse.status === 201 &&
+        video?.communicationScore === null &&
+        video?.clarityScore === null &&
+        video?.confidenceScore === null &&
+        video?.professionalism === null,
+    ));
   } catch (error) {
     results.push(result("Concurrent application submission creates exactly one row", false, error instanceof Error ? error.message : String(error)));
   } finally {
@@ -113,6 +142,81 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     await prisma.candidateProfile.delete({ where: { id: candidate.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
     await prisma.company.delete({ where: { id: company.id } }).catch(() => undefined);
+  }
+
+  const promoSuffix = crypto.randomUUID();
+  let promoId: string | undefined;
+  let planId: string | undefined;
+  let promoEmployerId: string | undefined;
+  let promoCompanyId: string | undefined;
+  try {
+    const promoCompany = await prisma.company.create({ data: { name: `Promo Test Company ${promoSuffix}` } });
+    promoCompanyId = promoCompany.id;
+    const employer = await prisma.user.create({
+      data: {
+        email: `promo-employer-${promoSuffix}@hirego.test`,
+        name: "Promo Regression Employer",
+        passwordHash: "not-used-by-handler-tests",
+        role: "EMPLOYER",
+        emailVerified: true,
+      },
+    });
+    promoEmployerId = employer.id;
+    await prisma.employerProfile.create({ data: { userId: employer.id, companyId: promoCompany.id } });
+    const plan = await prisma.subscriptionPlan.create({
+      data: {
+        name: `Promo Test Plan ${promoSuffix}`,
+        description: "Disposable promo-reservation plan.",
+        price: 1000,
+        currency: "INR",
+        jobPostsQuota: 1,
+        resumeUnlocksQuota: 1,
+        aiInterviewsQuota: 1,
+      },
+    });
+    planId = plan.id;
+    const promo = await prisma.promoCode.create({
+      data: { code: `ONE${promoSuffix.replace(/-/g, "").slice(0, 12)}`.toUpperCase(), discountType: "PERCENTAGE", discountValue: 10, maxUsage: 1 },
+    });
+    promoId = promo.id;
+    const { POST: checkout } = await import("@/app/api/payments/checkout/route");
+    const employerToken = createSessionToken({ id: employer.id, email: employer.email, name: employer.name, role: "EMPLOYER", sessionVersion: employer.sessionVersion });
+    const checkoutRequest = () => new Request("https://hirego.test/api/payments/checkout", {
+      method: "POST",
+      headers: { authorization: `Bearer ${employerToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ planId: plan.id, paymentMethod: "RAZORPAY", promoCode: promo.code }),
+    });
+    const checkoutResponses = await Promise.all([checkout(checkoutRequest() as any), checkout(checkoutRequest() as any)]);
+    const updatedPromo = await prisma.promoCode.findUnique({ where: { id: promo.id } });
+    results.push(result(
+      "Promo checkout reserves exactly one remaining capacity slot",
+      checkoutResponses.filter((response) => response.status === 200).length === 1 &&
+      checkoutResponses.filter((response) => response.status === 400).length === 1 &&
+      updatedPromo?.usageCount === 0 && updatedPromo?.reservedUsage === 1,
+    ));
+
+    const paymentAudit = await prisma.auditLog.create({
+      data: {
+        userId: null,
+        companyId: promoCompany.id,
+        action: "PAYMENT_AUDIT_RELATION_TEST",
+        resource: "test",
+      },
+    });
+    results.push(result(
+      "System payment audit events retain company ownership without a fake user ID",
+      paymentAudit.userId === null && paymentAudit.companyId === promoCompany.id,
+    ));
+  } catch (error) {
+    results.push(result("Promo checkout reserves exactly one remaining capacity slot", false, error instanceof Error ? error.message : String(error)));
+  } finally {
+    if (promoCompanyId) await prisma.auditLog.deleteMany({ where: { companyId: promoCompanyId } }).catch(() => undefined);
+    if (promoCompanyId) await prisma.paymentOrder.deleteMany({ where: { companyId: promoCompanyId } }).catch(() => undefined);
+    if (promoId) await prisma.promoCode.delete({ where: { id: promoId } }).catch(() => undefined);
+    if (planId) await prisma.subscriptionPlan.delete({ where: { id: planId } }).catch(() => undefined);
+    if (promoEmployerId) await prisma.employerProfile.deleteMany({ where: { userId: promoEmployerId } }).catch(() => undefined);
+    if (promoEmployerId) await prisma.user.delete({ where: { id: promoEmployerId } }).catch(() => undefined);
+    if (promoCompanyId) await prisma.company.delete({ where: { id: promoCompanyId } }).catch(() => undefined);
   }
 
   return { results };

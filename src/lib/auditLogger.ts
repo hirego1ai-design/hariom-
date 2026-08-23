@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 export interface AuditLogEntry {
   id: string;
   userId?: string;
+  companyId?: string;
   action: string;
   resource: string;
   ipAddress?: string;
@@ -18,6 +19,7 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
     const newEntry: AuditLogEntry = {
       id: `audit-${Date.now()}-${Math.random()}`,
       userId: entry.userId || undefined,
+      companyId: entry.companyId || undefined,
       action: entry.action,
       resource: entry.resource,
       ipAddress: entry.ipAddress || "unknown",
@@ -32,6 +34,7 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
     const saved = await prisma.auditLog.create({
       data: {
         userId: entry.userId || null,
+        companyId: entry.companyId || null,
         action: entry.action,
         resource: entry.resource,
         ipAddress: entry.ipAddress || "unknown",
@@ -42,6 +45,7 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
     const result: AuditLogEntry = {
       id: saved.id,
       userId: saved.userId || undefined,
+      companyId: saved.companyId || undefined,
       action: saved.action,
       resource: saved.resource,
       ipAddress: saved.ipAddress || undefined,
@@ -54,6 +58,7 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
       action: entry.action,
       resource: entry.resource,
       userId: entry.userId,
+      companyId: entry.companyId,
       error,
     });
     return null;
@@ -74,6 +79,7 @@ export async function getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
     return logs.map((log) => ({
       id: log.id,
       userId: log.userId || undefined,
+      companyId: log.companyId || undefined,
       action: log.action,
       resource: log.resource,
       ipAddress: log.ipAddress || undefined,
