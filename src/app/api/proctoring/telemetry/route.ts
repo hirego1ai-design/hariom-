@@ -1,74 +1,103 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { z } from "zod";
+import { getCurrentSession } from "@/lib/auth";
+import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
-interface ProctoringEvent {
-  id: string;
-  interviewId: string;
-  candidateId: string;
-  violationType: string;
-  severity: "low" | "medium" | "high";
-  timestamp: string;
+const telemetrySchema = z.object({
+  interviewId: z.string().uuid("Invalid interview ID."),
+  violationType: z.enum([
+    "TAB_SWITCH",
+    "FACE_NOT_DETECTED",
+    "MULTIPLE_FACES",
+    "AUDIO_ANOMALY",
+    "SCREEN_SHARE_STOPPED",
+    "BROWSER_UNFOCUSED",
+    "COPY_PASTE_DETECTED",
+  ]),
+  severity: z.enum(["low", "medium", "high"]),
+});
+
+async function getInterviewWithOwner(interviewId: string) {
+  return prisma.interview.findUnique({
+    where: { id: interviewId },
+    include: {
+      application: {
+        include: {
+          candidateProfile: { select: { userId: true } },
+          job: { select: { companyId: true } },
+        },
+      },
+    },
+  });
 }
 
-const ALLOWED_VIOLATION_TYPES = new Set([
-  "TAB_SWITCH",
-  "FACE_NOT_DETECTED",
-  "MULTIPLE_FACES",
-  "AUDIO_ANOMALY",
-  "SCREEN_SHARE_STOPPED",
-  "BROWSER_UNFOCUSED",
-  "COPY_PASTE_DETECTED",
-]);
+type InterviewWithOwner = Awaited<ReturnType<typeof getInterviewWithOwner>>;
 
-const ALLOWED_SEVERITIES = new Set(["low", "medium", "high"]);
+async function assertInterviewAccess(
+  session: NonNullable<ReturnType<typeof getCurrentSession>>,
+  interviewId: string,
+  purpose: "read" | "write",
+): Promise<NonNullable<InterviewWithOwner>> {
+  const interview = await getInterviewWithOwner(interviewId);
+  if (!interview) throw new ApiError("Interview not found.", 404);
 
-const proctoringEventsStore: ProctoringEvent[] = [];
+  if (session.role === "ADMIN") return interview;
 
-export async function GET(req: NextRequest) {
+  const candidateUserId = interview.application.candidateProfile?.userId;
+  if (session.role === "CANDIDATE") {
+    if (candidateUserId !== session.id) {
+      throw new ApiError("You do not have access to this interview.", 403);
+    }
+    return interview;
+  }
+
+  if (purpose === "write") {
+    throw new ApiError("Only the assigned candidate may submit proctoring telemetry.", 403);
+  }
+
+  if (session.role === "EMPLOYER" || session.role === "RECRUITER") {
+    const profile = await prisma.employerProfile.findUnique({
+      where: { userId: session.id },
+      select: { companyId: true },
+    });
+    if (!profile || profile.companyId !== interview.application.job.companyId) {
+      throw new ApiError("You do not have access to this interview.", 403);
+    }
+    return interview;
+  }
+
+  throw new ApiError("You do not have access to this interview.", 403);
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
+    const session = getCurrentSession(request.headers);
+    if (!session) return jsonError("Unauthorized access", 401);
 
-    const { searchParams } = new URL(req.url);
-    const interviewId = searchParams.get("interviewId") || "";
+    enforceRateLimit(request, "proctoring_telemetry_read", 60, 60_000);
+    const interviewId = new URL(request.url).searchParams.get("interviewId");
+    if (!interviewId) return jsonError("interviewId is required.", 400);
 
-    // Authorize employer/recruiter reads to interviews belonging to their company
-    if (interviewId && (session.role === "EMPLOYER" || session.role === "RECRUITER")) {
-      try {
-        const interview = await prisma.interview.findUnique({
-          where: { id: interviewId },
-          include: { application: { include: { job: true } } },
-        });
-        const profile = await prisma.employerProfile.findUnique({
-          where: { userId: session.id },
-        });
-        if (interview && profile && interview.application.job.companyId !== profile.companyId) {
-          return jsonError("Forbidden: You do not have access to telemetry for this interview.", 403);
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === "production") {
-          throw error;
-        }
-      }
-    }
+    await assertInterviewAccess(session, interviewId, "read");
+    const events = await prisma.proctoringTelemetry.findMany({
+      where: { interviewId },
+      select: {
+        id: true,
+        interviewId: true,
+        candidateId: true,
+        violationType: true,
+        severity: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
 
-    let events = proctoringEventsStore.filter(
-      (e) => !interviewId || e.interviewId === interviewId
+    const totalSeverityScore = events.reduce(
+      (score, event) => score + (event.severity === "high" ? 25 : event.severity === "medium" ? 15 : 5),
+      0,
     );
-
-    // If candidate, restrict strictly to their own proctoring events
-    if (session.role === "CANDIDATE") {
-      events = events.filter((e) => e.candidateId === session.id);
-    }
-
-    const totalSeverityScore = events.reduce((acc, e) => {
-      return acc + (e.severity === "high" ? 25 : e.severity === "medium" ? 15 : 5);
-    }, 0);
-
     const cheatingRiskScore = Math.min(100, totalSeverityScore);
 
     return NextResponse.json({
@@ -77,7 +106,7 @@ export async function GET(req: NextRequest) {
         totalViolations: events.length,
         cheatingRiskScore,
         status: cheatingRiskScore > 40 ? "FLAGGED" : "CLEAN",
-        events: events.slice(0, 20),
+        events: events.slice(0, 20).map((event) => ({ ...event, timestamp: event.createdAt.toISOString() })),
       },
     });
   } catch (error) {
@@ -85,68 +114,48 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const session = getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    const session = getCurrentSession(request.headers);
+    if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "CANDIDATE") {
+      return jsonError("Only candidates may submit proctoring telemetry.", 403);
     }
 
-    const body = await req.json();
-    const { interviewId, violationType, severity } = body;
+    enforceRateLimit(request, "proctoring_telemetry_write", 120, 60_000);
+    const body = await readValidatedJson(request, telemetrySchema);
+    await assertInterviewAccess(session, body.interviewId, "write");
 
-    if (!violationType || !ALLOWED_VIOLATION_TYPES.has(violationType)) {
-      return jsonError("Invalid or unsupported violationType", 400);
-    }
+    const event = await prisma.proctoringTelemetry.create({
+      data: {
+        interviewId: body.interviewId,
+        candidateId: session.id,
+        violationType: body.violationType,
+        severity: body.severity,
+      },
+      select: {
+        id: true,
+        interviewId: true,
+        candidateId: true,
+        violationType: true,
+        severity: true,
+        createdAt: true,
+      },
+    });
 
-    // Verify candidate belongs to the requested interview
-    if (interviewId && session.role === "CANDIDATE") {
-      try {
-        const interview = await prisma.interview.findUnique({
-          where: { id: interviewId },
-          include: { application: { include: { candidateProfile: true } } },
-        });
-        if (interview && interview.application.candidateProfile?.userId !== session.id) {
-          return jsonError("Forbidden: Candidate is not assigned to this interview.", 403);
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === "production") {
-          throw error;
-        }
-      }
-    }
-
-    const cleanSeverity: "low" | "medium" | "high" =
-      severity && ALLOWED_SEVERITIES.has(severity) ? severity : "medium";
-
-    const event: ProctoringEvent = {
-      id: `proc_${crypto.randomUUID()}`,
-      interviewId: interviewId || `int_${session.id}`,
-      candidateId: session.id,
-      violationType,
-      severity: cleanSeverity,
-      timestamp: new Date().toISOString(),
-    };
-
-    proctoringEventsStore.unshift(event);
-
-    try {
-      await prisma.auditLog.create({
-        data: {
-          userId: session.id,
-          action: "PROCTORING_VIOLATION",
-          resource: `interview:${event.interviewId}`,
-          details: JSON.stringify({ violationType, severity: cleanSeverity }),
-        },
-      });
-    } catch {
-      // DB fallback
-    }
+    await prisma.auditLog.create({
+      data: {
+        userId: session.id,
+        action: "PROCTORING_VIOLATION",
+        resource: `interview:${event.interviewId}`,
+        details: JSON.stringify({ violationType: event.violationType, severity: event.severity }),
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      event,
-      message: "Proctoring violation telemetry recorded",
+      event: { ...event, timestamp: event.createdAt.toISOString() },
+      message: "Proctoring violation telemetry recorded.",
     });
   } catch (error) {
     return handleApiError(error);

@@ -51,12 +51,12 @@ export function hashPassword(password: string): string {
   return bcrypt.hashSync(password, 10);
 }
 
-export function createSessionToken(payload: string | { id: string; email?: string; role?: any; name?: string }, role?: UserRole): string {
-  const sessionData: UserSession = typeof payload === "string" 
-    ? { id: payload, email: `${payload}@hirego.ai`, role: role || "ADMIN", name: payload }
-    : { id: payload.id, email: payload.email || `${payload.id}@hirego.ai`, role: payload.role || role || "ADMIN", name: payload.name || "User" };
+export function createSessionToken(payload: UserSession): string {
+  if (!payload.id || !payload.email || !payload.name || !payload.role) {
+    throw new Error("Session tokens require an explicit user ID, email, name, and role.");
+  }
 
-  return jwt.sign(sessionData, JWT_SECRET, { expiresIn: "12h" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "12h" });
 }
 
 export function verifySessionToken(token: string): UserSession | null {

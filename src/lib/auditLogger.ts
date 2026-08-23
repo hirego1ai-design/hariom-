@@ -10,55 +10,60 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
-const auditLogsStore: AuditLogEntry[] = [];
-
-export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp">) {
-  const log: AuditLogEntry = {
-    ...entry,
-    id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    timestamp: new Date().toISOString(),
-  };
-
+/**
+ * PostgreSQL is the sole source of truth for security audit events. Failures are
+ * surfaced to application monitoring instead of being hidden in process memory.
+ */
+export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp">): Promise<AuditLogEntry | null> {
   try {
-    await prisma.auditLog.create({
+    const saved = await prisma.auditLog.create({
       data: {
         userId: entry.userId || null,
         action: entry.action,
         resource: entry.resource,
-        ipAddress: entry.ipAddress || "local",
+        ipAddress: entry.ipAddress || "unknown",
         details: entry.details || null,
       },
     });
-  } catch (err) {
-    // Fallback to local in-memory logging if database url placeholder / down
-  }
 
-  auditLogsStore.push(log);
-  console.log(`[AUDIT LOG] ${log.timestamp} | ${log.action} | Resource: ${log.resource} | IP: ${log.ipAddress || "local"}`);
-  return log;
+    return {
+      id: saved.id,
+      userId: saved.userId || undefined,
+      action: saved.action,
+      resource: saved.resource,
+      ipAddress: saved.ipAddress || undefined,
+      details: saved.details || undefined,
+      timestamp: saved.createdAt.toISOString(),
+    };
+  } catch (error) {
+    console.error("AUDIT_LOG_PERSISTENCE_FAILURE", {
+      action: entry.action,
+      resource: entry.resource,
+      userId: entry.userId,
+      error,
+    });
+    return null;
+  }
 }
 
-export async function getAuditLogs(limit = 50) {
+export async function getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
   try {
     const logs = await prisma.auditLog.findMany({
-      take: limit,
-      orderBy: {
-        createdAt: "desc",
-      },
+      take: Math.min(Math.max(limit, 1), 500),
+      orderBy: { createdAt: "desc" },
     });
-    if (logs && logs.length > 0) {
-      return logs.map((l) => ({
-        id: l.id,
-        userId: l.userId || undefined,
-        action: l.action,
-        resource: l.resource,
-        ipAddress: l.ipAddress || undefined,
-        details: l.details || undefined,
-        timestamp: l.createdAt.toISOString(),
-      }));
-    }
-  } catch (err) {
-    // Fallback to in-memory store
+
+    return logs.map((log) => ({
+      id: log.id,
+      userId: log.userId || undefined,
+      action: log.action,
+      resource: log.resource,
+      ipAddress: log.ipAddress || undefined,
+      details: log.details || undefined,
+      timestamp: log.createdAt.toISOString(),
+    }));
+  } catch (error) {
+    console.error("AUDIT_LOG_READ_FAILURE", { error });
+    return [];
   }
-  return auditLogsStore.slice(-limit).reverse();
 }

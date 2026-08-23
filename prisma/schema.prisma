@@ -54,6 +54,7 @@ model User {
   auditLogs          AuditLog[]
   notifications      Notification[]
   aiUsages           AiUsage[]
+  proctoringEvents   ProctoringTelemetry[]
   savedJobs          SavedJob[]
   referralsInitiated ReferralAttribution[] @relation("UserReferrer")
   referralReceived   ReferralAttribution?  @relation("UserReferred")
@@ -205,6 +206,8 @@ model OtpVerification {
   type      String   @default("VERIFY_EMAIL")
   expiresAt DateTime
   verified  Boolean  @default(false)
+  attempts  Int      @default(0)
+  lockedUntil DateTime?
   createdAt DateTime @default(now())
 
   @@index([email, type])
@@ -249,7 +252,22 @@ model Interview {
   roomUrl       String?
   transcript    String?
   aiFeedback    String?
+  proctoringEvents ProctoringTelemetry[]
   createdAt     DateTime    @default(now())
+}
+
+model ProctoringTelemetry {
+  id            String    @id @default(uuid())
+  interviewId   String
+  interview     Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     User      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  violationType String
+  severity      String
+  createdAt     DateTime  @default(now())
+
+  @@index([interviewId, createdAt])
+  @@index([candidateId, createdAt])
 }
 
 model Notification {

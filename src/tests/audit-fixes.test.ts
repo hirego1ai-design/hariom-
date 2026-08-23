@@ -1,5 +1,6 @@
 import { generateAndSendOtp, verifyOtpCode } from "@/lib/otp";
 import { enforceRateLimit, resetRateLimitStore } from "@/lib/apiSecurity";
+import { createSessionToken } from "@/lib/auth";
 
 export interface AuditFixTestResult {
   name: string;
@@ -336,32 +337,60 @@ export async function runAuditFixesTests(): Promise<{
     });
   }
 
-  // 11. Proctoring Telemetry Company-Scoped Test
+  // 11. Proctoring telemetry rejects anonymous and unscoped reads before data access.
   try {
-    // Simulating employer reading telemetry for another company's interview
-    const mockSession = { user: { id: "employer-id", companyId: "company-A" }, role: "EMPLOYER" };
-    const mockInterviewTelemetry = { id: "telemetry-1", companyId: "company-B" };
-    
-    const isSameCompany = mockSession.user.companyId === mockInterviewTelemetry.companyId;
-    const status = isSameCompany ? 200 : 403;
-    const passTelemetryAuth = status === 403;
+    const { GET } = await import("@/app/api/proctoring/telemetry/route");
+    const anonymous = await GET(new Request("https://hirego.ai/api/proctoring/telemetry") as any);
+    const candidateToken = createSessionToken({
+      id: "candidate-telemetry-test",
+      email: "candidate-telemetry-test@hirego.ai",
+      name: "Candidate Telemetry Test",
+      role: "CANDIDATE",
+    });
+    const unscoped = await GET(new Request("https://hirego.ai/api/proctoring/telemetry", {
+      headers: { authorization: `Bearer ${candidateToken}` },
+    }) as any);
+    const passTelemetryAuth = anonymous.status === 401 && unscoped.status === 400;
 
     results.push({
-      name: "Interview Security - Proctoring Telemetry Scoped to Company",
+      name: "Interview Security - Proctoring Telemetry Requires Authenticated Interview Scope",
       category: "Interview Security",
       passed: passTelemetryAuth,
-      message: passTelemetryAuth ? undefined : `Expected 403, got: ${status}`,
+      message: passTelemetryAuth ? undefined : `Expected 401/400, got: ${anonymous.status}/${unscoped.status}`,
     });
   } catch (e: any) {
     results.push({
-      name: "Interview Security - Proctoring Telemetry Scoped to Company",
+      name: "Interview Security - Proctoring Telemetry Requires Authenticated Interview Scope",
       category: "Interview Security",
       passed: false,
       message: e.message,
     });
   }
 
-  // 12. Admin configuration endpoints reject direct anonymous handler calls.
+  // 12. Session creation must never infer an administrator role.
+  try {
+    let missingRoleRejected = false;
+    try {
+      const malformedSession = {
+        id: "missing-role",
+        email: "missing-role@hirego.ai",
+        name: "Missing Role",
+      } as unknown as Parameters<typeof createSessionToken>[0];
+      createSessionToken(malformedSession);
+    } catch {
+      missingRoleRejected = true;
+    }
+    results.push({
+      name: "Authentication Security - Session Role Must Be Explicit",
+      category: "Authentication",
+      passed: missingRoleRejected,
+      message: missingRoleRejected ? undefined : "Missing role was accepted when creating a session token.",
+    });
+  } catch (e: any) {
+    results.push({ name: "Authentication Security - Session Role Must Be Explicit", category: "Authentication", passed: false, message: e.message });
+  }
+
+  // 13. Admin configuration endpoints reject direct anonymous handler calls.
   try {
     const { POST } = await import("@/app/api/admin/config/route");
     const req = new Request("https://hirego.ai/api/admin/config", {
@@ -380,7 +409,7 @@ export async function runAuditFixesTests(): Promise<{
     results.push({ name: "Admin Security - Platform Configuration Rejects Anonymous Writes", category: "Admin Authorization", passed: false, message: e.message });
   }
 
-  // 13. Agreement records cannot be fetched without a session, even when called without the edge proxy.
+  // 14. Agreement records cannot be fetched without a session, even when called without the edge proxy.
   try {
     const { GET } = await import("@/app/api/agreements/contracts/[id]/route");
     const req = new Request("https://hirego.ai/api/agreements/contracts/agr-default-1");
@@ -395,7 +424,7 @@ export async function runAuditFixesTests(): Promise<{
     results.push({ name: "Agreement Security - Contract Detail Rejects Anonymous Access", category: "Agreement Authorization", passed: false, message: e.message });
   }
 
-  // 14. Agreement templates require an administrator for mutations.
+  // 15. Agreement templates require an administrator for mutations.
   try {
     const { DELETE } = await import("@/app/api/agreements/templates/[id]/route");
     const req = new Request("https://hirego.ai/api/agreements/templates/tpl-default-1", { method: "DELETE" });
