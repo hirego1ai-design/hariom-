@@ -1,3 +1,5 @@
+process.env.MOCK_DB = process.env.MOCK_DB ?? "true";
+
 import { calculateCommercialFee } from "@/utils/pricing";
 import { agreementsDb } from "@/lib/agreements-db";
 import { invoicesDb } from "@/lib/invoices-db";
@@ -18,7 +20,6 @@ export async function runAllTests(): Promise<{
   failedCount: number;
   results: TestResult[];
 }> {
-  process.env.MOCK_DB = process.env.MOCK_DB ?? "true";
   const results: TestResult[] = [];
 
   // 1. Commercial Pricing Engine Tests
@@ -162,6 +163,17 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Audit Fixes Suite", category: "Audit Fixes", passed: false, message: e.message });
   }
 
+  // 10. WhatsApp Meta Cloud API Integration Suite
+  try {
+    const { runWhatsAppTestSuite } = await import("./whatsapp.test");
+    const waRes = await runWhatsAppTestSuite();
+    for (const r of waRes.results) {
+      results.push({ name: r.name, category: "WhatsApp Meta Cloud API", passed: r.passed, message: r.message });
+    }
+  } catch (e: any) {
+    results.push({ name: "WhatsApp Meta Cloud API Suite", category: "WhatsApp Meta Cloud API", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const failedCount = results.length - passedCount;
 
@@ -191,4 +203,3 @@ if (process.argv[1]?.includes("suite.test")) {
       process.exit(1);
     });
 }
-

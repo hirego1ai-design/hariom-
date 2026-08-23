@@ -1,15 +1,15 @@
 /**
  * GET /api/whatsapp/auth/handoff?token=xxx
  *
- * Exchanges a short-lived WhatsApp auth handoff token for a
+ * Exchanges a short-lived (5 min) WhatsApp auth handoff token for a
  * standard hirego_session cookie, then redirects to the dashboard.
  *
  * Security:
  * - Token is JWT-signed with JWT_SECRET
- * - 15-minute expiry enforced by JWT
+ * - 5-minute expiry enforced by JWT
  * - Single-use: jti is consumed on first valid exchange
  * - Redirect target is hardcoded to internal dashboard (no open redirect)
- * - Expired or already-used tokens return 400
+ * - Expired or already-used tokens redirect to /login?error=link_expired
  */
 
 import { NextRequest, NextResponse } from "next/server";

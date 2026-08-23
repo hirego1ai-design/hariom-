@@ -4,13 +4,130 @@
  * Business logic lives in whatsapp-onboarding.ts.
  */
 
-const WA_API_BASE = "https://graph.facebook.com/v20.0";
+export const DEFAULT_META_GRAPH_VERSION = "v21.0";
 
-function getWaConfig(): { token: string; phoneNumberId: string } | null {
+export function getMetaGraphVersion(): string {
+  return process.env.META_GRAPH_VERSION || DEFAULT_META_GRAPH_VERSION;
+}
+
+export function getMetaGraphBaseUrl(): string {
+  const version = getMetaGraphVersion();
+  return `https://graph.facebook.com/${version}`;
+}
+
+export interface WaConfig {
+  token: string;
+  phoneNumberId: string;
+  appSecret?: string;
+  verifyToken?: string;
+}
+
+export function isPlaceholderSecret(secret?: string | null): boolean {
+  if (!secret) return true;
+  const lower = secret.toLowerCase().trim();
+  return (
+    lower.includes("set-a-long") ||
+    lower.includes("eaagz...w0192") ||
+    lower.includes("your-meta-") ||
+    lower.includes("placeholder") ||
+    lower === ""
+  );
+}
+
+export function validateWhatsAppConfig(): { valid: boolean; error?: string; config?: WaConfig } {
   const token = process.env.WHATSAPP_API_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) return null;
-  return { token, phoneNumberId };
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (!token || !phoneNumberId) {
+    if (isProd) {
+      return { valid: false, error: "WHATSAPP_API_TOKEN and WHATSAPP_PHONE_NUMBER_ID must be configured in production." };
+    }
+    return { valid: false, error: "WhatsApp provider is not configured." };
+  }
+
+  if (isProd) {
+    if (isPlaceholderSecret(token)) {
+      return { valid: false, error: "WHATSAPP_API_TOKEN contains placeholder value." };
+    }
+    if (isPlaceholderSecret(phoneNumberId)) {
+      return { valid: false, error: "WHATSAPP_PHONE_NUMBER_ID contains placeholder value." };
+    }
+    if (isPlaceholderSecret(appSecret)) {
+      return { valid: false, error: "WHATSAPP_APP_SECRET must be configured in production." };
+    }
+    if (isPlaceholderSecret(verifyToken)) {
+      return { valid: false, error: "WHATSAPP_VERIFY_TOKEN must be configured in production." };
+    }
+  }
+
+  return {
+    valid: true,
+    config: { token, phoneNumberId, appSecret, verifyToken },
+  };
+}
+
+function getWaConfig(): WaConfig | null {
+  const validation = validateWhatsAppConfig();
+  if (!validation.valid || !validation.config) return null;
+  return validation.config;
+}
+
+// ─── Outbound Retry & Backoff Helper ──────────────────────────────────────────
+
+export interface FetchRetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffFactor?: number;
+}
+
+export async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retryOptions: FetchRetryOptions = {}
+): Promise<Response> {
+  const {
+    maxRetries = 3,
+    initialDelayMs = 250,
+    maxDelayMs = 2500,
+    backoffFactor = 2,
+  } = retryOptions;
+
+  let attempt = 0;
+  let delay = initialDelayMs;
+
+  while (true) {
+    try {
+      const response = await fetch(url, options);
+
+      // Do not retry successful responses or non-retryable client errors (400, 401, 403, 404, 422)
+      const status = response.status;
+      const isRetryableStatus = status === 429 || (status >= 500 && status <= 599);
+
+      if (!isRetryableStatus || attempt >= maxRetries) {
+        return response;
+      }
+
+      attempt++;
+      const jitter = Math.random() * 100;
+      const sleepMs = Math.min(delay, maxDelayMs) + jitter;
+      await new Promise((resolve) => setTimeout(resolve, sleepMs));
+      delay *= backoffFactor;
+    } catch (error: any) {
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+      attempt++;
+      const jitter = Math.random() * 100;
+      const sleepMs = Math.min(delay, maxDelayMs) + jitter;
+      await new Promise((resolve) => setTimeout(resolve, sleepMs));
+      delay *= backoffFactor;
+    }
+  }
 }
 
 // ─── Text message ────────────────────────────────────────────────────────────
@@ -34,7 +151,8 @@ export async function sendWhatsAppTextMessage(
   if (!to) return { sent: false, reason: "Invalid phone number." };
 
   try {
-    const response = await fetch(`${WA_API_BASE}/${cfg.phoneNumberId}/messages`, {
+    const baseUrl = getMetaGraphBaseUrl();
+    const response = await fetchWithRetry(`${baseUrl}/${cfg.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cfg.token}`,
@@ -81,7 +199,8 @@ export async function sendWhatsAppInteractiveList(
   if (!to) return { sent: false, reason: "Invalid phone number." };
 
   try {
-    const response = await fetch(`${WA_API_BASE}/${cfg.phoneNumberId}/messages`, {
+    const baseUrl = getMetaGraphBaseUrl();
+    const response = await fetchWithRetry(`${baseUrl}/${cfg.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cfg.token}`,
@@ -135,7 +254,8 @@ export async function sendWhatsAppButtonMessage(
   }
 
   try {
-    const response = await fetch(`${WA_API_BASE}/${cfg.phoneNumberId}/messages`, {
+    const baseUrl = getMetaGraphBaseUrl();
+    const response = await fetchWithRetry(`${baseUrl}/${cfg.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cfg.token}`,
@@ -177,7 +297,8 @@ export async function markWhatsAppMessageRead(messageId: string): Promise<void> 
   if (!cfg) return;
 
   try {
-    await fetch(`${WA_API_BASE}/${cfg.phoneNumberId}/messages`, {
+    const baseUrl = getMetaGraphBaseUrl();
+    await fetchWithRetry(`${baseUrl}/${cfg.phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${cfg.token}`,

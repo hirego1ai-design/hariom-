@@ -9,6 +9,7 @@
  * 5. A WhatsApp message proves control of the conversation only,
  *    NOT automatic authorization to access an existing HireGo account.
  *    Existing-account linking requires additional OTP verification.
+ * 6. Sanitize raw webhook payloads to redact unnecessary PII.
  */
 
 import { prisma } from "./prisma";
@@ -229,6 +230,25 @@ export async function linkContactToUser(
   });
 }
 
+// ─── PII Sanitization for Inbound Payloads ────────────────────────────────────
+
+/**
+ * Sanitizes inbound raw payloads to avoid storing sensitive extraneous data
+ * or tokens while retaining necessary debug/correlation fields.
+ */
+export function sanitizeRawPayload(payload: any): object {
+  if (!payload || typeof payload !== "object") return {};
+
+  return {
+    id: payload.id ?? undefined,
+    from: payload.from ? `${String(payload.from).slice(0, 4)}***${String(payload.from).slice(-3)}` : undefined,
+    type: payload.type ?? "text",
+    timestamp: payload.timestamp ?? undefined,
+    hasText: Boolean(payload.text?.body),
+    hasInteractive: Boolean(payload.interactive),
+  };
+}
+
 // ─── Persist inbound event (idempotency) ──────────────────────────────────────
 
 /**
@@ -253,13 +273,16 @@ export async function persistInboundEvent(params: {
   // Ensure contact row exists so the FK is satisfied
   await ensureWhatsAppContact(params.waId);
 
+  // Sanitize payload to protect user privacy & limit PII retention
+  const sanitized = sanitizeRawPayload(params.rawPayload);
+
   try {
     const event = await prisma.whatsAppInboundEvent.create({
       data: {
         providerEventId: params.providerEventId,
         waId: params.waId,
         messageType: params.messageType,
-        rawPayload: params.rawPayload as any,
+        rawPayload: sanitized as any,
         processed: false,
       },
       select: { id: true },

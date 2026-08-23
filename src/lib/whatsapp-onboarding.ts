@@ -10,10 +10,11 @@
  *
  * Commands (any state): back | edit | restart | cancel | help
  *
- * Concurrency safety:
- *   Account creation is wrapped in prisma.$transaction.
- *   WhatsAppContact.waId @unique prevents two simultaneous creations
- *   from racing to create duplicate Users.
+ * Concurrency & Security:
+ *   - Account creation is wrapped in prisma.$transaction.
+ *   - New user email is created with emailVerified: false (phone is verified).
+ *   - Auth handoff tokens expire in 5 minutes and are single-use.
+ *   - WhatsAppContact.waId @unique prevents duplicate User creation race conditions.
  */
 
 import { prisma } from "./prisma";
@@ -269,6 +270,7 @@ async function createAccountTransaction(
     const randomPassword = crypto.randomBytes(24).toString("hex");
     const passwordHash = hashPassword(randomPassword);
 
+    // Phone is verified by WhatsApp session; email remains unverified until verified via email OTP
     const user = await tx.user.create({
       data: {
         email: data.email!,
@@ -334,7 +336,6 @@ export async function processWhatsAppMessage(
   rawMessage: string
 ): Promise<ProcessResult> {
   const msg = rawMessage.trim();
-  const normalizedPhone = waIdToE164(waId);
 
   // Ensure contact row exists
   const contact = await ensureWhatsAppContact(waId);
@@ -470,7 +471,7 @@ export async function processWhatsAppMessage(
       },
     });
 
-    // Generate handoff token
+    // Generate handoff token (5 min expiry)
     const { generateHandoffToken } = await import("./whatsapp-auth");
     const token = await generateHandoffToken(userId, session.id);
     const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
@@ -479,7 +480,7 @@ export async function processWhatsAppMessage(
 
     return {
       reply:
-        `✅ Verified! Welcome back, ${user?.name}.\n\nTap the link below to open your HireGo dashboard:\n${handoffUrl}\n\n_This link expires in 15 minutes._`,
+        `✅ Verified! Welcome back, ${user?.name}.\n\nTap the link below to open your HireGo dashboard:\n${handoffUrl}\n\n_This link expires in 5 minutes._`,
       nextStep: "COMPLETE",
       sessionComplete: true,
       handoffToken: token,
@@ -604,7 +605,7 @@ export async function processWhatsAppMessage(
       return { reply: stepPrompt("LOCATION", updated, 5), nextStep: "LOCATION", sessionComplete: false };
     }
 
-    // ── LOCATION ────────────────────────────────────────────────────────────
+    // ── LOCATION ────────────────────────────────────────────────────
     case "LOCATION": {
       const result = validateLocation(msg);
       if (!result.valid) {
@@ -663,7 +664,7 @@ export async function processWhatsAppMessage(
           }
         }
 
-        // Generate auth handoff token
+        // Generate auth handoff token (5 min expiry)
         const { generateHandoffToken } = await import("./whatsapp-auth");
         const token = await generateHandoffToken(userId, session.id);
         const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
@@ -679,7 +680,7 @@ export async function processWhatsAppMessage(
           reply:
             `✅ Your HireGo account is ready, ${data.name}!\n\n` +
             `Tap the link below to open your dashboard:\n${handoffUrl}\n\n` +
-            `_This link expires in 15 minutes._\n\n` +
+            `_This link expires in 5 minutes._\n\n` +
             `Complete your profile there to improve your job matches 🚀`,
           nextStep: "COMPLETE",
           sessionComplete: true,

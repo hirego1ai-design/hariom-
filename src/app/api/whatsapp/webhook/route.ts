@@ -4,23 +4,24 @@
  * GET  /api/whatsapp/webhook  — Meta hub.challenge verification
  * POST /api/whatsapp/webhook  — Inbound message handler
  *
- * Security:
- * - GET:  Verifies hub.verify_token against WHATSAPP_VERIFY_TOKEN
- * - POST: Validates X-Hub-Signature-256 HMAC using WHATSAPP_APP_SECRET
- * - POST: Idempotent — duplicate providerEventId is silently skipped
- * - POST: Acknowledges 200 immediately; all domain processing is synchronous
- *         but safe — DB errors do not break the ack.
- *
- * Rate limiting: per IP via existing enforceRateLimit infrastructure.
+ * Security & Architecture:
+ * - GET:  Verifies hub.verify_token against WHATSAPP_VERIFY_TOKEN (fails closed on placeholder).
+ * - POST: Enforces body size limit (256 KB) to prevent DoS.
+ * - POST: Validates X-Hub-Signature-256 HMAC using WHATSAPP_APP_SECRET.
+ * - POST: Enforces per-waId distributed rate limiting (prevents shared-IP throttling).
+ * - POST: Idempotent persistence — duplicate providerEventId is detected and skipped.
+ * - POST: Fast ACK — Enqueues message to WhatsApp inbound queue and responds 200 immediately.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { enforceRateLimit } from "@/lib/apiSecurity";
-import { persistInboundEvent, markEventProcessed, ensureWhatsAppContact } from "@/lib/whatsapp-identity";
-import { processWhatsAppMessage } from "@/lib/whatsapp-onboarding";
-import { sendWhatsAppTextMessage, markWhatsAppMessageRead } from "@/lib/whatsapp";
+import { persistInboundEvent, ensureWhatsAppContact } from "@/lib/whatsapp-identity";
+import { isPlaceholderSecret, validateWhatsAppConfig } from "@/lib/whatsapp";
+import { checkWaRateLimit } from "@/lib/whatsapp-rate-limiter";
+import { enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
 import { logAuditEvent } from "@/lib/auditLogger";
+
+export const MAX_WEBHOOK_BODY_BYTES = 256 * 1024; // 256 KB
 
 // ─── GET — Hub challenge verification ────────────────────────────────────────
 
@@ -31,7 +32,9 @@ export async function GET(req: NextRequest) {
   const challenge = searchParams.get("hub.challenge");
 
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
-  if (!verifyToken) {
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (!verifyToken || (isProd && isPlaceholderSecret(verifyToken))) {
     return new NextResponse("Webhook not configured", { status: 503 });
   }
 
@@ -45,19 +48,32 @@ export async function GET(req: NextRequest) {
 // ─── POST — Inbound message handler ──────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // 1. Rate limiting (per IP)
-  try {
-    enforceRateLimit(req as any, "whatsapp:webhook", 120, 60_000);
-  } catch {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  // 1. Body-size protection (Content-Length header check)
+  const contentLength = Number(req.headers.get("content-length") || "0");
+  if (contentLength > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
   }
 
-  // 2. Read raw body for HMAC verification
+  // 2. Read raw body with size enforcement
   const rawBody = await req.text();
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
 
-  // 3. Verify X-Hub-Signature-256
+  // 3. Verify X-Hub-Signature-256 HMAC
   const signatureHeader = req.headers.get("x-hub-signature-256") ?? "";
   const appSecret = process.env.WHATSAPP_APP_SECRET;
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (isProd) {
+    if (!appSecret || isPlaceholderSecret(appSecret)) {
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+    }
+    if (!signatureHeader) {
+      logAuditEvent({ action: "WHATSAPP_WEBHOOK_MISSING_SIGNATURE", resource: "/api/whatsapp/webhook" });
+      return NextResponse.json({ error: "Missing webhook signature" }, { status: 401 });
+    }
+  }
 
   if (appSecret && signatureHeader) {
     const expected = "sha256=" + crypto
@@ -74,43 +90,33 @@ export async function POST(req: NextRequest) {
       logAuditEvent({ action: "WHATSAPP_WEBHOOK_INVALID_SIGNATURE", resource: "/api/whatsapp/webhook" });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
-  } else if (process.env.NODE_ENV === "production") {
-    // Production webhooks must always be signed with the Meta App Secret.
-    if (!appSecret) {
-      return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
-    }
-    logAuditEvent({ action: "WHATSAPP_WEBHOOK_MISSING_SIGNATURE", resource: "/api/whatsapp/webhook" });
-    return NextResponse.json({ error: "Missing webhook signature" }, { status: 401 });
   } else if (!appSecret) {
-    // Local development may omit Meta credentials, but never production.
-    console.warn("[WhatsApp webhook] Signature verification skipped because WHATSAPP_APP_SECRET is not configured.");
-  } else {
-    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+    // Non-production warning
+    console.warn("[WhatsApp webhook] Signature verification skipped (WHATSAPP_APP_SECRET not set in non-prod).");
   }
 
-  // 4. Acknowledge immediately — Meta expects a fast 200
-  // (We run processing inline but keep it safe with try/catch)
+  // 4. Parse JSON payload
   let body: any;
   try {
     body = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ status: "ok" }); // ack even on bad JSON
+    return NextResponse.json({ status: "ok" }); // Fast ACK even on bad JSON
   }
 
-  // 5. Process each entry
+  // 5. Ingest and enqueue entries
   try {
-    await processWebhookBody(body);
+    await ingestWebhookEntries(body);
   } catch (err: any) {
-    // Log but do not return 5xx — Meta would retry
-    console.error("[WhatsApp webhook] Processing error:", err?.message);
+    console.error("[WhatsApp webhook] Ingestion error:", err?.message);
   }
 
+  // 6. Return fast 200 OK to Meta
   return NextResponse.json({ status: "ok" });
 }
 
-// ─── Webhook body processor ───────────────────────────────────────────────────
+// ─── Webhook entry ingestion ─────────────────────────────────────────────────
 
-async function processWebhookBody(body: any): Promise<void> {
+async function ingestWebhookEntries(body: any): Promise<void> {
   const entries: any[] = body?.entry ?? [];
 
   for (const entry of entries) {
@@ -123,22 +129,29 @@ async function processWebhookBody(body: any): Promise<void> {
       const messages: any[] = value?.messages ?? [];
 
       for (const message of messages) {
-        await processInboundMessage(message, value).catch((err: any) => {
-          console.error("[WhatsApp webhook] Message processing error:", err?.message, "messageId:", message?.id);
+        await ingestSingleMessage(message).catch((err: any) => {
+          console.error("[WhatsApp webhook] Message ingestion error:", err?.message, "messageId:", message?.id);
         });
       }
     }
   }
 }
 
-async function processInboundMessage(message: any, value: any): Promise<void> {
+async function ingestSingleMessage(message: any): Promise<void> {
   const messageId: string = message?.id ?? "";
   const waId: string = message?.from ?? "";
   const messageType: string = message?.type ?? "text";
 
   if (!messageId || !waId) return;
 
-  // Extract text body depending on message type
+  // 1. Per-waId rate limit check
+  const rateLimitResult = checkWaRateLimit(waId, 20, 60_000);
+  if (!rateLimitResult.allowed) {
+    console.warn(`[WhatsApp webhook] Rate limit exceeded for waId ${waId}`);
+    return;
+  }
+
+  // 2. Extract text body depending on message type
   let textBody = "";
   if (messageType === "text") {
     textBody = message?.text?.body ?? "";
@@ -150,13 +163,12 @@ async function processInboundMessage(message: any, value: any): Promise<void> {
       textBody = interactive?.list_reply?.title ?? interactive?.list_reply?.id ?? "";
     }
   } else {
-    // Unsupported message type — acknowledge receipt but don't process
+    // Unsupported message type — ensure contact and enqueue notice
     await ensureWhatsAppContact(waId);
-    await sendWhatsAppTextMessage(waId, "We received your message but can't process this type yet. Please send a text reply.");
-    return;
+    textBody = "";
   }
 
-  // 5. Persist and deduplicate
+  // 3. Persist and deduplicate (PostgreSQL unique providerEventId)
   const { isDuplicate, eventId } = await persistInboundEvent({
     providerEventId: messageId,
     waId,
@@ -165,34 +177,16 @@ async function processInboundMessage(message: any, value: any): Promise<void> {
   });
 
   if (isDuplicate) {
-    return; // Already processed — no side effects
+    return; // Duplicate delivery — silently skip
   }
 
-  // 6. Mark message as read (non-critical)
-  markWhatsAppMessageRead(messageId).catch(() => {});
-
-  // 7. Process through onboarding state machine
-  let reply: string;
-  try {
-    if (!textBody.trim()) {
-      // Empty message — nudge user
-      reply = "Please send a text message to continue. Reply *help* for options.";
-    } else {
-      const result = await processWhatsAppMessage(waId, textBody);
-      reply = result.reply;
-    }
-  } catch (err: any) {
-    reply = "Something went wrong on our end. Please try again in a moment. 🙏";
-    await markEventProcessed(eventId, err?.message ?? "unknown");
-    await sendWhatsAppTextMessage(waId, reply);
-    return;
-  }
-
-  // 8. Send reply
-  const sendResult = await sendWhatsAppTextMessage(waId, reply);
-  if (!sendResult.sent) {
-    console.error("[WhatsApp webhook] Failed to send reply:", sendResult.reason);
-  }
-
-  await markEventProcessed(eventId);
+  // 4. Enqueue into background worker queue for asynchronous processing
+  enqueueWhatsAppInboundJob({
+    eventId,
+    messageId,
+    waId,
+    messageType,
+    textBody,
+    enqueuedAt: Date.now(),
+  });
 }
