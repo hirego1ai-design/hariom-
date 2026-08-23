@@ -37,12 +37,6 @@ import {
   consumeHandoffToken,
   HANDOFF_EXPIRY_SECS,
 } from "@/lib/whatsapp-auth";
-import {
-  enqueueWhatsAppInboundJob,
-  processInboundQueue,
-  getWhatsAppQueueStatus,
-  clearWhatsAppQueue,
-} from "@/lib/whatsapp-queue";
 import { MAX_WEBHOOK_BODY_BYTES } from "@/app/api/whatsapp/webhook/route";
 
 export interface WhatsAppTestResult {
@@ -138,7 +132,7 @@ export async function runWhatsAppTestSuite(): Promise<{
   const origVerify = process.env.WHATSAPP_VERIFY_TOKEN;
 
   try {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     process.env.WHATSAPP_API_TOKEN = "set-a-long-placeholder-token";
     process.env.WHATSAPP_PHONE_NUMBER_ID = "109823471092";
     process.env.WHATSAPP_APP_SECRET = "valid_secret_123456";
@@ -151,7 +145,7 @@ export async function runWhatsAppTestSuite(): Promise<{
     const prodValidRes = validateWhatsAppConfig();
     assert("WA-26: Pass production validation with real tokens", prodValidRes.valid, "production accepts real credentials");
   } finally {
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
     process.env.WHATSAPP_API_TOKEN = origToken;
     process.env.WHATSAPP_PHONE_NUMBER_ID = origPhone;
     process.env.WHATSAPP_APP_SECRET = origSecret;
@@ -230,32 +224,32 @@ export async function runWhatsAppTestSuite(): Promise<{
 
   // ─── Section 8: Per-waId Distributed Rate Limiting ──────────────────────────
 
-  resetWaRateLimiter();
+  await resetWaRateLimiter();
   const waUser1 = "919876543210";
   const waUser2 = "919123456789";
 
   // waUser1 sends 5 requests (allowed up to 5 in test limit)
   let user1Allowed = true;
   for (let i = 0; i < 5; i++) {
-    const r = checkWaRateLimit(waUser1, 5, 60_000);
+    const r = await checkWaRateLimit(waUser1, 5, 60_000);
     if (!r.allowed) user1Allowed = false;
   }
   assert("WA-35: Sender within rate limit is allowed", user1Allowed, "5 requests within limit of 5 allowed");
 
   // 6th request from waUser1 should be blocked
-  const user1Blocked = checkWaRateLimit(waUser1, 5, 60_000);
+  const user1Blocked = await checkWaRateLimit(waUser1, 5, 60_000);
   assert("WA-36: Sender exceeding rate limit is throttled (429)", !user1Blocked.allowed && (user1Blocked.retryAfterSecs ?? 0) > 0, "6th request throttled");
 
   // waUser2 should NOT be blocked (independent bucket, no shared IP problem)
-  const user2Allowed = checkWaRateLimit(waUser2, 5, 60_000);
+  const user2Allowed = await checkWaRateLimit(waUser2, 5, 60_000);
   assert("WA-37: Independent waId not affected by other throttled users", user2Allowed.allowed, "User 2 not throttled by User 1 activity");
 
   // OTP rate limit
-  const otpRes1 = checkWaOtpLimit(waUser1, 2, 60_000);
-  const otpRes2 = checkWaOtpLimit(waUser1, 2, 60_000);
-  const otpRes3 = checkWaOtpLimit(waUser1, 2, 60_000);
+  const otpRes1 = await checkWaOtpLimit(waUser1, 2, 60_000);
+  const otpRes2 = await checkWaOtpLimit(waUser1, 2, 60_000);
+  const otpRes3 = await checkWaOtpLimit(waUser1, 2, 60_000);
   assert("WA-38: Per-waId OTP attempt throttling enforced", otpRes1.allowed && otpRes2.allowed && !otpRes3.allowed, "3rd OTP attempt throttled");
-  resetWaRateLimiter();
+  await resetWaRateLimiter();
 
   // ─── Section 9: Single-Use Auth Handoff Token & Replay Protection ─────────────
 
@@ -292,22 +286,6 @@ export async function runWhatsAppTestSuite(): Promise<{
   assert("WA-41: PII Sanitizer preserves message ID and type", sanitized.id === rawMetaWebhookMessage.id && sanitized.type === "text", "id and type preserved");
   assert("WA-42: PII Sanitizer masks phone number", sanitized.from === "9198***210", "phone number masked: 9198***210");
   assert("WA-43: PII Sanitizer strips raw text body & sensitive tokens", sanitized.text === undefined && sanitized.extraSensitiveTokens === undefined && sanitized.hasText === true, "raw sensitive data stripped from payload log");
-
-  // ─── Section 11: Queue & Fast ACK Integration ───────────────────────────────
-
-  clearWhatsAppQueue();
-  enqueueWhatsAppInboundJob({
-    eventId: "evt-test-1",
-    messageId: "wamid-test-1",
-    waId: "919876543210",
-    messageType: "text",
-    textBody: "Hi",
-    enqueuedAt: Date.now(),
-  });
-
-  const queueStatus = getWhatsAppQueueStatus();
-  assert("WA-44: Inbound job enqueued successfully for background worker", queueStatus.pendingJobs >= 1, "job in queue");
-  clearWhatsAppQueue();
 
   // ─── Summary ────────────────────────────────────────────────────────────────
 

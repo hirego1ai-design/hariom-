@@ -22,6 +22,7 @@ import { hashPassword } from "./auth";
 import { referralDb } from "./referral-db";
 import { logAuditEvent } from "./auditLogger";
 import { generateAndSendOtp, verifyOtpCode } from "./otp";
+import { checkWaOtpLimit } from "./whatsapp-rate-limiter";
 import { findRole } from "./skill-master";
 import { INDIA_US_LOCATION_MASTER } from "./location-master";
 import crypto from "crypto";
@@ -409,6 +410,14 @@ export async function processWhatsAppMessage(
       await saveStep(session.id, "EXISTING_USER_VERIFY", updatedData);
 
       // Send email OTP to registered address — account enumeration safe
+      const otpRequestLimit = await checkWaOtpLimit(waId, 5, 15 * 60_000);
+      if (!otpRequestLimit.allowed) {
+        return {
+          reply: "Too many verification attempts. Please wait before requesting another code.",
+          nextStep: "EXISTING_USER_VERIFY",
+          sessionComplete: false,
+        };
+      }
       await generateAndSendOtp(identity.user!.email, "VERIFY_EMAIL");
 
       return {
@@ -443,6 +452,14 @@ export async function processWhatsAppMessage(
       return { reply: "Something went wrong. Let's start over.", nextStep: "START", sessionComplete: false };
     }
 
+    const otpAttemptLimit = await checkWaOtpLimit(waId, 5, 15 * 60_000);
+    if (!otpAttemptLimit.allowed) {
+      return {
+        reply: "Too many verification attempts. Please wait before trying again.",
+        nextStep: "EXISTING_USER_VERIFY",
+        sessionComplete: false,
+      };
+    }
     const verification = await verifyOtpCode(userEmail, msg, "VERIFY_EMAIL");
     if (!verification.valid) {
       return {

@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     const session = getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
 
-    enforceRateLimit(request, "proctoring_telemetry_read", 60, 60_000);
+    await enforceRateLimit(request, "proctoring_telemetry_read", 60, 60_000);
     const interviewId = new URL(request.url).searchParams.get("interviewId");
     if (!interviewId) return jsonError("interviewId is required.", 400);
 
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       return jsonError("Only candidates may submit proctoring telemetry.", 403);
     }
 
-    enforceRateLimit(request, "proctoring_telemetry_write", 120, 60_000);
+    await enforceRateLimit(request, "proctoring_telemetry_write", 120, 60_000);
     const body = await readValidatedJson(request, telemetrySchema);
     await assertInterviewAccess(session, body.interviewId, "write");
 

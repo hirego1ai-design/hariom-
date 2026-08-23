@@ -28,7 +28,7 @@ const ALLOWED_DESTINATIONS: Record<string, string> = {
 export async function GET(req: NextRequest) {
   // Rate limit: 10 exchange attempts per minute per IP
   try {
-    enforceRateLimit(req as any, "whatsapp:auth_handoff", 10, 60_000);
+    await enforceRateLimit(req as any, "whatsapp:auth_handoff", 10, 60_000);
   } catch {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

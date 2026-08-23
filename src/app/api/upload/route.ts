@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
+import { createStoredFile } from "@/lib/storage";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
 const ALLOWED_MIME_TYPES = [
@@ -75,21 +74,18 @@ export async function POST(req: NextRequest) {
       return jsonError("File content does not match claimed MIME type", 415);
     }
 
-    const baseDir = path.resolve(path.join(process.cwd(), "public", "uploads"));
-    const uploadDir = path.join(baseDir, category);
-    const relative = path.relative(baseDir, uploadDir);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      return jsonError("Invalid upload path", 400);
-    }
-
-    await mkdir(uploadDir, { recursive: true });
-
-    const filename = `${crypto.randomUUID()}.${serverExt}`;
-    const filePath = path.join(uploadDir, filename);
-
-    await writeFile(filePath, buffer);
-
-    const publicUrl = `/uploads/${category}/${filename}`;
+    const profile = (session.role === "EMPLOYER" || session.role === "RECRUITER")
+      ? await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } })
+      : null;
+    const storedFile = await createStoredFile({
+      ownerId: session.id,
+      companyId: profile?.companyId,
+      category,
+      originalName: file.name,
+      mimeType: file.type,
+      data: buffer,
+      extension: serverExt,
+    });
 
     return NextResponse.json({
       success: true,
@@ -97,7 +93,8 @@ export async function POST(req: NextRequest) {
         name: file.name,
         size: file.size,
         type: file.type,
-        url: publicUrl,
+        id: storedFile.id,
+        url: `/api/files/${storedFile.id}`,
         uploadedAt: new Date().toISOString(),
       },
     });

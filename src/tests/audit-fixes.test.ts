@@ -80,13 +80,13 @@ export async function runAuditFixesTests(): Promise<{
 
   // 3. API Security Rate Limiter Cleanup Test
   try {
-    resetRateLimitStore("test-prefix");
+    await resetRateLimitStore("test-prefix");
     const req = new Request("https://hirego.ai/api/test", {
       headers: { "x-forwarded-for": "127.0.0.1" },
     });
 
-    enforceRateLimit(req, "test-prefix", 10, 60000);
-    resetRateLimitStore("test-prefix");
+    await enforceRateLimit(req, "test-prefix", 10, 60000);
+    await resetRateLimitStore("test-prefix");
 
     results.push({
       name: "API Security - Rate Limiter Store & Stale Entry Eviction",
@@ -104,6 +104,8 @@ export async function runAuditFixesTests(): Promise<{
 
   // 4. PaymentOrder Interface & Notes Structure
   try {
+    // All webhook verification paths now require a configured secret, including test mode.
+    process.env.RAZORPAY_WEBHOOK_SECRET = "audit_test_razorpay_webhook_secret";
     const { RazorpayGateway } = await import("@/lib/payments/RazorpayGateway");
     const rzp = new RazorpayGateway();
 

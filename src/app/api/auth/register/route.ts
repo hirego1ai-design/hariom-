@@ -16,7 +16,7 @@ const registerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "auth_register");
+    await enforceRateLimit(request, "auth_register");
     const body = await readValidatedJson(request, registerSchema);
     const passwordStrength = validatePasswordStrength(body.password);
     if (!passwordStrength.valid) {

@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
-    enforceRateLimit(request, "employer_jobs_post");
+    await enforceRateLimit(request, "employer_jobs_post");
     const session = getCurrentSession(request.headers);
 
     if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {

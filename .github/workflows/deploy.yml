@@ -30,6 +30,9 @@ jobs:
       - name: Run TypeScript Typecheck
         run: npx tsc --noEmit
 
+      - name: Run ESLint
+        run: npm run lint
+
       - name: Run Automated Suite Tests
         run: npm test
 

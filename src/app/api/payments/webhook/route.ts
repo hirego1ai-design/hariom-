@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { handleApiError, ApiError } from "@/lib";
+import { handleApiError, ApiError, readBoundedTextBody } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 import type { GatewayName } from "@/lib/payments/PaymentGatewayInterface";
 
 export async function POST(req: NextRequest) {
   try {
-    const rawBody = await req.text();
+    const rawBody = await readBoundedTextBody(req, 64 * 1024);
     let body: any;
     try {
       body = JSON.parse(rawBody);
@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
       "";
 
     const { PaymentGatewayController } = await import("@/lib/payments/PaymentGatewayController");
+    const config = await PaymentGatewayController.getConfig();
+    if (config.gatewaysStatus[providerHeader] === "DISABLED") {
+      throw new ApiError("This payment provider is disabled", 403);
+    }
     const verification = await PaymentGatewayController.verifyWebhook({
       rawBody,
       signature,

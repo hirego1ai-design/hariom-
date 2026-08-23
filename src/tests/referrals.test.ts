@@ -51,7 +51,7 @@ export async function runReferralTestSuite(): Promise<{
   try {
     // Reset test harness state
     referralDb.resetTestHarness();
-    resetRateLimitStore();
+    await resetRateLimitStore();
 
     const referrerAlphaId = "usr-referrer-alpha";
     referralDb.registerTestUserProfile(referrerAlphaId, {
@@ -322,7 +322,7 @@ export async function runReferralTestSuite(): Promise<{
     // SECTION 3: RATE LIMITING ON SENSITIVE ENDPOINTS
     // ================================================================
 
-    resetRateLimitStore();
+    await resetRateLimitStore();
 
     // 3.1 Rate limit on referral code validation
     let rateLimitTriggered = false;
@@ -343,7 +343,7 @@ export async function runReferralTestSuite(): Promise<{
       `High velocity referral code lookup triggers 429 Too Many Requests (observed statuses: [${statuses.slice(18, 30).join(", ")}])`
     );
 
-    resetRateLimitStore();
+    await resetRateLimitStore();
 
     // ================================================================
     // SECTION 4: FRAUD ENGINE STATE MACHINE & PAYOUT GATING

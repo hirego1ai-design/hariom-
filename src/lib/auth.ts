@@ -1,12 +1,16 @@
 import { UserRole } from "@/types";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { setRedisValue } from "./redis";
 
 export interface UserSession {
   id: string;
   email: string;
   role: UserRole;
   name: string;
+  sessionVersion?: number;
+  jti?: string;
 }
 
 export const AUTH_COOKIE_NAME = "hirego_session";
@@ -56,7 +60,18 @@ export function createSessionToken(payload: UserSession): string {
     throw new Error("Session tokens require an explicit user ID, email, name, and role.");
   }
 
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "12h" });
+  return jwt.sign({ ...payload, sessionVersion: payload.sessionVersion ?? 0 }, JWT_SECRET, { expiresIn: "12h", jwtid: crypto.randomUUID() });
+}
+
+export async function revokeSessionToken(token: string): Promise<void> {
+  const decoded = jwt.decode(token) as { jti?: string; exp?: number } | null;
+  if (!decoded?.jti) return;
+  const ttlSeconds = decoded.exp ? Math.max(1, decoded.exp - Math.floor(Date.now() / 1_000)) : 12 * 60 * 60;
+  await setRedisValue(`session:revoked:${decoded.jti}`, "1", ttlSeconds);
+}
+
+export async function revokeAllUserSessions(userId: string, sessionVersion: number): Promise<void> {
+  await setRedisValue(`session:version:${userId}`, String(sessionVersion));
 }
 
 export function verifySessionToken(token: string): UserSession | null {

@@ -50,7 +50,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    enforceRateLimit(request, "employer_jobs_put");
+    await enforceRateLimit(request, "employer_jobs_put");
     const session = getCurrentSession(request.headers);
 
     if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
