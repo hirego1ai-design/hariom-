@@ -14,6 +14,17 @@ const jobSchema = z.object({
   type: z.string().default("Full-time"),
   salary: z.string().min(2, "Salary range required"),
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED"]).default("ACTIVE"),
+  matchingConfig: z.object({
+    weightExperience: z.number().min(0).max(100),
+    weightEducation: z.number().min(0).max(100),
+    weightSkills: z.number().min(0).max(100),
+    autoArchiveScore: z.number().min(0).max(100),
+    autoInterviewLimit: z.number().int().min(1).max(100),
+    proctoringLevel: z.string().max(40).optional(),
+  }).refine(
+    (config) => config.weightExperience + config.weightSkills > 0,
+    "Experience and skills weights must total more than zero.",
+  ).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -138,6 +149,7 @@ export async function POST(request: Request) {
           salaryRange: body.salary,
           location: body.location,
           type: body.type ?? "Full-time",
+          matchingConfig: body.matchingConfig,
         },
         tx
       );

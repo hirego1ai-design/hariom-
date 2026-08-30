@@ -14,6 +14,10 @@ export default function TypingTestActivePage() {
   const [wpm, setWpm] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [errorCount, setErrorCount] = useState(0);
+  
+  const [keystrokeCount, setKeystrokeCount] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [resultSaved, setResultSaved] = useState(false);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -28,7 +32,38 @@ export default function TypingTestActivePage() {
     };
   }, [isTestActive, timeLeft]);
 
+  useEffect(() => {
+    if (isCompleted && !resultSaved && !submitting) {
+      submitResult();
+    }
+  }, [isCompleted]);
+
+  const submitResult = async () => {
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/assessment/typing/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          promptText: sampleText,
+          typedText: userInput,
+          durationSeconds: 60 - timeLeft,
+          keystrokeCount,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setResultSaved(true);
+      }
+    } catch (err) {
+      console.error('Failed to submit typing assessment:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setKeystrokeCount(prev => prev + 1);
     const val = e.target.value;
     if (!isTestActive && !isCompleted) {
       setIsTestActive(true);
@@ -63,8 +98,8 @@ export default function TypingTestActivePage() {
       <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
         <header className="fixed top-0 left-[116px] right-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-gutter h-20 shadow-md">
           <div>
-            <h1 className="font-bold text-lg text-white">Enterprise Typing Speed Assessment</h1>
-            <p className="text-text-muted text-xs">Measures WPM, accuracy %, and error density under timed conditions.</p>
+            <h1 className="font-bold text-lg text-white">Typing Practice</h1>
+            <p className="text-text-muted text-xs">Self-reported WPM and accuracy practice. It is not a verified hiring assessment.</p>
           </div>
 
           <div className="flex items-center gap-4 font-mono text-xs">
@@ -118,16 +153,30 @@ export default function TypingTestActivePage() {
           {/* Completion Modal Trigger */}
           {isCompleted && (
             <div className="p-6 rounded-2xl bg-green/10 border border-green/30 text-green space-y-3 font-mono">
-              <h3 className="font-bold text-base font-sans">🎉 Assessment Completed Successfully</h3>
-              <p className="text-xs text-white">Your Typing Speed Certificate has been recorded to your Candidate Profile.</p>
-              <div className="flex gap-3 pt-2">
-                <Link
-                  href="/profile"
-                  className="px-5 py-2.5 rounded-xl bg-green text-bg-page font-bold font-sans text-xs shadow-lg shadow-green/30"
-                >
-                  View Profile Certificate
-                </Link>
-              </div>
+              {submitting ? (
+                 <div className="flex items-center gap-2">
+                   <span className="material-symbols-outlined animate-spin text-[16px]">sync</span>
+                   <span className="font-bold">Submitting assessment...</span>
+                 </div>
+              ) : (
+                <>
+                  <h3 className="font-bold text-base font-sans">Practice Completed</h3>
+                  <p className="text-xs text-white">Your self-reported practice result has been saved. It is not a verified certificate.</p>
+                  {resultSaved && (
+                    <div className="text-xs text-white bg-black/20 p-3 rounded-lg mt-2">
+                      <p>Practice speed: <span className="font-bold text-green">{wpm} WPM</span> at {accuracy}% accuracy</p>
+                    </div>
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <Link
+                      href="/profile"
+                      className="px-5 py-2.5 rounded-xl bg-green text-bg-page font-bold font-sans text-xs shadow-lg shadow-green/30"
+                    >
+                      View Profile
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </main>

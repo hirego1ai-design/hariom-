@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 
@@ -135,6 +136,12 @@ func min(a, b int) int {
 };
 
 export default function WebIDEPage() {
+  const searchParams = useSearchParams();
+  const problemIdParam = searchParams.get('problemId');
+
+  const [currentProblem, setCurrentProblem] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
   const [selectedLanguage, setSelectedLanguage] = useState<string>("python3");
   const [code, setCode] = useState<string>(initialCodeTemplates["python3"]);
   const [activeRightTab, setActiveRightTab] = useState<"testcases" | "history">("testcases");
@@ -142,126 +149,153 @@ export default function WebIDEPage() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [testCases, setTestCases] = useState<TestCase[]>([
-    {
-      id: 1,
-      input: 's = "cbaaaabc"\nforbidden = ["aaa", "cb"]',
-      expectedOutput: "4",
-      actualOutput: "4",
-      status: "passed",
-      runtime: "32ms",
-    },
-    {
-      id: 2,
-      input: 's = "leetcode"\nforbidden = ["de", "le", "e"]',
-      expectedOutput: "4",
-      actualOutput: "4",
-      status: "passed",
-      runtime: "41ms",
-    },
-    {
-      id: 3,
-      input: 's = "abcde"\nforbidden = ["bc"]',
-      expectedOutput: "3",
-      actualOutput: "3",
-      status: "passed",
-      runtime: "28ms",
-    },
-  ]);
-
-  const [submissions, setSubmissions] = useState<SubmissionHistory[]>([
-    {
-      id: 103,
-      time: "2 mins ago",
-      language: "Python 3",
-      status: "Accepted",
-      score: "100%",
-      runtime: "32ms",
-      memory: "14.2 MB",
-    },
-    {
-      id: 102,
-      time: "15 mins ago",
-      language: "TypeScript",
-      status: "Accepted",
-      score: "100%",
-      runtime: "45ms",
-      memory: "18.6 MB",
-    },
-    {
-      id: 101,
-      time: "1 hour ago",
-      language: "C++20",
-      status: "Accepted",
-      score: "100%",
-      runtime: "12ms",
-      memory: "11.1 MB",
-    },
-  ]);
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [submissions, setSubmissions] = useState<SubmissionHistory[]>([]);
 
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
     "> System initialized. Ready to execute code.",
     "> Selected language environment: Python 3.11 Runtime.",
   ]);
 
+  useEffect(() => {
+    const fetchProblem = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/assessment/coding/problems');
+        const data = await res.json();
+        
+        if (res.ok && data.success && data.problems && data.problems.length > 0) {
+          let problem = problemIdParam ? data.problems.find((p: any) => p.id === problemIdParam) : data.problems[0];
+          if (!problem) problem = data.problems[0];
+          
+          setCurrentProblem(problem);
+          
+          if (problem.starterCode && problem.starterCode[selectedLanguage]) {
+            setCode(problem.starterCode[selectedLanguage]);
+          }
+          
+          if (problem.testCases) {
+            setTestCases(problem.testCases.map((tc: any, i: number) => ({
+              id: i + 1,
+              input: tc.input,
+              expectedOutput: tc.expected,
+              actualOutput: '-',
+              status: 'pending',
+              runtime: '-'
+            })));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch problems", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProblem();
+  }, [problemIdParam]);
+
   const handleLanguageChange = (langKey: string) => {
     setSelectedLanguage(langKey);
-    setCode(initialCodeTemplates[langKey] || "");
+    if (currentProblem && currentProblem.starterCode && currentProblem.starterCode[langKey]) {
+      setCode(currentProblem.starterCode[langKey]);
+    } else {
+      setCode(initialCodeTemplates[langKey] || "");
+    }
     setConsoleLogs((prev) => [
       ...prev,
       `> Switched execution language environment to ${langKey.toUpperCase()}.`,
     ]);
   };
 
-  const handleRunCode = () => {
+  const handleRunCode = async () => {
+    if (!currentProblem) {
+      setToastMessage('No coding challenge is currently available.');
+      return;
+    }
     setIsRunning(true);
-    setConsoleLogs((prev) => [
-      ...prev,
-      `> Compiling & Executing ${selectedLanguage.toUpperCase()} solution...`,
-    ]);
+    setConsoleLogs(prev => [...prev, `> Compiling & Executing ${selectedLanguage.toUpperCase()} solution...`]);
+    try {
+      const res = await fetch('/api/assessment/coding/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: currentProblem?.id, language: selectedLanguage, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Execution failed');
+      const result = data.result;
+      if (!result) throw new Error('Execution returned no result');
 
-    setTimeout(() => {
-      setIsRunning(false);
-      setConsoleLogs((prev) => [
-        ...prev,
-        "> Running Test Case 1... Passed (32ms)",
-        "> Running Test Case 2... Passed (41ms)",
-        "> Running Test Case 3... Passed (28ms)",
-        "> Execution complete. All 3 test cases passed successfully!",
-      ]);
-
-      setToastMessage("► All 3 Test Cases Passed (Runtime: 32ms)");
+      // Update test cases with actual results
+      setTestCases(result.results.map((r: any, i: number) => ({
+        id: i + 1,
+        input: r.input,
+        expectedOutput: r.expected,
+        actualOutput: r.actual,
+        status: r.passed ? 'passed' : 'failed',
+        runtime: `${r.runtimeMs}ms`,
+      })));
+      const passed = result.results.filter((r: any) => r.passed).length;
+      setConsoleLogs(prev => [...prev, ...result.results.map((r: any, i: number) => `> Test Case ${i+1}... ${r.passed ? 'Passed' : 'Failed'} (${r.runtimeMs}ms)`)]);
+      setConsoleLogs(prev => [...prev, `> Execution complete. ${passed}/${result.results.length} test cases passed.`]);
+      setToastMessage(`► ${passed}/${result.results.length} Test Cases Passed (Runtime: ${result.runtimeMs}ms)`);
       setTimeout(() => setToastMessage(null), 3500);
-    }, 1200);
+    } catch (err: any) {
+      setConsoleLogs(prev => [...prev, `> ERROR: ${err.message}`]);
+      setToastMessage(`❌ ${err.message}`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
-  const handleSubmitSolution = () => {
+  const handleSubmitSolution = async () => {
+    if (!currentProblem) {
+      setToastMessage('No coding challenge is currently available.');
+      return;
+    }
     setIsRunning(true);
-    setConsoleLogs((prev) => [
-      ...prev,
-      `> Submitting solution for evaluation...`,
-    ]);
-
-    setTimeout(() => {
-      setIsRunning(false);
+    setConsoleLogs(prev => [...prev, `> Submitting solution for evaluation...`]);
+    try {
+      const res = await fetch('/api/assessment/coding/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: currentProblem?.id, language: selectedLanguage, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Submission failed');
+      const sub = data.submission;
       const newSub: SubmissionHistory = {
         id: Date.now(),
-        time: "Just now",
+        time: 'Just now',
         language: selectedLanguage.toUpperCase(),
-        status: "Accepted",
-        score: "100%",
-        runtime: "32ms",
-        memory: "14.2 MB",
+        status: sub.status === 'ACCEPTED' ? 'Accepted' : sub.status === 'TIME_LIMIT_EXCEEDED' ? 'Time Limit Exceeded' : 'Wrong Answer',
+        score: `${sub.score}%`,
+        runtime: `${sub.runtimeMs || 0}ms`,
+        memory: '-',
       };
-      setSubmissions((prev) => [newSub, ...prev]);
-      setActiveRightTab("history");
-
-      setToastMessage("🎉 Solution Accepted! 100% Score Recorded.");
+      setSubmissions(prev => [newSub, ...prev]);
+      setActiveRightTab('history');
+      setConsoleLogs(prev => [...prev, `> Submission: ${sub.status} | Score: ${sub.score}% | Tests: ${sub.passedTests}/${sub.totalTests}`]);
+      setToastMessage(sub.status === 'ACCEPTED' ? '🎉 Solution Accepted!' : `⚠️ ${sub.status}: ${sub.passedTests}/${sub.totalTests} tests passed`);
       setTimeout(() => setToastMessage(null), 4000);
-    }, 1500);
+    } catch (err: any) {
+      setConsoleLogs(prev => [...prev, `> ERROR: ${err.message}`]);
+      setToastMessage(`❌ ${err.message}`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
-  const activeTestCase = testCases.find((tc) => tc.id === selectedTestCaseId) || testCases[0];
+  const activeTestCase = testCases.find((tc) => tc.id === selectedTestCaseId) || testCases[0] || {
+    id: 1,
+    input: "Loading...",
+    expectedOutput: "Loading...",
+    actualOutput: "Loading...",
+    status: "pending",
+    runtime: "-"
+  };
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
@@ -282,9 +316,9 @@ export default function WebIDEPage() {
             </Link>
             <div>
               <h1 className="font-bold text-sm text-white flex items-center gap-2">
-                <span>Longest Valid Substring</span>
+                <span>{currentProblem ? currentProblem.title : "Longest Valid Substring"}</span>
                 <span className="px-2 py-0.5 rounded text-[10px] bg-yellow/20 text-yellow font-mono font-bold uppercase">
-                  Medium
+                  {currentProblem ? currentProblem.difficulty : "Medium"}
                 </span>
               </h1>
               <p className="text-[11px] text-text-muted">Sliding Window • String Optimization</p>
@@ -356,36 +390,56 @@ export default function WebIDEPage() {
             </div>
 
             <div className="space-y-3 text-xs text-text-muted leading-relaxed">
-              <p>
-                You are given a string <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">s</code> and an array of strings <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">forbidden</code>.
-              </p>
-              <p>
-                A string is called <strong className="text-white">valid</strong> if none of its substrings are present in <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">forbidden</code>.
-              </p>
-              <p>
-                Return the length of the longest valid substring of the string <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">s</code>.
-              </p>
+              {currentProblem?.description ? (
+                <div className="whitespace-pre-wrap">{currentProblem.description}</div>
+              ) : (
+                <>
+                  <p>
+                    You are given a string <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">s</code> and an array of strings <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">forbidden</code>.
+                  </p>
+                  <p>
+                    A string is called <strong className="text-white">valid</strong> if none of its substrings are present in <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">forbidden</code>.
+                  </p>
+                  <p>
+                    Return the length of the longest valid substring of the string <code className="px-1.5 py-0.5 rounded bg-white/10 text-primary font-mono">s</code>.
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Example 1</h4>
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 font-mono text-xs space-y-1.5 text-text-muted">
-                  <p><span className="text-white font-bold">Input:</span> s = &quot;cbaaaabc&quot;, forbidden = [&quot;aaa&quot;, &quot;cb&quot;]</p>
-                  <p><span className="text-green font-bold">Output:</span> 4</p>
-                  <p className="text-[11px] text-text-muted italic pt-1 border-t border-white/5">
-                    Explanation: There are 11 valid substrings, the longest is &quot;aaab&quot;.
-                  </p>
-                </div>
-              </div>
+              {currentProblem?.testCases ? (
+                currentProblem.testCases.map((tc: any, idx: number) => (
+                  <div key={idx} className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Example {idx + 1}</h4>
+                    <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 font-mono text-xs space-y-1.5 text-text-muted">
+                      <p><span className="text-white font-bold">Input:</span> {tc.input}</p>
+                      <p><span className="text-green font-bold">Output:</span> {tc.expected}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Example 1</h4>
+                    <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 font-mono text-xs space-y-1.5 text-text-muted">
+                      <p><span className="text-white font-bold">Input:</span> s = &quot;cbaaaabc&quot;, forbidden = [&quot;aaa&quot;, &quot;cb&quot;]</p>
+                      <p><span className="text-green font-bold">Output:</span> 4</p>
+                      <p className="text-[11px] text-text-muted italic pt-1 border-t border-white/5">
+                        Explanation: There are 11 valid substrings, the longest is &quot;aaab&quot;.
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Example 2</h4>
-                <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 font-mono text-xs space-y-1.5 text-text-muted">
-                  <p><span className="text-white font-bold">Input:</span> s = &quot;leetcode&quot;, forbidden = [&quot;de&quot;, &quot;le&quot;, &quot;e&quot;]</p>
-                  <p><span className="text-green font-bold">Output:</span> 4</p>
-                </div>
-              </div>
+                  <div className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Example 2</h4>
+                    <div className="bg-white/5 p-3.5 rounded-xl border border-white/5 font-mono text-xs space-y-1.5 text-text-muted">
+                      <p><span className="text-white font-bold">Input:</span> s = &quot;leetcode&quot;, forbidden = [&quot;de&quot;, &quot;le&quot;, &quot;e&quot;]</p>
+                      <p><span className="text-green font-bold">Output:</span> 4</p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="pt-4 border-t border-white/10 text-[11px] text-text-muted flex justify-between font-mono">

@@ -196,6 +196,16 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Production hardening regression suite", category: "Production hardening", passed: false, message: e.message });
   }
 
+  // 12. Assessment runner safety. These tests use a controlled HTTP double;
+  // real sandbox connectivity requires a configured external runner.
+  try {
+    const { runAssessmentSecurityTests } = await import("./assessment-security.test");
+    const assessment = await runAssessmentSecurityTests();
+    results.push(...assessment.results);
+  } catch (e: any) {
+    results.push({ name: "Assessment runner security suite", category: "Assessment security", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const failedCount = results.length - passedCount - skippedCount;

@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 import { useRouter } from "next/navigation";
 import { useJobCreationStore, ProctoringLevel } from "@/store/useJobCreationStore";
@@ -8,9 +8,44 @@ export default function EmployerPageE62() {
   const router = useRouter();
   const store = useJobCreationStore();
 
-  const handlePublish = () => {
-    // In real app, make API call here
-    router.push("/employer/job-listings-management");
+  const [publishing, setPublishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    setError(null);
+    try {
+      const matchingConfig = {
+        weightExperience: store.weightExperience,
+        weightEducation: store.weightEducation,
+        weightSkills: store.weightSkills,
+        autoArchiveScore: store.autoArchiveScore,
+        autoInterviewLimit: store.autoInterviewLimit,
+        proctoringLevel: store.proctoringLevel,
+      };
+      
+      const res = await fetch('/api/employer/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: store.jobTitle || 'Untitled Job',
+          company: 'Company Name', // Required by schema, API gets actual from profile
+          location: store.location || 'Remote',
+          type: store.jobType || 'Full-time',
+          salary: store.salaryMin && store.salaryMax ? `${store.currency} ${store.salaryMin}-${store.salaryMax}` : 'Negotiable',
+          status: 'ACTIVE',
+          matchingConfig,
+          autoInterview: store.autoInterview,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to publish job');
+      router.push('/employer/job-listings-management');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -185,17 +220,20 @@ export default function EmployerPageE62() {
 </div>
 </div>
 {/*  Action Buttons  */}
-<div className="flex items-center justify-between pt-stack-md">
+<div className="flex flex-col gap-4 pt-stack-md">
+{error && <div className="text-red-500 text-sm">{error}</div>}
+<div className="flex items-center justify-between">
 <button onClick={() => router.push("/employer/create-job-requirements")} className="btn-ghost h-[50px] px-8 rounded-full font-label-md text-label-md text-text-primary flex items-center gap-2">
 <span className="material-symbols-outlined">arrow_back</span>
                         Back
                     </button>
 <div className="flex gap-4">
 <button className="btn-ghost h-[50px] px-8 rounded-full font-label-md text-label-md text-text-primary">Save Draft</button>
-<button onClick={handlePublish} className="btn-primary-red h-[50px] px-10 rounded-full font-label-md text-label-md text-white flex items-center gap-2">
-                            Publish Job
-                            <span className="material-symbols-outlined">rocket_launch</span>
+<button onClick={handlePublish} disabled={publishing} className="btn-primary-red h-[50px] px-10 rounded-full font-label-md text-label-md text-white flex items-center gap-2 disabled:opacity-50">
+                            {publishing ? 'Publishing...' : 'Publish Job'}
+                            {!publishing && <span className="material-symbols-outlined">rocket_launch</span>}
 </button>
+</div>
 </div>
 </div>
 </div>

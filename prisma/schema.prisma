@@ -1531,5 +1531,5 @@ model MockInterviewTurn {
   turnLatencyMs            Int?
   createdAt                DateTime              @default(now())
 
-  @@index([sessionId, questionIndex])
+  @@unique([sessionId, questionIndex])
 }

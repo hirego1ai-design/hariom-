@@ -16,6 +16,14 @@ export interface DispatchJobCreationParams {
   salaryRange: string;
   location: string;
   type: string;
+  matchingConfig?: {
+    weightExperience: number;
+    weightEducation: number;
+    weightSkills: number;
+    autoArchiveScore: number;
+    autoInterviewLimit: number;
+    proctoringLevel?: string;
+  };
 }
 
 export interface DispatchApplicationParams {
@@ -84,6 +92,7 @@ export class RosGateway {
         salaryRange: params.salaryRange,
         description: (generatedJd.jobDescription as string) || `Job listing for ${params.jobTitle}`,
         requirements: (generatedJd.targetKeywords as string[]) || ['AI Architecture', 'TypeScript'],
+        matchingConfig: params.matchingConfig,
         status: 'ACTIVE',
       },
     });

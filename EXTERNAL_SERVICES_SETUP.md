@@ -72,6 +72,19 @@ The present interview signaling implementation persists signals in PostgreSQL an
 
 When Realtime is implemented, use a server-only service-role key and a separate public anonymous key only if the browser client genuinely requires it, protected by Row Level Security. A code change will define the exact variables and verification test first.
 
+## 7. Isolated code-assessment runner
+
+Create a private, separately sandboxed code-execution service before enabling coding assessments. It must run outside the HireGo Next.js process, enforce CPU, memory, filesystem, and network isolation, and expose an HTTPS `POST /execute` endpoint. Do not use Node's `vm` or the Vercel application process to execute applicant code.
+
+| Variable | Secret? | Vercel environment | Purpose |
+| --- | --- | --- | --- |
+| `CODE_RUNNER_URL` | No | Production, Preview/Staging | Base HTTPS URL of the private runner; HireGo calls `<URL>/execute`. |
+| `CODE_RUNNER_API_KEY` | Yes | Production, Preview/Staging | Bearer credential accepted only by that runner. |
+
+The runner endpoint must accept `{ code, language, testCases, timeLimitMs, memoryLimitMb }` and return `{ status, passedTests, totalTests, runtimeMs, results, stdout, stderr }`. Supported languages are `python3`, `javascript`, `typescript`, `java`, `cpp`, and `go`.
+
+Verify: configure a staging runner, submit a harmless solution, and confirm the execution occurs in the runner logs—not in the HireGo server. The blocked test that becomes a real integration test is the coding run/submit flow; the existing local test only verifies fail-closed behavior and response validation.
+
 ## Common application secrets
 
 Add these separately for every production-like environment: `NEXTAUTH_SECRET`, `JWT_SECRET`, `INTERNAL_API_KEY`, `EMAIL_CONFIG_ENCRYPTION_KEY`, payment-provider credentials, email-provider credentials, `WHATSAPP_API_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, and `OPENAI_API_KEY` if AI features are enabled. All are secrets except provider identifiers such as a phone-number ID.
