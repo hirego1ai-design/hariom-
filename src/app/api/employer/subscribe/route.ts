@@ -3,17 +3,13 @@ import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 
-const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
 
 async function resolveCompanyId(userId: string) {
-  try {
-    const profile = await prisma.employerProfile.findUnique({ where: { userId } });
-    if (profile) return profile.companyId;
-    if (!allowMockFallbacks) throw new Error("Employer profile not found.");
-  } catch (error) {
-    if (!allowMockFallbacks) throw error;
+  const profile = await prisma.employerProfile.findUnique({ where: { userId } });
+  if (!profile?.companyId) {
+    throw new Error("Employer profile not found.");
   }
-  return "comp-1";
+  return profile.companyId;
 }
 
 // GET employer's subscription, credits, and available plans

@@ -3,12 +3,8 @@
 import React from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
-import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function OnboardingCompletePage() {
-  const { state } = useOnboarding();
-  const displayName = state.personalDetails.fullName.trim() || "Candidate";
-  const score = state.hireGoScore?.overall;
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
@@ -17,13 +13,13 @@ export default function OnboardingCompletePage() {
         <header className="fixed top-0 left-[116px] right-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-gutter h-20 shadow-md">
           <div>
             <h1 className="font-display-md text-headline-md text-white font-bold tracking-tight">
-              Onboarding Complete!
+              Onboarding saved
             </h1>
-            <p className="text-text-muted text-xs">Your candidate profile is verified and active in the candidate directory.</p>
+            <p className="text-text-muted text-xs">Your profile information has been saved. Verification, assessment, and job eligibility are separate steps.</p>
           </div>
           <div className="flex items-center gap-3 font-mono text-xs">
             <span className="px-3 py-1.5 rounded-xl bg-green/20 text-green font-bold border border-green/30">
-              100% Onboarding Completed
+              Profile saved
             </span>
           </div>
         </header>
@@ -37,20 +33,18 @@ export default function OnboardingCompletePage() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-2xl font-bold text-white">Congratulations, {displayName}!</h1>
+              <h1 className="text-2xl font-bold text-white">Your onboarding details are saved</h1>
               <p className="text-xs text-text-muted max-w-[400px] mx-auto leading-relaxed">
-                {score !== undefined
-                  ? <>Your current HireGo Score™ is <strong>{score}</strong>. You can keep improving your profile at any time.</>
-                  : "Your candidate profile is ready. Complete any optional assessments later to generate a HireGo Score™."}
+                Continue to Job-Ready assessments if an administrator has configured one for your role and seniority. Completion does not automatically verify your profile or guarantee a job.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
               <Link
-                href="/candidate/universal-profile"
+                href="/assessment/readiness"
                 className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
               >
-                <span className="material-symbols-outlined text-base">badge</span> View Universal Profile
+                <span className="material-symbols-outlined text-base">verified</span> Check Job-Ready assessments
               </Link>
               <Link
                 href="/dashboard"
@@ -62,7 +56,7 @@ export default function OnboardingCompletePage() {
                 href="/jobs"
                 className="w-full sm:w-auto px-8 py-3 rounded-full bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all"
               >
-                Browse Matched Opportunities
+                Browse opportunities
               </Link>
             </div>
           </div>

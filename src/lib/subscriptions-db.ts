@@ -50,6 +50,7 @@ export interface PromoCodeRecord {
   discountValue: number;
   maxUsage: number;
   usageCount: number;
+  reservedUsage?: number;
   validUntil?: string;
   isArchived: boolean;
   createdAt: string;
@@ -503,43 +504,215 @@ class SubscriptionsDb {
     return true;
   }
 
-  // PROMO CODES
+  // PROMO CODES (PostgreSQL Prisma Backed)
   public async getPromoCodes(includeArchived = false): Promise<PromoCodeRecord[]> {
-
-    const promos = Array.from(this.inMemoryPromos.values());
-    return includeArchived ? promos : promos.filter((p) => !p.isArchived);
+    try {
+      const promos = await prisma.promoCode.findMany({
+        where: includeArchived ? undefined : { isArchived: false },
+        orderBy: { createdAt: "desc" },
+      });
+      return promos.map((p) => ({
+        id: p.id,
+        code: p.code,
+        discountType: p.discountType as "PERCENTAGE" | "FLAT",
+        discountValue: p.discountValue,
+        maxUsage: p.maxUsage,
+        usageCount: p.usageCount,
+        reservedUsage: p.reservedUsage,
+        validUntil: p.validUntil ? p.validUntil.toISOString() : undefined,
+        isArchived: p.isArchived,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      }));
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") throw error;
+      const promos = Array.from(this.inMemoryPromos.values());
+      return includeArchived ? promos : promos.filter((p) => !p.isArchived);
+    }
   }
 
   public async createPromoCode(
-    payload: Omit<PromoCodeRecord, "id" | "usageCount" | "isArchived" | "createdAt" | "updatedAt">
+    payload: Omit<PromoCodeRecord, "id" | "usageCount" | "reservedUsage" | "isArchived" | "createdAt" | "updatedAt">
   ): Promise<PromoCodeRecord> {
-    const promo: PromoCodeRecord = {
-      ...payload,
-      id: `promo-${Date.now()}`,
-      usageCount: 0,
-      isArchived: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.inMemoryPromos.set(payload.code.toUpperCase(), promo);
-    return promo;
+    const normalizedCode = payload.code.trim().toUpperCase();
+    try {
+      const promo = await prisma.promoCode.create({
+        data: {
+          code: normalizedCode,
+          discountType: payload.discountType,
+          discountValue: payload.discountValue,
+          maxUsage: payload.maxUsage ?? 9999,
+          validUntil: payload.validUntil ? new Date(payload.validUntil) : null,
+          isArchived: false,
+        },
+      });
+      return {
+        id: promo.id,
+        code: promo.code,
+        discountType: promo.discountType as "PERCENTAGE" | "FLAT",
+        discountValue: promo.discountValue,
+        maxUsage: promo.maxUsage,
+        usageCount: promo.usageCount,
+        reservedUsage: promo.reservedUsage,
+        validUntil: promo.validUntil ? promo.validUntil.toISOString() : undefined,
+        isArchived: promo.isArchived,
+        createdAt: promo.createdAt.toISOString(),
+        updatedAt: promo.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") throw error;
+      const promo: PromoCodeRecord = {
+        ...payload,
+        code: normalizedCode,
+        id: `promo-${Date.now()}`,
+        usageCount: 0,
+        reservedUsage: 0,
+        isArchived: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.inMemoryPromos.set(normalizedCode, promo);
+      return promo;
+    }
   }
 
   public async archivePromoCode(code: string): Promise<PromoCodeRecord | null> {
-    const promo = this.inMemoryPromos.get(code.toUpperCase());
-    if (!promo) return null;
-    promo.isArchived = true;
-    promo.updatedAt = new Date().toISOString();
-    this.inMemoryPromos.set(code.toUpperCase(), promo);
-    return promo;
+    const normalizedCode = code.trim().toUpperCase();
+    try {
+      const promo = await prisma.promoCode.update({
+        where: { code: normalizedCode },
+        data: { isArchived: true },
+      });
+      return {
+        id: promo.id,
+        code: promo.code,
+        discountType: promo.discountType as "PERCENTAGE" | "FLAT",
+        discountValue: promo.discountValue,
+        maxUsage: promo.maxUsage,
+        usageCount: promo.usageCount,
+        reservedUsage: promo.reservedUsage,
+        validUntil: promo.validUntil ? promo.validUntil.toISOString() : undefined,
+        isArchived: promo.isArchived,
+        createdAt: promo.createdAt.toISOString(),
+        updatedAt: promo.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") throw error;
+      const promo = this.inMemoryPromos.get(normalizedCode);
+      if (!promo) return null;
+      promo.isArchived = true;
+      promo.updatedAt = new Date().toISOString();
+      this.inMemoryPromos.set(normalizedCode, promo);
+      return promo;
+    }
   }
 
   public async validatePromoCode(code: string): Promise<PromoCodeRecord | null> {
-    const promo = this.inMemoryPromos.get(code.toUpperCase());
-    if (!promo || promo.isArchived) return null;
-    if (promo.validUntil && new Date() > new Date(promo.validUntil)) return null;
-    if (promo.usageCount >= promo.maxUsage) return null;
-    return promo;
+    const normalizedCode = code.trim().toUpperCase();
+    try {
+      const promo = await prisma.promoCode.findUnique({
+        where: { code: normalizedCode },
+      });
+      if (!promo || promo.isArchived) return null;
+      if (promo.validUntil && new Date() > promo.validUntil) return null;
+      if (promo.usageCount + promo.reservedUsage >= promo.maxUsage) return null;
+      return {
+        id: promo.id,
+        code: promo.code,
+        discountType: promo.discountType as "PERCENTAGE" | "FLAT",
+        discountValue: promo.discountValue,
+        maxUsage: promo.maxUsage,
+        usageCount: promo.usageCount,
+        reservedUsage: promo.reservedUsage,
+        validUntil: promo.validUntil ? promo.validUntil.toISOString() : undefined,
+        isArchived: promo.isArchived,
+        createdAt: promo.createdAt.toISOString(),
+        updatedAt: promo.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      if (process.env.NODE_ENV === "production") throw error;
+      const promo = this.inMemoryPromos.get(normalizedCode);
+      if (!promo || promo.isArchived) return null;
+      if (promo.validUntil && new Date() > new Date(promo.validUntil)) return null;
+      if ((promo.usageCount + (promo.reservedUsage || 0)) >= promo.maxUsage) return null;
+      return promo;
+    }
+  }
+
+  public async reservePromoCode(code: string): Promise<PromoCodeRecord> {
+    const normalizedCode = code.trim().toUpperCase();
+    return prisma.$transaction(async (tx) => {
+      const promos = await tx.$queryRaw<Array<{
+        id: string;
+        code: string;
+        discountType: string;
+        discountValue: number;
+        maxUsage: number;
+        usageCount: number;
+        reservedUsage: number;
+        validUntil: Date | null;
+        isArchived: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }>>`
+        SELECT "id", "code", "discountType", "discountValue", "maxUsage", "usageCount", "reservedUsage", "validUntil", "isArchived", "createdAt", "updatedAt"
+        FROM "PromoCode"
+        WHERE "code" = ${normalizedCode}
+        FOR UPDATE
+      `;
+      const promo = promos[0];
+      if (!promo || promo.isArchived) {
+        throw new Error("Invalid or archived promo code.");
+      }
+      if (promo.validUntil && promo.validUntil < new Date()) {
+        throw new Error("Expired promo code.");
+      }
+      if (promo.usageCount + promo.reservedUsage >= promo.maxUsage) {
+        throw new Error("Exhausted promo code.");
+      }
+
+      const updated = await tx.promoCode.update({
+        where: { id: promo.id },
+        data: { reservedUsage: { increment: 1 } },
+      });
+
+      return {
+        id: updated.id,
+        code: updated.code,
+        discountType: updated.discountType as "PERCENTAGE" | "FLAT",
+        discountValue: updated.discountValue,
+        maxUsage: updated.maxUsage,
+        usageCount: updated.usageCount,
+        reservedUsage: updated.reservedUsage,
+        validUntil: updated.validUntil ? updated.validUntil.toISOString() : undefined,
+        isArchived: updated.isArchived,
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+      };
+    });
+  }
+
+  public async releasePromoReservation(code: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    await prisma.promoCode.updateMany({
+      where: { code: normalizedCode, reservedUsage: { gt: 0 } },
+      data: { reservedUsage: { decrement: 1 } },
+    }).catch(() => undefined);
+  }
+
+  public async confirmPromoUsage(code: string): Promise<void> {
+    const normalizedCode = code.trim().toUpperCase();
+    await prisma.$transaction(async (tx) => {
+      const promo = await tx.promoCode.findUnique({ where: { code: normalizedCode } });
+      if (!promo) return;
+      await tx.promoCode.update({
+        where: { id: promo.id },
+        data: {
+          usageCount: { increment: 1 },
+          reservedUsage: promo.reservedUsage > 0 ? { decrement: 1 } : undefined,
+        },
+      });
+    });
   }
 
   // AI SERVICES

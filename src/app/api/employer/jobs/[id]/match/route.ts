@@ -5,12 +5,12 @@ import { prisma } from '@/lib/prisma';
 import { batchMatchCandidates } from '@/lib/matching/JobMatchingEngine';
 import { logAuditEvent } from '@/lib/auditLogger';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireEmployerOrAdminSession(req);
     await enforceRateLimit(req, 'employer_match_job');
     
-    const jobId = params.id;
+    const { id: jobId } = await params;
     
     if (session.role === 'EMPLOYER' || session.role === 'RECRUITER') {
       const company = await getSessionCompany(session);

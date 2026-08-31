@@ -1,5 +1,2 @@
 import { redirect } from "next/navigation";
-
-export default function MockInterviewSummaryPage() {
-  redirect("/video-assessment/active");
-}
+export default function MockInterviewSummaryPage() { redirect("/assessment/readiness"); }

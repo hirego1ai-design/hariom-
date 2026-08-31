@@ -180,15 +180,15 @@ export default function ApplicationTimelinePage() {
                 </h3>
                 <div>
                   <h4 className="text-base font-bold text-text-primary">
-                    {selectedApp?.job?.title || "Senior Engineering Role"}
+                    {selectedApp?.job?.title || "Job title not available"}
                   </h4>
                   <p className="text-xs text-text-secondary mt-0.5">
-                    {selectedApp?.job?.company?.name || "HireGo Partner"} • {selectedApp?.job?.location || "Remote"}
+                    {selectedApp?.job?.company?.name || "Company not available"} • {selectedApp?.job?.location || "Location not provided"}
                   </p>
                 </div>
                 <div className="pt-2">
                   <Link
-                    href={`/jobs/${selectedApp?.jobId || "job-101"}`}
+                    href={selectedApp?.jobId ? `/jobs/${selectedApp.jobId}` : "/jobs"}
                     className="w-full h-10 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-text-primary flex items-center justify-center gap-1.5 transition-all"
                   >
                     <span>View Job Posting</span>

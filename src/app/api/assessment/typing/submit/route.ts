@@ -7,9 +7,9 @@ import { z } from 'zod';
 import crypto from 'crypto';
 
 const typingSubmitSchema = z.object({
-  promptText: z.string().min(1).max(2_000),
+  promptId: z.string().uuid(),
   typedText: z.string().max(2_000),
-  durationSeconds: z.number().min(5).max(600),
+  durationSeconds: z.number().min(1).max(600),
   keystrokeCount: z.number().int().min(0),
 }).strict();
 
@@ -23,11 +23,14 @@ export async function POST(request: Request) {
     await enforceRateLimit(request, 'assessment_typing_submit');
 
     const body = await readValidatedJson(request, typingSubmitSchema);
-    const { promptText, typedText, durationSeconds, keystrokeCount } = body;
+    const { promptId, typedText, durationSeconds, keystrokeCount } = body;
 
-    if (durationSeconds < 5) {
-      throw new ApiError('Duration too short to be valid', 400);
-    }
+    const prompt = await prisma.typingPracticePrompt.findFirst({
+      where: { id: promptId, isActive: true },
+      select: { text: true },
+    });
+    if (!prompt) throw new ApiError('The selected typing prompt is no longer available.', 409);
+    const promptText = prompt.text;
 
     // These are self-reported practice metrics. Browser keystroke counts cannot
     // prove identity or prevent paste, so they must never produce a credential.

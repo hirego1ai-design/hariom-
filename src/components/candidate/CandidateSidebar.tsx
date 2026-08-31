@@ -16,21 +16,17 @@ export interface NavRailItem {
 
 const mainNavItems: NavRailItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: "dashboard" },
-  { id: "universal-profile", label: "Universal Profile (UCP)", href: "/employer/full-candidate-profile-employer-view", icon: "badge", badge: "Shareable" },
-  { id: "jobs", label: "Browse Opportunities", href: "/jobs", icon: "work", badge: "248 New" },
+  { id: "profile", label: "My Profile", href: "/profile", icon: "person" },
+  { id: "readiness", label: "Job-Ready Assessment", href: "/assessment/readiness", icon: "verified" },
+  { id: "jobs", label: "Browse Opportunities", href: "/jobs", icon: "work" },
   { id: "applications", label: "Applications", href: "/applications", icon: "description" },
-  { id: "interviews", label: "Interviews", href: "/interviews", icon: "video_call", badge: "3 Active" },
-  { id: "messages", label: "Messages & Chat", href: "/messages/chat", icon: "forum" },
+  { id: "credits", label: "Career Credits", href: "/credits", icon: "account_balance_wallet" },
   { id: "notifications", label: "Notifications", href: "/notifications", icon: "notifications" },
 ];
 
 const aiCopilotNavItems: NavRailItem[] = [
-  { id: "practice-hub", label: "AI Practice Hub", href: "/ai/practice-hub", icon: "psychology", isAi: true },
-  { id: "mock-interview", label: "AI Mock Interview", href: "/ai/mock-interview/active", icon: "smart_toy", isAi: true },
-  { id: "coach", label: "Speech Coach", href: "/ai/coach/active", icon: "record_voice_over", isAi: true },
-  { id: "career-prediction", label: "Career Prediction", href: "/ai/career-prediction", icon: "trending_up", isAi: true },
-  { id: "resume-score", label: "Resume Optimizer", href: "/ai/resume-score", icon: "task_alt", isAi: true },
-  { id: "skill-gap", label: "Skill Gap Matrix", href: "/ai/skill-gap", icon: "assessment", isAi: true },
+  { id: "mcq", label: "Assigned Assessments", href: "/assessment/mcq", icon: "fact_check", isAi: true },
+  { id: "typing", label: "Typing Practice", href: "/assessment/typing/active", icon: "keyboard", isAi: true },
 ];
 
 const PUBLIC_ROUTES = [

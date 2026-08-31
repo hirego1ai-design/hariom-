@@ -12,6 +12,7 @@ const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/webp",
   "video/mp4",
+  "video/webm",
 ];
 
 const MIME_TO_EXT_MAP: Record<string, string[]> = {
@@ -22,6 +23,7 @@ const MIME_TO_EXT_MAP: Record<string, string[]> = {
   "image/jpeg": ["jpg"],
   "image/webp": ["webp"],
   "video/mp4": ["mp4"],
+  "video/webm": ["webm"],
 };
 
 export async function POST(req: NextRequest) {
@@ -35,8 +37,13 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File | null;
     const category = (formData.get("category") as string) || "resumes";
 
-    const ALLOWED_UPLOAD_CATEGORIES = new Set(["resumes", "avatars", "company-logos", "assessment-media"]);
-    if (!ALLOWED_UPLOAD_CATEGORIES.has(category)) {
+    const allowedCategoriesByRole: Record<string, Set<string>> = {
+      CANDIDATE: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes"]),
+      EMPLOYER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
+      RECRUITER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
+      ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media"]),
+    };
+    if (!allowedCategoriesByRole[session.role]?.has(category)) {
       return jsonError("Invalid upload category", 400);
     }
 
@@ -63,6 +70,7 @@ export async function POST(req: NextRequest) {
     else if (header.startsWith("FFD8FF")) serverExt = "jpg";
     else if (headerAscii.startsWith("RIFF") && headerAscii.substring(8, 12) === "WEBP") serverExt = "webp";
     else if (headerAscii.includes("ftyp")) serverExt = "mp4";
+    else if (header.startsWith("1A45DFA3")) serverExt = "webm";
     else if (header.startsWith("504B0304") || header.startsWith("D0CF")) serverExt = "docx";
     else {
       return jsonError("Invalid file signature", 415);

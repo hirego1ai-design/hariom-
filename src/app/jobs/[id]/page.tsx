@@ -38,50 +38,14 @@ export default function JobDetailPage() {
     if (!jobId) return;
 
     // Fetch live job details
-    fetch(`/api/employer/jobs/${jobId}`)
+    fetch(`/api/jobs/${jobId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.job) {
           setJob(data.job);
-        } else {
-          // Fallback if specific id not in db
-          setJob({
-            id: jobId,
-            title: "Senior AI Research & Fullstack Engineer",
-            department: "AI Infrastructure",
-            location: "Bangalore / Remote Friendly",
-            type: "Full-time",
-            salaryRange: "₹28L - ₹42L",
-            description:
-              "Join the core engineering team building frontier recruitment AI agents, distributed LLM routing architectures, and Next.js applications.",
-            requirements: [
-              "5+ years of experience with TypeScript, Next.js, and React architecture.",
-              "Hands-on expertise with PostgreSQL, Prisma ORM, and high-throughput APIs.",
-              "Familiarity with OpenAI / Anthropic LLM integrations and streaming responses.",
-              "Strong communication skills and cross-functional leadership.",
-            ],
-            company: {
-              name: "HireGo AI Labs",
-              logoUrl: "https://images.unsplash.com/photo-1549923746-c502d488b3ea?w=150",
-              description: "AI-first platform revolutionizing intelligent workforce allocation.",
-              location: "Bangalore, India",
-            },
-          });
-        }
+        } else throw new Error(data.error || "Job listing not found.");
       })
-      .catch(() => {
-        setJob({
-          id: jobId,
-          title: "Senior AI Research & Fullstack Engineer",
-          department: "AI Infrastructure",
-          location: "Bangalore / Remote",
-          type: "Full-time",
-          salaryRange: "₹28L - ₹42L",
-          description: "Build Next.js AI applications and scalable cloud backends.",
-          requirements: ["TypeScript", "Next.js", "Prisma", "PostgreSQL"],
-          company: { name: "HireGo Labs", location: "Bangalore" },
-        });
-      })
+      .catch((cause) => setFeedbackMessage(cause instanceof Error ? cause.message : "Job listing could not be loaded."))
       .finally(() => setLoading(false));
 
     // Check if saved
@@ -98,39 +62,39 @@ export default function JobDetailPage() {
 
   const handleApply = async () => {
     if (!jobId || isApplied) return;
-    setIsApplied(true);
-
     try {
-      await fetch("/api/applications", {
+      const response = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
       });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Application could not be submitted.");
+      setIsApplied(true);
       setFeedbackMessage("Application submitted successfully!");
-    } catch {
-      setFeedbackMessage("Application submitted successfully!");
+    } catch (cause) {
+      setFeedbackMessage(cause instanceof Error ? cause.message : "Application could not be submitted.");
     }
   };
 
   const handleToggleSave = async () => {
     if (!jobId) return;
     const nextState = !isSaved;
-    setIsSaved(nextState);
-
     try {
-      if (nextState) {
-        await fetch("/api/candidate/saved-jobs", {
+      const response = nextState
+        ? await fetch("/api/candidate/saved-jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId }),
-        });
-      } else {
-        await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
+        })
+        : await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
           method: "DELETE",
         });
-      }
-    } catch {
-      // Ignore
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Could not update saved jobs.");
+      setIsSaved(nextState);
+    } catch (cause) {
+      setFeedbackMessage(cause instanceof Error ? cause.message : "Could not update saved jobs.");
     }
   };
 
@@ -144,6 +108,22 @@ export default function JobDetailPage() {
               progress_activity
             </span>
             <p className="text-xs text-text-secondary">Loading opportunity details...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+        <CandidateSidebar />
+        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+          <div className="glass-card max-w-md p-8 rounded-3xl border border-white/10 text-center space-y-4">
+            <span className="material-symbols-outlined text-4xl text-primary">work_off</span>
+            <h1 className="text-lg font-bold">Job listing unavailable</h1>
+            <p className="text-sm text-text-secondary">{feedbackMessage || "This listing may have closed or been removed."}</p>
+            <Link href="/jobs" className="inline-flex px-5 py-2.5 rounded-xl btn-3d-red text-xs font-bold text-white">Back to job search</Link>
           </div>
         </main>
       </div>
@@ -184,10 +164,10 @@ export default function JobDetailPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl lg:text-3xl font-extrabold text-text-primary mb-1">
-                    {job?.title}
+                    {job.title}
                   </h1>
                   <p className="text-xs text-text-secondary">
-                    {job?.company?.name || "HireGo Partner"} • {job?.location} • {job?.type}
+                    {job.company?.name || "Company name not available"} • {job.location} • {job.type}
                   </p>
                 </div>
               </div>
@@ -199,7 +179,7 @@ export default function JobDetailPage() {
                     Salary Range
                   </span>
                   <span className="text-xs font-bold text-primary">
-                    {job?.salaryRange || "Competitive"}
+                    {job.salaryRange || "Not disclosed"}
                   </span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
@@ -207,7 +187,7 @@ export default function JobDetailPage() {
                     Department
                   </span>
                   <span className="text-xs font-bold text-text-primary">
-                    {job?.department || "Engineering"}
+                    {job.department || "Not specified"}
                   </span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
@@ -215,14 +195,14 @@ export default function JobDetailPage() {
                     Work Mode
                   </span>
                   <span className="text-xs font-bold text-text-primary">
-                    {job?.type || "Full-time"}
+                    {job.type}
                   </span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
                   <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    AI Match
+                    Application requirement
                   </span>
-                  <span className="text-xs font-bold text-green-400">94% Fit</span>
+                  <span className="text-xs font-bold text-text-secondary">See application details</span>
                 </div>
               </div>
             </div>
@@ -231,12 +211,12 @@ export default function JobDetailPage() {
             <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
               <h2 className="text-base font-bold text-text-primary">About the Role</h2>
               <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-line">
-                {job?.description}
+                {job.description}
               </p>
             </div>
 
             {/* Requirements */}
-            {job?.requirements && job.requirements.length > 0 && (
+            {job.requirements && job.requirements.length > 0 && (
               <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
                 <h2 className="text-base font-bold text-text-primary">Key Requirements</h2>
                 <ul className="space-y-2.5">
@@ -298,11 +278,10 @@ export default function JobDetailPage() {
                 Hiring Organization
               </h3>
               <p className="text-xs text-text-primary font-bold">
-                {job?.company?.name || "HireGo Partner"}
+                {job.company?.name || "Company name not available"}
               </p>
               <p className="text-[11px] text-text-secondary leading-relaxed">
-                {job?.company?.description ||
-                  "Verified employer using HireGo AI automated workforce intelligence."}
+                {job.company?.description || "No company description has been provided for this listing."}
               </p>
             </div>
           </div>

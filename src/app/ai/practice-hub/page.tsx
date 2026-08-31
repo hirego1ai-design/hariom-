@@ -269,23 +269,23 @@ export default function PracticeHubPage() {
                   </span>
                 </div>
                 <h3 className="font-bold text-lg group-hover:text-emerald-500 transition-colors" style={{ color: "var(--text-primary)" }}>
-                  Coding & DSA IDE Arena
+                  Dynamic MCQ Assessment Arena
                 </h3>
                 <p className="text-xs mt-2 leading-relaxed font-medium" style={{ color: "var(--text-secondary)" }}>
-                  Solve Data Structure & Algorithm challenges in a browser-based Monaco editor with real-time test runners, time complexity analysis, and AI hint copilot.
+                  Complete dynamic, database-driven MCQ technical assessments with real-time timer tracking and secure server-side scoring.
                 </p>
               </div>
 
               <div className="mt-6 pt-4 space-y-2" style={{ borderTop: "1px solid var(--outline)" }}>
                 <Link
-                  href="/assessment/coding/ide"
+                  href="/assessment/mcq"
                   className="block w-full py-2.5 rounded-full text-white font-bold text-xs text-center transition-all"
                   style={{
                     background: "linear-gradient(135deg, #2E7D32, #4CAF50)",
                     boxShadow: "0 6px 18px rgba(46,125,50,0.35)",
                   }}
                 >
-                  Enter Web IDE →
+                  Take MCQ Assessment →
                 </Link>
               </div>
             </div>
@@ -373,7 +373,7 @@ export default function PracticeHubPage() {
 
               <div className="mt-6 pt-4 space-y-2" style={{ borderTop: "1px solid var(--outline)" }}>
                 <Link
-                  href="/assessment/coding/ide"
+                  href="/assessment/mcq"
                   className="block w-full py-2.5 rounded-full font-bold text-xs text-center border transition-all"
                   style={{
                     backgroundColor: "var(--surface-container-high)",
@@ -381,7 +381,7 @@ export default function PracticeHubPage() {
                     color: "var(--text-primary)",
                   }}
                 >
-                  Open Whiteboard Canvas →
+                  Practice MCQ Questions →
                 </Link>
               </div>
             </div>

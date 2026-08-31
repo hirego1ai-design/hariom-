@@ -15,11 +15,7 @@ export default function JobApplyPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [answers, setAnswers] = useState({
-    noticePeriod: "Immediate / 15 Days",
-    experienceYears: "4",
-    whyJoin: "",
-  });
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/candidate/profile")
@@ -31,7 +27,13 @@ export default function JobApplyPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+    if (jobId) {
+      fetch(`/api/jobs/${jobId}`)
+        .then((res) => res.json())
+        .then((data) => setJobTitle(data.success ? data.job?.title || null : null))
+        .catch(() => setJobTitle(null));
+    }
+  }, [jobId]);
 
   const handleSubmitApplication = async () => {
     if (!jobId) return;
@@ -42,10 +44,7 @@ export default function JobApplyPage() {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId,
-          answers,
-        }),
+        body: JSON.stringify({ jobId }),
       });
 
       const data = await res.json();
@@ -124,7 +123,7 @@ export default function JobApplyPage() {
                   Confirm Your Profile Details
                 </h1>
                 <p className="text-xs text-text-secondary">
-                  Your verified HireGo credentials will be submitted to the hiring team.
+                  Review the details currently stored in your HireGo profile before applying.
                 </p>
               </div>
 
@@ -135,7 +134,7 @@ export default function JobApplyPage() {
                       Full Name
                     </span>
                     <span className="text-text-primary font-bold text-sm">
-                      {profile?.name || "Candidate"}
+                      {profile?.name || "Not provided"}
                     </span>
                   </div>
                   <div>
@@ -143,7 +142,7 @@ export default function JobApplyPage() {
                       Email Address
                     </span>
                     <span className="text-text-primary font-bold text-sm">
-                      {profile?.email || profile?.user?.email || "candidate@hirego.ai"}
+                      {profile?.email || profile?.user?.email || "Not provided"}
                     </span>
                   </div>
                   <div>
@@ -151,16 +150,12 @@ export default function JobApplyPage() {
                       Headline
                     </span>
                     <span className="text-text-primary">
-                      {profile?.headline || "Senior Software Professional"}
+                      {profile?.headline || "Not provided"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-text-muted block text-[10px] uppercase font-bold">
-                      HireGo Score™
-                    </span>
-                    <span className="text-green-400 font-bold">
-                      {profile?.hireGoScore || 92} / 100
-                    </span>
+                    <span className="text-text-muted block text-[10px] uppercase font-bold">Profile status</span>
+                    <span className="text-text-primary font-bold">{profile ? "Available" : "Not available"}</span>
                   </div>
                 </div>
 
@@ -169,7 +164,7 @@ export default function JobApplyPage() {
                     Verified Skills
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {(profile?.skills || ["React", "TypeScript", "Next.js", "AI"]).map(
+                    {(profile?.skills || []).map(
                       (skill: string, i: number) => (
                         <span
                           key={i}
@@ -179,6 +174,7 @@ export default function JobApplyPage() {
                         </span>
                       )
                     )}
+                    {(!profile?.skills || profile.skills.length === 0) && <span className="text-text-secondary">No skills provided.</span>}
                   </div>
                 </div>
               </div>
@@ -209,58 +205,12 @@ export default function JobApplyPage() {
                   Screening Questions
                 </h1>
                 <p className="text-xs text-text-secondary">
-                  Please provide preliminary information for the hiring team.
+                  This listing has no additional stored screening questions. Continue to review your application.
                 </p>
               </div>
 
-              <div className="space-y-4 text-xs">
-                <div className="space-y-1">
-                  <label className="text-text-muted font-bold block">
-                    What is your current notice period?
-                  </label>
-                  <select
-                    value={answers.noticePeriod}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, noticePeriod: e.target.value })
-                    }
-                    className="input-pill w-full h-11 px-4 text-xs text-text-primary"
-                  >
-                    <option value="Immediate" className="bg-[#181818]">Immediate</option>
-                    <option value="15 Days" className="bg-[#181818]">15 Days</option>
-                    <option value="30 Days" className="bg-[#181818]">30 Days</option>
-                    <option value="60+ Days" className="bg-[#181818]">60+ Days</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-text-muted font-bold block">
-                    Total relevant years of experience in this role:
-                  </label>
-                  <input
-                    type="number"
-                    value={answers.experienceYears}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, experienceYears: e.target.value })
-                    }
-                    className="input-pill w-full h-11 px-4 text-xs text-text-primary"
-                    placeholder="e.g. 5"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-text-muted font-bold block">
-                    Why are you interested in this position? (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={answers.whyJoin}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, whyJoin: e.target.value })
-                    }
-                    className="w-full p-3 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-primary outline-none focus:border-primary transition-all"
-                    placeholder="Tell the hiring manager why you'd be a great fit..."
-                  />
-                </div>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-secondary">
+                Screening questions will appear here only after the employer has configured questions that HireGo can store with your application.
               </div>
 
               <div className="flex justify-between items-center pt-2">
@@ -290,26 +240,18 @@ export default function JobApplyPage() {
                   Ready to Submit
                 </h1>
                 <p className="text-xs text-text-secondary">
-                  Your application will be processed by HireGo AI pipeline and forwarded directly to the employer.
+                  Your application will be submitted to the employer for this active job listing.
                 </p>
               </div>
 
               <div className="p-5 bg-white/5 rounded-2xl border border-white/5 space-y-3 text-xs">
                 <div className="flex justify-between">
                   <span className="text-text-muted">Target Job:</span>
-                  <span className="text-text-primary font-bold">Senior Engineering Role</span>
+                  <span className="text-text-primary font-bold">{jobTitle || "Job title not available"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">Applicant:</span>
-                  <span className="text-text-primary font-bold">{profile?.name || "Candidate"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Notice Period:</span>
-                  <span className="text-text-primary">{answers.noticePeriod}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Experience:</span>
-                  <span className="text-text-primary">{answers.experienceYears} Years</span>
+                  <span className="text-text-primary font-bold">{profile?.name || "Not provided"}</span>
                 </div>
               </div>
 

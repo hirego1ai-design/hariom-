@@ -447,9 +447,10 @@ export async function runWhatsAppTestSuite(): Promise<{
       const earlyRetryEvent = await createStoredEvent("wa50");
       const earlyRetryClaim = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
       await markWhatsAppJobRetry(earlyRetryClaim!, "WhatsApp provider returned HTTP 503.", true, "TRANSIENT_PROVIDER");
+      await prisma.whatsAppInboundEvent.update({ where: { id: earlyRetryEvent.id }, data: { nextAttemptAt: new Date(Date.now() + 60000) } });
       const earlyInvocation = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
       const retryBeforeDue = await prisma.whatsAppInboundEvent.findUnique({ where: { id: earlyRetryEvent.id } });
-      await prisma.whatsAppInboundEvent.update({ where: { id: earlyRetryEvent.id }, data: { nextAttemptAt: new Date(Date.now() - 1) } });
+      await prisma.whatsAppInboundEvent.update({ where: { id: earlyRetryEvent.id }, data: { nextAttemptAt: new Date(Date.now() - 60000) } });
       const dueInvocation = await claimWhatsAppInboundEvent(earlyRetryEvent.id);
       if (dueInvocation) await markWhatsAppJobProcessed(dueInvocation.id);
       assert("WA-50: Early RETRY invocation remains recoverable and cannot get stuck", earlyInvocation === null && retryBeforeDue?.processingStatus === "RETRY" && retryBeforeDue.nextAttemptAt !== null && dueInvocation !== null, "an early delivery does not steal or fail the retry; the event remains claimable once its scheduled time arrives");

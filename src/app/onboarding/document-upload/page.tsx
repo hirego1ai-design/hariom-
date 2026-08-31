@@ -6,25 +6,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOnboarding } from "@/context/OnboardingContext";
 
-// Required documents for Admin verification (only these, not everything)
-const REQUIRED_DOCUMENTS = [
+// Candidate supporting documents are uploaded privately. Verification is not
+// claimed until a candidate-document review workflow has been configured.
+const SUPPORTING_DOCUMENTS = [
   {
-    id: "gst",
-    name: "GST Certificate",
-    description: "GST registration certificate for your company",
-    type: "GST Certificate",
+    id: "identity",
+    name: "Identity document",
+    description: "A government-issued identity document, if requested later by an employer.",
+    type: "candidate-identity",
   },
   {
-    id: "pan",
-    name: "PAN Card",
-    description: "PAN card copy of the company authorized signatory",
-    type: "PAN Card",
+    id: "education",
+    name: "Education document",
+    description: "An optional certificate or academic record supporting your profile.",
+    type: "candidate-education",
   },
   {
-    id: "inc",
-    name: "Certificate of Incorporation",
-    description: "Company incorporation certificate from ROC",
-    type: "Certificate of Incorporation",
+    id: "experience",
+    name: "Experience document",
+    description: "An optional experience or employment document supporting your profile.",
+    type: "candidate-experience",
   },
 ];
 
@@ -46,25 +47,10 @@ export default function DocumentUploadPage() {
 
       const uploadJson = await uploadRes.json();
       
-      if (uploadJson.file?.url) {
-        // Upload to document verification API
-        const verifyRes = await fetch("/api/admin/document-verification", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            docType,
-            fileUrl: uploadJson.file.url,
-            fileName: file.name,
-            employerId: state.userId,
-            companyName: state.companyName || "Unknown",
-          }),
-        });
-
-        if (verifyRes.ok) {
-          setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
-          updateState({ [docType]: true });
-          return true;
-        }
+      if (uploadRes.ok && uploadJson.file?.url) {
+        setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
+        updateState({ [docType]: true });
+        return true;
       }
     } catch (err) {
       console.error("Document upload failed:", err);
@@ -89,14 +75,14 @@ export default function DocumentUploadPage() {
                 Document upload
               </span>
               <h1 className="font-display-lg text-lg font-bold text-text-primary mt-1">
-                Admin Verification Documents
+                Supporting documents
               </h1>
               <p className="text-xs text-text-muted mt-1">
-                Upload only the required documents for employer verification
+                Upload optional documents that support your candidate profile
               </p>
             </div>
             <span className="text-xs font-mono text-text-muted">
-              {Object.values(uploadedDocs).filter(Boolean).length}/{REQUIRED_DOCUMENTS.length} documents
+              {Object.values(uploadedDocs).filter(Boolean).length}/{SUPPORTING_DOCUMENTS.length} documents
             </span>
           </div>
         </header>
@@ -108,22 +94,19 @@ export default function DocumentUploadPage() {
                 <span className="material-symbols-outlined text-yellow text-[20px] mt-1">info</span>
                 <div>
                   <p className="text-xs font-bold text-text-primary">
-                    Only Required Documents
+                    Optional supporting documents
                   </p>
                   <p className="text-[11px] text-text-secondary mt-1">
-                    Upload only these documents to avoid delays:
+                    Documents are stored privately. Uploading them does not mean they are verified.
                   </p>
                   <ul className="text-[11px] text-text-muted mt-2 space-y-1 list-disc list-inside">
-                    <li>GST Certificate</li>
-                    <li>PAN Card</li>
-                    <li>Certificate of Incorporation</li>
                   </ul>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4">
-              {REQUIRED_DOCUMENTS.map((doc) => (
+              {SUPPORTING_DOCUMENTS.map((doc) => (
                 <div
                   key={doc.id}
                   className="glass-card rounded-xl p-5 border border-white/5 hover:border-primary/20 transition-all"

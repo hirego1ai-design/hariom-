@@ -93,8 +93,8 @@ export default function CandidateSettingsPage() {
                 <span className="material-symbols-outlined text-[32px]">person</span>
               </div>
               <div>
-                <h3 className="font-bold text-base text-white">{name || "Candidate"}</h3>
-                <p className="text-xs text-text-muted">{email || "candidate@hirego.ai"}</p>
+                <h3 className="font-bold text-base text-white">{name || "Profile not available"}</h3>
+                <p className="text-xs text-text-muted">{email || "Email not available"}</p>
               </div>
             </div>
 

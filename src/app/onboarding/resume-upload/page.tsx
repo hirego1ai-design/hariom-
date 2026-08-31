@@ -48,52 +48,22 @@ export default function ResumeUploadPage() {
         }
         const fileUrl = uploadJson.file.url;
 
-        // Dispatch AI Resume Analysis
-        const aiRes = await fetch("/api/agents/dispatch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            task: "RESUME_SCORE",
-            prompt: `Analyze resume file: ${file.name}. Extract skills, experience years, and strengths.`,
-          }),
-        });
-
-        const aiJson = await aiRes.json();
-        let parsedAi: any = null;
-        try {
-          parsedAi = typeof aiJson.result === "string" ? JSON.parse(aiJson.result) : aiJson.result;
-        } catch {
-          parsedAi = null;
-        }
-
-        const realAnalysis = parsedAi?.score
-          ? {
-              qualityScore: Number(parsedAi.score),
-              extractedSkills: Array.isArray(parsedAi.skillsFound) ? parsedAi.skillsFound : [],
-              experienceYears: Number(parsedAi.experienceYears) || 0,
-              missingFields: Array.isArray(parsedAi.missingKeywords) ? parsedAi.missingKeywords : [],
-              summary: typeof parsedAi.aiSummary === "string" ? parsedAi.aiSummary : "Resume uploaded successfully.",
-              improvements: Array.isArray(parsedAi.improvements) ? parsedAi.improvements : [],
-            }
-          : null;
-
-        setAnalysis(realAnalysis);
-        updateState({ resumeUploaded: true, resumeAnalysis: realAnalysis });
-
-        // Persist resume URL and score to candidate profile
-        fetch("/api/candidate/profile", {
+        const profileRes = await fetch("/api/candidate/profile", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             resumeUrl: fileUrl,
-            ...(realAnalysis
-              ? {
-                  skills: realAnalysis.extractedSkills,
-                  experienceYears: realAnalysis.experienceYears,
-                }
-              : {}),
           }),
         });
+        const profileJson = await profileRes.json();
+        if (!profileRes.ok || !profileJson.success) {
+          throw new Error(profileJson.error || "Resume could not be saved to your profile.");
+        }
+
+        // Do not invent an AI score from a filename. Resume analysis is enabled
+        // only when a private-file parsing provider is configured.
+        setAnalysis(null);
+        updateState({ resumeUploaded: true, resumeAnalysis: null });
       } catch (err) {
         setFileName(null);
         setUploadError(err instanceof Error ? err.message : "Resume upload failed. Please try again.");
@@ -156,14 +126,14 @@ export default function ResumeUploadPage() {
                 Resume upload
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Deep Neural Parser & Quality Scoring
+                Secure profile storage
               </span>
             </div>
             <h1
               className="text-headline-md font-bold tracking-tight"
               style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}
             >
-              AI Resume Upload & Analysis
+              Resume upload
             </h1>
           </div>
 
@@ -204,7 +174,7 @@ export default function ResumeUploadPage() {
                 PDF / DOCX Resume Ingestion
               </h2>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Max 15MB • Automatic Vectorization
+                Maximum 10MB
               </span>
             </div>
 
@@ -248,8 +218,8 @@ export default function ResumeUploadPage() {
               <div className="p-4 rounded-2xl border space-y-2 flex items-center gap-3" style={{ backgroundColor: "var(--primary-container-bg)", borderColor: "var(--primary)" }}>
                 <span className="material-symbols-outlined text-[20px] animate-spin" style={{ color: "var(--primary)" }}>progress_activity</span>
                 <div>
-                  <p className="font-extrabold text-xs" style={{ color: "var(--primary)" }}>Parsing Resume with HireGo AI Engine...</p>
-                  <p className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>Extracting skill density, domain experience, and quantified achievements</p>
+                  <p className="font-extrabold text-xs" style={{ color: "var(--primary)" }}>Uploading your resume…</p>
+                  <p className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>Saving it securely to your candidate profile</p>
                 </div>
               </div>
             )}

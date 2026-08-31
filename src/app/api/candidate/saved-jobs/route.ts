@@ -1,172 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { z } from "zod";
+import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
-const allowMockFallbacks = process.env.NODE_ENV !== "production" || process.env.MOCK_DB === "true";
-
-// Fallback in-memory saved jobs
-const inMemorySavedJobs: Map<string, Set<string>> = new Map();
-
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
-    if (session.role !== "CANDIDATE") {
-      return jsonError("Candidate access required", 403);
-    }
-
-    try {
-      const saved = await (prisma as any).savedJob?.findMany?.({
-        where: { userId: session.id },
-        include: {
-          job: {
-            include: {
-              company: {
-                select: { name: true, logoUrl: true, location: true },
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (saved && saved.length > 0) {
-        return NextResponse.json({
-          success: true,
-          savedJobs: saved.map((s: any) => ({
-            id: s.id,
-            jobId: s.jobId,
-            savedAt: s.createdAt,
-            job: s.job,
-          })),
-        });
-      }
-    } catch {
-      if (!allowMockFallbacks) {
-        throw new Error("Failed to load saved jobs.");
-      }
-    }
-
-    if (!allowMockFallbacks) {
-      return NextResponse.json({
-        success: true,
-        savedJobs: [],
-      });
-    }
-
-    const userSaved = Array.from(inMemorySavedJobs.get(session.id) || []);
-    return NextResponse.json({
-      success: true,
-      savedJobs: userSaved.map((jobId) => ({
-        id: `saved-${jobId}`,
-        jobId,
-        savedAt: new Date().toISOString(),
-        job: null,
-        unavailable: true,
-      })),
-      warning: userSaved.length > 0 ? "Saved job details are unavailable while the database is offline." : undefined,
-    });
-  } catch (error) {
-    return handleApiError(error);
-  }
+const savedJobSchema = z.object({ jobId: z.string().uuid() }).strict();
+async function requireCandidate(request: NextRequest) {
+  const session = await getCurrentSession(request.headers);
+  if (!session) throw new ApiError("Unauthorized access", 401);
+  if (session.role !== "CANDIDATE") throw new ApiError("Candidate access required", 403);
+  return session;
 }
 
-export async function POST(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
-    if (session.role !== "CANDIDATE") {
-      return jsonError("Candidate access required", 403);
-    }
-
-    const body = await req.json();
-    const jobId = body.jobId;
-    if (!jobId) {
-      return jsonError("jobId is required", 400);
-    }
-
-    try {
-      const record = await (prisma as any).savedJob?.upsert?.({
-        where: {
-          userId_jobId: {
-            userId: session.id,
-            jobId,
-          },
-        },
-        create: {
-          userId: session.id,
-          jobId,
-        },
-        update: {},
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: "Job saved successfully",
-        savedJob: record,
-      });
-    } catch {
-      if (!allowMockFallbacks) {
-        throw new Error("Failed to save job.");
-      }
-      if (!inMemorySavedJobs.has(session.id)) {
-        inMemorySavedJobs.set(session.id, new Set());
-      }
-      inMemorySavedJobs.get(session.id)!.add(jobId);
-
-      return NextResponse.json({
-        success: true,
-        message: "Job saved successfully",
-        savedJob: { id: `saved-${jobId}`, userId: session.id, jobId },
-      });
-    }
-  } catch (error) {
-    return handleApiError(error);
-  }
+    const session = await requireCandidate(request);
+    const savedJobs = await prisma.savedJob.findMany({ where: { userId: session.id }, include: { job: { include: { company: { select: { name: true, logoUrl: true, location: true } } } } }, orderBy: { createdAt: "desc" } });
+    return NextResponse.json({ success: true, savedJobs: savedJobs.map((saved) => ({ id: saved.id, jobId: saved.jobId, savedAt: saved.createdAt, job: saved.job })) });
+  } catch (error) { return handleApiError(error); }
 }
 
-export async function DELETE(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
-    if (session.role !== "CANDIDATE") {
-      return jsonError("Candidate access required", 403);
-    }
+    const session = await requireCandidate(request);
+    const { jobId } = await readValidatedJson(request, savedJobSchema);
+    const job = await prisma.jobListing.findFirst({ where: { id: jobId, status: "ACTIVE" }, select: { id: true } });
+    if (!job) return jsonError("Active job listing not found", 404);
+    const savedJob = await prisma.savedJob.upsert({ where: { userId_jobId: { userId: session.id, jobId } }, create: { userId: session.id, jobId }, update: {} });
+    return NextResponse.json({ success: true, savedJob }, { status: 201 });
+  } catch (error) { return handleApiError(error); }
+}
 
-    const { searchParams } = new URL(req.url);
-    const jobId = searchParams.get("jobId");
-
-    if (!jobId) {
-      return jsonError("jobId parameter is required", 400);
-    }
-
-    try {
-      await (prisma as any).savedJob?.deleteMany?.({
-        where: {
-          userId: session.id,
-          jobId,
-        },
-      });
-    } catch {
-      if (!allowMockFallbacks) {
-        throw new Error("Failed to remove saved job.");
-      }
-      if (inMemorySavedJobs.has(session.id)) {
-        inMemorySavedJobs.get(session.id)!.delete(jobId);
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Job removed from saved list",
-    });
-  } catch (error) {
-    return handleApiError(error);
-  }
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await requireCandidate(request);
+    const jobId = new URL(request.url).searchParams.get("jobId");
+    const parsed = savedJobSchema.safeParse({ jobId });
+    if (!parsed.success) throw new ApiError("A valid jobId parameter is required", 400);
+    await prisma.savedJob.deleteMany({ where: { userId: session.id, jobId: parsed.data.jobId } });
+    return NextResponse.json({ success: true });
+  } catch (error) { return handleApiError(error); }
 }

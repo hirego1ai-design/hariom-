@@ -38,25 +38,39 @@ enum CustomSkillStatus {
   REJECTED
 }
 
-enum CodingDifficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum SubmissionStatus {
-  ACCEPTED
-  WRONG_ANSWER
-  TIME_LIMIT_EXCEEDED
-  RUNTIME_ERROR
-  COMPILE_ERROR
-  PENDING
-}
-
 enum MockInterviewStatus {
   IN_PROGRESS
   COMPLETED
   ABANDONED
+}
+
+enum AssessmentScope {
+  EMPLOYER_JOB
+  PLATFORM_READINESS
+}
+
+enum CandidateReadinessStatus {
+  NOT_STARTED
+  DEVELOPING
+  JOB_READY
+  EXPIRED
+}
+
+enum CandidateCreditLedgerType {
+  PURCHASE
+  BONUS
+  SPEND
+  REFUND
+  ADJUSTMENT
+  EXPIRY
+}
+
+enum CandidateServiceUsageStatus {
+  REQUESTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REFUNDED
 }
 
 model User {
@@ -74,6 +88,7 @@ model User {
 
   candidateProfile      CandidateProfile?
   employerProfile       EmployerProfile?
+  invitationsSent       CompanyInvitation[]   @relation("InvitedByUser")
   auditLogs             AuditLog[]
   notifications         Notification[]
   aiUsages              AiUsage[]
@@ -109,11 +124,15 @@ model CandidateProfile {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  videoResumes        VideoResume[]
-  applications        Application[]
-  codingSubmissions   CodingSubmission[]
-  typingAssessments   TypingAssessment[]
+  videoResumes          VideoResume[]
+  applications          Application[]
+  mcqAttempts           McqAttempt[]
+  typingAssessments     TypingAssessment[]
   mockInterviewSessions MockInterviewSession[]
+  readinessRecords      CandidateReadiness[]
+  creditWallet          CandidateCreditWallet?
+  creditLedgerEntries   CandidateCreditLedger[]
+  serviceUsages         CandidateServiceUsage[]
 }
 
 model Company {
@@ -129,6 +148,7 @@ model Company {
   updatedAt   DateTime @updatedAt
 
   employers            EmployerProfile[]
+  invitations          CompanyInvitation[]
   jobs                 JobListing[]
   subscriptions        CompanySubscription[]
   credits              CompanyCredits?
@@ -137,6 +157,35 @@ model Company {
   commercialAgreements CommercialAgreement[]
   storedFiles          StoredFile[]
   auditLogs            AuditLog[]
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model CompanyInvitation {
+  id          String           @id @default(uuid())
+  companyId   String
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email       String
+  name        String
+  role        Role             @default(RECRUITER)
+  designation String?
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String
+  invitedBy   User             @relation("InvitedByUser", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([companyId, email])
+  @@index([companyId, status])
 }
 
 model EmployerProfile {
@@ -152,13 +201,13 @@ model EmployerProfile {
 }
 
 model JobListing {
-  id           String    @id @default(uuid())
-  companyId    String
-  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  title        String
-  department   String?
-  location     String
-  type         String    @default("Full-time")
+  id                 String    @id @default(uuid())
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title              String
+  department         String?
+  location           String
+  type               String    @default("Full-time")
   salaryRange        String?
   description        String
   requirements       String[]  @default([])
@@ -166,12 +215,16 @@ model JobListing {
   screeningQuestions String[]  @default([])
   aiFocusAreas       String?
   skillRequirements  Json?
+  requiresJobReady   Boolean   @default(false)
+  jobReadyRoleTitle  String?
+  jobReadySeniority  String?
   status             JobStatus @default(ACTIVE)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  applications Application[]
-  savedBy      SavedJob[]
+  applications   Application[]
+  savedBy        SavedJob[]
+  mcqAssessments McqAssessment[]
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -1421,62 +1474,166 @@ model PaymentOrder {
   @@index([gatewayTxId])
 }
 
-// ── Assessment Engine: Coding Problems ────────────────────────────────────────
-model CodingProblem {
-  id               String            @id @default(uuid())
-  slug             String            @unique
-  title            String
-  difficulty       CodingDifficulty  @default(MEDIUM)
-  category         String            @default("algorithms")
-  description      String
-  starterCode      Json              // { python3: "...", javascript: "...", typescript: "..." }
-  solutionTemplate Json?             // Reference solutions keyed by language
-  timeLimitMs      Int               @default(2000)
-  memoryLimitMb    Int               @default(128)
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+// ── Assessment Engine: Dynamic MCQ Assessments ────────────────────────────────
+model McqAssessment {
+  id                  String          @id @default(uuid())
+  title               String
+  description         String?
+  instructions        String?
+  durationMinutes     Int             @default(30)
+  passingPercentage   Int             @default(70)
+  isActive            Boolean         @default(false)
+  scope               AssessmentScope @default(EMPLOYER_JOB)
+  roleTitle           String?
+  seniority           String?
+  validityDays        Int?
+  retakeCooldownHours Int?
+  jobListingId        String?
+  jobListing          JobListing?     @relation(fields: [jobListingId], references: [id], onDelete: SetNull)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  testCases   TestCase[]
-  submissions CodingSubmission[]
+  questions        McqQuestion[]
+  attempts         McqAttempt[]
+  readinessRecords CandidateReadiness[]
 
-  @@index([difficulty, isActive])
-  @@index([category, isActive])
+  @@index([jobListingId, isActive])
+  @@index([scope, roleTitle, seniority, isActive])
 }
 
-model TestCase {
-  id             String        @id @default(uuid())
-  problemId      String
-  problem        CodingProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  input          String
-  expectedOutput String
-  isHidden       Boolean       @default(false)
-  weight         Int           @default(1)
-  orderIndex     Int           @default(0)
+model McqQuestion {
+  id           String        @id @default(uuid())
+  assessmentId String
+  assessment   McqAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionText String
+  explanation  String?
+  points       Int           @default(1)
+  difficulty   String        @default("MEDIUM") // EASY, MEDIUM, HARD
+  category     String?
+  orderIndex   Int           @default(0)
 
-  @@index([problemId, isHidden])
+  options          McqOption[]
+  candidateAnswers McqCandidateAnswer[]
+
+  @@index([assessmentId, orderIndex])
 }
 
-model CodingSubmission {
+model McqOption {
+  id         String      @id @default(uuid())
+  questionId String
+  question   McqQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionText String
+  isCorrect  Boolean     @default(false)
+
+  candidateAnswers McqCandidateAnswer[]
+
+  @@index([questionId])
+}
+
+model McqAttempt {
   id                 String           @id @default(uuid())
   candidateProfileId String
   candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
-  problemId          String
-  problem            CodingProblem    @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  language           String
-  code               String
-  status             SubmissionStatus @default(PENDING)
+  assessmentId       String
+  assessment         McqAssessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   score              Int              @default(0)
-  passedTests        Int              @default(0)
-  totalTests         Int              @default(0)
-  runtimeMs          Int?
-  memoryMb           Float?
-  stdout             String?
-  stderr             String?
-  createdAt          DateTime         @default(now())
+  earnedPoints       Int              @default(0)
+  totalPoints        Int              @default(0)
+  percentage         Float            @default(0)
+  passed             Boolean          @default(false)
+  startedAt          DateTime         @default(now())
+  submittedAt        DateTime?
 
-  @@index([candidateProfileId, problemId])
+  answers McqCandidateAnswer[]
+
+  @@index([candidateProfileId, assessmentId])
+  @@index([candidateProfileId, startedAt])
+}
+
+model McqCandidateAnswer {
+  id               String      @id @default(uuid())
+  attemptId        String
+  attempt          McqAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         McqQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String
+  selectedOption   McqOption   @relation(fields: [selectedOptionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+}
+
+model CandidateReadiness {
+  id                 String                   @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile         @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  roleTitle          String
+  seniority          String
+  status             CandidateReadinessStatus @default(NOT_STARTED)
+  score              Int?
+  assessmentId       String?
+  assessment         McqAssessment?           @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  assessedAt         DateTime?
+  validUntil         DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@unique([candidateProfileId, roleTitle, seniority])
+  @@index([candidateProfileId, status])
+  @@index([roleTitle, seniority, status])
+}
+
+model CandidateCreditWallet {
+  id                 String           @id @default(uuid())
+  candidateProfileId String           @unique
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  balance            Int              @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model CandidateCreditLedger {
+  id                 String                    @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile          @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  type               CandidateCreditLedgerType
+  amount             Int
+  balanceAfter       Int
+  serviceKey         String?
+  idempotencyKey     String                    @unique
+  reference          String?
+  createdAt          DateTime                  @default(now())
+
+  serviceUsage CandidateServiceUsage?
+
   @@index([candidateProfileId, createdAt])
+}
+
+model CandidateServiceCatalog {
+  id          String   @id @default(uuid())
+  serviceKey  String   @unique
+  name        String
+  description String?
+  creditCost  Int
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  usages CandidateServiceUsage[]
+}
+
+model CandidateServiceUsage {
+  id                 String                      @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile            @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  serviceId          String
+  service            CandidateServiceCatalog     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  ledgerId           String                      @unique
+  ledger             CandidateCreditLedger       @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  status             CandidateServiceUsageStatus @default(REQUESTED)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([candidateProfileId, status, createdAt])
 }
 
 // ── Assessment Engine: Typing Speed ───────────────────────────────────────────
@@ -1496,6 +1653,20 @@ model TypingAssessment {
   @@index([candidateProfileId, createdAt])
 }
 
+// Prompts are managed by an administrator. Nothing in the candidate UI should
+// imply that a source-code sample paragraph is an employer assessment.
+model TypingPracticePrompt {
+  id              String   @id @default(uuid())
+  title           String
+  text            String
+  durationSeconds Int
+  isActive        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive, updatedAt])
+}
+
 // ── AI Mock Interview Engine ──────────────────────────────────────────────────
 model MockInterviewSession {
   id                   String              @id @default(uuid())
@@ -1503,7 +1674,7 @@ model MockInterviewSession {
   candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
   roleTarget           String
   status               MockInterviewStatus @default(IN_PROGRESS)
-  totalQuestions        Int                 @default(5)
+  totalQuestions       Int                 @default(5)
   currentQuestionIndex Int                 @default(0)
   overallScore         Int?
   communicationScore   Int?
@@ -1520,16 +1691,16 @@ model MockInterviewSession {
 }
 
 model MockInterviewTurn {
-  id                       String               @id @default(uuid())
-  sessionId                String
-  session                  MockInterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  questionIndex            Int
-  questionText             String
+  id                        String               @id @default(uuid())
+  sessionId                 String
+  session                   MockInterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionIndex             Int
+  questionText              String
   candidateAnswerTranscript String?
-  score                    Int?
-  feedback                 String?
-  turnLatencyMs            Int?
-  createdAt                DateTime              @default(now())
+  score                     Int?
+  feedback                  String?
+  turnLatencyMs             Int?
+  createdAt                 DateTime             @default(now())
 
   @@unique([sessionId, questionIndex])
 }

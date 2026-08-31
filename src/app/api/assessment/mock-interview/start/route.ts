@@ -3,7 +3,6 @@ import { getCurrentSession } from '@/lib/auth';
 import { handleApiError, readValidatedJson, ApiError } from '@/lib/apiSecurity';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { getFallbackQuestion } from '@/lib/assessment/interviewQuestionBank';
 import { dispatchAiTask } from '@/utils/aiRouter';
 
 const mockInterviewStartSchema = z.object({
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
       throw new ApiError('Candidate profile not found. Please complete your profile first.', 404);
     }
 
-    const skills = candidateProfile.skills?.join(', ') || 'general programming';
+    const skills = candidateProfile.skills?.join(', ') || 'not supplied';
 
     const promptStr = `Generate a technical interview question for a ${roleTarget} candidate with skills: [${skills}]. Question 1 of ${totalQuestions}. Return JSON: {nextQuestion: string}`;
 
@@ -46,8 +45,8 @@ export async function POST(request: Request) {
       } else {
         throw new Error('Invalid AI response format');
       }
-    } catch (err) {
-      questionText = getFallbackQuestion(roleTarget, 0);
+    } catch {
+      throw new ApiError('Mock interview question service is unavailable. Please try again later.', 503);
     }
 
     const interviewSession = await prisma.mockInterviewSession.create({

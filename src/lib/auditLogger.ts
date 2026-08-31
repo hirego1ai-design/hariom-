@@ -31,14 +31,22 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
   }
 
   try {
+    // System/cron actors use synthetic IDs that aren't real User records.
+    // Store them in details to avoid FK constraint violations.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isRealUserId = entry.userId && UUID_RE.test(entry.userId);
+    const actorDetail = !isRealUserId && entry.userId
+      ? `actor:${entry.userId}${entry.details ? ` | ${entry.details}` : ""}`
+      : entry.details || null;
+
     const saved = await prisma.auditLog.create({
       data: {
-        userId: entry.userId || null,
+        userId: isRealUserId ? entry.userId! : null,
         companyId: entry.companyId || null,
         action: entry.action,
         resource: entry.resource,
         ipAddress: entry.ipAddress || "unknown",
-        details: entry.details || null,
+        details: actorDetail,
       },
     });
 

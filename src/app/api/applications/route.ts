@@ -22,15 +22,9 @@ export async function GET(req: NextRequest) {
       return jsonError("Candidate access required", 403);
     }
 
-    let applications: any[] = [];
-
-    try {
-      const candidate = await prisma.candidateProfile.findUnique({
-        where: { userId: session.id },
-      });
-
-      if (candidate) {
-        applications = await prisma.application.findMany({
+    const candidate = await prisma.candidateProfile.findUnique({ where: { userId: session.id } });
+    if (!candidate) return NextResponse.json({ success: true, applications: [] });
+    const applications = await prisma.application.findMany({
           where: { candidateProfileId: candidate.id },
           include: {
             job: {
@@ -42,14 +36,6 @@ export async function GET(req: NextRequest) {
           },
           orderBy: { createdAt: "desc" },
         });
-      }
-    } catch (err) {
-      if (process.env.NODE_ENV === "production") {
-        throw err;
-      }
-      // Database fallback
-      applications = [];
-    }
 
     return NextResponse.json({ success: true, applications });
   } catch (error) {
@@ -83,6 +69,25 @@ export async function POST(req: NextRequest) {
       });
       if (!candidate) {
         return jsonError("Complete your candidate profile before applying.", 409);
+      }
+
+      if (job.requiresJobReady) {
+        if (!job.jobReadyRoleTitle || !job.jobReadySeniority) {
+          return jsonError("This job's Job-Ready requirement is not configured. Please contact support.", 409);
+        }
+        const readiness = await prisma.candidateReadiness.findUnique({
+          where: {
+            candidateProfileId_roleTitle_seniority: {
+              candidateProfileId: candidate.id,
+              roleTitle: job.jobReadyRoleTitle,
+              seniority: job.jobReadySeniority,
+            },
+          },
+        });
+        const isCurrent = readiness?.status === "JOB_READY" && (!readiness.validUntil || readiness.validUntil > new Date());
+        if (!isCurrent) {
+          return jsonError("Complete and pass the required Job-Ready assessment before applying to this role.", 403);
+        }
       }
 
       const { RosGateway } = await import("@/lib/ros/RosGateway");

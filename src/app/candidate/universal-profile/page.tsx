@@ -1,7 +1,5 @@
-"use client";
-
-import UniversalCandidateProfile from "@/app/employer/full-candidate-profile-employer-view/page";
+import { redirect } from "next/navigation";
 
 export default function CandidateUniversalProfilePage() {
-  return <UniversalCandidateProfile />;
+  redirect("/profile");
 }

@@ -196,14 +196,34 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Production hardening regression suite", category: "Production hardening", passed: false, message: e.message });
   }
 
-  // 12. Assessment runner safety. These tests use a controlled HTTP double;
-  // real sandbox connectivity requires a configured external runner.
+  // 12. Dynamic MCQ assessment system. Verified dynamically-loaded tests
+  // and correct grading math on secure endpoints.
   try {
-    const { runAssessmentSecurityTests } = await import("./assessment-security.test");
-    const assessment = await runAssessmentSecurityTests();
-    results.push(...assessment.results);
+    const { runMcqAssessmentTests } = await import("./mcq-assessment.test");
+    const mcqTests = await runMcqAssessmentTests();
+    results.push(...mcqTests.results);
   } catch (e: any) {
-    results.push({ name: "Assessment runner security suite", category: "Assessment security", passed: false, message: e.message });
+    results.push({ name: "MCQ assessment system suite", category: "MCQ Assessments", passed: false, message: e.message });
+  }
+
+  // 13. Employer Team Invitations. Verified cryptographic tokens, RBAC,
+  // duplicate prevention, and lifecycle state transitions.
+  try {
+    const { runTeamInvitationTests } = await import("./team-invitations.test");
+    const teamTests = await runTeamInvitationTests();
+    results.push(...teamTests.results);
+  } catch (e: any) {
+    results.push({ name: "Team invitations test suite", category: "Team Invitations", passed: false, message: e.message });
+  }
+
+  // 14. PostgreSQL Promo Code Engine. Verified database validity,
+  // expiration, archive status, max usage, and atomic concurrency reservations.
+  try {
+    const { runPromoCodeTests } = await import("./promo-code.test");
+    const promoTests = await runPromoCodeTests();
+    results.push(...promoTests.results);
+  } catch (e: any) {
+    results.push({ name: "Promo codes test suite", category: "Promo Codes", passed: false, message: e.message });
   }
 
   const passedCount = results.filter((r) => r.passed).length;

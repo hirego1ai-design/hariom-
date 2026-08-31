@@ -11,9 +11,18 @@ Create one production PostgreSQL database and a separate staging database. The a
 | `DATABASE_URL` | Yes | Production, Preview/Staging | Pooled PostgreSQL connection string used by the app. |
 | `DIRECT_URL` | Yes | Production, Preview/Staging | Direct PostgreSQL connection string used by Prisma migrations. |
 
-After adding the values, run `npx prisma migrate deploy` against the intended database. This makes the tenant-ownership, application uniqueness, AI usage, and queue schema changes live. The CI database is disposable and does not update production.
+After adding the values, run `npx prisma migrate deploy` against the intended database. This makes the tenant-ownership, application uniqueness, AI usage, queue schema changes, candidate Job-Ready, candidate-credit, and typing-prompt schema changes live. The CI database is disposable and does not update production.
 
 Verify: sign in, create a test candidate and application, then check that the single application is persisted. The real database concurrency test becomes runnable in CI when `HIREGO_TEST_DATABASE=1` points at its disposable database.
+
+### Candidate feature setup after migration
+
+No candidate assessment, typing prompt, career service, score, or credit is seeded by a migration. An authenticated administrator must deliberately configure and publish them through the supported admin APIs/UI before a candidate can use them:
+
+- Create a Job-Ready template at `POST /api/admin/readiness-templates`, add MCQ questions, then publish it using the existing assessment controls.
+- Create a typing prompt at `POST /api/admin/typing-prompts`, then activate one prompt with `PUT /api/admin/typing-prompts/:id` and `{ "isActive": true }`.
+- Create a candidate career service at `POST /api/admin/candidate-services`, then activate it with `PUT /api/admin/candidate-services/:id` and `{ "isActive": true }`.
+- Credits require a real payment webhook before self-service purchasing is enabled. Until then, an administrator may issue an auditable, idempotent `BONUS` or `ADJUSTMENT` through `POST /api/admin/candidate-credits/grants`; the candidate UI does not simulate purchases.
 
 ## 2. Upstash Redis
 
@@ -72,18 +81,9 @@ The present interview signaling implementation persists signals in PostgreSQL an
 
 When Realtime is implemented, use a server-only service-role key and a separate public anonymous key only if the browser client genuinely requires it, protected by Row Level Security. A code change will define the exact variables and verification test first.
 
-## 7. Isolated code-assessment runner
+## 7. Code runner — retired for this release
 
-Create a private, separately sandboxed code-execution service before enabling coding assessments. It must run outside the HireGo Next.js process, enforce CPU, memory, filesystem, and network isolation, and expose an HTTPS `POST /execute` endpoint. Do not use Node's `vm` or the Vercel application process to execute applicant code.
-
-| Variable | Secret? | Vercel environment | Purpose |
-| --- | --- | --- | --- |
-| `CODE_RUNNER_URL` | No | Production, Preview/Staging | Base HTTPS URL of the private runner; HireGo calls `<URL>/execute`. |
-| `CODE_RUNNER_API_KEY` | Yes | Production, Preview/Staging | Bearer credential accepted only by that runner. |
-
-The runner endpoint must accept `{ code, language, testCases, timeLimitMs, memoryLimitMb }` and return `{ status, passedTests, totalTests, runtimeMs, results, stdout, stderr }`. Supported languages are `python3`, `javascript`, `typescript`, `java`, `cpp`, and `go`.
-
-Verify: configure a staging runner, submit a harmless solution, and confirm the execution occurs in the runner logs—not in the HireGo server. The blocked test that becomes a real integration test is the coding run/submit flow; the existing local test only verifies fail-closed behavior and response validation.
+Coding IDE and code-execution routes have been removed from the application. Do not create `CODE_RUNNER_URL` or `CODE_RUNNER_API_KEY` for the current release. If coding assessments are reintroduced, first add a separately sandboxed runner, a new security review, and explicit configuration documentation before enabling any candidate-facing route.
 
 ## Common application secrets
 

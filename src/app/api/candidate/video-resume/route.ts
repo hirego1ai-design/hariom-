@@ -4,7 +4,7 @@ import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from 
 import { prisma } from "@/lib/prisma";
 
 const videoResumeSubmissionSchema = z.object({
-  videoUrl: z.string().trim().min(1).max(2_048),
+  videoUrl: z.string().regex(/^\/api\/files\/[0-9a-f-]{36}$/i, "Video must be an uploaded HireGo file."),
   // Existing clients may submit form values as strings; coercion preserves the
   // prior contract while retaining the original 1–180 second boundary.
   durationSeconds: z.coerce.number().int().min(1).max(180),
@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const body = await readValidatedJson(request, videoResumeSubmissionSchema);
+
+    const fileId = body.videoUrl.slice("/api/files/".length);
+    const file = await prisma.storedFile.findFirst({
+      where: { id: fileId, ownerId: session.id, category: "video-resumes", deletedAt: null, mimeType: { in: ["video/mp4", "video/webm"] } },
+      select: { id: true },
+    });
+    if (!file) return jsonError("Upload a valid video resume before saving.", 409);
 
     const profile = await prisma.candidateProfile.upsert({
       where: { userId: session.id },

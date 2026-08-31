@@ -13,13 +13,9 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit")) || 10));
     const skip = (page - 1) * limit;
 
-    let jobs: any[] = [];
-    let total = 0;
-
-    try {
-      const where: any = {
-        status: "ACTIVE",
-      };
+    const where: any = {
+      status: "ACTIVE",
+    };
 
       if (query) {
         where.OR = [
@@ -40,29 +36,25 @@ export async function GET(req: NextRequest) {
         where.type = { equals: type, mode: "insensitive" };
       }
 
-      [jobs, total] = await Promise.all([
-        prisma.jobListing.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: "desc" },
-          include: {
-            company: {
-              select: {
-                id: true,
-                name: true,
-                logoUrl: true,
-                location: true,
-              },
+    const [jobs, total] = await Promise.all([
+      prisma.jobListing.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              location: true,
             },
           },
-        }),
-        prisma.jobListing.count({ where }),
-      ]);
-    } catch {
-      jobs = [];
-      total = 0;
-    }
+        },
+      }),
+      prisma.jobListing.count({ where }),
+    ]);
 
     return NextResponse.json({
       success: true,
