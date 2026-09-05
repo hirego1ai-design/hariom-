@@ -1,4 +1,4 @@
-﻿-- Additive migration: CompanyInvitation for secure employer team invitations
+-- Additive migration: CompanyInvitation for secure employer team invitations
 -- No existing rows are deleted or rewritten.
 
 DO $$ BEGIN

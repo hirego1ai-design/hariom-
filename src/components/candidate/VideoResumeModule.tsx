@@ -162,8 +162,8 @@ export default function VideoResumeModule() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 100 * 1024 * 1024) {
-      alert("File size exceeds 100 MB limit. Please upload a smaller video.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10 MB limit. Please upload a smaller video.");
       return;
     }
 

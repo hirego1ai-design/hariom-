@@ -449,7 +449,7 @@ export default function HiringPipelinePage() {
                 key={c.id}
                 className="glass-card p-5 rounded-2xl border border-white/10 bg-[#141418] hover:border-secondary/40 hover:scale-[1.01] transition-all duration-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
               >
-                <Link href="/employer/full-candidate-profile-employer-view" className="flex items-start gap-4 hover:opacity-80 transition-opacity relative z-10">
+                <Link href={`/employer/full-candidate-profile-employer-view?id=${c.id}`} className="flex items-start gap-4 hover:opacity-80 transition-opacity relative z-10">
                   <img src={c.avatar} alt={c.name} className="w-14 h-14 rounded-full object-cover border-2 border-secondary/30 shadow-sm" />
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -599,7 +599,7 @@ function CandidateCard({
       {/* Top Header Row */}
       <div className="flex justify-between items-start gap-2">
         <Link
-          href="/employer/full-candidate-profile-employer-view"
+          href={`/employer/full-candidate-profile-employer-view?id=${candidate.id}`}
           className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-80 transition-opacity relative z-10"
         >
           <img
@@ -714,7 +714,7 @@ function CandidateCard({
             </button>
           )}
           <Link
-            href="/employer/full-candidate-profile-employer-view"
+            href={`/employer/full-candidate-profile-employer-view?id=${candidate.id}`}
             className="w-7 h-7 rounded-lg bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 flex items-center justify-center text-secondary transition-all"
             title="View Full Candidate Profile"
           >

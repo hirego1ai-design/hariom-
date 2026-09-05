@@ -116,6 +116,25 @@ export async function getPrivateDownloadUrl(objectKey: string, fileName: string)
   });
 }
 
+export async function getWorkerDownloadUrl(objectKey: string): Promise<string | null> {
+  if (isProduction() || process.env.S3_BUCKET_NAME) {
+    try {
+      const { client, bucket } = s3Client();
+      return await getSignedUrl(
+        client,
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: objectKey,
+        }),
+        { expiresIn: 900 }
+      );
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export async function deleteObject(objectKey: string) {
   if (isProduction()) {
     const { client, bucket } = s3Client();

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useRef, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   candidateProfile,
   candidateScores,
@@ -82,8 +82,10 @@ const SECTIONS = [
   { id: "analytics", label: "Analytics", icon: "bar_chart" },
 ];
 
-export default function UniversalCandidateProfile() {
+function UniversalCandidateProfileContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const candidateId = searchParams.get("id");
   const { user } = useApp();
   const [isEmployer, setIsEmployer] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
@@ -94,10 +96,15 @@ export default function UniversalCandidateProfile() {
   const [videoTab, setVideoTab] = useState<"analysis" | "transcript" | "insights">("analysis");
   const [transcriptSearch, setTranscriptSearch] = useState("");
   const [profileData, setProfileData] = useState(() => getUniversalCandidateProfile());
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  const triggerToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   /* Synchronize profile data and role on client mount */
   useEffect(() => {
-    setProfileData(getUniversalCandidateProfile());
     const savedRole = localStorage.getItem("userRole") || localStorage.getItem("role");
     if (
       user?.role === "EMPLOYER" || 
@@ -108,7 +115,28 @@ export default function UniversalCandidateProfile() {
     ) {
       setIsEmployer(true);
     }
-  }, [user]);
+
+    if (candidateId) {
+      setProfileLoading(true);
+      fetch(`/api/employer/candidates/${candidateId}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to load candidate details");
+          return res.json();
+        })
+        .then(data => {
+          if (data.success) {
+            setProfileData(data);
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          triggerToast("Failed to load candidate profile. Showing template data.");
+        })
+        .finally(() => setProfileLoading(false));
+    } else {
+      setProfileData(getUniversalCandidateProfile());
+    }
+  }, [user, candidateId, triggerToast]);
 
   /* Video controls */
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -141,10 +169,7 @@ export default function UniversalCandidateProfile() {
     return () => observer.disconnect();
   }, []);
 
-  const triggerToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  }, []);
+
 
   const copyShareLink = useCallback(() => {
     navigator.clipboard.writeText(`https://${p.profileLink}`);
@@ -914,5 +939,13 @@ export default function UniversalCandidateProfile() {
 
       </div>
     </div>
+  );
+}
+
+export default function UniversalCandidateProfile() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0E0E10] text-slate-400 flex items-center justify-center">Loading Candidate Profile...</div>}>
+      <UniversalCandidateProfileContent />
+    </Suspense>
   );
 }

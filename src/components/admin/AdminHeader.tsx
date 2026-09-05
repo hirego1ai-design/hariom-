@@ -130,7 +130,7 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
                 ))}
               </div>
               <Link
-                href="/admin/system-health"
+                href="/admin/settings/audit-log"
                 className="block text-center mt-3 pt-2 border-t border-white/5 text-xs text-primary font-bold hover:underline"
               >
                 View Full Audit Logs →

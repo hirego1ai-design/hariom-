@@ -1,13 +1,9 @@
-"use client";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import EmployerPageE49 from "@/app/employer/revenue-and-billing-management/page";
-
-import { AppProviders } from "@/providers";
+import { redirect } from "next/navigation";
 
 export default function AdminRevenuePage() {
-  return (
-    <AppProviders>
-      <EmployerPageE49 />
-    </AppProviders>
-  );
+  // The previous implementation rendered an employer-only billing screen
+  // under an admin URL. That exposed the wrong data contract and bypassed the
+  // Admin shell. Invoice Operations is the persisted admin billing surface;
+  // keep this legacy URL as a safe compatibility redirect.
+  redirect("/admin/invoices");
 }

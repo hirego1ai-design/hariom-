@@ -3,8 +3,10 @@ import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import React, { useState } from "react";
 
 export default function PaymentGatewayConfigPage() {
-  const [razorpayKey, setRazorpayKey] = useState("rzp_live_8910239102");
-  const [stripeKey, setStripeKey] = useState("pk_live_51M01923091");
+  // Never ship gateway credentials (even placeholders that look live) to the browser.
+  // Configuration must be loaded and persisted through an authenticated server API.
+  const [razorpayKey, setRazorpayKey] = useState("");
+  const [stripeKey, setStripeKey] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
   return (
@@ -30,6 +32,8 @@ export default function PaymentGatewayConfigPage() {
             type="text"
             value={razorpayKey}
             onChange={(e) => setRazorpayKey(e.target.value)}
+            placeholder="Configured securely on the server"
+            autoComplete="off"
             className="w-full h-10 rounded-xl bg-[#1E1E1E] border border-white/10 px-3 text-xs text-white font-mono"
           />
         </div>
@@ -40,6 +44,8 @@ export default function PaymentGatewayConfigPage() {
             type="text"
             value={stripeKey}
             onChange={(e) => setStripeKey(e.target.value)}
+            placeholder="Configured securely on the server"
+            autoComplete="off"
             className="w-full h-10 rounded-xl bg-[#1E1E1E] border border-white/10 px-3 text-xs text-white font-mono"
           />
         </div>

@@ -310,6 +310,7 @@ model Application {
   aiSummary          String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+  annualCtc          Float?
 
   interviews Interview[]
 
@@ -317,17 +318,65 @@ model Application {
 }
 
 model VideoResume {
-  id                 String           @id @default(uuid())
-  candidateProfileId String
-  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
-  videoUrl           String
-  durationSeconds    Int
-  transcript         String?
-  communicationScore Int?
-  confidenceScore    Int?
-  clarityScore       Int?
-  professionalism    Int?
-  createdAt          DateTime         @default(now())
+  id                        String           @id @default(uuid())
+  candidateProfileId        String
+  candidateProfile          CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  videoUrl                  String
+  durationSeconds           Int
+  transcript                String?
+  communicationScore        Int?
+  confidenceScore           Int?
+  clarityScore              Int?
+  professionalism           Int?
+  speechDeliveryScore       Int?
+  contentStructureScore     Int?
+  analysisStatus            String           @default("PENDING")
+  analysisVersion           String?
+  workerVersion             String?
+  modelName                 String?
+  modelVersion              String?
+  detectedLanguage          String?
+  wordsPerMinute            Float?
+  pauseRatio                Float?
+  fillerWordCount           Int?
+  transcriptConfidence      Float?
+  lowConfidence             Boolean?         @default(false)
+  audioQuality              String?
+  facePresenceRatio         Float?
+  cameraFacingRatioEstimate Float?
+  headPoseIndicators        Json?
+  postureIndicators         Json?
+  strengths                 Json?
+  improvementSuggestions    Json?
+  analysisError             String?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  retryCount                Int              @default(0)
+  retentionExpiresAt        DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  analysisJobs VideoAnalysisJob[]
+}
+
+model VideoAnalysisJob {
+  id             String      @id @default(uuid())
+  videoResumeId  String
+  videoResume    VideoResume @relation(fields: [videoResumeId], references: [id], onDelete: Cascade)
+  status         String      @default("PENDING")
+  idempotencyKey String      @unique
+  attempts       Int         @default(0)
+  maxAttempts    Int         @default(3)
+  error          String?
+  payload        Json?
+  result         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([videoResumeId])
+  @@index([status])
 }
 
 model Interview {
@@ -400,6 +449,16 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([companyId, createdAt])
+}
+
+// Global admin-managed configuration. JSON keeps the existing API contract
+// stable while ensuring values survive restarts and multiple app instances.
+model AdminConfiguration {
+  id                  String   @id @default("global-admin-config")
+  platformConfig      Json?
+  securityPolicy      Json?
+  managedHiringConfig Json?
+  updatedAt           DateTime @updatedAt
 }
 
 model StoredFile {

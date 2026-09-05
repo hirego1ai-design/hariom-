@@ -28,25 +28,25 @@ export default function EmployerBillingManagementPage() {
   const handlePayOnline = async (invoiceId: string) => {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/invoices", {
+      const res = await fetch(`/api/employer/billing/invoices/${invoiceId}/pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_paid", invoiceId }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Payment failed");
       if (data.success) {
         alert("Online payment processed successfully!");
         setSelectedInvoice(null);
         setPaymentMode("none");
         // Reload invoices
-        fetch("/api/admin/invoices")
+        fetch("/api/employer/billing/invoices")
           .then((res) => res.json())
           .then((d) => {
             if (d.success) setInvoices(d.invoices || []);
           });
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      alert(err.message || "Online payment failed.");
     } finally {
       setSubmitting(false);
     }
@@ -57,19 +57,22 @@ export default function EmployerBillingManagementPage() {
       alert("Please enter your bank transfer reference/transaction ID.");
       return;
     }
+    if (!receiptUrl) {
+      alert("Please upload/attach your bank transfer receipt screenshot.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/invoices", {
+      const res = await fetch(`/api/employer/billing/invoices/${invoiceId}/receipt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "submit_receipt",
-          invoiceId,
           bankTransferRef: bankRef,
-          bankTransferReceiptUrl: receiptUrl || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?q=80&w=600&auto=format&fit=crop",
+          bankTransferReceiptUrl: receiptUrl,
         }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Receipt submission failed");
       if (data.success) {
         alert("Bank transfer details and screenshot submitted for validation!");
         setSelectedInvoice(null);
@@ -77,22 +80,25 @@ export default function EmployerBillingManagementPage() {
         setBankRef("");
         setReceiptUrl("");
         // Reload invoices
-        fetch("/api/admin/invoices")
+        fetch("/api/employer/billing/invoices")
           .then((res) => res.json())
           .then((d) => {
             if (d.success) setInvoices(d.invoices || []);
           });
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      alert(err.message || "Failed to submit bank receipt.");
     } finally {
       setSubmitting(false);
     }
   };
 
   useEffect(() => {
-    fetch("/api/admin/invoices")
-      .then((res) => res.json())
+    fetch("/api/employer/billing/invoices")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load billing records");
+        return res.json();
+      })
       .then((data) => {
         if (data.success) {
           setInvoices(data.invoices || []);

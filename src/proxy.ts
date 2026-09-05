@@ -13,6 +13,7 @@ const publicRoutes = new Set([
   "/employer/employer-registration",
   "/employer/employer-registration-company-info",
   "/employer/employer-registration-otp-verification",
+  "/employer/invitation/accept",
 ]);
 
 const securityHeaders: Record<string, string> = {

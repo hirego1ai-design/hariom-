@@ -1,9 +1,9 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { hashPassword, validatePasswordStrength } from "@/lib/auth";
+import { hashPassword, validatePasswordStrength, revokeAllUserSessions } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/auditLogger";
 
 const acceptInvitationSchema = z.object({
@@ -48,24 +48,27 @@ export async function POST(req: NextRequest) {
 
       if (existingUser) {
         userId = existingUser.id;
-        // Check if user already has an EmployerProfile linked to this company
+
+        // Check if user already has an EmployerProfile
         const existingEmployer = await tx.employerProfile.findUnique({
           where: { userId: existingUser.id },
         });
 
         if (existingEmployer) {
+          // Reject cross-company transfer by default to prevent silent moving or hijacking
           if (existingEmployer.companyId !== invitation.companyId) {
-            // Update companyId and designation
-            await tx.employerProfile.update({
-              where: { userId: existingUser.id },
-              data: {
-                companyId: invitation.companyId,
-                designation: invitation.designation || existingEmployer.designation,
-              },
-            });
+            throw new ApiError("This account is already registered to another company. Cross-company transfers are not permitted.", 400);
           }
+
+          // Existing member in the same company: update designation if specified
+          await tx.employerProfile.update({
+            where: { userId: existingUser.id },
+            data: {
+              designation: invitation.designation || existingEmployer.designation,
+            },
+          });
         } else {
-          // Create employer profile
+          // No employer profile exists yet (could be a CANDIDATE user)
           await tx.employerProfile.create({
             data: {
               userId: existingUser.id,
@@ -75,12 +78,23 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // If user role was CANDIDATE, promote to the invitation role
-        if (existingUser.role === "CANDIDATE") {
-          await tx.user.update({
-            where: { id: existingUser.id },
-            data: { role: invitation.role },
-          });
+        // Set user role exactly to the invitation role.
+        // This prevents privilege escalation (e.g. keeping EMPLOYER role when invited as RECRUITER)
+        // or promotes a CANDIDATE to the appropriate role.
+        const roleChanged = existingUser.role !== invitation.role;
+        const newSessionVersion = existingUser.sessionVersion + 1;
+
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: {
+            role: invitation.role,
+            // Rotate session version to invalidate active sessions if privilege/role changes
+            sessionVersion: roleChanged ? newSessionVersion : undefined,
+          },
+        });
+
+        if (roleChanged) {
+          await revokeAllUserSessions(existingUser.id, newSessionVersion);
         }
       } else {
         // New user creation requires a valid password
@@ -101,7 +115,8 @@ export async function POST(req: NextRequest) {
             name: body.name || invitation.name,
             passwordHash,
             role: invitation.role,
-            emailVerified: true, // Email verified through invitation token delivery
+            emailVerified: true,
+            sessionVersion: 0,
           },
         });
 
@@ -130,7 +145,7 @@ export async function POST(req: NextRequest) {
         companyId: invitation.companyId,
         action: "INVITATION_ACCEPTED",
         resource: `Invitation:${invitation.id}`,
-        details: `Invitation accepted by ${invitation.email} for company ${invitation.company.name}`,
+        details: `Invitation accepted by ${invitation.email} for company ${invitation.company.name} as role ${invitation.role}`,
         ipAddress: req.headers.get("x-forwarded-for") || undefined,
       });
     });

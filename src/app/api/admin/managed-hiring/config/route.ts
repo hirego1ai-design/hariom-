@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { handleApiError } from "@/lib/apiSecurity";
+import { prisma } from "@/lib/prisma";
+import { getAuditLogs, logAuditEvent } from "@/lib/auditLogger";
 
 export interface PPHPricingRule {
   method: "percentage_ctc" | "fixed_fee" | "hybrid_higher";
@@ -294,6 +296,28 @@ export const managedHiringAuditLogs: ManagedHiringAuditLog[] = [
 export async function GET(req: Request) {
   try {
     await requireAdminSession(req);
+    if (process.env.MOCK_DB !== "true") {
+      const stored = await prisma.adminConfiguration.findUnique({ where: { id: "global-admin-config" } });
+      const persistedLogs = await getAuditLogs(200);
+      const auditLogs = persistedLogs
+        .filter((log) => log.resource === "Managed Hiring Configuration")
+        .map((log) => ({
+          id: log.id,
+          timestamp: log.timestamp,
+          adminUser: log.userId || "system",
+          adminRole: "Administrator",
+          category: "Configuration",
+          action: log.action,
+          oldValue: "redacted",
+          newValue: "updated",
+          reason: log.details || "Configuration update",
+        }));
+      return NextResponse.json({
+        success: true,
+        config: stored?.managedHiringConfig || managedHiringGlobalConfig,
+        auditLogs,
+      });
+    }
   return NextResponse.json({
     success: true,
     config: managedHiringGlobalConfig,
@@ -313,11 +337,20 @@ export async function POST(req: Request) {
     const payloadConfig = updatedConfig || config;
 
     if (payloadConfig) {
-      managedHiringGlobalConfig = {
+      const nextConfig = {
         ...managedHiringGlobalConfig,
         ...payloadConfig,
         lastUpdated: new Date().toISOString(),
       };
+      if (process.env.MOCK_DB === "true") {
+        managedHiringGlobalConfig = nextConfig;
+      } else {
+        await prisma.adminConfiguration.upsert({
+          where: { id: "global-admin-config" },
+          create: { id: "global-admin-config", managedHiringConfig: nextConfig },
+          update: { managedHiringConfig: nextConfig },
+        });
+      }
     }
 
     const logEntry: ManagedHiringAuditLog = {
@@ -331,13 +364,29 @@ export async function POST(req: Request) {
       newValue: String(auditEntry?.newValue || "Updated Ruleset"),
       reason: auditEntry?.reason || reason || "Commercial rules deployed via Admin Console",
     };
-    managedHiringAuditLogs.unshift(logEntry);
+    if (process.env.MOCK_DB === "true") {
+      managedHiringAuditLogs.unshift(logEntry);
+    } else {
+      await logAuditEvent({
+        userId: session.id,
+        action: logEntry.action,
+        resource: "Managed Hiring Configuration",
+        details: logEntry.reason,
+      });
+    }
+
+    const responseConfig = process.env.MOCK_DB === "true"
+      ? managedHiringGlobalConfig
+      : (await prisma.adminConfiguration.findUnique({ where: { id: "global-admin-config" } }))?.managedHiringConfig;
+    const responseLogs = process.env.MOCK_DB === "true"
+      ? managedHiringAuditLogs
+      : (await getAuditLogs(200)).filter((log) => log.resource === "Managed Hiring Configuration");
 
     return NextResponse.json({
       success: true,
       message: "HireGo Managed Hiring™ configuration saved and audit logged successfully.",
-      config: managedHiringGlobalConfig,
-      auditLogs: managedHiringAuditLogs,
+      config: responseConfig,
+      auditLogs: responseLogs,
     });
   } catch (error) {
     return handleApiError(error);

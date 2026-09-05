@@ -392,14 +392,24 @@ class SubscriptionsDb {
     this.inMemoryCredits.set(companyId, credits);
 
     try {
-      await prisma.companyCredits.update({
-        where: { companyId },
-        data: {
-          jobPostsLeft: credits.jobPostsLeft,
-          resumeUnlocksLeft: credits.resumeUnlocksLeft,
-          aiInterviewsLeft: credits.aiInterviewsLeft,
-        },
-      });
+      const client = prisma as any;
+      if (client.companyCredits) {
+        await client.companyCredits.upsert({
+          where: { companyId },
+          create: {
+            id: credits.id,
+            companyId,
+            jobPostsLeft: credits.jobPostsLeft,
+            resumeUnlocksLeft: credits.resumeUnlocksLeft,
+            aiInterviewsLeft: credits.aiInterviewsLeft,
+          },
+          update: {
+            jobPostsLeft: credits.jobPostsLeft,
+            resumeUnlocksLeft: credits.resumeUnlocksLeft,
+            aiInterviewsLeft: credits.aiInterviewsLeft,
+          },
+        });
+      }
     } catch (error) {
       if (process.env.NODE_ENV === "production") {
         throw error;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
 
 export interface SubscriptionPlanSummary {
   id: string;
@@ -148,6 +149,9 @@ export const subscriptionPlans: SubscriptionPlanSummary[] = [
 
 export async function GET(req: NextRequest) {
   await requireAdminSession(req);
+  if (!allowRevenueFixtures) {
+    return revenueUnavailable(new Error("Subscription revenue has no persisted reporting source."), "Subscription revenue");
+  }
   return NextResponse.json({
     success: true,
     totalPlans: subscriptionPlans.length,

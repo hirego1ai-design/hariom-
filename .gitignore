@@ -42,3 +42,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE and local dev
+.agents/
+.cursor/
+.vscode/
+scratch/
+skills-lock.json
+
+__pycache__/

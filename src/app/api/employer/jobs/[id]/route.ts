@@ -115,3 +115,48 @@ export async function PUT(
     return handleApiError(error);
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    await enforceRateLimit(request, "employer_jobs_delete");
+    const session = await getCurrentSession(request.headers);
+
+    if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
+      throw new ApiError("Forbidden: Employer or Admin role required.", 403);
+    }
+
+    const profile = session.role === "ADMIN"
+      ? null
+      : await prisma.employerProfile.findUnique({ where: { userId: session.id } });
+    if (session.role !== "ADMIN" && !profile?.companyId) {
+      throw new ApiError("Employer profile not found.", 403);
+    }
+    const companyId = profile?.companyId;
+
+    const job = await prisma.jobListing.findUnique({ where: { id } });
+    if (!job) {
+      throw new ApiError("Job listing not found.", 404);
+    }
+
+    if (session.role !== "ADMIN" && job.companyId !== companyId) {
+      throw new ApiError("Forbidden: job listing does not belong to your company.", 403);
+    }
+
+    await prisma.jobListing.delete({ where: { id } });
+
+    logAuditEvent({
+      userId: session.id,
+      action: "JOB_DELETE",
+      resource: `/api/employer/jobs/${id}`,
+      details: `Deleted job listing: ${job.title} (${id})`,
+    });
+
+    return NextResponse.json({ success: true, message: "Job listing successfully deleted." });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

@@ -226,6 +226,36 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Promo codes test suite", category: "Promo Codes", passed: false, message: e.message });
   }
 
+  // 15. Managed Hiring Join Invoice Verification. Verified Zod validation,
+  // pricing model, agreement status, role access, and idempotency.
+  try {
+    const { runManagedHiringJoinTests } = await import("./managed-hiring-join.test");
+    const joinTests = await runManagedHiringJoinTests();
+    results.push(...joinTests.results);
+  } catch (e: any) {
+    results.push({ name: "Managed hiring join test suite", category: "Managed Hiring Join", passed: false, message: e.message });
+  }
+
+  // 16. Billing Invoices and Private Proof Verification. Verified RBAC,
+  // company-scoped listings, payment processing, and StoredFile uploads.
+  try {
+    const { runBillingInvoicesTests } = await import("./billing-invoices.test");
+    const billingTests = await runBillingInvoicesTests();
+    results.push(...billingTests.results);
+  } catch (e: any) {
+    results.push({ name: "Billing invoices test suite", category: "Billing Invoices", passed: false, message: e.message });
+  }
+
+  // 17. Hiring Workflow Operations. Verified RBAC, company-scoped candidate
+  // stage updates, job updates/deletions, and interview scheduling/cancellation.
+  try {
+    const { runHiringWorkflowTests } = await import("./hiring-workflow.test");
+    const workflowTests = await runHiringWorkflowTests();
+    results.push(...workflowTests.results);
+  } catch (e: any) {
+    results.push({ name: "Hiring workflow test suite", category: "Hiring Workflow", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const failedCount = results.length - passedCount - skippedCount;
@@ -241,6 +271,21 @@ export async function runAllTests(): Promise<{
 
 // Direct CLI execution support for CI & npm test
 if (process.argv[1]?.includes("suite.test")) {
+  const databaseUrl = process.env.DATABASE_URL || "";
+  const directUrl = process.env.DIRECT_URL || "";
+  const isTestDb = process.env.HIREGO_TEST_DATABASE === "1";
+  const isDisposable = (url: string) =>
+    url.includes("localhost") ||
+    url.includes("127.0.0.1") ||
+    url.includes("hirego_ci") ||
+    url.includes("test");
+
+  if (!isTestDb || (!isDisposable(databaseUrl) && !isDisposable(directUrl))) {
+    console.error("FATAL: Test runner blocked. You are attempting to run tests against a live/production database.");
+    console.error("To run tests safely, you must set HIREGO_TEST_DATABASE=1 and configure DATABASE_URL/DIRECT_URL to a local/disposable database.");
+    process.exit(1);
+  }
+
   runAllTests()
     .then((res) => {
       console.log("\n========================================");

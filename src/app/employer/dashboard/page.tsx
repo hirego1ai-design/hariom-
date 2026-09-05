@@ -274,7 +274,7 @@ export default function EmployerDashboard() {
             {[
               { id: 1, title: "23 qualified candidates waiting review", role: "AI Screen Completed", action: "Review", href: "/employer/proactive-candidate-search", border: "rgba(38,166,154,0.3)" },
               { id: 2, title: "2 jobs require title/description updates", role: "Lower SEO visibility index", action: "Optimize", href: "/employer/job-listings-management", border: "rgba(255,202,40,0.3)" },
-              { id: 3, title: "1 key candidate offer awaiting final signoff", role: "Lead Dev position", action: "Signoff", href: "/employer/offer-management-dashboard", border: "rgba(255,82,82,0.3)" },
+              { id: 3, title: "1 key candidate scheduled for today", role: "AI Technical Round", action: "Join", href: "/employer/upcoming-interviews-list", border: "rgba(255,82,82,0.3)" },
               { id: 4, title: "Marketing Manager position expires tomorrow", role: "Nearing 30-day live limit", action: "Extend", href: "/employer/job-listings-management", border: "rgba(171,71,188,0.3)" }
             ].map((prio) => (
               <div 

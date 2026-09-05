@@ -4,8 +4,12 @@ CREATE TYPE "CodingDifficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD');
 -- CreateEnum: SubmissionStatus
 CREATE TYPE "SubmissionStatus" AS ENUM ('ACCEPTED', 'WRONG_ANSWER', 'TIME_LIMIT_EXCEEDED', 'RUNTIME_ERROR', 'COMPILE_ERROR', 'PENDING');
 
--- CreateEnum: MockInterviewStatus
-CREATE TYPE "MockInterviewStatus" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED');
+-- MockInterviewStatus may already exist when an earlier reconciliation created
+-- the shared enum. Keep this additive migration retry-safe.
+DO $$ BEGIN
+  CREATE TYPE "MockInterviewStatus" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AlterTable: Add matching fields to JobListing
 ALTER TABLE "JobListing" ADD COLUMN "matchingConfig" JSONB;

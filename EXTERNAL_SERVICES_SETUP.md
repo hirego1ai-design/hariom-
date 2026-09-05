@@ -38,19 +38,60 @@ Verify: call a protected endpoint with a valid session, sign out, then confirm t
 
 ## 3. Cloudflare R2 or S3-compatible private object storage
 
-Create a private bucket for uploads and media. The app uses the S3-compatible API; do not make the bucket public.
+The application uses Cloudflare R2 (or any S3-compatible object store) for private file storage (such as commercial payment receipts and verified documents). Cloudflare R2 is accessed through its standard S3-compatible API from the Node.js/Next.js backend.
 
-| Variable | Secret? | Vercel environment | Purpose |
-| --- | --- | --- | --- |
-| `S3_BUCKET_NAME` | No | Production, Preview/Staging | Private bucket name. |
-| `S3_REGION` | No | Production, Preview/Staging | Provider region; use `auto` for R2 when applicable. |
-| `S3_ACCESS_KEY_ID` | Yes | Production, Preview/Staging | Access key limited to this bucket. |
-| `S3_SECRET_ACCESS_KEY` | Yes | Production, Preview/Staging | Matching secret key. |
-| `S3_ENDPOINT` | No | Production, Preview/Staging | S3-compatible endpoint; required for R2. |
-| `S3_FORCE_PATH_STYLE` | No | Production, Preview/Staging | Set only if the provider requires path-style addressing. |
-| `S3_SIGNED_URL_TTL_SECONDS` | No | Production, Preview/Staging | Private-download URL lifetime; default is 300 seconds. |
+### Cloudflare R2 Bucket Creation & Configuration Steps:
+1. Log in to the Cloudflare Dashboard and navigate to **Storage & Databases** → **R2**.
+2. Click **Create bucket**, name it (e.g. `hirego-receipts-prod` or `hirego-receipts-staging`), and select region preference (default is **Automatic**).
+3. **Bucket Privacy**: Ensure the bucket is **strictly private**. Do NOT connect a custom public domain or enable public `r2.dev` bucket access.
+4. **Generate API Token**:
+   - Go to **R2** → **Manage R2 API Tokens** → **Create API Token**.
+   - Set Permissions to **Object Read & Write**.
+   - Specify bucket scope (All buckets or specific bucket).
+   - Set TTL to Forever (or per organizational policy).
+   - Click **Create API Token** and copy the resulting `Access Key ID` and `Secret Access Key`.
+5. **Account ID / Endpoint**:
+   - Locate your 32-character **Account ID** in the Cloudflare R2 overview.
+   - Endpoint URL format: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
 
-Verify: upload a non-sensitive test file through the app, open its signed URL while authenticated, and confirm the direct public bucket URL is denied.
+### Environment Variables:
+
+| Variable | Secret? | Server / Client | Staging & Production Location | Purpose |
+| --- | --- | --- | --- | --- |
+| `S3_BUCKET_NAME` | No | Server-Only | Vercel / Secret Manager | Private bucket name (e.g. `hirego-receipts-prod`). |
+| `S3_REGION` | No | Server-Only | Vercel / Secret Manager | Storage region; use `auto` for Cloudflare R2. |
+| `S3_ACCESS_KEY_ID` | **Yes (Secret)** | Server-Only | Vercel (Encrypted) / Secret Manager | R2 API Token Access Key ID. |
+| `S3_SECRET_ACCESS_KEY` | **Yes (Secret)** | Server-Only | Vercel (Encrypted) / Secret Manager | R2 API Token Secret Access Key. |
+| `S3_ENDPOINT` | No | Server-Only | Vercel / Secret Manager | S3-compatible endpoint (e.g. `https://<account-id>.r2.cloudflarestorage.com`). |
+| `S3_FORCE_PATH_STYLE` | No | Server-Only | Vercel / Secret Manager | `false` for Cloudflare R2 and AWS S3 virtual-hosted style. |
+| `S3_SIGNED_URL_TTL_SECONDS` | No | Server-Only | Vercel / Secret Manager | Short-lived signed download URL lifetime; default is `300` (5 minutes). |
+
+> **Security Rule**: None of the `S3_*` variables may be exposed to browser code or client-side bundles (never prefix with `NEXT_PUBLIC_`).
+
+### CORS Guidance:
+- Under the current architecture, payment receipts and candidate files are uploaded to the Next.js API server (`POST /api/employer/billing/invoices/[id]/receipt`), which streams them directly to R2 using server credentials.
+- Signed URLs for downloads are generated server-side with `attachment` Content-Disposition.
+- Therefore, custom bucket CORS rules are **not required** for the current architecture.
+
+### Verification & Cleanup Steps:
+1. **Missing / Invalid Credentials (Fail-Closed Test)**:
+   - Call `POST /api/employer/billing/invoices/[id]/receipt` without valid R2 credentials.
+   - Confirm the API returns **503 Service Unavailable** and the invoice remains **`UNPAID`** (never sets `PENDING_VERIFICATION`).
+2. **Authorized Upload Test**:
+   - Provide valid R2 credentials in the server environment.
+   - Upload a test receipt PNG through `POST /api/employer/billing/invoices/[id]/receipt`.
+   - Confirm:
+     - The object is created in the private R2 bucket under `PAYMENT_RECEIPT/<uuid>.png`.
+     - A `StoredFile` database record is created with the `objectKey`.
+     - The invoice status transitions to `PENDING_VERIFICATION`.
+     - The stored database value is a private object key, NOT a public URL.
+3. **Signed Download & Access Control Test**:
+   - Request the file via `GET /api/files/[id]`.
+   - Confirm unauthorized / cross-company users receive **403 Forbidden**.
+   - Confirm authorized users receive a **307 Redirect** to a presigned R2 download URL that expires after `S3_SIGNED_URL_TTL_SECONDS`.
+   - Confirm trying to access the direct bucket URL without signature returns **401/403**.
+4. **Cleanup**:
+   - Delete the isolated test object from the R2 bucket and remove the test `StoredFile` database record.
 
 ## 4. QStash
 

@@ -1,279 +1,60 @@
-"use client";
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import type { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/marketingMetadata";
+
+export const metadata: Metadata = createMarketingMetadata("home");
+import MarketingShell from "@/components/marketing/MarketingShell";
 
 export default function HomePage() {
-  const router = useRouter();
-  const [showBypassModal, setShowBypassModal] = useState(false);
-
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 relative select-none"
-      style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}
-    >
-      {/* Ambient background grid & glow */}
-      <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30" />
-      <div
-        className="fixed inset-0 pointer-events-none -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse at 80% 20%, rgba(68,138,255,0.08) 0%, transparent 55%), radial-gradient(ellipse at 20% 80%, rgba(255,82,82,0.08) 0%, transparent 50%)",
-        }}
-      />
-
-      {/* Developer Bypass Floating Button (Top Right) */}
-      <div className="absolute top-6 right-6 z-50">
-        <button
-          onClick={() => setShowBypassModal(true)}
-          className="px-4 py-2 rounded-full text-black font-extrabold text-xs transition-all flex items-center gap-2"
-          style={{
-            background: "linear-gradient(135deg, #FFD54F, #F57F17)",
-            boxShadow: "var(--shadow-btn-gold)",
-          }}
-        >
-          <span className="material-symbols-outlined text-[18px]">developer_mode</span>
-          <span>Developer Bypass</span>
-        </button>
-      </div>
-
-      <main className="relative z-10 w-full max-w-[960px] mx-auto flex flex-col items-center space-y-8 my-auto py-12">
-        {/* Brand Header */}
-        <header className="text-center space-y-3">
-          <div className="flex items-center justify-center gap-1">
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#4285F4" }}>H</span>
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#EA4335" }}>i</span>
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#FBBC05" }}>r</span>
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#34A853" }}>e</span>
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#4285F4" }}>G</span>
-            <span className="text-[36px] font-extrabold font-display" style={{ color: "#EA4335" }}>o</span>
-            <div className="ml-2 px-2.5 py-0.5 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4285F4, #EA4335)" }}>
-              <span className="font-mono font-bold text-white text-sm">[AI]</span>
-            </div>
-          </div>
-          <h1
-            className="text-[28px] sm:text-[36px] font-extrabold tracking-tight"
-            style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}
-          >
-            Who are you joining as?
-          </h1>
-          <p className="text-sm font-semibold max-w-md mx-auto" style={{ color: "var(--text-muted)" }}>
-            Choose your path to access the autonomous AI hiring platform
-          </p>
-        </header>
-
-        {/* Compact Proportioned 3D Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-[840px]">
-          
-          {/* Candidate Card */}
-          <div
-            className="rounded-3xl p-8 flex flex-col items-center text-center justify-between group transition-all duration-300 hover:-translate-y-1.5"
-            style={{
-              backgroundColor: "var(--bg-card)",
-              border: "1.5px solid var(--outline)",
-              boxShadow: "var(--shadow-card)",
-            }}
-          >
-            <div className="flex flex-col items-center space-y-4">
-              {/* Centered 3D Icon Box */}
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110"
-                style={{
-                  background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
-                  boxShadow: "var(--shadow-btn-red)",
-                }}
-              >
-                <span className="material-symbols-outlined text-white text-[32px]">video_file</span>
-              </div>
-              <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>
-                I'm a Job Seeker
-              </h2>
-              <p className="text-xs font-medium leading-relaxed max-w-[280px]" style={{ color: "var(--text-secondary)" }}>
-                Practice AI interviews, calculate your HireGo Score™, and apply to verified top-tier tech roles.
-              </p>
-            </div>
-
-            <button
-              onClick={() => router.push("/login")}
-              className="w-full h-12 rounded-full font-bold text-xs text-white transition-all flex items-center justify-center gap-2 mt-6 shadow-md"
-              style={{
-                background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
-                boxShadow: "var(--shadow-btn-red)",
-              }}
-            >
-              <span>Continue as Candidate</span>
-              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                arrow_forward
-              </span>
-            </button>
-          </div>
-
-          {/* Employer Card */}
-          <div
-            className="rounded-3xl p-8 flex flex-col items-center text-center justify-between group transition-all duration-300 hover:-translate-y-1.5"
-            style={{
-              backgroundColor: "var(--bg-card)",
-              border: "1.5px solid var(--outline)",
-              boxShadow: "var(--shadow-card)",
-            }}
-          >
-            <div className="flex flex-col items-center space-y-4">
-              {/* Centered 3D Icon Box */}
-              <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110"
-                style={{
-                  background: "linear-gradient(135deg, var(--secondary), var(--secondary-dim))",
-                  boxShadow: "var(--shadow-btn-blue)",
-                }}
-              >
-                <span className="material-symbols-outlined text-white text-[32px]">domain</span>
-              </div>
-              <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>
-                I'm an Employer
-              </h2>
-              <p className="text-xs font-medium leading-relaxed max-w-[280px]" style={{ color: "var(--text-secondary)" }}>
-                Post jobs, configure AI vetting pipelines, screen verified talent, and hire 84% faster.
-              </p>
-            </div>
-
-            <button
-              onClick={() => router.push("/employer/employer-sign-in")}
-              className="w-full h-12 rounded-full font-bold text-xs text-white transition-all flex items-center justify-center gap-2 mt-6 shadow-md"
-              style={{
-                background: "linear-gradient(135deg, var(--secondary), var(--secondary-dim))",
-                boxShadow: "var(--shadow-btn-blue)",
-              }}
-            >
-              <span>Continue as Employer</span>
-              <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                arrow_forward
-              </span>
-            </button>
+    <MarketingShell>
+      <section className="relative flex min-h-[90vh] flex-col justify-center overflow-hidden px-5 py-28 sm:px-8">
+        <div className="absolute inset-0 z-0 overflow-hidden bg-[#020617]">
+          <Image src="/marketing/images/interactive_world_map_globe.png" alt="" fill sizes="100vw" className="object-cover object-center opacity-65" priority />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-transparent to-[#050510]/80" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/80 via-transparent to-[#050510]/80" />
+        </div>
+        <div className="relative z-10 mx-auto max-w-5xl text-center">
+          <p className="mb-5 text-sm font-bold uppercase tracking-[0.22em] text-cyan-300">Autonomous hiring, made human</p>
+          <h1 className="text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-2xl sm:text-7xl">World&apos;s <span className="bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400 bg-clip-text text-transparent">Fastest Hiring</span><br />Platform.</h1>
+          <p className="mx-auto mt-7 max-w-3xl text-lg font-medium leading-8 text-slate-200 drop-shadow-md sm:text-xl">Reducing recruitment time by up to <span className="font-bold text-cyan-300">90%</span>. Screen, assess, and interview candidates automatically with intelligent agents across the globe.</p>
+          <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
+            <Link href="/register?type=employer" className="btn-primary-blue min-w-[220px] px-7">Get started free <span aria-hidden>→</span></Link>
+            <Link href="/contact" className="btn-ghost min-w-[220px] border-white/30 bg-white/5 px-7 text-white hover:bg-white/10">Talk to our team <span aria-hidden>→</span></Link>
           </div>
         </div>
-
-        {/* Footer */}
-        <footer className="pt-4 text-center flex flex-col items-center gap-3">
-          <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-            Already have an account?{" "}
-            <button
-              onClick={() => router.push("/login")}
-              className="font-bold underline underline-offset-4 transition-colors"
-              style={{ color: "var(--primary)" }}
-            >
-              Sign In
-            </button>
-          </p>
-          <button
-            onClick={() => setShowBypassModal(true)}
-            className="text-xs font-bold underline underline-offset-2 flex items-center gap-1"
-            style={{ color: "#F57F17" }}
-          >
-            <span>⚡ Open Developer Bypass Hub</span>
-          </button>
-        </footer>
-      </main>
-
-      {/* Developer Bypass Modal Overlay */}
-      {showBypassModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div
-            className="rounded-3xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto custom-scrollbar space-y-6 shadow-2xl relative"
-            style={{
-              backgroundColor: "var(--bg-card)",
-              border: "1px solid var(--outline)",
-            }}
-          >
-            <div className="flex items-center justify-between pb-4" style={{ borderBottom: "1px solid var(--outline)" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center justify-center font-bold">
-                  ⚡
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>Developer Bypass Hub</h3>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Direct single-click shortcuts to test all portal screens</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowBypassModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
-                style={{
-                  backgroundColor: "var(--surface-container-high)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Links Grid */}
-            <div className="space-y-4 text-xs">
-              <div>
-                <h4 className="font-bold mb-2 uppercase tracking-wider" style={{ color: "var(--primary)" }}>
-                  Candidate Portal Shortcuts
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    { label: "Dashboard", href: "/dashboard" },
-                    { label: "Browse Jobs", href: "/jobs" },
-                    { label: "Applications Tracker", href: "/applications" },
-                    { label: "Pipeline View", href: "/applications/pipeline" },
-                    { label: "AI Practice Hub", href: "/ai/practice-hub" },
-                    { label: "Candidate Chat", href: "/messages/chat" },
-                  ].map((item) => (
-                    <button
-                      key={item.href}
-                      onClick={() => {
-                        setShowBypassModal(false);
-                        router.push(item.href);
-                      }}
-                      className="p-2.5 rounded-xl border text-left font-semibold transition-all hover:scale-105"
-                      style={{
-                        backgroundColor: "var(--surface-container-high)",
-                        borderColor: "var(--outline)",
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-bold mb-2 uppercase tracking-wider" style={{ color: "var(--secondary)" }}>
-                  Employer Portal Shortcuts
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    { label: "Employer Sign In", href: "/employer/employer-sign-in" },
-                    { label: "Employer Dashboard", href: "/employer/dashboard" },
-                    { label: "AI Hiring Copilot", href: "/employer/ai-hiring-copilot-hub" },
-                    { label: "Candidate Kanban", href: "/employer/candidate-pipeline-kanban" },
-                    { label: "Job Listings", href: "/employer/job-listings-management" },
-                    { label: "Employer Analytics", href: "/employer/employer-analytics-dashboard" },
-                  ].map((item) => (
-                    <button
-                      key={item.href}
-                      onClick={() => {
-                        setShowBypassModal(false);
-                        router.push(item.href);
-                      }}
-                      className="p-2.5 rounded-xl border text-left font-semibold transition-all hover:scale-105"
-                      style={{
-                        backgroundColor: "var(--surface-container-high)",
-                        borderColor: "var(--outline)",
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+      </section>
+      <section className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50 px-5 py-16 sm:px-8 md:py-24">
+        <div className="pointer-events-none absolute inset-0 opacity-50" style={{ backgroundImage: "radial-gradient(#dbe4f0 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
+        <div className="relative mx-auto max-w-7xl text-center">
+          <h2 className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-3xl font-extrabold text-transparent sm:text-4xl">Trusted by industry leaders</h2>
+          <p className="mx-auto mt-3 max-w-xl text-slate-600">Top companies use HireGo AI to find and hire exceptional talent faster than ever.</p>
+          <div className="mt-10 grid grid-cols-2 gap-3 rounded-[2rem] border-4 border-white bg-white p-5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.2)] sm:grid-cols-3 lg:grid-cols-6">
+            {['Google','TCS','Microsoft','Infosys','Amazon','Zomato','Slack','Wipro','Stripe','Cognizant','Swiggy','Spotify'].map((company) => <div key={company} className="flex h-12 items-center justify-center rounded-xl bg-slate-50 px-3 text-sm font-bold text-slate-500">{company}</div>)}
+          </div>
+          <div className="mt-14 grid grid-cols-2 gap-8 md:grid-cols-4">
+            {[['500+','Partner Companies'],['50K+','Successful Hires'],['12','Countries'],['99%','Satisfaction Rate']].map(([value,label]) => <div key={label}><div className="text-3xl font-extrabold text-slate-900 sm:text-4xl">{value}</div><div className="mt-1 text-sm text-slate-500">{label}</div></div>)}
           </div>
         </div>
-      )}
-    </div>
+      </section>
+      <section className="bg-white px-5 py-16 sm:px-8 md:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="text-center"><h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">Trusted Results Worldwide</h2><p className="mx-auto mt-3 max-w-xl text-slate-600">A hiring engine built for speed, quality, and scale.</p></div>
+          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[['10 min','Avg. Hiring Time','Reducing industry timelines by 45 days on average'],['85%','Time Saving','Faster than traditional hiring'],['50K+','Successful Hirings','Across 12 countries'],['99.9%','Accuracy Rate','Verified AI matching']].map(([value,label,description]) => <article key={label} className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-blue-50 p-6 text-center shadow-sm"><div className="text-3xl font-black text-slate-900">{value}</div><h3 className="mt-2 font-bold text-slate-800">{label}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{description}</p></article>)}
+          </div>
+        </div>
+      </section>
+      <section className="bg-gradient-to-br from-slate-50 via-white to-purple-50 px-5 py-16 sm:px-8 md:py-24">
+        <div className="mx-auto max-w-7xl"><div className="text-center"><h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">Built for worldwide hiring.</h2><p className="mx-auto mt-3 max-w-xl text-slate-600">Premium features designed for modern engineering teams and global enterprises.</p></div>
+          <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{[['Autonomous AI Agents','10-MINUTE AVERAGE TIME-TO-SHORTLIST','AI agents work 24/7 to automate screening, evaluation, and candidate ranking, cutting manual work to almost zero.','from-blue-500 to-cyan-400'],['Lightning Fast Hiring','REDUCE RECRUITER WORKLOAD BY UP TO 80%','Go from job posting to qualified shortlist in minutes, not weeks, so you fill urgent roles before competitors even start.','from-purple-600 to-fuchsia-500'],['Precision Matching','95% CANDIDATE-JOB FIT ACCURACY','AI-powered matching based on skills, experience, culture fit, and growth potential for highly accurate placements.','from-emerald-500 to-teal-400'],['AI Video Interviews','SCREEN 100+ CANDIDATES SIMULTANEOUSLY','Automated video interviews with behavioral analysis, sentiment detection, and clear, actionable candidate reports.','from-rose-500 to-orange-400'],['AI Anti-Cheating Engine','99.9% FRAUD DETECTION RATE','Advanced proctoring ensures fair, authentic assessments with real-time fraud detection and identity verification.','from-indigo-600 to-blue-500'],['Global Talent Access','ACCESS 50+ COUNTRIES INSTANTLY','Connect with verified talent worldwide. No borders, no limits, reduced visa headaches for global hiring teams.','from-cyan-500 to-green-400']].map(([title,outcome,description,gradient]) => <article key={title} className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"><div className={`mb-6 h-2 w-20 rounded-full bg-gradient-to-r ${gradient}`} /><h3 className="text-xl font-bold text-slate-900">{title}</h3><p className="mt-3 text-xs font-bold uppercase tracking-wider text-blue-600">{outcome}</p><p className="mt-3 leading-7 text-slate-600">{description}</p></article>)}</div>
+        </div>
+      </section>
+      <section className="bg-[#050510] px-5 py-16 sm:px-8 md:py-24"><div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-2"><div><p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-300">Autonomous AI agents</p><h2 className="mt-4 text-3xl font-extrabold text-white sm:text-5xl">Agentic Hiring Dashboard</h2><p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">Our AI agents go beyond resumes, delivering behavioral insights, skill verification, and culture-fit analysis in a single, intuitive dashboard.</p><div className="mt-8 flex gap-8"><div><div className="text-3xl font-black text-cyan-300">98.5%</div><div className="mt-1 text-sm text-slate-400">Matching Accuracy</div></div><div><div className="text-3xl font-black text-violet-300">10 min</div><div className="mt-1 text-sm text-slate-400">Time to Shortlist</div></div></div><Link href="/ai-features" className="btn-primary-blue mt-8">Explore AI features →</Link></div><div className="overflow-hidden rounded-3xl border border-white/15 bg-white/5 p-2 shadow-2xl shadow-cyan-500/10"><Image src="/marketing/images/ai_hiring_dashboard_real.png" alt="HireGo AI management dashboard" width={1200} height={800} className="h-auto w-full rounded-2xl" /></div></div></section>
+      <section className="bg-white px-5 py-16 sm:px-8 md:py-24"><div className="mx-auto max-w-7xl"><div className="text-center"><h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">Your entire hiring pipeline, fully automated.</h2><p className="mt-3 text-slate-600">From job posting to offer letter in record time.</p></div><div className="mt-12 grid gap-5 md:grid-cols-4">{[['1','Post Job','Create your job in seconds with AI-assisted requirements.','Import your JD or let AI generate one in under 30 seconds'],['2','AI Screens','AI agents instantly screen and rank every applicant.','Evaluate 1000+ candidates in under 5 minutes with zero manual effort'],['3','Auto Interview','Candidates complete AI-powered, fraud-proof video interviews.','Behavioral insights, skill verification, and cheating detection in one report'],['4','Hire Fast','Get a ranked shortlist with rich, actionable profiles.','Review, compare, and send offers in minutes, not weeks']].map(([number,title,description,microcopy]) => <article key={number} className="rounded-[2rem] bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-7"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-xl font-black text-white">{number}</div><h3 className="mt-6 text-xl font-bold text-slate-900">{title}</h3><p className="mt-3 text-slate-700">{description}</p><p className="mt-5 text-xs font-bold uppercase tracking-wide text-slate-500">{microcopy}</p></article>)}</div></div></section>
+      <section className="bg-gradient-to-br from-slate-50 via-white to-blue-50 px-5 py-16 sm:px-8 md:py-24"><div className="mx-auto max-w-7xl text-center"><h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">Trusted by leaders.</h2><p className="mt-3 text-slate-600">See why the world&apos;s best companies hire with HireGo.</p><div className="mt-10 grid gap-5 text-left md:grid-cols-2 lg:grid-cols-4">{[['P','Priya Sharma','HR Director, TCS','HireGo AI agents slashed our time-to-hire by 70%. We closed 15 senior dev roles in a week.'],['J','James Wilson','CTO, Microsoft','The technical assessments vary dynamically. It&apos;s impossible to cheat, and the candidates are top-tier.'],['A','Anita Desai','Talent Lead, Infosys','Finally, an AI tool that actually understands culture fit. The candidate summaries are scary accurate.'],['R','Rahul Verma','Founder, Razorpay','As a small team, we could not afford a recruiter. HireGo acted as our entire HR department.']].map(([initial,name,role,quote]) => <article key={name} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 font-bold text-white">{initial}</div><p className="mt-5 leading-7 text-slate-700">&quot;{quote}&quot;</p><p className="mt-5 font-bold text-slate-900">{name}</p><p className="text-sm text-slate-500">{role}</p></article>)}</div></div></section>
+      <section className="bg-[#050510] px-5 py-20 text-center sm:px-8 md:py-28"><h2 className="text-3xl font-extrabold text-white sm:text-5xl">Ready to scale, without scaling your HR team?</h2><p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">Join companies worldwide using HireGo AI to run autonomous, 24/7 hiring. Start free today.</p><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/register" className="btn-primary-blue px-7">Get started free</Link><Link href="/contact" className="btn-ghost border-white/30 bg-white/5 px-7 text-white hover:bg-white/10">Contact sales</Link></div></section>
+    </MarketingShell>
   );
 }

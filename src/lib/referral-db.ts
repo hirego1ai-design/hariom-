@@ -1074,7 +1074,7 @@ class ReferralDatabaseStore {
     let lifetimeEarnings = 0;
 
     for (const r of userRewards) {
-      if (r.status === ReferralStatus.ELIGIBLE) {
+      if (r.status === ReferralStatus.ELIGIBLE && !r.payoutId) {
         availableBalance += r.rewardAmount;
         lifetimeEarnings += r.rewardAmount;
       } else if (r.status === ReferralStatus.LOCKED) {
@@ -1244,6 +1244,33 @@ class ReferralDatabaseStore {
             },
           });
 
+          // Reserve the exact underlying rewards while the payout is pending.
+          // The row predicate prevents concurrent requests from claiming the
+          // same eligible reward. Exact matching avoids silent overpayment.
+          const availableRewards = await tx.referralReward.findMany({
+            where: { referrerId: input.referrerId, status: "ELIGIBLE", payoutId: null },
+            orderBy: { createdAt: "asc" },
+          });
+          let reservedAmount = 0;
+          const rewardsToReserve: any[] = [];
+          for (const reward of availableRewards) {
+            if (reservedAmount >= input.amount) break;
+            reservedAmount += reward.rewardAmount;
+            rewardsToReserve.push(reward);
+          }
+          if (reservedAmount !== input.amount) {
+            throw new Error("Requested payout must match an exact combination of eligible rewards.");
+          }
+          for (const reward of rewardsToReserve) {
+            const reserved = await tx.referralReward.updateMany({
+              where: { id: reward.id, status: "ELIGIBLE", payoutId: null },
+              data: { payoutId: createdPayout.id },
+            });
+            if (reserved.count !== 1) {
+              throw new Error("One or more rewards were reserved by another payout request.");
+            }
+          }
+
           // 2. Create immutable ReferralLedgerEntry for reserved liability
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
@@ -1288,6 +1315,19 @@ class ReferralDatabaseStore {
 
     // Dev/Test harness recording
     this.payouts.set(id, payout);
+    let reservedAmount = 0;
+    const rewardsToReserve: ReferralReward[] = [];
+    for (const reward of this.rewards.values()) {
+      if (reward.referrerId !== input.referrerId || reward.status !== ReferralStatus.ELIGIBLE || reward.payoutId) continue;
+      if (reservedAmount >= input.amount) break;
+      reservedAmount += reward.rewardAmount;
+      rewardsToReserve.push(reward);
+    }
+    if (reservedAmount !== input.amount) {
+      this.payouts.delete(id);
+      throw new Error("Requested payout must match an exact combination of eligible rewards.");
+    }
+    for (const reward of rewardsToReserve) reward.payoutId = id;
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
       referrerId: input.referrerId,
@@ -1357,14 +1397,19 @@ class ReferralDatabaseStore {
     if (isProduction) {
       try {
         const client = prisma as any;
-        const updated = await client.referralPayout.update({
-          where: { id: payoutId },
-          data: {
-            status: "APPROVED",
-            approvedBy: adminUserId,
-            adminNotes: adminNotes || "Approved by Admin for processing.",
-          },
+        const updated = await client.$transaction(async (tx: any) => {
+          const transitioned = await tx.referralPayout.updateMany({
+            where: { id: payoutId, status: "PENDING_ADMIN_APPROVAL" },
+            data: {
+              status: "APPROVED",
+              approvedBy: adminUserId,
+              adminNotes: adminNotes || "Approved by Admin for processing.",
+            },
+          });
+          if (transitioned.count !== 1) return null;
+          return tx.referralPayout.findUnique({ where: { id: payoutId } });
         });
+        if (!updated) throw new Error(`Payout ${payoutId} is not awaiting approval.`);
         return {
           id: updated.id,
           referrerId: updated.referrerId,
@@ -1388,6 +1433,9 @@ class ReferralDatabaseStore {
 
     const payout = this.payouts.get(payoutId);
     if (!payout) return null;
+    if (payout.status !== "PENDING_ADMIN_APPROVAL") {
+      throw new Error(`Payout ${payoutId} is not awaiting approval.`);
+    }
 
     payout.status = "APPROVED";
     payout.approvedBy = adminUserId;
@@ -1422,9 +1470,14 @@ class ReferralDatabaseStore {
             throw new Error(`Payout with ID ${payoutId} not found.`);
           }
 
-          // 2. Update payout to PAID
-          const updated = await tx.referralPayout.update({
-            where: { id: payoutId },
+          if (existing.status !== "APPROVED") {
+            throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
+          }
+
+          // 2. Update payout to PAID only if it is still approved. This
+          // prevents duplicate settlement/ledger entries under concurrent calls.
+          const transitioned = await tx.referralPayout.updateMany({
+            where: { id: payoutId, status: "APPROVED" },
             data: {
               status: "PAID",
               approvedBy: adminUserId,
@@ -1432,12 +1485,18 @@ class ReferralDatabaseStore {
               processedAt: new Date(),
             },
           });
+          if (transitioned.count !== 1) {
+            throw new Error(`Payout ${payoutId} was already settled or changed state.`);
+          }
+          const updated = await tx.referralPayout.findUnique({ where: { id: payoutId } });
+          if (!updated) throw new Error(`Payout with ID ${payoutId} not found.`);
 
           // 3. Mark underlying eligible rewards as PAID
           const eligibleRewards = await tx.referralReward.findMany({
             where: {
               referrerId: existing.referrerId,
               status: "ELIGIBLE",
+              payoutId: existing.id,
             },
             orderBy: { createdAt: "asc" },
           });
@@ -1453,6 +1512,9 @@ class ReferralDatabaseStore {
               },
             });
             remainingToMark -= rew.rewardAmount;
+          }
+          if (remainingToMark !== 0) {
+            throw new Error(`Payout ${payoutId} exceeds the eligible reward balance.`);
           }
 
           // 4. Create immutable ReferralLedgerEntry
@@ -1501,6 +1563,17 @@ class ReferralDatabaseStore {
     // Dev/Test harness flow
     const payout = this.payouts.get(payoutId);
     if (!payout) return null;
+    if (payout.status !== "APPROVED") {
+      throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
+    }
+
+    const eligibleRewards = Array.from(this.rewards.values()).filter(
+      (rew) => rew.referrerId === payout.referrerId && rew.status === ReferralStatus.ELIGIBLE && rew.payoutId === payout.id,
+    );
+    const eligibleBalance = eligibleRewards.reduce((sum, rew) => sum + rew.rewardAmount, 0);
+    if (eligibleBalance !== payout.amount) {
+      throw new Error(`Payout ${payoutId} exceeds the eligible reward balance.`);
+    }
 
     payout.status = "PAID";
     payout.approvedBy = adminUserId;
@@ -1511,10 +1584,11 @@ class ReferralDatabaseStore {
 
     // Transition underlying eligible rewards for the referrer to PAID
     let remainingToMark = payout.amount;
-    for (const rew of this.rewards.values()) {
+    for (const rew of eligibleRewards) {
       if (
         rew.referrerId === payout.referrerId &&
         rew.status === ReferralStatus.ELIGIBLE &&
+        rew.payoutId === payoutId &&
         remainingToMark > 0
       ) {
         rew.status = ReferralStatus.PAID;
@@ -1560,13 +1634,24 @@ class ReferralDatabaseStore {
             throw new Error(`Payout with ID ${payoutId} not found.`);
           }
 
-          const updated = await tx.referralPayout.update({
-            where: { id: payoutId },
+          const updated = await tx.referralPayout.updateMany({
+            where: { id: payoutId, status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] } },
             data: {
               status: "REJECTED",
               approvedBy: adminUserId,
               adminNotes: reason,
             },
+          });
+          if (updated.count !== 1) {
+            throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+          }
+          const updatedRecord = await tx.referralPayout.findUnique({ where: { id: payoutId } });
+          if (!updatedRecord) throw new Error(`Payout with ID ${payoutId} not found.`);
+
+          // Re-open rewards reserved by this rejected payout.
+          await tx.referralReward.updateMany({
+            where: { payoutId, status: "ELIGIBLE" },
+            data: { payoutId: null },
           });
 
           // Unreserve liability via financial ledger entry (PAYOUT_REFUNDED)
@@ -1588,7 +1673,7 @@ class ReferralDatabaseStore {
             },
           });
 
-          return [updated, createdLedger];
+          return [updatedRecord, createdLedger];
         });
 
         return {
@@ -1615,12 +1700,21 @@ class ReferralDatabaseStore {
     // Dev/Test harness flow
     const payout = this.payouts.get(payoutId);
     if (!payout) return null;
+    if (payout.status !== "PENDING_ADMIN_APPROVAL" && payout.status !== "APPROVED") {
+      throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+    }
 
     payout.status = "REJECTED";
     payout.approvedBy = adminUserId;
     payout.adminNotes = reason;
     payout.updatedAt = new Date().toISOString();
     this.payouts.set(payoutId, payout);
+
+    for (const reward of this.rewards.values()) {
+      if (reward.payoutId === payoutId && reward.status === ReferralStatus.ELIGIBLE) {
+        reward.payoutId = null;
+      }
+    }
 
     const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const ledgerEntry: ReferralLedgerEntry = {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createDevDocumentVerification, getDevDocumentVerifications } from "@/lib/document-verification-store";
+import { z } from "zod";
 
 // Document types that require admin verification
 const DOCUMENT_TYPES = [
@@ -13,6 +14,15 @@ const DOCUMENT_TYPES = [
   "Company Registration",
   "Bank Statement",
 ] as const;
+
+const DOCUMENT_STATUSES = ["Pending Audit", "Verified", "Rejected"] as const;
+const documentSubmissionSchema = z.object({
+  docType: z.enum(DOCUMENT_TYPES),
+  fileUrl: z.string().trim().url().max(2048),
+  fileName: z.string().trim().min(1).max(255),
+  companyName: z.string().trim().max(255).optional(),
+  employerId: z.string().trim().min(1).max(191).optional(),
+});
 
 export type DocumentType = typeof DOCUMENT_TYPES[number];
 
@@ -49,14 +59,22 @@ function calculateRiskScore(docType: DocumentType, companyProfile: any): "Low" |
 export async function GET(req: NextRequest) {
   try {
     const session = await getCurrentSession(req.headers);
-    if (!session || session.role !== "ADMIN") {
-      return jsonError("Unauthorized access", 401);
-    }
+    if (!session) return jsonError("Authentication required", 401);
+    if (session.role !== "ADMIN") return jsonError("Administrator access required", 403);
 
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status");
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const rawStatus = searchParams.get("status");
+    if (rawStatus && !DOCUMENT_STATUSES.includes(rawStatus as (typeof DOCUMENT_STATUSES)[number])) {
+      return jsonError("Invalid document status", 400);
+    }
+    const rawLimit = Number(searchParams.get("limit") || 50);
+    const rawOffset = Number(searchParams.get("offset") || 0);
+    if (!Number.isInteger(rawLimit) || !Number.isInteger(rawOffset) || rawLimit < 1 || rawLimit > 100 || rawOffset < 0) {
+      return jsonError("Invalid pagination", 400);
+    }
+    const status = rawStatus as (typeof DOCUMENT_STATUSES)[number] | null;
+    const limit = rawLimit;
+    const offset = rawOffset;
 
     const where: any = {};
     if (status) {
@@ -125,21 +143,13 @@ export async function POST(req: NextRequest) {
       return jsonError("Unauthorized access", 401);
     }
 
-    const body = await req.json();
-    const { docType, fileUrl, fileName, companyName } = body;
-
-    // Validate document type
-    if (!DOCUMENT_TYPES.includes(docType as DocumentType)) {
-      return jsonError(`Invalid document type. Must be one of: ${DOCUMENT_TYPES.join(", ")}`, 400);
-    }
-
-    if (!fileUrl || !fileName) {
-      return jsonError("File URL and filename are required", 400);
-    }
+    const parsed = documentSubmissionSchema.safeParse(await req.json());
+    if (!parsed.success) return jsonError("Invalid document submission", 400);
+    const { docType, fileUrl, fileName, companyName, employerId: requestedEmployerId } = parsed.data;
 
     // Employers may submit only for their own account. Admins may submit on behalf
     // of an employer when an employerId is explicitly provided.
-    const employerId = session.role === "ADMIN" && body.employerId ? String(body.employerId) : session.id;
+    const employerId = session.role === "ADMIN" && requestedEmployerId ? requestedEmployerId : session.id;
     let employerProfile;
     let databaseAvailable = true;
     try {
@@ -162,10 +172,10 @@ export async function POST(req: NextRequest) {
       const devDocument = createDevDocumentVerification({
         employerId,
         employerName: session.name || session.email,
-        companyName: String(companyName || session.name || "Pending company profile"),
+        companyName: companyName || session.name || "Pending company profile",
         docType: docType as DocumentType,
-        fileUrl: String(fileUrl),
-        fileName: String(fileName),
+        fileUrl,
+        fileName,
         riskScore,
       });
       return NextResponse.json({

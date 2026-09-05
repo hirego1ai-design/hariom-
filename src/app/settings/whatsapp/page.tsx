@@ -3,8 +3,8 @@ import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import React, { useState } from "react";
 
 export default function WhatsappApiConfigPage() {
-  const [phoneNumberId, setPhoneNumberId] = useState("109823471092");
-  const [accessToken, setAccessToken] = useState("EAAGz...w0192");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
   return (
@@ -30,6 +30,8 @@ export default function WhatsappApiConfigPage() {
             type="text"
             value={phoneNumberId}
             onChange={(e) => setPhoneNumberId(e.target.value)}
+            placeholder="Configured securely on the server"
+            autoComplete="off"
             className="w-full h-10 rounded-xl bg-[#1E1E1E] border border-white/10 px-3 text-xs text-white font-mono"
           />
         </div>
@@ -40,6 +42,8 @@ export default function WhatsappApiConfigPage() {
             type="password"
             value={accessToken}
             onChange={(e) => setAccessToken(e.target.value)}
+            placeholder="Configured securely on the server"
+            autoComplete="new-password"
             className="w-full h-10 rounded-xl bg-[#1E1E1E] border border-white/10 px-3 text-xs text-white font-mono"
           />
         </div>

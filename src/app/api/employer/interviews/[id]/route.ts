@@ -7,11 +7,63 @@ import { sendEmail } from "@/lib/email";
 const changeSchema = z.object({ action: z.enum(["CANCEL", "RESCHEDULE"]), scheduledAt: z.string().datetime().optional(), reason: z.string().max(500).optional() });
 
 async function authorizedInterview(id: string, session: { id: string; role: string }) {
-  const interview = await prisma.interview.findUnique({ include: { application: { include: { job: true, candidateProfile: { include: { user: true } } } } }, where: { id } });
+  const interview = await prisma.interview.findFirst({
+    where: {
+      OR: [
+        { id },
+        { roomUrl: { contains: id } }
+      ]
+    },
+    include: {
+      application: {
+        include: {
+          job: true,
+          candidateProfile: {
+            include: {
+              user: true
+            }
+          }
+        }
+      }
+    }
+  });
   if (!interview) return null;
   if (session.role === "ADMIN") return interview;
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getCurrentSession(request.headers);
+  if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    const { id } = await params;
+    const interview = await authorizedInterview(id, session);
+    if (!interview) {
+      return NextResponse.json({ success: false, error: "Interview not found or access denied." }, { status: 404 });
+    }
+    const meta = (() => { try { return interview.aiFeedback ? JSON.parse(interview.aiFeedback) : {}; } catch { return {}; } })();
+
+    return NextResponse.json({
+      success: true,
+      interview: {
+        id: interview.id,
+        applicationId: interview.applicationId,
+        scheduledAt: interview.scheduledAt.toISOString(),
+        durationMins: interview.durationMins,
+        status: interview.status,
+        roomUrl: interview.roomUrl,
+        round: typeof meta.round === "string" ? meta.round : "Technical Interview",
+        mode: typeof meta.mode === "string" ? meta.mode : interview.roomUrl ? "ONLINE" : "OFFLINE",
+        candidateName: interview.application.candidateProfile.user?.name || "Candidate",
+        jobTitle: interview.application.job.title,
+      }
+    });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "Unable to retrieve interview." }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

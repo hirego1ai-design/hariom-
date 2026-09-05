@@ -117,8 +117,53 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateCandidateStage = (candidateId: string, newStage: string) => {
-    setCandidates(candidates.map(c => c.id === candidateId ? { ...c, stage: newStage } : c));
+  const updateCandidateStage = async (candidateId: string, newStage: string) => {
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate?.applicationId) return;
+
+    // Map frontend stage names to database ApplicationStatus enums
+    const mapStageToDbStatus = (stage: string): string => {
+      switch (stage) {
+        case "Applied":
+          return "SCREENING"; // fallback since APPLIED isn't in stage PATCH zod enum
+        case "AI Screening":
+        case "Video Resume Review":
+          return "SCREENING";
+        case "Assessment":
+          return "ASSESSMENT";
+        case "AI Interview":
+          return "AI_INTERVIEW";
+        case "Technical Interview":
+        case "HR Interview":
+        case "Client Interview":
+        case "Offer":
+        case "Documentation":
+          return "SHORTLISTED";
+        case "Joined":
+          return "HIRED";
+        case "Rejected":
+        case "Withdrawn":
+          return "REJECTED";
+        default:
+          return "SCREENING";
+      }
+    };
+
+    try {
+      const dbStage = mapStageToDbStatus(newStage);
+      const res = await fetch(`/api/employer/candidates/${candidate.applicationId}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: dbStage }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update stage");
+
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c));
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to update candidate stage.");
+    }
   };
 
   return (

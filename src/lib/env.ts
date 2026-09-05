@@ -29,3 +29,17 @@ export function requireStorageEnv() {
     endpoint: getOptionalEnv("S3_ENDPOINT"),
   };
 }
+
+export function getVideoAnalysisConfig() {
+  return {
+    enabled: process.env.VIDEO_ANALYSIS_ENABLED === "true",
+    workerUrl: process.env.VIDEO_ANALYSIS_WORKER_URL?.trim() || "http://localhost:8000",
+    internalToken: process.env.VIDEO_ANALYSIS_INTERNAL_TOKEN?.trim() || "dev-internal-token-change-in-prod",
+    maxSeconds: Number(process.env.VIDEO_ANALYSIS_MAX_SECONDS || 120),
+    timeoutSeconds: Number(process.env.VIDEO_ANALYSIS_TIMEOUT_SECONDS || 600),
+    retentionDays: Number(process.env.VIDEO_ANALYSIS_RETENTION_DAYS || 30),
+    whisperModelSize: process.env.WHISPER_MODEL_SIZE?.trim() || "small",
+    whisperDevice: process.env.WHISPER_DEVICE?.trim() || "cpu",
+    whisperComputeType: process.env.WHISPER_COMPUTE_TYPE?.trim() || "int8",
+  };
+}

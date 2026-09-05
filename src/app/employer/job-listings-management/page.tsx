@@ -304,17 +304,43 @@ export default function EmployerJobListingsPolishedPage() {
     setSelectedJobIds([]);
   };
 
-  const handleTriggerStatus = (id: string, newStatus: JobListing["status"]) => {
-    setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus } : j));
-    if (activeDrawerJob?.id === id) {
-      setActiveDrawerJob(prev => prev ? { ...prev, status: newStatus } : null);
+  const handleTriggerStatus = async (id: string, newStatus: JobListing["status"]) => {
+    try {
+      const apiStatus = newStatus === "Active" ? "ACTIVE" : newStatus === "Paused" ? "PAUSED" : newStatus === "Closed" ? "CLOSED" : "DRAFT";
+      const res = await fetch(`/api/employer/jobs/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: apiStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update status");
+
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus } : j));
+      if (activeDrawerJob?.id === id) {
+        setActiveDrawerJob(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+      triggerToast(`Job status updated to ${newStatus}`);
+    } catch (err: any) {
+      alert(err.message || "Failed to update status.");
     }
   };
 
-  const handleDeleteJob = (id: string) => {
-    setJobs(prev => prev.filter(j => j.id !== id));
-    if (activeDrawerJob?.id === id) {
-      setActiveDrawerJob(null);
+  const handleDeleteJob = async (id: string) => {
+    if (!confirm("Are you sure you want to permanently delete this job listing?")) return;
+    try {
+      const res = await fetch(`/api/employer/jobs/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete job");
+
+      setJobs(prev => prev.filter(j => j.id !== id));
+      if (activeDrawerJob?.id === id) {
+        setActiveDrawerJob(null);
+      }
+      triggerToast("Job listing successfully deleted.");
+    } catch (err: any) {
+      alert(err.message || "Failed to delete job.");
     }
   };
 

@@ -1,43 +1,12 @@
 "use client";
-import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
+import { useEffect, useState } from "react";
+
+type Analytics = { candidateSignups: number; applications: number; interviewsCompleted: number; paidSubscriptions: number };
 
 export default function PlatformAnalyticsHubPage() {
-  return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      <CandidateSidebar />
-      <div className="min-h-screen bg-[#0E0E0E] text-text-primary p-gutter max-w-container-max mx-auto space-y-6">
-      <div>
-        <h1 className="font-display-lg text-display-lg text-white">Platform Analytics Hub (G12)</h1>
-        <p className="text-text-muted text-sm">Deep-dive analytics across user signups, application volume, interview pass rates, and subscription retention.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter">
-        <div className="glass-card p-5 rounded-2xl border border-white/10">
-          <p className="text-text-muted text-[10px] uppercase font-bold tracking-widest">Candidate Signups</p>
-          <h3 className="font-bold text-3xl text-white mt-1">48,420</h3>
-          <p className="text-green text-xs mt-2 font-bold">+12.4% MoM</p>
-        </div>
-
-        <div className="glass-card p-5 rounded-2xl border border-white/10">
-          <p className="text-text-muted text-[10px] uppercase font-bold tracking-widest">Applications Submitted</p>
-          <h3 className="font-bold text-3xl text-primary mt-1">182,900</h3>
-          <p className="text-secondary text-xs mt-2 font-bold">+24% MoM</p>
-        </div>
-
-        <div className="glass-card p-5 rounded-2xl border border-white/10">
-          <p className="text-text-muted text-[10px] uppercase font-bold tracking-widest">Interviews Completed</p>
-          <h3 className="font-bold text-3xl text-white mt-1">14,210</h3>
-          <p className="text-green text-xs mt-2 font-bold">88.2% completion rate</p>
-        </div>
-
-        <div className="glass-card p-5 rounded-2xl border border-white/10">
-          <p className="text-text-muted text-[10px] uppercase font-bold tracking-widest">Paid Conversion Rate</p>
-          <h3 className="font-bold text-3xl text-gold-payment mt-1">2.61%</h3>
-          <p className="text-green text-xs mt-2 font-bold">Target &gt; 2.5% met</p>
-        </div>
-      </div>
-    </div>
-    </div>
-);
+  const [data, setData] = useState<Analytics | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { fetch("/api/admin/analytics", { cache: "no-store" }).then(async (r) => { const p = await r.json(); if (!r.ok) throw new Error(p.error || "Unable to load analytics."); setData(p.data); }).catch((e) => setError(e.message)); }, []);
+  const cards = data ? [["Candidate Signups", data.candidateSignups], ["Applications Submitted", data.applications], ["Interviews Completed", data.interviewsCompleted], ["Active Paid Subscriptions", data.paidSubscriptions]] : [];
+  return <div className="min-h-screen bg-[#0E0E0E] p-6 text-white"><h1 className="text-2xl font-bold">Platform Analytics Hub</h1><p className="mt-2 text-sm text-slate-400">Live counts from the persisted production database.</p>{error ? <p className="mt-6 text-sm text-red-300">{error}</p> : !data ? <p className="mt-6 text-sm text-slate-400">Loading…</p> : <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">{cards.map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-xs uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}</div>}</div>;
 }

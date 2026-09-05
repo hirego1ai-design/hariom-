@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
 
 export const mockInterviewSummary = {
   totalRevenue: 520000,
@@ -87,6 +88,9 @@ export const mockInterviewLogs = [
 
 export async function GET(req: NextRequest) {
   await requireAdminSession(req);
+  if (!allowRevenueFixtures) {
+    return revenueUnavailable(new Error("Mock interview revenue has no persisted reporting source."), "Mock interview revenue");
+  }
   return NextResponse.json({
     success: true,
     summary: mockInterviewSummary,
