@@ -1,34 +1,94 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+
+// ─── Analysis Report Types ───────────────────────────────────────
+interface AnalysisReport {
+  videoId: string;
+  analysisStatus: string;
+  durationSeconds: number;
+  transcript: string | null;
+  scores: {
+    communicationScore: number | null;
+    clarityScore: number | null;
+    confidenceScore: number | null;
+    professionalism: number | null;
+    speechDeliveryScore: number | null;
+    contentStructureScore: number | null;
+  };
+  metrics: {
+    detectedLanguage: string | null;
+    wordsPerMinute: number | null;
+    pauseRatio: number | null;
+    fillerWordCount: number | null;
+    transcriptConfidence: number | null;
+    lowConfidence: boolean | null;
+    audioQuality: string | null;
+    facePresenceRatio: number | null;
+    cameraFacingRatioEstimate: number | null;
+    headPoseIndicators: Record<string, unknown> | null;
+    postureIndicators: Record<string, unknown> | null;
+  };
+  insights: {
+    strengths: string[] | null;
+    improvementSuggestions: string[] | null;
+  };
+  modelInfo: {
+    analysisVersion: string | null;
+    workerVersion: string | null;
+    modelName: string | null;
+    modelVersion: string | null;
+  };
+  error: string | null;
+  completedAt: string | null;
+}
+
+// ─── Score display helpers ───────────────────────────────────────
+const ScoreCard = ({ label, value, icon }: { label: string; value: number | null; icon: string }) => {
+  const color = value === null ? "text-text-secondary" : value >= 75 ? "text-green" : value >= 50 ? "text-yellow-400" : "text-red";
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col items-center gap-2 min-w-[120px]">
+      <span className="material-symbols-outlined text-2xl text-primary">{icon}</span>
+      <span className={`text-2xl font-bold ${color}`}>{value ?? "—"}</span>
+      <span className="text-[10px] text-text-secondary uppercase tracking-wider font-bold text-center">{label}</span>
+    </div>
+  );
+};
+
+const MetricRow = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
+  <div className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
+    <span className="text-xs text-text-secondary">{label}</span>
+    <span className="text-xs font-bold text-white">{value ?? "—"}</span>
+  </div>
+);
 
 export default function VideoResumeModule() {
   const [activeTab, setActiveTab] = useState<"record" | "upload">("record");
   const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0); // in seconds
+  const [recordingTime, setRecordingTime] = useState(0);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [analysisReport, setAnalysisReport] = useState<AnalysisReport | null>(null);
+  const [analysisPolling, setAnalysisPolling] = useState(false);
+  const [savedVideoId, setSavedVideoId] = useState<string | null>(null);
   const [savedVideo, setSavedVideo] = useState<{
     url: string;
     duration: string;
     date: string;
     size: string;
-  } | null>({
-    url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    duration: "01:45",
-    date: "July 26, 2026",
-    size: "18.4 MB",
-  });
+  } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const MAX_DURATION = 120; // 2 minutes max
 
@@ -58,14 +118,17 @@ export default function VideoResumeModule() {
   };
 
   useEffect(() => {
-    if (activeTab === "record" && !savedVideo) {
-      requestPermissions();
-    }
+    requestPermissions();
     return () => {
-      stopStream();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
       if (timerRef.current) clearInterval(timerRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [activeTab, savedVideo]);
+  }, []);
+
+
 
   // Start Recording
   const startRecording = () => {
@@ -133,58 +196,152 @@ export default function VideoResumeModule() {
     setVideoBlob(null);
     setVideoUrl(null);
     setRecordingTime(0);
+    setUploadError(null);
     requestPermissions();
   };
 
-  // Save / Submit Video
-  const handleSaveVideo = () => {
-    if (!videoUrl) return;
-    setIsUploading(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 20;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsUploading(false);
-        setSavedVideo({
-          url: videoUrl,
-          duration: formatTime(recordingTime || 105),
-          date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-          size: videoBlob ? `${(videoBlob.size / (1024 * 1024)).toFixed(1)} MB` : "15.2 MB",
-        });
-      }
-    }, 300);
+  // ─── Get video duration from blob ────────────────────────────────
+  const getVideoDuration = (blob: Blob): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        if (isFinite(video.duration)) {
+          resolve(Math.round(video.duration));
+        } else {
+          resolve(0); // WebM blobs sometimes report Infinity
+        }
+      };
+      video.onerror = () => reject(new Error("Cannot read video metadata"));
+      video.src = URL.createObjectURL(blob);
+    });
   };
 
-  // Upload File handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ─── Real Upload + Analysis Pipeline ─────────────────────────────
+  const uploadAndAnalyze = async (blob: Blob, durationFallback: number) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      // Step 1: Get duration
+      let duration = durationFallback;
+      try {
+        const d = await getVideoDuration(blob);
+        if (d > 0) duration = d;
+      } catch { /* use fallback */ }
+
+      if (duration > MAX_DURATION) {
+        setUploadError(`Video is ${duration}s — exceeds the 2-minute (120s) limit.`);
+        setIsUploading(false);
+        return;
+      }
+
+      setUploadProgress(10);
+
+      // Step 2: Upload file to R2 via /api/upload
+      const formData = new FormData();
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      formData.append("file", blob, `video-resume.${ext}`);
+      formData.append("category", "video-resumes");
+
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || `Upload failed (${uploadRes.status})`);
+      }
+      const uploadData = await uploadRes.json();
+      const fileUrl = uploadData.file?.url;
+      if (!fileUrl) throw new Error("Upload response missing file URL");
+
+      setUploadProgress(50);
+
+      // Step 3: Submit video resume + queue analysis job
+      const submitRes = await fetch("/api/candidate/video-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl: fileUrl, durationSeconds: duration }),
+      });
+      if (!submitRes.ok) {
+        const err = await submitRes.json().catch(() => ({ error: "Submission failed" }));
+        throw new Error(err.error || `Submission failed (${submitRes.status})`);
+      }
+      const submitData = await submitRes.json();
+      const videoId = submitData.videoResumeId || submitData.id;
+
+      setUploadProgress(80);
+
+      setSavedVideo({
+        url: URL.createObjectURL(blob),
+        duration: formatTime(duration),
+        date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
+      });
+      setSavedVideoId(videoId);
+      setUploadProgress(100);
+
+      // Step 4: Start polling for analysis status
+      if (videoId) startPolling(videoId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(msg);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // ─── Status Polling ──────────────────────────────────────────────
+  const startPolling = useCallback((videoId: string) => {
+    setAnalysisPolling(true);
+    setAnalysisReport(null);
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/candidate/video-resume/status?videoId=${videoId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.analysisStatus === "COMPLETED" || data.analysisStatus === "FAILED" || data.analysisStatus === "BLOCKED_INFRA") {
+          setAnalysisReport(data as AnalysisReport);
+          setAnalysisPolling(false);
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch { /* continue polling on network errors */ }
+    };
+
+    poll(); // immediate first check
+    pollRef.current = setInterval(poll, 5000);
+  }, []);
+
+  // ─── Save Recorded Video Handler ─────────────────────────────────
+  const handleSaveVideo = () => {
+    if (!videoBlob) return;
+    uploadAndAnalyze(videoBlob, recordingTime || 60);
+  };
+
+  // ─── Upload File Handler ─────────────────────────────────────────
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File size exceeds 10 MB limit. Please upload a smaller video.");
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadError("File size exceeds 100 MB limit. Please upload a smaller video.");
       return;
     }
 
-    setIsUploading(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 25;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsUploading(false);
-        const url = URL.createObjectURL(file);
-        setSavedVideo({
-          url: url,
-          duration: "01:50",
-          date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        });
+    // Validate duration client-side
+    try {
+      const duration = await getVideoDuration(file);
+      if (duration > MAX_DURATION) {
+        setUploadError(`Video is ${duration}s — exceeds the 2-minute (120s) limit.`);
+        return;
       }
-    }, 400);
+    } catch { /* proceed — server will enforce */ }
+
+    uploadAndAnalyze(file, 0);
   };
+
+
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -245,6 +402,17 @@ export default function VideoResumeModule() {
         </div>
       </div>
 
+      {/* ERROR BANNER */}
+      {uploadError && (
+        <div className="bg-red/10 border border-red/30 rounded-xl p-4 mb-4 flex items-start gap-3 animate-fade-in">
+          <span className="material-symbols-outlined text-red text-xl flex-shrink-0">error</span>
+          <div className="flex-1">
+            <p className="text-xs text-red font-bold">{uploadError}</p>
+          </div>
+          <button onClick={() => setUploadError(null)} className="text-red/60 hover:text-red text-xs">✕</button>
+        </div>
+      )}
+
       {/* SAVED VIDEO VIEW */}
       {savedVideo ? (
         <div className="space-y-4">
@@ -267,6 +435,10 @@ export default function VideoResumeModule() {
               <button
                 onClick={() => {
                   setSavedVideo(null);
+                  setSavedVideoId(null);
+                  setAnalysisReport(null);
+                  setAnalysisPolling(false);
+                  if (pollRef.current) clearInterval(pollRef.current);
                   retakeVideo();
                 }}
                 className="btn-ghost px-4 py-2 rounded-xl text-xs font-bold text-white hover:border-primary/40 flex items-center justify-center gap-1.5 border border-white/10 w-full sm:w-auto"
@@ -275,7 +447,12 @@ export default function VideoResumeModule() {
                 <span>Replace Video</span>
               </button>
               <button
-                onClick={() => setSavedVideo(null)}
+                onClick={() => {
+                  setSavedVideo(null);
+                  setSavedVideoId(null);
+                  setAnalysisReport(null);
+                  if (pollRef.current) clearInterval(pollRef.current);
+                }}
                 className="px-3 py-2 rounded-xl text-xs font-bold text-red hover:bg-red/10 transition-colors flex items-center justify-center gap-1 border border-red/20 w-full sm:w-auto"
               >
                 <span className="material-symbols-outlined text-[16px]">delete</span>
@@ -283,6 +460,128 @@ export default function VideoResumeModule() {
               </button>
             </div>
           </div>
+
+          {/* ─── ANALYSIS POLLING STATUS ─────────────────────────── */}
+          {analysisPolling && (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 flex flex-col items-center gap-3 animate-pulse">
+              <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <p className="text-sm font-bold text-white">Analyzing your video resume...</p>
+              <p className="text-xs text-text-secondary">Local AI is processing speech, facial expressions, and posture. This typically takes 30–90 seconds.</p>
+            </div>
+          )}
+
+          {/* ─── ANALYSIS REPORT (COMPLETED) ─────────────────────── */}
+          {analysisReport && analysisReport.analysisStatus === "COMPLETED" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-2 pt-2">
+                <span className="material-symbols-outlined text-primary text-xl">analytics</span>
+                <h3 className="font-bold text-sm text-white uppercase tracking-wider">AI Analysis Report</h3>
+                <span className="bg-green/20 text-green border border-green/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Completed</span>
+              </div>
+
+              {/* Score Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <ScoreCard label="Communication" value={analysisReport.scores.communicationScore} icon="forum" />
+                <ScoreCard label="Clarity" value={analysisReport.scores.clarityScore} icon="visibility" />
+                <ScoreCard label="Confidence" value={analysisReport.scores.confidenceScore} icon="psychology" />
+                <ScoreCard label="Professionalism" value={analysisReport.scores.professionalism} icon="business_center" />
+                <ScoreCard label="Speech Delivery" value={analysisReport.scores.speechDeliveryScore} icon="record_voice_over" />
+                <ScoreCard label="Content Structure" value={analysisReport.scores.contentStructureScore} icon="format_list_numbered" />
+              </div>
+
+              {/* Speech & Visual Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">mic</span>
+                    Speech Metrics
+                  </h4>
+                  <MetricRow label="Detected Language" value={analysisReport.metrics.detectedLanguage} />
+                  <MetricRow label="Words Per Minute" value={analysisReport.metrics.wordsPerMinute ? Math.round(analysisReport.metrics.wordsPerMinute) : null} />
+                  <MetricRow label="Pause Ratio" value={analysisReport.metrics.pauseRatio !== null && analysisReport.metrics.pauseRatio !== undefined ? `${(analysisReport.metrics.pauseRatio * 100).toFixed(0)}%` : null} />
+                  <MetricRow label="Filler Words" value={analysisReport.metrics.fillerWordCount} />
+                  <MetricRow label="Audio Quality" value={analysisReport.metrics.audioQuality} />
+                  <MetricRow label="Transcript Confidence" value={analysisReport.metrics.transcriptConfidence !== null && analysisReport.metrics.transcriptConfidence !== undefined ? `${(analysisReport.metrics.transcriptConfidence * 100).toFixed(0)}%` : null} />
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">face</span>
+                    Visual Metrics (MediaPipe)
+                  </h4>
+                  <MetricRow label="Face Presence" value={analysisReport.metrics.facePresenceRatio !== null && analysisReport.metrics.facePresenceRatio !== undefined ? `${(analysisReport.metrics.facePresenceRatio * 100).toFixed(0)}%` : null} />
+                  <MetricRow label="Camera Facing" value={analysisReport.metrics.cameraFacingRatioEstimate !== null && analysisReport.metrics.cameraFacingRatioEstimate !== undefined ? `${(analysisReport.metrics.cameraFacingRatioEstimate * 100).toFixed(0)}%` : null} />
+                  <MetricRow label="Posture (Upright)" value={
+                    analysisReport.metrics.postureIndicators && typeof analysisReport.metrics.postureIndicators === "object" && "uprightRatio" in analysisReport.metrics.postureIndicators
+                      ? `${((analysisReport.metrics.postureIndicators as { uprightRatio: number }).uprightRatio * 100).toFixed(0)}%`
+                      : null
+                  } />
+                  <MetricRow label="Duration" value={`${analysisReport.durationSeconds}s`} />
+                  <MetricRow label="Model" value={analysisReport.modelInfo.modelName} />
+                  <MetricRow label="Version" value={analysisReport.modelInfo.modelVersion} />
+                </div>
+              </div>
+
+              {/* Strengths & Improvements */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {analysisReport.insights.strengths && analysisReport.insights.strengths.length > 0 && (
+                  <div className="bg-green/5 border border-green/20 rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-green uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">thumb_up</span>
+                      Strengths
+                    </h4>
+                    <ul className="space-y-2">
+                      {analysisReport.insights.strengths.map((s, i) => (
+                        <li key={i} className="text-xs text-text-secondary flex items-start gap-2">
+                          <span className="text-green mt-0.5">✓</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {analysisReport.insights.improvementSuggestions && analysisReport.insights.improvementSuggestions.length > 0 && (
+                  <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4">
+                    <h4 className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">lightbulb</span>
+                      Suggestions for Improvement
+                    </h4>
+                    <ul className="space-y-2">
+                      {analysisReport.insights.improvementSuggestions.map((s, i) => (
+                        <li key={i} className="text-xs text-text-secondary flex items-start gap-2">
+                          <span className="text-yellow-400 mt-0.5">→</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Transcript */}
+              {analysisReport.transcript && (
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">subtitles</span>
+                    Transcript
+                  </h4>
+                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto">
+                    {analysisReport.transcript}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Analysis Error State */}
+          {analysisReport && (analysisReport.analysisStatus === "FAILED" || analysisReport.analysisStatus === "BLOCKED_INFRA") && (
+            <div className="bg-red/5 border border-red/20 rounded-xl p-4 flex items-start gap-3">
+              <span className="material-symbols-outlined text-red text-xl flex-shrink-0">warning</span>
+              <div>
+                <h4 className="text-xs font-bold text-red uppercase tracking-wider mb-1">Analysis Failed</h4>
+                <p className="text-xs text-text-secondary">{analysisReport.error || "The video analysis could not be completed. Please try uploading again."}</p>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <>
