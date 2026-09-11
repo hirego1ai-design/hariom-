@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { z } from "zod";
+import { checkoutSchema } from "@/lib/payments/planContracts";
 import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { CreateOrderResult } from "@/lib/payments/PaymentGatewayInterface";
 import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
-
-const checkoutSchema = z.object({
-  planId: z.string().uuid(),
-  paymentMethod: z.enum(["RAZORPAY", "STRIPE", "PAYU", "PHONEPE", "AUTO"]).optional(),
-  promoCode: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
-}).strict();
 
 type CheckoutPlan = {
   id: string;

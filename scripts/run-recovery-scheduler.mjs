@@ -19,7 +19,7 @@ while (!stopping) {
     });
     const result = await response.json();
     if (!response.ok || !result.success) throw new Error(`Recovery tick failed with HTTP ${response.status}`);
-    const attention = result.report && (result.report.outbox.unhandled || result.report.outbox.failed || result.report.outbox.retried || result.report.failedWorkflowsEnqueued || result.report.timeBudgetExhausted);
+    const attention = result.report && (result.report.pphBilling?.held || result.report.outbox.unhandled || result.report.outbox.failed || result.report.outbox.retried || result.report.failedWorkflowsEnqueued || result.report.timeBudgetExhausted);
     console.log(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: attention ? 'attention' : result.skipped || 'completed', report: result.report }));
   } catch (error) {
     console.error(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: 'failed', message: error instanceof Error ? error.message : 'Request failed' }));

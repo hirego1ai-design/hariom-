@@ -311,6 +311,7 @@ model Application {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   annualCtc          Float?
+  pphPlacement       PphPlacement?
 
   interviews Interview[]
 
@@ -635,6 +636,7 @@ model CommercialAgreement {
   updatedAt DateTime @updatedAt
 
   events AgreementEvent[]
+  placements PphPlacement[]
 
   @@index([companyId])
 }
@@ -672,6 +674,39 @@ model Invoice {
   notes         String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  placement     PphPlacement?
+}
+
+model PphPlacement {
+  id                String   @id @default(uuid())
+  applicationId     String   @unique
+  application       Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  agreementId       String
+  agreement         CommercialAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  companyId         String
+  joinedAt          DateTime
+  invoiceEligibleAt DateTime
+  approvedBy        String
+  approvedRole      String
+  approvedAt        DateTime @default(now())
+  annualCtc         Decimal @db.Decimal(18, 2)
+  amount            Decimal @db.Decimal(18, 2)
+  taxAmount         Decimal @db.Decimal(18, 2)
+  totalAmount       Decimal @db.Decimal(18, 2)
+  currency          String @default("INR")
+  creditDays        Int
+  termsSnapshot     Json
+  requestHash       String
+  status            String @default("SCHEDULED")
+  holdReason        String?
+  invoiceId         String? @unique
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, invoiceEligibleAt])
+  @@index([companyId, createdAt])
+  @@index([agreementId])
 }
 
 model PaymentTransaction {

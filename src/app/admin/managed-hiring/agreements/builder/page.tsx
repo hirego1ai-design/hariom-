@@ -21,7 +21,7 @@ function BuilderContent() {
     feeValue: "",
     feeType: "PERCENTAGE",
     replacementDays: "90",
-    invoiceRule: "ON_JOINING",
+    invoiceRule: "DAY_25",
     creditDays: "15",
     customClauses: "",
     salesExecutiveNotes: "",
@@ -217,6 +217,7 @@ function BuilderContent() {
                   <div>
                     <label className="block text-xs font-semibold text-text-secondary mb-1">Invoicing Rule</label>
                     <select name="invoiceRule" value={formData.invoiceRule} onChange={handleChange} className="w-full bg-surface-container border border-white/10 rounded px-3 py-2 text-sm text-white">
+                      <option value="DAY_25">25 days after confirmed joining (automatic)</option>
                       <option value="ON_JOINING">On Joining Date</option>
                       <option value="ON_OFFER_ACCEPTANCE">On Offer Acceptance</option>
                       <option value="POST_PROBATION">Post Probation</option>

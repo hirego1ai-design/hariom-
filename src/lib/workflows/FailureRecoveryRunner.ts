@@ -2,8 +2,10 @@ import { OutboxPoller, type OutboxPollReport } from '../events/Outbox';
 import { BudgetManager } from '../governance/BudgetManager';
 import { prisma } from '@/lib/prisma';
 import { registerProductionConsumers } from '../events/ProductionConsumers';
+import { PphBillingWorker } from '../pph-billing';
 
 export interface RecoveryReport {
+  pphBilling?: { invoiced: number; held: number };
   reclaimedOutboxEntries: number;
   expiredReservations: number;
   failedWorkflowsEnqueued: number;
@@ -20,6 +22,7 @@ export class FailureRecoveryRunner {
     // Cooperative deadline: stop claiming new work after 40 seconds. An
     // already-running effect must finish using its own provider timeout.
     const stopAt = Date.now() + 40_000;
+    const pphBilling = await PphBillingWorker.run(20, Math.min(stopAt, Date.now() + 15_000));
     // 1. Reclaim abandoned Outbox PROCESSING rows & process PENDING rows
     const outbox = await OutboxPoller.pollAndProcess(20, 90_000, stopAt);
 
@@ -59,6 +62,7 @@ export class FailureRecoveryRunner {
     }
 
     return {
+      pphBilling,
       reclaimedOutboxEntries: outbox.reclaimed,
       expiredReservations,
       failedWorkflowsEnqueued,

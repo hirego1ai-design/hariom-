@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       clientPhone: body.clientPhone || "",
       feeType: body.feeType || "PERCENTAGE",
       feeValue: Number(body.feeValue) || 8.33,
-      invoiceRule: body.invoiceRule || "ON_JOINING",
+      invoiceRule: body.invoiceRule || "DAY_25",
       replacementDays: Number(body.replacementDays) || 90,
       validityStartDate: startDate,
       validityEndDate: endDate,

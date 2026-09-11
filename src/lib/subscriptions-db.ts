@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { randomUUID } from "node:crypto";
 
 export interface SubscriptionPlanRecord {
   id: string;
@@ -272,7 +273,7 @@ class SubscriptionsDb {
   public async createSubscriptionPlan(
     payload: Omit<SubscriptionPlanRecord, "id" | "isArchived" | "createdAt" | "updatedAt">
   ): Promise<SubscriptionPlanRecord> {
-    const id = `plan-${Date.now()}`;
+    const id = randomUUID();
     const newPlan: SubscriptionPlanRecord = {
       ...payload,
       id,
@@ -294,9 +295,9 @@ class SubscriptionsDb {
           jobPostsQuota: payload.jobPostsQuota,
           resumeUnlocksQuota: payload.resumeUnlocksQuota,
           aiInterviewsQuota: payload.aiInterviewsQuota,
-          applicationsQuota: payload.applicationsQuota || 100,
-          resumeDownloadsQuota: payload.resumeDownloadsQuota || 50,
-          backgroundVerificationsQuota: payload.backgroundVerificationsQuota || 5,
+          applicationsQuota: payload.applicationsQuota,
+          resumeDownloadsQuota: payload.resumeDownloadsQuota,
+          backgroundVerificationsQuota: payload.backgroundVerificationsQuota,
           featuresAllowed: payload.featuresAllowed || [],
           validityMonths: payload.validityMonths || 1,
           isArchived: false,

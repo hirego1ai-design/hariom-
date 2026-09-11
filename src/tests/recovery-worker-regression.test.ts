@@ -5,6 +5,7 @@ import { FailureRecoveryRunner, type RecoveryReport } from '../lib/workflows/Fai
 import { RecoveryWorkerState } from '../lib/workflows/RecoveryWorkerState';
 import { OutboxPoller } from '../lib/events/Outbox';
 import { BudgetManager } from '../lib/governance/BudgetManager';
+import { PphBillingWorker } from '../lib/pph-billing';
 import { GET, POST } from '../app/api/internal/workflows/recover/route';
 
 const workerKey = 'offline-test-worker-key-32-characters-long';
@@ -78,6 +79,7 @@ test('stale or unhandled-event heartbeat is unhealthy for monitoring', async (t)
 });
 
 test('recovery scans are bounded and a concurrently advanced workflow is not failed', async (t) => {
+  t.mock.method(PphBillingWorker, 'run', async () => ({ invoiced: 0, held: 0 }));
   t.mock.method(OutboxPoller, 'pollAndProcess', async (batch: number, lease: number, stopAt: number) => {
     assert.equal(batch, 20); assert.equal(lease, 90_000); assert.ok(stopAt > Date.now());
     return report.outbox;

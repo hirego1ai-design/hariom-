@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
+import { handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { createPlanSchema, updatePlanSchema } from "@/lib/payments/planContracts";
 
 // GET all subscription plans (Admin view includes archived if requested)
 export async function GET(request: NextRequest) {
@@ -24,29 +26,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    if (!body.name || !body.description || body.price === undefined) {
-      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
-    }
-
-    const plan = await subscriptionsDb.createSubscriptionPlan({
-      name: body.name,
-      description: body.description,
-      price: parseFloat(body.price),
-      currency: body.currency || "INR",
-      jobPostsQuota: parseInt(body.jobPostsQuota || 0),
-      resumeUnlocksQuota: parseInt(body.resumeUnlocksQuota || 0),
-      aiInterviewsQuota: parseInt(body.aiInterviewsQuota || 0),
-      applicationsQuota: parseInt(body.applicationsQuota || 100),
-      resumeDownloadsQuota: parseInt(body.resumeDownloadsQuota || 50),
-      backgroundVerificationsQuota: parseInt(body.backgroundVerificationsQuota || 5),
-      featuresAllowed: body.featuresAllowed || [],
-      validityMonths: parseInt(body.validityMonths || 1),
-    });
+    const body = await readValidatedJson(request, createPlanSchema);
+    const plan = await subscriptionsDb.createSubscriptionPlan(body);
 
     return NextResponse.json({ success: true, plan }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -58,19 +43,15 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    if (!body.id) {
-      return NextResponse.json({ success: false, error: "Missing plan ID" }, { status: 400 });
-    }
-
-    const plan = await subscriptionsDb.updateSubscriptionPlan(body.id, body);
+    const { id, ...updates } = await readValidatedJson(request, updatePlanSchema);
+    const plan = await subscriptionsDb.updateSubscriptionPlan(id, updates);
     if (!plan) {
       return NextResponse.json({ success: false, error: "Plan not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, plan });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 

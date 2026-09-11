@@ -52,7 +52,7 @@ export class RecoveryWorkerState {
   static async finish(heartbeat: RecoveryHeartbeat, report?: RecoveryReport): Promise<boolean> {
     const finished: RecoveryHeartbeat = {
       ...heartbeat, finishedAt: new Date().toISOString(),
-      state: report ? (report.outbox.unhandled > 0 || report.failedWorkflowsEnqueued > 0 || report.outbox.failed > 0 || report.outbox.retried > 0 || report.timeBudgetExhausted ? 'attention' : 'completed') : 'failed',
+      state: report ? ((report.pphBilling?.held ?? 0) > 0 || report.outbox.unhandled > 0 || report.failedWorkflowsEnqueued > 0 || report.outbox.failed > 0 || report.outbox.retried > 0 || report.timeBudgetExhausted ? 'attention' : 'completed') : 'failed',
       ...(report ? { report } : {}),
     };
     const saved = await redis().eval<[string, string], number>(

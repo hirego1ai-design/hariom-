@@ -62,6 +62,9 @@ jobs:
         env:
           HIREGO_TEST_DATABASE: "1"
 
+      - name: Run Offline Audit Regressions
+        run: npm run test:audit
+
       - name: Audit Production Dependencies
         run: npm audit --omit=dev --audit-level=high
 

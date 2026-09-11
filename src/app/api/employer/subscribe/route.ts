@@ -82,9 +82,9 @@ export async function GET(request: NextRequest) {
         planName: activePlan?.name || "Free Tier",
       },
       quotas: {
-        jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota || 10 },
-        resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota || 100 },
-        aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota || 40 },
+        jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota ?? 0 },
+        resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota ?? 0 },
+        aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota ?? 0 },
       },
     });
   } catch (error) {
