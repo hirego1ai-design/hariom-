@@ -17,6 +17,7 @@ hirego-app/
 
 # next.js
 /.next/
+/.next-audit/
 /out/
 
 # production

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { configuredSecurityHeaders } from "@/lib/securityHeaders";
 
 const AUTH_COOKIE_NAME = "hirego_session";
 
@@ -16,15 +17,7 @@ const publicRoutes = new Set([
   "/employer/invitation/accept",
 ]);
 
-const securityHeaders: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(), payment=(self)",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin",
-  "X-DNS-Prefetch-Control": "on",
-};
+const securityHeaders = configuredSecurityHeaders(process.env.NODE_ENV !== "production");
 
 interface SessionPayload {
   id: string;

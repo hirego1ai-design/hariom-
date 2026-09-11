@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { WorkflowInstance, WorkflowStatus, Prisma } from '@prisma/client';
-import { IdempotencyGuard } from '../reliability/IdempotencyGuard';
-import { DlqManager } from '../reliability/DlqManager';
+import { WorkflowInstance, Prisma } from '@prisma/client';
 
 export class WorkflowEngine {
   static async startWorkflow(params: {
@@ -15,186 +13,76 @@ export class WorkflowEngine {
     initialStep: string;
     checkpointState: Record<string, unknown>;
   }): Promise<WorkflowInstance> {
-    try {
-      return await prisma.workflowInstance.create({
-        data: {
-          workflowType: params.workflowType,
-          companyId: params.companyId,
-          jobId: params.jobId,
-          candidateId: params.candidateId,
-          applicationId: params.applicationId,
-          correlationId: params.correlationId,
-          initiatedBy: params.initiatedBy,
-          currentStep: params.initialStep,
-          checkpointState: params.checkpointState as Prisma.InputJsonValue,
-          status: 'RUNNING' as WorkflowStatus,
-        },
-      });
-    } catch {
-      // Offline unit testing fallback
-      return {
-        id: `wf-${Date.now()}`,
-        workflowType: params.workflowType,
-        companyId: params.companyId || null,
-        jobId: params.jobId || null,
-        candidateId: params.candidateId || null,
-        applicationId: params.applicationId || null,
-        correlationId: params.correlationId,
-        initiatedBy: params.initiatedBy,
-        currentStep: params.initialStep,
-        checkpointState: params.checkpointState as Prisma.JsonValue,
-        status: 'RUNNING' as WorkflowStatus,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interviewId: null,
-        workflowVersion: "1",
-        failureCount: 0,
-      };
-    }
+    const { initialStep, checkpointState, ...data } = params;
+    return prisma.workflowInstance.create({
+      data: { ...data, currentStep: initialStep, checkpointState: checkpointState as Prisma.InputJsonValue, status: 'RUNNING' },
+    });
   }
 
   static async executeStep<T>(
-    workflowId: string,
-    stepName: string,
-    attemptNumber: number,
-    inputPayload: unknown,
-    stepFn: () => Promise<T>
+    workflowId: string, stepName: string, attemptNumber: number,
+    inputPayload: unknown, stepFn: () => Promise<T>
   ): Promise<T> {
     const executionKey = `${workflowId}:${stepName}:${attemptNumber}`;
-
-    const executedCheck = await IdempotencyGuard.isStepExecuted(executionKey);
-    if (executedCheck.executed) {
-      return executedCheck.outputPayload as T;
-    }
-
-    try {
-      await prisma.workflowStepLog.create({
-        data: {
-          executionKey,
-          workflowInstanceId: workflowId,
-          stepName,
-          attemptNumber,
-          status: 'RUNNING',
-          inputPayload: inputPayload ? (inputPayload as Prisma.InputJsonValue) : Prisma.JsonNull,
-        },
-      });
-    } catch {
-      // Offline fallback
-    }
-
-    const timeoutMs = 60000;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      const timer = setTimeout(() => reject(new Error('Step execution timeout')), timeoutMs);
-      if (timer.unref) timer.unref();
+    const previous = await prisma.workflowStepLog.findUnique({ where: { executionKey } });
+    if (previous?.status === 'COMPLETED' && previous.sideEffectDone) return previous.outputPayload as T;
+    // The unique execution key is the claim. Never execute a side effect when
+    // another worker owns it, or when persistence is unavailable.
+    await prisma.workflowStepLog.create({
+      data: {
+        executionKey, workflowInstanceId: workflowId, stepName, attemptNumber, status: 'RUNNING',
+        inputPayload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue,
+      },
     });
-
     try {
-      const result = await Promise.race([stepFn(), timeoutPromise]);
-
-      try {
-        await prisma.workflowStepLog.update({
+      // Do not use a non-cancelling Promise.race: it marked a live side effect
+      // failed while the original operation continued in the background.
+      // Providers own bounded request timeouts; recovery requires idempotency.
+      const result = await stepFn();
+      await prisma.$transaction(async (tx) => {
+        await tx.workflowStepLog.update({
           where: { executionKey },
-          data: {
-            status: 'COMPLETED',
-            sideEffectDone: true,
-            outputPayload: result ? (result as Prisma.InputJsonValue) : undefined,
-          },
+          data: { status: 'COMPLETED', sideEffectDone: true, outputPayload: result == null ? Prisma.JsonNull : result as Prisma.InputJsonValue },
         });
-
-        await prisma.workflowInstance.update({
-          where: { id: workflowId },
-          data: {
-            currentStep: stepName,
-            updatedAt: new Date(),
-          },
+        await tx.workflowInstance.update({
+          where: { id: workflowId }, data: { currentStep: stepName, updatedAt: new Date() },
         });
-      } catch {
-        // Offline fallback
-      }
-
+      });
       return result;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      try {
-        await prisma.workflowStepLog.update({
-          where: { executionKey },
-          data: {
-            status: 'FAILED',
-            errorMessage,
-          },
+    } catch (error) {
+      await prisma.$transaction(async (tx) => {
+        const errorMessage = error instanceof Error ? error.message : 'Step execution failed';
+        await tx.workflowStepLog.update({ where: { executionKey }, data: { status: 'FAILED', errorMessage } });
+        const workflow = await tx.workflowInstance.update({
+          where: { id: workflowId }, data: { status: 'FAILED', updatedAt: new Date() },
         });
-
         if (attemptNumber >= 3) {
-          const workflow = await prisma.workflowInstance.update({
-            where: { id: workflowId },
+          await tx.deadLetterJob.create({
             data: {
-              status: 'FAILED' as WorkflowStatus,
-              updatedAt: new Date(),
+              sourceType: 'WorkflowStep', sourceId: executionKey, correlationId: workflow.correlationId,
+              errorType: 'StepFailed', errorMessage,
+              payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue,
+              status: 'OPEN',
             },
           });
-
-          await DlqManager.enqueue({
-            sourceType: 'WorkflowStep',
-            sourceId: executionKey,
-            correlationId: workflow.correlationId,
-            errorType: 'StepFailed',
-            errorMessage,
-            payload: inputPayload,
-          });
         }
-      } catch {
-        // Offline fallback
-      }
-
+      });
       throw error;
     }
   }
 
   static async pauseForApproval(workflowId: string, stepName: string): Promise<void> {
-    try {
-      await prisma.workflowInstance.update({
-        where: { id: workflowId },
-        data: {
-          status: 'PAUSED_FOR_APPROVAL' as WorkflowStatus,
-          currentStep: stepName,
-          updatedAt: new Date(),
-        },
-      });
-    } catch {
-      // Offline fallback
-    }
+    await prisma.workflowInstance.update({
+      where: { id: workflowId },
+      data: { status: 'PAUSED_FOR_APPROVAL', currentStep: stepName, updatedAt: new Date() },
+    });
   }
 
   static async resumeWorkflow(workflowId: string, approvedBy: string): Promise<WorkflowInstance> {
-    try {
-      return await prisma.workflowInstance.update({
-        where: { id: workflowId },
-        data: {
-          status: 'RUNNING' as WorkflowStatus,
-          updatedAt: new Date(),
-        },
-      });
-    } catch {
-      // Offline fallback
-      return {
-        id: workflowId,
-        workflowType: 'END_TO_END_HIRING',
-        companyId: null,
-        jobId: null,
-        candidateId: null,
-        applicationId: null,
-        correlationId: 'corr-resume',
-        initiatedBy: approvedBy,
-        currentStep: 'RESUMED',
-        checkpointState: {},
-        status: 'RUNNING' as WorkflowStatus,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        interviewId: null,
-        workflowVersion: "1",
-        failureCount: 0,
-      };
-    }
+    if (!approvedBy.trim()) throw new Error('An approver is required');
+    return prisma.workflowInstance.update({
+      where: { id: workflowId, status: 'PAUSED_FOR_APPROVAL' },
+      data: { status: 'RUNNING', updatedAt: new Date() },
+    });
   }
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/prisma";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { logCriticalAuditEvent } from "@/lib/auditLogger";
 import { referralDb } from "@/lib/referral-db";
 import { generateAndSendOtp } from "@/lib/otp";
 
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
 
     const otpResult = await generateAndSendOtp(user.email, "VERIFY_EMAIL");
 
-    logAuditEvent({
+    await logCriticalAuditEvent({
       userId: user.id,
       action: "USER_REGISTER",
       resource: "/api/auth/register",

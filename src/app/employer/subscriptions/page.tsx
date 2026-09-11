@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { razorpayCheckoutFields } from "@/lib/payments/subscriptionCredits";
 
 export default function EmployerSubscriptionsStorePage() {
   const router = useRouter();
@@ -39,12 +40,6 @@ export default function EmployerSubscriptionsStorePage() {
       const res = await fetch("/api/employer/subscribe");
       const data = await res.json();
       
-      const settingsRes = await fetch("/api/admin/subscriptions/settings");
-      const settingsData = await settingsRes.json();
-
-      const gwRes = await fetch("/api/admin/payment-gateway/config");
-      const gwData = await gwRes.json();
-
       if (data.success) {
         setPlans(data.plans || []);
         setCredits(data.credits || null);
@@ -53,12 +48,12 @@ export default function EmployerSubscriptionsStorePage() {
         setSubscriptionState(data.subscriptionState || null);
         setQuotas(data.quotas || null);
       }
-      if (settingsData.success) {
-        setServices(settingsData.services || []);
+      if (data.success) {
+        setServices(data.services || []);
       }
-      if (gwData.success && gwData.config) {
-        setGatewayConfig(gwData.config);
-        setSelectedGateway(gwData.config.primaryGateway || "RAZORPAY");
+      if (data.success && data.gatewayConfig) {
+        setGatewayConfig(data.gatewayConfig);
+        setSelectedGateway(data.gatewayConfig.primaryGateway);
       }
     } catch (err) {
       console.error("Failed to fetch employer subscription info", err);
@@ -116,7 +111,7 @@ export default function EmployerSubscriptionsStorePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planId: checkoutPlan.id,
-          couponCode: couponCode ? couponCode.toUpperCase() : undefined,
+          promoCode: couponCode ? couponCode.trim().toUpperCase() : undefined,
           paymentMethod: gatewayConfig.allowEmployerSelection ? selectedGateway : undefined,
         }),
       });
@@ -135,12 +130,9 @@ export default function EmployerSubscriptionsStorePage() {
         }
 
         const options = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_hirego",
-          amount: Math.round((promoDetails ? promoDetails.finalPrice : checkoutPlan.price) * 100),
-          currency: order.currency || "INR",
+          ...razorpayCheckoutFields(order),
           name: "HireGo AI",
           description: `Subscription for ${checkoutPlan.name}`,
-          order_id: order.gatewayOrderId,
           handler: function (response: any) {
             router.push(`/payment/status?orderId=${order.orderId}&gatewayOrderId=${response.razorpay_payment_id || order.gatewayOrderId}&gateway=RAZORPAY`);
           },
@@ -167,6 +159,8 @@ export default function EmployerSubscriptionsStorePage() {
         } else {
           router.push(`/payment/status?orderId=${order.orderId}&gatewayOrderId=${order.gatewayOrderId}&gateway=PAYU`);
         }
+      } else {
+        throw new Error("This payment provider is not supported by this checkout screen.");
       }
     } catch (err: any) {
       console.error("Checkout initiation error:", err);

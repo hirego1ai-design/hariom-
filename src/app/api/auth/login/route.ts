@@ -3,7 +3,12 @@ import { z } from "zod";
 import { db } from "@/lib/prisma";
 import { createSessionToken, verifyPassword, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { logCriticalAuditEvent } from "@/lib/auditLogger";
+import {
+  clearLoginProtection,
+  getLoginLockRetryAfterSeconds,
+  registerFailedLogin,
+} from "@/lib/loginProtection";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -13,20 +18,32 @@ const loginSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await enforceRateLimit(request, "auth_login");
+    // Login is a high-value brute-force target; it needs a stricter limit
+    // than the general authenticated API default.
+    await enforceRateLimit(request, "auth_login", 5, 60_000);
     const body = await readValidatedJson(request, loginSchema);
+
+    const lockRetryAfterSeconds = await getLoginLockRetryAfterSeconds(body.email);
+    if (lockRetryAfterSeconds > 0) {
+      return NextResponse.json(
+        { success: false, error: "Invalid email or password." },
+        { status: 429, headers: { "Retry-After": String(lockRetryAfterSeconds) } },
+      );
+    }
 
     const user = await db.findUserByEmail(body.email);
     if (!user) {
+      const retryAfterSeconds = await registerFailedLogin(body.email);
       return NextResponse.json(
         { success: false, error: "Invalid email or password." },
-        { status: 401 }
+        { status: retryAfterSeconds > 0 ? 429 : 401, headers: retryAfterSeconds > 0 ? { "Retry-After": String(retryAfterSeconds) } : undefined }
       );
     }
 
     const isValid = await verifyPassword(body.password, user.passwordHash);
     if (!isValid) {
-      logAuditEvent({
+      const retryAfterSeconds = await registerFailedLogin(body.email);
+      await logCriticalAuditEvent({
         userId: user.id,
         action: "USER_LOGIN_FAILED",
         resource: "/api/auth/login",
@@ -34,7 +51,7 @@ export async function POST(request: Request) {
       });
       return NextResponse.json(
         { success: false, error: "Invalid email or password." },
-        { status: 401 }
+        { status: retryAfterSeconds > 0 ? 429 : 401, headers: retryAfterSeconds > 0 ? { "Retry-After": String(retryAfterSeconds) } : undefined }
       );
     }
 
@@ -46,7 +63,7 @@ export async function POST(request: Request) {
     }
 
     if (body.portal === "admin" && user.role !== "ADMIN") {
-      logAuditEvent({
+      await logCriticalAuditEvent({
         userId: user.id,
         action: "ADMIN_LOGIN_DENIED",
         resource: "/api/auth/login",
@@ -58,6 +75,10 @@ export async function POST(request: Request) {
       );
     }
 
+    // A valid credential is the only event that clears account-level failure
+    // history. Fail closed if the distributed protection store is unavailable.
+    await clearLoginProtection(body.email);
+
     const token = createSessionToken({
       id: user.id,
       email: user.email,
@@ -66,7 +87,7 @@ export async function POST(request: Request) {
       sessionVersion: "sessionVersion" in user ? user.sessionVersion : 0,
     });
 
-    logAuditEvent({
+    await logCriticalAuditEvent({
       userId: user.id,
       action: "USER_LOGIN_SUCCESS",
       resource: "/api/auth/login",
@@ -83,7 +104,9 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60,
+      // Match the 12-hour JWT expiry. A longer cookie must never imply that
+      // the user still has a valid session after the token has expired.
+      maxAge: 12 * 60 * 60,
     });
 
     return response;

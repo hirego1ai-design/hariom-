@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EmployerHeader from "@/components/employer/EmployerHeader";
 import { useEmployer } from "@/context/EmployerContext";
+import { formatRecordedScore, recordedCandidateEvidence } from "@/lib/candidateEvidence";
 
 /* ─── THEME ─── */
 const T = {
@@ -49,37 +50,19 @@ const DEFAULT_COLLECTIONS: Collection[] = [
 ];
 
 const PINNED_FILTER_PRESETS = [
-  { label: "AI Match > 90%", key: "matchScore", value: "90" },
+  { label: "Recorded match > 90%", key: "matchScore", value: "90" },
   { label: "Immediate Joiners", key: "noticePeriod", value: "Immediate" },
   { label: "Remote", key: "location", value: "Remote" },
   { label: "Notice < 30 Days", key: "noticePeriod", value: "30" },
 ];
 
-/* ─── AI Explanation Generator ─── */
-function getAIExplanation(c: any) {
-  const factors = [];
-  if (c.matchScore >= 90) factors.push({ label: "Skills matched", pct: Math.min(c.matchScore, 99), pass: true });
-  else factors.push({ label: "Skills partially matched", pct: c.matchScore - 10, pass: false });
-  factors.push({ label: "Experience matched", pct: c.experience?.includes("8") || c.experience?.includes("10") || c.experience?.includes("12") ? 100 : 75, pass: true });
-  factors.push({ label: "Salary within range", pct: 90, pass: !c.expectedSalary?.includes("200") });
-  factors.push({ label: "Notice period fits", pct: c.noticePeriod === "Immediate" ? 100 : 70, pass: c.noticePeriod === "Immediate" || c.noticePeriod?.includes("15") });
-  if (c.assessmentScore > 80) factors.push({ label: "Assessment passed", pct: c.assessmentScore, pass: true });
-  if (c.aiInterviewScore > 80) factors.push({ label: "Communication excellent", pct: c.aiInterviewScore, pass: true });
-  return factors;
-}
-
-function getRecommendedAction(c: any): { text: string; icon: string; color: string } {
-  if (c.matchScore >= 95 && c.assessmentScore >= 90) return { text: "Interview Now — Top Candidate", icon: "bolt", color: T.green };
-  if (c.matchScore >= 90) return { text: "High response probability", icon: "trending_up", color: T.blue };
-  if (c.matchScore >= 80 && c.assessmentScore < 80) return { text: "Recommend Skill Assessment", icon: "quiz", color: T.yellow };
-  if (c.matchScore >= 70) return { text: "Likely to accept offer", icon: "handshake", color: T.sky };
-  return { text: "Missing required skills", icon: "warning", color: T.orange };
+function getRecommendedAction(_candidate: unknown): { text: string; icon: string; color: string } {
+  return { text: "Review the profile and recorded evidence before deciding next steps.", icon: "fact_check", color: T.blue };
 }
 
 function getActivityBadge(lastActivity: string): { text: string; color: string } {
-  if (lastActivity?.includes("hour") || lastActivity?.includes("min")) return { text: `Active ${lastActivity}`, color: T.green };
-  if (lastActivity?.includes("Yesterday") || lastActivity === "1 day ago") return { text: "Active yesterday", color: T.blue };
-  return { text: `Last seen ${lastActivity}`, color: T.slate };
+  const date = new Date(lastActivity);
+  return { text: Number.isNaN(date.getTime()) ? "Update time unavailable" : `Application updated ${date.toLocaleDateString()}`, color: T.slate };
 }
 
 /* ─── MAIN COMPONENT ─── */
@@ -449,7 +432,7 @@ export default function CandidateMarketplace() {
                 <div className="flex items-center gap-3 px-4 py-2.5 border-b text-[9px] font-bold uppercase tracking-widest text-slate-500" style={{ borderColor: T.border }}>
                   <div className="w-6"><input type="checkbox" checked={selected.size === paginatedCandidates.length && paginatedCandidates.length > 0} onChange={selectAll} className="rounded" /></div>
                   <button onClick={() => toggleSort("name")} className="w-44 flex items-center gap-1 hover:text-white cursor-pointer">Candidate {sortCol === "name" && <span className="material-symbols-outlined text-[10px]">{sortDir === "asc" ? "arrow_upward" : "arrow_downward"}</span>}</button>
-                  <button onClick={() => toggleSort("matchScore")} className="w-20 flex items-center gap-1 hover:text-white cursor-pointer">AI Match {sortCol === "matchScore" && <span className="material-symbols-outlined text-[10px]">{sortDir === "asc" ? "arrow_upward" : "arrow_downward"}</span>}</button>
+                  <button onClick={() => toggleSort("matchScore")} className="w-20 flex items-center gap-1 hover:text-white cursor-pointer">Recorded match {sortCol === "matchScore" && <span className="material-symbols-outlined text-[10px]">{sortDir === "asc" ? "arrow_upward" : "arrow_downward"}</span>}</button>
                   <div className="w-24">Stage</div>
                   {density !== "compact" && <div className="flex-1">Skills / Tags</div>}
                   <div className="w-20">Availability</div>
@@ -537,11 +520,11 @@ export default function CandidateMarketplace() {
                         <div className="px-4 pb-3 pt-1 ml-10">
                           <div className="flex flex-wrap gap-2 items-center">
                             <span className="material-symbols-outlined text-[12px]" style={{ color: T.blue }}>auto_awesome</span>
-                            <span className="text-[9px] font-bold text-slate-400">AI Match Breakdown:</span>
-                            {getAIExplanation(c).map((f, i) => (
-                              <span key={i} className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: f.pass ? T.green : T.orange }}>
-                                <span className="material-symbols-outlined text-[10px]">{f.pass ? "check_circle" : "warning"}</span>
-                                {f.label} ({f.pct}%)
+                            <span className="text-[9px] font-bold text-slate-400">Recorded evidence:</span>
+                            {recordedCandidateEvidence(c).map((f, i) => (
+                              <span key={i} className="flex items-center gap-1 text-[9px] font-semibold text-slate-300">
+                                <span className="material-symbols-outlined text-[10px]">info</span>
+                                {f.label}: {f.value}
                               </span>
                             ))}
                           </div>
@@ -554,8 +537,8 @@ export default function CandidateMarketplace() {
                           <span>📍 {c.currentLocation}</span>
                           <span>💰 {c.expectedSalary}</span>
                           <span>🎓 {c.education}</span>
-                          <span>📊 Assessment: {c.assessmentScore}/100</span>
-                          <span>🤖 AI Interview: {c.aiInterviewScore}/100</span>
+                          <span>📊 Assessment: {formatRecordedScore(c.assessmentScore)}</span>
+                          <span>🤖 AI Interview: {formatRecordedScore(c.aiInterviewScore)}</span>
                         </div>
                       )}
 
@@ -617,7 +600,7 @@ export default function CandidateMarketplace() {
 
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-extrabold" style={{ color: c.matchScore >= 90 ? T.green : T.yellow }}>{c.matchScore}%</span>
-                          <span className="text-[9px] text-slate-500">AI Match</span>
+                          <span className="text-[9px] text-slate-500">Recorded match</span>
                           <div className="ml-auto">
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.noticePeriod}</span>
                           </div>
@@ -746,11 +729,11 @@ export default function CandidateMarketplace() {
                     <p className="text-[9px] text-slate-500 uppercase mb-1.5">Assessment Scores</p>
                     <div className="flex gap-2">
                       <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: T.cardAlt }}>
-                        <p className="text-sm font-extrabold" style={{ color: T.green }}>{previewCandidate.assessmentScore}</p>
-                        <p className="text-[8px] text-slate-500">Technical</p>
+                        <p className="text-sm font-extrabold" style={{ color: T.green }}>{formatRecordedScore(previewCandidate.assessmentScore)}</p>
+                        <p className="text-[8px] text-slate-500">Employer assessment</p>
                       </div>
                       <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: T.cardAlt }}>
-                        <p className="text-sm font-extrabold" style={{ color: T.blue }}>{previewCandidate.aiInterviewScore}</p>
+                        <p className="text-sm font-extrabold" style={{ color: T.blue }}>{formatRecordedScore(previewCandidate.aiInterviewScore)}</p>
                         <p className="text-[8px] text-slate-500">AI Interview</p>
                       </div>
                     </div>
@@ -765,7 +748,9 @@ export default function CandidateMarketplace() {
 
                   <div>
                     <p className="text-[9px] text-slate-500 uppercase mb-1.5">Recruiter Notes</p>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">{previewCandidate.recruiterNotes}</p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">{previewCandidate.recruiterNotes || "No recruiter notes recorded."}</p>
+                    <p className="text-[9px] text-slate-500 uppercase mt-3 mb-1.5">Candidate bio</p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">{previewCandidate.candidateBio || "Not provided"}</p>
                   </div>
                 </div>
               )}
@@ -774,14 +759,14 @@ export default function CandidateMarketplace() {
               {previewTab === "ai" && (
                 <div className="px-4 pb-4 space-y-3">
                   <div>
-                    <p className="text-[9px] text-slate-500 uppercase mb-2">AI Match Breakdown</p>
-                    {getAIExplanation(previewCandidate).map((f, i) => (
+                    <p className="text-[9px] text-slate-500 uppercase mb-2">Recorded evidence</p>
+                    {recordedCandidateEvidence(previewCandidate).map((f, i) => (
                       <div key={i} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: T.border }}>
                         <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[12px]" style={{ color: f.pass ? T.green : T.orange }}>{f.pass ? "check_circle" : "warning"}</span>
+                          <span className="material-symbols-outlined text-[12px] text-slate-400">info</span>
                           <span className="text-[10px] text-slate-300">{f.label}</span>
                         </div>
-                        <span className="text-[10px] font-bold" style={{ color: f.pass ? T.green : T.orange }}>{f.pct}%</span>
+                        <span className="text-[10px] font-bold text-slate-300">{f.value}</span>
                       </div>
                     ))}
                   </div>
@@ -914,15 +899,15 @@ export default function CandidateMarketplace() {
                   </thead>
                   <tbody>
                     {[
-                      { label: "AI Match", key: "matchScore", fmt: (v: any) => `${v}%` },
+                      { label: "Recorded match", key: "matchScore", fmt: formatRecordedScore },
                       { label: "Role", key: "currentRole" },
                       { label: "Experience", key: "experience" },
                       { label: "Location", key: "currentLocation" },
                       { label: "Salary", key: "expectedSalary" },
                       { label: "Notice", key: "noticePeriod" },
                       { label: "Education", key: "education" },
-                      { label: "Assessment", key: "assessmentScore", fmt: (v: any) => `${v}/100` },
-                      { label: "AI Interview", key: "aiInterviewScore", fmt: (v: any) => `${v}/100` },
+                      { label: "Assessment", key: "assessmentScore", fmt: formatRecordedScore },
+                      { label: "AI Interview", key: "aiInterviewScore", fmt: formatRecordedScore },
                       { label: "Recommendation", key: "recommendation" },
                       { label: "Stage", key: "stage" },
                     ].map(attr => {

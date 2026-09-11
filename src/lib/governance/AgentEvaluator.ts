@@ -50,7 +50,8 @@ export class AgentEvaluator {
 
     const fairness = FairnessAuditor.audit(outputString);
     const schemaValid = validateSchema(params.output, params.outputSchema);
-    const factualConsistency = true; // Deterministic assertion placeholder
+    // No factual verifier is implemented; do not attest model claims as true.
+    const factualConsistency = false;
 
     let score = 0.9; // Base quality score
     if (!schemaValid) score -= 0.5;
@@ -87,8 +88,8 @@ export class AgentEvaluator {
         },
       });
       logId = log.id;
-    } catch {
-      // Offline test runner fallback
+    } catch (error) {
+      if (process.env.NODE_ENV === 'production' || process.env.MOCK_DB !== 'true') throw error;
     }
 
     return {

@@ -13,16 +13,26 @@ services:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be configured}
       DIRECT_URL: ${DIRECT_URL:-}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET must be configured}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be configured}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be configured}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY must be configured}
+      WORKER_RECOVERY_API_KEY: ${WORKER_RECOVERY_API_KEY:-}
       APP_URL: ${APP_URL:?APP_URL must be configured}
       QSTASH_TOKEN: ${QSTASH_TOKEN:-}
-      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-}
-      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-}
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:?UPSTASH_REDIS_REST_URL must be configured}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:?UPSTASH_REDIS_REST_TOKEN must be configured}
       RATE_LIMIT_HMAC_SECRET: ${RATE_LIMIT_HMAC_SECRET:-}
+      SIEM_WEBHOOK_URL: ${SIEM_WEBHOOK_URL:-}
+      SIEM_WEBHOOK_TOKEN: ${SIEM_WEBHOOK_TOKEN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_GPT4O_INPUT_USD_PER_MILLION: ${OPENAI_GPT4O_INPUT_USD_PER_MILLION:-}
+      OPENAI_GPT4O_OUTPUT_USD_PER_MILLION: ${OPENAI_GPT4O_OUTPUT_USD_PER_MILLION:-}
+      AI_BUDGET_USD_TO_INR: ${AI_BUDGET_USD_TO_INR:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
@@ -36,8 +46,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+
+  recovery-scheduler:
+    image: node:20-alpine
+    profiles: ["workers"]
+    restart: unless-stopped
+    user: node
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      APP_URL: http://app:3000
+      ALLOW_INTERNAL_HTTP: "1"
+      WORKER_RECOVERY_API_KEY: ${WORKER_RECOVERY_API_KEY:-}
+    volumes:
+      - ./scripts/run-recovery-scheduler.mjs:/app/run-recovery-scheduler.mjs:ro
+    command: ["node", "/app/run-recovery-scheduler.mjs"]
+    depends_on: ["app"]
 
   postgres:
     image: postgres:16-alpine
@@ -57,20 +82,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: hirego-redis-cache
-    restart: always
-    expose:
-      - "6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
-  redis_data:

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
+import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
 
 
 async function resolveCompanyId(userId: string) {
@@ -22,10 +23,12 @@ export async function GET(request: NextRequest) {
   try {
     const companyId = await resolveCompanyId(session.id);
 
-    const [credits, activeSubscription, plans] = await Promise.all([
+    const [credits, activeSubscription, plans, services, gatewayConfig] = await Promise.all([
       subscriptionsDb.getCompanyCredits(companyId),
       subscriptionsDb.getCompanySubscription(companyId),
       subscriptionsDb.getSubscriptionPlans(false),
+      subscriptionsDb.getAiServices(),
+      PaymentGatewayController.getConfig(),
     ]);
 
   let activePlan = null;
@@ -63,6 +66,13 @@ export async function GET(request: NextRequest) {
       activeSubscription,
       activePlan,
       plans,
+      services,
+      gatewayConfig: {
+        mode: gatewayConfig.mode,
+        primaryGateway: gatewayConfig.primaryGateway,
+        allowEmployerSelection: gatewayConfig.allowEmployerSelection,
+        gatewaysStatus: gatewayConfig.gatewaysStatus,
+      },
       subscriptionState: {
         status: derivedStatus,
         daysRemaining,

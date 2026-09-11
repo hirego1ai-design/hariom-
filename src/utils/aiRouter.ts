@@ -24,8 +24,27 @@ export interface AiExecutionLog {
   totalTokens: number | null;
   latencyMs: number;
   costEstUsd: number | null;
+  // INR paise. Company AI budgets are explicitly provisioned in INR.
+  actualCostMinorUnits: number | null;
   status: "SUCCESS" | "FALLBACK" | "FAILED" | "CACHED";
   timestamp: string;
+}
+
+function requiredPositiveNumber(name: string, developmentDefault: number): number {
+  const raw = process.env[name];
+  const value = raw ? Number(raw) : developmentDefault;
+  if (!Number.isFinite(value) || value <= 0 || (process.env.NODE_ENV === "production" && !raw)) {
+    throw new Error(`AI cost accounting is not configured: ${name}`);
+  }
+  return value;
+}
+
+function getOpenAiGpt4oPricing() {
+  return {
+    inputUsdPerMillion: requiredPositiveNumber("OPENAI_GPT4O_INPUT_USD_PER_MILLION", 2.5),
+    outputUsdPerMillion: requiredPositiveNumber("OPENAI_GPT4O_OUTPUT_USD_PER_MILLION", 10),
+    usdToInr: requiredPositiveNumber("AI_BUDGET_USD_TO_INR", 83),
+  };
 }
 
 // Development-only cache. Production must not present per-process cache state
@@ -68,6 +87,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
         totalTokens: 0,
         latencyMs: Date.now() - startTime,
         costEstUsd: 0.0,
+        actualCostMinorUnits: 0,
         status: "CACHED",
         timestamp: new Date().toISOString(),
       };
@@ -87,6 +107,9 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   let responseText = "";
   let actualPromptTokens: number | null = null;
   let actualCompletionTokens: number | null = null;
+  // Validate prices before a billable provider call. Production must never
+  // make a request it cannot account for afterwards.
+  const pricing = primaryProvider === "openai" ? getOpenAiGpt4oPricing() : null;
 
   const hasRealKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("sk-") && !process.env.OPENAI_API_KEY.includes("dummy");
   // Try real OpenAI API call if client is configured and real key present
@@ -121,6 +144,14 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     ? null
     : actualPromptTokens + actualCompletionTokens;
 
+  const costEstUsd = actualPromptTokens === null || actualCompletionTokens === null || !pricing
+    ? null
+    : (actualPromptTokens / 1_000_000) * pricing.inputUsdPerMillion
+      + (actualCompletionTokens / 1_000_000) * pricing.outputUsdPerMillion;
+  const actualCostMinorUnits = costEstUsd === null || !pricing
+    ? null
+    : Math.ceil(costEstUsd * pricing.usdToInr * 100);
+
   const log: AiExecutionLog = {
     id: crypto.randomUUID(),
     task: request.task,
@@ -130,7 +161,8 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     completionTokens: actualCompletionTokens,
     totalTokens,
     latencyMs,
-    costEstUsd: null,
+    costEstUsd,
+    actualCostMinorUnits,
     status,
     timestamp: new Date().toISOString(),
   };
@@ -184,6 +216,7 @@ export async function getAiUsageStats() {
         totalTokens: l.totalTokens,
         latencyMs: l.latencyMs,
         costEstUsd: l.costEstUsd,
+        actualCostMinorUnits: null,
         status: l.status as AiExecutionLog["status"],
         timestamp: l.timestamp.toISOString(),
       }));

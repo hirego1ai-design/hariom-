@@ -4,7 +4,7 @@ import { db, prisma } from "@/lib/prisma";
 import { verifyOtpCode } from "@/lib/otp";
 import { hashPassword, revokeAllUserSessions, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { logCriticalAuditEvent } from "@/lib/auditLogger";
 
 const resetPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       (user as any).passwordHash = newHashed;
     }
 
-    logAuditEvent({
+    await logCriticalAuditEvent({
       userId: user.id,
       action: "PASSWORD_RESET_SUCCESS",
       resource: "/api/auth/reset-password",

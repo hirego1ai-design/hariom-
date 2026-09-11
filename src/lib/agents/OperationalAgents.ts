@@ -86,6 +86,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     const jobRequirements = Array.isArray(jobData.requirements) ? jobData.requirements : [];
     const headline = profileData.headline || '';
 
+    let actualCostMinorUnits: number | null = null;
     // Execute LLM via ModelRouter with multi-provider fallback
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
@@ -97,6 +98,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
           prompt,
           primaryProvider: provider,
         });
+        actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
         return aiTask.resultText;
       },
     });
@@ -127,6 +129,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
       extractedSkills: candidateSkills,
       matchingSkills: evaluation.matchingSkills || candidateSkills.filter((s) => jobRequirements.includes(s)),
       summary: evaluation.summary,
+      actualCostMinorUnits,
       evaluatedAt: new Date().toISOString(),
     };
   }
@@ -146,6 +149,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
     const candidateProfileId = taskInput.candidateProfileId;
     if (typeof candidateProfileId !== 'string') throw new Error('candidateProfileId is required.');
 
+    let actualCostMinorUnits: number | null = null;
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'mock-interview',
       fn: async (provider) => {
@@ -155,6 +159,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
           prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Candidate profile ID: ${candidateProfileId}. Return strict JSON only: {"nextQuestion": string, "evalScore": integer 0-100 optional, "feedback": string optional}.`,
           primaryProvider: provider,
         });
+        actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
         return aiTask.resultText;
       },
     });
@@ -172,6 +177,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
       nextQuestion: interview.nextQuestion,
       evalScore: interview.evalScore ?? null,
       feedback: interview.feedback ?? null,
+      actualCostMinorUnits,
     };
   }
 }
@@ -187,8 +193,10 @@ export class SecurityJudgeAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
-    const tabSwitchCount = (taskInput.tabSwitchCount as number) ?? 0;
-    const faceCount = (taskInput.faceCount as number) ?? 1;
+    const { tabSwitchCount, faceCount } = z.object({
+      tabSwitchCount: z.number().int().nonnegative(),
+      faceCount: z.number().int().nonnegative(),
+    }).parse(taskInput);
 
     let flagged = false;
     let integrityScore = 100;
@@ -218,6 +226,7 @@ export class SecurityJudgeAgent extends BaseAgent {
       violations,
       flagged,
       evaluatedAt: new Date().toISOString(),
+      evidenceType: 'ADVISORY_INPUT',
     };
   }
 }
@@ -270,8 +279,9 @@ export class JdGeneratorAgent extends BaseAgent {
     taskInput: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
-    const jobTitle = (taskInput.title as string) || 'Senior Full Stack AI Engineer';
+    const jobTitle = z.string().trim().min(1).parse(taskInput.title);
 
+    let actualCostMinorUnits: number | null = null;
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'jd-generator',
       fn: async (provider) => {
@@ -281,6 +291,7 @@ export class JdGeneratorAgent extends BaseAgent {
           prompt: `Generate job description for: ${jobTitle}`,
           primaryProvider: provider,
         });
+        actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
         return aiTask.resultText;
       },
     });
@@ -297,6 +308,7 @@ export class JdGeneratorAgent extends BaseAgent {
       policyCompliant: fairness.policyCompliant,
       biasScore: fairness.biasScore,
       targetKeywords: ['AI Architecture', 'Prisma', 'TypeScript', 'Next.js', 'PostgreSQL'],
+      actualCostMinorUnits,
     };
   }
 }
@@ -314,39 +326,31 @@ export class CandidateMatchmakerAgent extends BaseAgent {
   ): Promise<Record<string, unknown>> {
     const companyId = context.tenantContext.companyId;
     let candidateProfiles: any[] = [];
+    if (!companyId) throw new Error('Company context is required for candidate matching.');
 
     try {
       candidateProfiles = await prisma.candidateProfile.findMany({
-        where: companyId
-          ? { applications: { some: { job: { companyId } } } }
-          : undefined,
+        where: { applications: { some: { job: { companyId } } } },
         take: 5,
         include: { user: true },
       });
     } catch (error) {
-      if (process.env.NODE_ENV === "production") {
-        throw error;
-      }
+      throw error;
     }
 
     const matches = candidateProfiles.map((c, index) => ({
       candidateProfileId: c.id,
       candidateName: c.user?.name || `Candidate ${index + 1}`,
-      compatibilityScore: 90 - index * 4,
+      compatibilityScore: null,
+      scoreStatus: 'NOT_MEASURED',
     }));
-
-    const fallbackMatches = process.env.NODE_ENV !== "production"
-      ? [
-          { candidateProfileId: 'cand-101', candidateName: 'Rohit Kumar', compatibilityScore: 92 },
-          { candidateProfileId: 'cand-102', candidateName: 'Priya Sharma', compatibilityScore: 88 },
-        ]
-      : [];
 
     return {
       agentId: this.agentId,
       status: 'SUCCESS',
-      matchedCandidateCount: matches.length || fallbackMatches.length,
-      topMatches: matches.length > 0 ? matches : fallbackMatches,
+      matchedCandidateCount: matches.length,
+      topMatches: matches,
+      rankingStatus: 'NOT_MEASURED',
     };
   }
 }

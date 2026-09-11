@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx src/tests/suite.test.ts"
+    "test": "tsx src/tests/suite.test.ts",
+    "test:audit": "node scripts/audit-regressions.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

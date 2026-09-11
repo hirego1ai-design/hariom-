@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { ApiError, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import { toEmployerCandidate } from "@/lib/candidateEvidence";
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,8 +12,23 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") {
+      return jsonError("Employer, recruiter, or administrator access required.", 403);
+    }
+
+    const { searchParams } = new URL(req.url);
+    const requestedLimit = searchParams.get("limit");
+    const requestedCursor = searchParams.get("cursor");
+    const limit = requestedLimit === null ? DEFAULT_PAGE_SIZE : Number(requestedLimit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
+      throw new ApiError(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`, 400);
+    }
+    if (requestedCursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedCursor)) {
+      throw new ApiError("Invalid candidate cursor.", 400);
+    }
 
     let candidates: any[] = [];
+    let nextCursor: string | null = null;
 
     try {
       const employerProfile = await prisma.employerProfile.findUnique({
@@ -19,11 +38,19 @@ export async function GET(req: NextRequest) {
       if (employerProfile) {
         const companyId = employerProfile.companyId;
 
-        // Fetch all applications for this employer's jobs with full candidate details
+        // Cursor pagination prevents a large tenant's pipeline from loading
+        // every application and nested profile into one request.
         const applications = await prisma.application.findMany({
           where: { job: { companyId } },
           include: {
-            candidateProfile: { include: { user: { select: { name: true } } } },
+            candidateProfile: { include: {
+              user: { select: { name: true } },
+              videoResumes: {
+                where: { OR: [{ retentionExpiresAt: null }, { retentionExpiresAt: { gt: new Date() } }] },
+                select: { id: true },
+                take: 1,
+              },
+            } },
             job: {
               select: {
                 title: true,
@@ -32,53 +59,17 @@ export async function GET(req: NextRequest) {
               },
             },
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          cursor: requestedCursor ? { id: requestedCursor } : undefined,
+          skip: requestedCursor ? 1 : 0,
+          take: limit + 1,
         });
+
+        const page = applications.slice(0, limit);
+        nextCursor = applications.length > limit ? page[page.length - 1]?.id || null : null;
 
         // Transform applications to candidate format
-        candidates = applications.map((app) => {
-          const profile = app.candidateProfile;
-          const job = app.job;
-          
-          // Determine stage based on application status
-          const stage = app.status === "APPLIED" ? "SCREENING" : app.status;
-
-          // Calculate match score from the application's matchScore field
-          const matchScore = app.matchScore || 0;
-
-          // Use available profile data with defaults
-          const name = profile.user?.name || profile.headline || "Unknown";
-          
-          return {
-            id: profile.id,
-            applicationId: app.id,
-            name: name,
-            matchScore,
-            experience: `${Math.round(profile.experienceYears)}y Exp`,
-            avatar: profile.resumeUrl ? `https://ui-avatars.com/api/?name=${name}&background=random` : `https://ui-avatars.com/api/?name=${name}&background=random`,
-            stage,
-            jobId: app.jobId,
-            currentRole: profile.headline || "No Role",
-            appliedJob: job?.title || "Unknown Position",
-            education: "N/A",
-            currentCompany: "N/A",
-            expectedSalary: "$0/yr",
-            noticePeriod: "N/A",
-            currentLocation: profile.location || "Unknown",
-            preferredLocation: "N/A",
-            hasVideoResume: !!profile.resumeUrl,
-            assessmentScore: matchScore,
-            aiInterviewScore: matchScore,
-            recruiterNotes: profile.bio || "",
-            recommendation: "Needs Review",
-            recommendationReason: "",
-            source: "Direct",
-            partner: "Direct",
-            applicationDate: app.createdAt?.toISOString().split("T")[0] || "Unknown",
-            lastActivity: app.updatedAt ? `${app.updatedAt.toLocaleDateString()} ${app.updatedAt.toLocaleTimeString()}` : "Never",
-            availability: "N/A",
-          };
-        });
+        candidates = page.map(toEmployerCandidate);
       }
     } catch (dbError) {
       console.error("Candidates DB error:", dbError);
@@ -87,7 +78,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, candidates });
+    return NextResponse.json({
+      success: true,
+      candidates,
+      pagination: { limit, nextCursor, hasMore: nextCursor !== null },
+    });
   } catch (error) {
     return handleApiError(error);
   }

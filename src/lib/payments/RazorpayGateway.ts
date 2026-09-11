@@ -14,8 +14,9 @@ export class RazorpayGateway implements PaymentGateway {
   async createOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const isProduction = process.env.NODE_ENV === "production";
 
-    if (process.env.NODE_ENV === "production" && (!keyId || !keySecret)) {
+    if (isProduction && (!keyId || !keySecret)) {
       throw new Error("Razorpay credentials missing in production environment.");
     }
 
@@ -36,8 +37,8 @@ export class RazorpayGateway implements PaymentGateway {
           }),
         });
 
-        const data = await res.json();
-        if (res.ok && data.id) {
+        const data: unknown = await res.json();
+        if (res.ok && isRazorpayOrder(data)) {
           return {
             success: true,
             gateway: "RAZORPAY",
@@ -49,13 +50,27 @@ export class RazorpayGateway implements PaymentGateway {
             rawPayload: data,
           };
         }
+
+        // A provider error must never be represented as a checkout order. In
+        // particular, production must not fall through to the development
+        // mock below after a non-2xx or malformed Razorpay response.
+        throw new Error(
+          `Razorpay order creation failed (${res.status}${getRazorpayErrorDetail(data) ? `: ${getRazorpayErrorDetail(data)}` : ""}).`
+        );
       } catch (err: any) {
         console.error("Razorpay Live API Order Creation Failed:", err.message);
         throw err; // Allow Controller to capture exception for safe failover if order was NOT created
       }
     }
 
-    // Sandbox / Test fallback order
+    // Mock orders are explicitly development/test-only. This guard is kept
+    // adjacent to the fallback so it remains unreachable in production even
+    // if the provider flow above changes.
+    if (isProduction) {
+      throw new Error("Razorpay production order creation failed without a live provider response.");
+    }
+
+    // Sandbox / test fallback order
     const mockGatewayOrderId = `order_rzp_${crypto.randomUUID()}`;
     return {
       success: true,
@@ -70,14 +85,16 @@ export class RazorpayGateway implements PaymentGateway {
   }
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    // Razorpay's webhook signing secret is distinct from its API key secret.
+    // Never authenticate an inbound webhook with a generic or API credential.
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!secret) {
       return {
         isValid: false,
         gatewayTxId: "",
         status: "REJECTED",
         rawPayload: {},
-        error: "Razorpay Webhook secret missing in production environment.",
+        error: "Razorpay webhook secret is not configured.",
       };
     }
 
@@ -139,4 +156,16 @@ export class RazorpayGateway implements PaymentGateway {
   async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
     return { status: "SUCCESS" };
   }
+}
+
+function isRazorpayOrder(data: unknown): data is { id: string } & Record<string, unknown> {
+  return typeof data === "object" && data !== null && typeof (data as { id?: unknown }).id === "string";
+}
+
+function getRazorpayErrorDetail(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const error = (data as { error?: unknown }).error;
+  if (typeof error !== "object" || error === null) return undefined;
+  const description = (error as { description?: unknown }).description;
+  return typeof description === "string" ? description : undefined;
 }

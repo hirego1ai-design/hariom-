@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageContainer } from "@/components/employer/LayoutSystem";
+import { fetchEmployerCandidates } from "@/lib/employerCandidates";
 
 const stages = ["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"];
 const labels: Record<string, string> = {
@@ -25,18 +26,15 @@ export default function ManagedHiringCandidateTrackingPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/employer/candidates")
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok || !data.success) throw new Error(data.error || "Unable to load candidates");
-        setCandidates(data.candidates || []);
-      })
+    fetchEmployerCandidates<any>()
+      .then(setCandidates)
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load candidates"))
       .finally(() => setLoading(false));
   }, []);
 
   async function move(applicationId: string, stage: string) {
     setError("");
+    try {
     const response = await fetch(`/api/employer/candidates/${encodeURIComponent(applicationId)}/stage`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -47,7 +45,10 @@ export default function ManagedHiringCandidateTrackingPage() {
       setError(data.error || "Unable to update stage");
       return;
     }
-    setCandidates((items) => items.map((item) => (item.applicationId === applicationId ? { ...item, stage: labels[stage] || stage } : item)));
+    setCandidates((items) => items.map((item) => (item.applicationId === applicationId ? { ...item, stage: data.stage } : item)));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update stage");
+    }
   }
 
   return (

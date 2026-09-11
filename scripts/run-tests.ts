@@ -8,7 +8,7 @@ async function main() {
   const testReport = await runAllTests();
 
   testReport.results.forEach((r, idx) => {
-    const symbol = r.passed ? "✔ PASS" : "✖ FAIL";
+    const symbol = r.skipped ? "SKIP" : r.passed ? "✔ PASS" : "✖ FAIL";
     console.log(`[${idx + 1}/${testReport.total}] ${symbol} | [${r.category}] ${r.name}`);
   });
 

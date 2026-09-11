@@ -33,8 +33,10 @@ export class EventDispatcher {
 
       await consumer.handler(systemEvent);
 
-      await prisma.eventConsumerCheckpoint.create({
-        data: {
+      await prisma.eventConsumerCheckpoint.upsert({
+        where: { idempotencyKey_consumerId: { idempotencyKey: entry.idempotencyKey, consumerId: consumer.consumerId } },
+        update: { status: 'PROCESSED', processedAt: new Date() },
+        create: {
           idempotencyKey: entry.idempotencyKey,
           consumerId: consumer.consumerId,
           status: 'PROCESSED',

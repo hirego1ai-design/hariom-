@@ -37,6 +37,7 @@ export interface CompanyCreditsRecord {
   jobPostsLeft: number;
   resumeUnlocksLeft: number;
   aiInterviewsLeft: number;
+  aiAgentCreditsLeft: number;
   applicationsLeft: number;
   resumeDownloadsLeft: number;
   backgroundVerificationsLeft: number;
@@ -348,6 +349,7 @@ class SubscriptionsDb {
           jobPostsLeft: r.jobPostsLeft,
           resumeUnlocksLeft: r.resumeUnlocksLeft,
           aiInterviewsLeft: r.aiInterviewsLeft,
+          aiAgentCreditsLeft: r.aiAgentCreditsLeft,
           applicationsLeft: r.applicationsLeft,
           resumeDownloadsLeft: r.resumeDownloadsLeft,
           backgroundVerificationsLeft: r.backgroundVerificationsLeft,
@@ -360,6 +362,10 @@ class SubscriptionsDb {
       }
     }
 
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Company credit account not found.");
+    }
+
     let credits = this.inMemoryCredits.get(companyId);
     if (!credits) {
       credits = {
@@ -368,6 +374,7 @@ class SubscriptionsDb {
         jobPostsLeft: 1,
         resumeUnlocksLeft: 5,
         aiInterviewsLeft: 2,
+        aiAgentCreditsLeft: 0,
         applicationsLeft: 25,
         resumeDownloadsLeft: 10,
         backgroundVerificationsLeft: 1,
@@ -424,6 +431,9 @@ class SubscriptionsDb {
     planId: string,
     paymentId?: string
   ): Promise<CompanySubscriptionRecord> {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Subscription activation requires a verified payment webhook.");
+    }
     const plan = await this.getSubscriptionPlanById(planId);
     if (!plan) throw new Error("Subscription plan not found");
 
@@ -450,6 +460,7 @@ class SubscriptionsDb {
       jobPostsLeft: plan.jobPostsQuota,
       resumeUnlocksLeft: plan.resumeUnlocksQuota,
       aiInterviewsLeft: plan.aiInterviewsQuota,
+      aiAgentCreditsLeft: plan.aiInterviewsQuota,
       applicationsLeft: plan.applicationsQuota,
       resumeDownloadsLeft: plan.resumeDownloadsQuota,
       backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
@@ -727,7 +738,14 @@ class SubscriptionsDb {
 
   // AI SERVICES
   public async getAiServices(): Promise<AiServiceCostRecord[]> {
-    return Array.from(this.inMemoryAiServices.values());
+    try {
+      const records = await prisma.aiServiceCost.findMany({ orderBy: { serviceKey: "asc" } });
+      return records.map(record => ({ ...record, billingType: record.billingType as AiServiceCostRecord["billingType"],
+        createdAt: record.createdAt.toISOString(), updatedAt: record.updatedAt.toISOString() }));
+    } catch (error) {
+      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw error;
+      return Array.from(this.inMemoryAiServices.values());
+    }
   }
 
   public async updateAiServiceCost(
@@ -735,6 +753,18 @@ class SubscriptionsDb {
     creditCost: number,
     billingType: "INCLUDED" | "CREDIT_BASED" | "PAID_ADDON"
   ): Promise<AiServiceCostRecord | null> {
+    if (!Number.isSafeInteger(creditCost) || creditCost < 0 || !["INCLUDED", "CREDIT_BASED", "PAID_ADDON"].includes(billingType)) {
+      throw new Error("Invalid AI service billing settings");
+    }
+    try {
+      const existing = await prisma.aiServiceCost.findUnique({ where: { serviceKey } });
+      if (!existing) return null;
+      const record = await prisma.aiServiceCost.update({ where: { serviceKey }, data: { creditCost, billingType } });
+      return { ...record, billingType: record.billingType as AiServiceCostRecord["billingType"],
+        createdAt: record.createdAt.toISOString(), updatedAt: record.updatedAt.toISOString() };
+    } catch (error) {
+      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw error;
+    }
     const srv = this.inMemoryAiServices.get(serviceKey);
     if (!srv) return null;
     srv.creditCost = creditCost;

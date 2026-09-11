@@ -63,8 +63,8 @@ export async function transitionLifecycle(params: TransitionLifecycleParams): Pr
         metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
       },
     });
-  } catch {
-    // Offline unit test runner fallback
+  } catch (error) {
+    if (process.env.NODE_ENV === 'production' || process.env.MOCK_DB !== 'true') throw error;
   }
 }
 

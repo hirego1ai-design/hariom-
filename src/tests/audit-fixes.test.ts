@@ -104,7 +104,7 @@ export async function runAuditFixesTests(): Promise<{
 
   // 4. PaymentOrder Interface & Notes Structure
   try {
-    // All webhook verification paths now require a configured secret, including test mode.
+    // Razorpay must use its dedicated webhook secret, including in test mode.
     process.env.RAZORPAY_WEBHOOK_SECRET = "audit_test_razorpay_webhook_secret";
     const { RazorpayGateway } = await import("@/lib/payments/RazorpayGateway");
     const rzp = new RazorpayGateway();
@@ -124,11 +124,7 @@ export async function runAuditFixesTests(): Promise<{
       },
     });
 
-    const secret =
-      process.env.RAZORPAY_WEBHOOK_SECRET ||
-      process.env.PAYMENT_WEBHOOK_SECRET ||
-      process.env.RAZORPAY_KEY_SECRET ||
-      "";
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
     const signature = secret
       ? (await import("crypto")).createHmac("sha256", secret).update(rawBody).digest("hex")
@@ -157,6 +153,81 @@ export async function runAuditFixesTests(): Promise<{
   } catch (e: any) {
     results.push({
       name: "Razorpay Gateway - gatewayOrderId & notes field binding",
+      category: "Payments",
+      passed: false,
+      message: e.message,
+    });
+  }
+
+  // 4b. Razorpay must never issue a synthetic order in production after an
+  // unsuccessful provider response, and API secrets must not verify webhooks.
+  try {
+    const savedEnvironment = {
+      NODE_ENV: process.env.NODE_ENV,
+      RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+      RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+      RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+      PAYMENT_WEBHOOK_SECRET: process.env.PAYMENT_WEBHOOK_SECRET,
+    };
+    const mutableEnvironment = process.env as Record<string, string | undefined>;
+    const originalFetch = globalThis.fetch;
+    const restoreEnvironment = () => {
+      for (const [key, value] of Object.entries(savedEnvironment)) {
+        if (value === undefined) delete mutableEnvironment[key];
+        else mutableEnvironment[key] = value;
+      }
+      globalThis.fetch = originalFetch;
+    };
+
+    try {
+      mutableEnvironment.NODE_ENV = "production";
+      process.env.RAZORPAY_KEY_ID = "rzp_live_test_id";
+      process.env.RAZORPAY_KEY_SECRET = "rzp_live_test_api_secret";
+      process.env.RAZORPAY_WEBHOOK_SECRET = "dedicated_webhook_secret";
+      globalThis.fetch = (async () => new Response(JSON.stringify({
+        error: { description: "provider unavailable" },
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch;
+
+      const { RazorpayGateway } = await import("@/lib/payments/RazorpayGateway");
+      const rzp = new RazorpayGateway();
+      let productionOrderRejected = false;
+      try {
+        await rzp.createOrder({
+          orderId: "ord_production_rejection_test",
+          amount: 4999,
+          currency: "INR",
+          planName: "Test plan",
+          planId: "plan-test",
+          companyId: "company-test",
+        });
+      } catch {
+        productionOrderRejected = true;
+      }
+
+      delete process.env.RAZORPAY_WEBHOOK_SECRET;
+      process.env.PAYMENT_WEBHOOK_SECRET = "generic_webhook_secret";
+      const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_test", order_id: "order_test", amount: 499900 } } } });
+      const apiSecretSignature = (await import("crypto")).createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(rawBody).digest("hex");
+      const rejectedApiSecret = await rzp.verifyWebhook({
+        rawBody,
+        signature: apiSecretSignature,
+        provider: "RAZORPAY",
+        headers: {},
+      });
+
+      const passed = productionOrderRejected && !rejectedApiSecret.isValid;
+      results.push({
+        name: "Razorpay Gateway - production never mocks failed orders and requires dedicated webhook secret",
+        category: "Payments",
+        passed,
+        message: passed ? undefined : "Production provider failure created an order or an API/generic secret authenticated a webhook.",
+      });
+    } finally {
+      restoreEnvironment();
+    }
+  } catch (e: any) {
+    results.push({
+      name: "Razorpay Gateway - production never mocks failed orders and requires dedicated webhook secret",
       category: "Payments",
       passed: false,
       message: e.message,

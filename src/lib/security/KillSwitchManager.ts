@@ -36,8 +36,9 @@ export class KillSwitchManager {
         },
       });
       return switchConfig?.isActive ?? false;
-    } catch {
-      return false;
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production' && process.env.MOCK_DB === 'true') return false;
+      throw error;
     }
   }
 
@@ -162,8 +163,9 @@ export class KillSwitchManager {
         },
       });
       return globalSwitch !== null;
-    } catch {
-      return false;
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production' && process.env.MOCK_DB === 'true') return false;
+      throw error;
     }
   }
 }

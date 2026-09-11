@@ -20,6 +20,12 @@ export type DistributedCounterResult = {
   ttlMs: number;
 };
 
+export type LoginFailureResult = {
+  locked: boolean;
+  retryAfterMs: number;
+  failures: number;
+};
+
 function isProduction() {
   return process.env.NODE_ENV === "production";
 }
@@ -122,6 +128,110 @@ export async function deleteRedisKey(key: string): Promise<void> {
   }
   try {
     await redis.del(key);
+  } catch (error) {
+    throw new RedisUnavailableError(error instanceof Error ? error.message : "Shared Redis request failed.");
+  }
+}
+
+/**
+ * Record a failed sign-in without a read/modify/write race. A group of failed
+ * attempts creates a temporary lock, and each subsequent group within the
+ * level retention period increases the lock duration.  This is deliberately
+ * Redis-backed: production auth protection must work across all instances.
+ */
+export async function recordLoginFailure(
+  failureKey: string,
+  levelKey: string,
+  lockKey: string,
+  threshold: number,
+  failureWindowMs: number,
+  baseLockMs: number,
+  maxLockMs: number,
+  levelTtlMs: number,
+): Promise<LoginFailureResult> {
+  const redis = getConfiguredClient();
+  if (!redis) {
+    if (isProduction()) {
+      throw new RedisUnavailableError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.");
+    }
+
+    const now = Date.now();
+    const lock = developmentStore.get(lockKey);
+    if (lock && lock.expiresAt > now) {
+      return { locked: true, retryAfterMs: lock.expiresAt - now, failures: 0 };
+    }
+    if (lock) developmentStore.delete(lockKey);
+
+    const failures = incrementDevelopmentCounter(failureKey, failureWindowMs).count;
+    if (failures < threshold) return { locked: false, retryAfterMs: 0, failures };
+
+    developmentStore.delete(failureKey);
+    const currentLevel = developmentStore.get(levelKey);
+    const level = Number(currentLevel?.value ?? "0") + 1;
+    const lockMs = Math.min(maxLockMs, baseLockMs * (2 ** Math.min(level - 1, 20)));
+    developmentStore.set(levelKey, { value: String(level), expiresAt: now + levelTtlMs });
+    developmentStore.set(lockKey, { value: "1", expiresAt: now + lockMs });
+    return { locked: true, retryAfterMs: lockMs, failures: threshold };
+  }
+
+  try {
+  const result = await redis.eval<[number, number, number, number, number], [number, number, number]>(
+      "local currentLockTtl = redis.call('PTTL', KEYS[3])\n" +
+        "if currentLockTtl > 0 then return {1, currentLockTtl, 0} end\n" +
+        "local failures = redis.call('INCR', KEYS[1])\n" +
+        "if failures == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end\n" +
+        "if failures < tonumber(ARGV[1]) then return {0, 0, failures} end\n" +
+        "redis.call('DEL', KEYS[1])\n" +
+        "local level = redis.call('INCR', KEYS[2])\n" +
+        "if level == 1 then redis.call('PEXPIRE', KEYS[2], ARGV[5]) end\n" +
+        "local exponent = math.min(level - 1, 20)\n" +
+        "local duration = math.min(tonumber(ARGV[4]), tonumber(ARGV[3]) * (2 ^ exponent))\n" +
+        "redis.call('PSETEX', KEYS[3], duration, '1')\n" +
+        "return {1, duration, failures}",
+      [failureKey, levelKey, lockKey],
+      [threshold, failureWindowMs, baseLockMs, maxLockMs, levelTtlMs],
+    );
+    return { locked: Number(result[0]) === 1, retryAfterMs: Math.max(0, Number(result[1])), failures: Number(result[2]) };
+  } catch (error) {
+    throw new RedisUnavailableError(error instanceof Error ? error.message : "Shared Redis request failed.");
+  }
+}
+
+/** Return an account lock's remaining duration without exposing Redis details. */
+export async function getRedisTtlMs(key: string): Promise<number> {
+  const redis = getConfiguredClient();
+  if (!redis) {
+    if (isProduction()) {
+      throw new RedisUnavailableError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.");
+    }
+    const entry = developmentStore.get(key);
+    if (!entry || entry.expiresAt <= Date.now()) {
+      developmentStore.delete(key);
+      return 0;
+    }
+    return Math.max(1, entry.expiresAt - Date.now());
+  }
+  try {
+    return Math.max(0, Number(await redis.pttl(key)));
+  } catch (error) {
+    throw new RedisUnavailableError(error instanceof Error ? error.message : "Shared Redis request failed.");
+  }
+}
+
+/** Clear transient failure state only after a successful credential check. */
+export async function clearLoginFailureState(failureKey: string, levelKey: string, lockKey: string): Promise<void> {
+  const redis = getConfiguredClient();
+  if (!redis) {
+    if (isProduction()) {
+      throw new RedisUnavailableError("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.");
+    }
+    developmentStore.delete(failureKey);
+    developmentStore.delete(levelKey);
+    developmentStore.delete(lockKey);
+    return;
+  }
+  try {
+    await redis.del(failureKey, levelKey, lockKey);
   } catch (error) {
     throw new RedisUnavailableError(error instanceof Error ? error.message : "Shared Redis request failed.");
   }

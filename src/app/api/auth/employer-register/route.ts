@@ -50,7 +50,17 @@ export async function POST(request: Request) {
       const createdUser = await tx.user.create({ data: { email, passwordHash, name: body.companyName, role: "EMPLOYER", emailVerified: false } });
       const company = await tx.company.create({ data: { name: body.companyName, industry: body.industry, size: body.companySize } });
       await tx.employerProfile.create({ data: { userId: createdUser.id, companyId: company.id } });
-      await tx.companyCredits.create({ data: { companyId: company.id, jobPostsLeft: 5, resumeUnlocksLeft: 25, aiInterviewsLeft: 5 } });
+      await tx.companyCredits.create({ data: { companyId: company.id, jobPostsLeft: 5, resumeUnlocksLeft: 25, aiInterviewsLeft: 5, aiAgentCreditsLeft: 0 } });
+      // Every company gets an explicit hard budget. A missing budget must never
+      // be interpreted as permission to spend without a ceiling.
+      await tx.aiCompanyBudget.create({
+        data: {
+          companyId: company.id,
+          currency: "INR",
+          monthlyLimitMinorUnits: BigInt(5_000_000),
+          isHardCapEnabled: true,
+        },
+      });
       return { createdUser, companyId: company.id };
     });
 

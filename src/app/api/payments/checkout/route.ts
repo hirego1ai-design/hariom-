@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { CreateOrderResult } from "@/lib/payments/PaymentGatewayInterface";
+import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
 
 const checkoutSchema = z.object({
   planId: z.string().uuid(),
@@ -135,9 +136,9 @@ export async function POST(req: NextRequest) {
     const { planId, paymentMethod, promoCode } = await readValidatedJson(req, checkoutSchema);
 
     const isProduction = process.env.NODE_ENV === "production";
-    const gatewaySecret = process.env.RAZORPAY_KEY_SECRET || process.env.STRIPE_SECRET_KEY || process.env.PAYMENT_WEBHOOK_SECRET;
+    const hasRazorpayCredentials = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 
-    if (isProduction && !gatewaySecret) {
+    if (isProduction && !hasRazorpayCredentials) {
       throw new Error("Payment gateway credentials not configured in production environment.");
     }
 
@@ -187,6 +188,7 @@ export async function POST(req: NextRequest) {
       return jsonError("This subscription plan has been archived and is no longer available", 400);
     }
 
+    subscriptionCredits(plan);
     const orderId = 'ord_' + crypto.randomUUID();
     const reservation = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan, promoCode });
 
@@ -225,6 +227,7 @@ export async function POST(req: NextRequest) {
         gatewayOrderId: gatewayResult.gatewayOrderId,
         gateway: gatewayResult.gateway,
         planId: plan.id,
+        keyId: gatewayResult.gateway === "RAZORPAY" ? process.env.RAZORPAY_KEY_ID : undefined,
         planName: plan.name,
         originalPrice: plan.price,
         discountAmount: reservation.discountApplied,

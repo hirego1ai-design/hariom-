@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 
 export interface AuditLogEntry {
   id: string;
@@ -12,6 +13,13 @@ export interface AuditLogEntry {
 }
 
 const inMemoryAuditLogs: AuditLogEntry[] = [];
+
+export class AuditLogPersistenceError extends Error {
+  constructor(action: string) {
+    super(`Security audit event '${action}' could not be persisted.`);
+    this.name = "AuditLogPersistenceError";
+  }
+}
 
 /** PostgreSQL is the sole source of truth for security audit events. */
 export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp">): Promise<AuditLogEntry | null> {
@@ -39,15 +47,22 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
       ? `actor:${entry.userId}${entry.details ? ` | ${entry.details}` : ""}`
       : entry.details || null;
 
-    const saved = await prisma.auditLog.create({
-      data: {
-        userId: isRealUserId ? entry.userId! : null,
-        companyId: entry.companyId || null,
-        action: entry.action,
-        resource: entry.resource,
-        ipAddress: entry.ipAddress || "unknown",
-        details: actorDetail,
-      },
+    // The audit row and the provider-neutral SIEM delivery envelope must be
+    // committed together. A future forwarder can fail independently without
+    // losing the source event, while a failed enqueue rolls this write back.
+    const saved = await prisma.$transaction(async (tx) => {
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: isRealUserId ? entry.userId! : null,
+          companyId: entry.companyId || null,
+          action: entry.action,
+          resource: entry.resource,
+          ipAddress: entry.ipAddress || "unknown",
+          details: actorDetail,
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, entry.userId);
+      return auditLog;
     });
 
     const result: AuditLogEntry = {
@@ -71,6 +86,17 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
     });
     return null;
   }
+}
+
+/**
+ * Use for authentication, credential, and authorization events. Production
+ * callers must not report a completed sensitive operation when its audit
+ * record could not be durably persisted.
+ */
+export async function logCriticalAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp">): Promise<AuditLogEntry> {
+  const saved = await logAuditEvent(entry);
+  if (!saved) throw new AuditLogPersistenceError(entry.action);
+  return saved;
 }
 
 export async function getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {

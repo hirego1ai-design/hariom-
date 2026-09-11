@@ -5,7 +5,8 @@ import { KillSwitchManager } from '../security/KillSwitchManager';
 import { KillSwitchType, AgentLifecycleState } from '@prisma/client';
 import { BudgetManager } from '../governance/BudgetManager';
 import { AgentEvaluator } from '../governance/AgentEvaluator';
-import { ShadowExecutor } from '../governance/ShadowExecutor';
+import { isBillableAiAgent } from '../governance/AiEntitlements';
+import { validateTenantAccess } from '../security/TenantContext';
 
 export class ExecutionLoopError extends Error {
   constructor(message: string) {
@@ -30,6 +31,12 @@ export class ExecutionLoop {
   }): Promise<Record<string, unknown>> {
     const registry = AgentRegistry.getInstance();
     const agent = registry.get(params.agentId);
+
+    validateTenantAccess(params.context.tenantContext, params.companyId);
+    if (params.context.agentId !== params.agentId) throw new ExecutionLoopError('Agent context mismatch');
+    const billable = isBillableAiAgent(params.agentId);
+    const estimatedMinor = billable ? params.estimatedSpendMinor : BigInt(0);
+    if (billable && estimatedMinor <= BigInt(0)) throw new ExecutionLoopError('Billable agents require a positive budget reservation');
 
     // 1. Assert Kill Switch is NOT active
     await this.killSwitchManager.assertNotKilled(KillSwitchType.AGENT, params.agentId);
@@ -60,9 +67,13 @@ export class ExecutionLoop {
       companyId: params.companyId,
       executionId: params.context.executionId,
       correlationId: params.context.correlationId,
-      estimatedMinor: params.estimatedSpendMinor,
+      estimatedMinor,
+      billableAgentId: billable ? params.agentId : undefined,
     });
 
+    let executionStarted = false;
+    let result: Record<string, unknown> | null = null;
+    try {
     // 4. Lifecycle: PLANNING -> EXECUTING
     await transitionLifecycle({
       agentId: params.agentId,
@@ -75,18 +86,22 @@ export class ExecutionLoop {
     currentState = AgentLifecycleState.EXECUTING;
 
     let attempt = 1;
-    let result: Record<string, unknown> | null = null;
     let lastError: unknown;
+    // A timed-out or invalid model response may already be billed. There is
+    // no provider idempotency contract here, so billable calls are not replayed.
+    const maxAttempts = billable ? 1 : this.MAX_ATTEMPTS;
 
     // 5. Bounded Loop: Max 3 attempts
-    while (attempt <= this.MAX_ATTEMPTS) {
+    while (attempt <= maxAttempts) {
       try {
+        await this.killSwitchManager.assertNotKilled(KillSwitchType.AGENT, params.agentId);
+        executionStarted = true;
         result = await agent.execute(params.taskInput, params.context);
         break; // Success
       } catch (err) {
         lastError = err;
         attempt++;
-        if (attempt <= this.MAX_ATTEMPTS) {
+        if (attempt <= maxAttempts) {
           // Retry transition
           await transitionLifecycle({
             agentId: params.agentId,
@@ -110,9 +125,8 @@ export class ExecutionLoop {
         targetState: AgentLifecycleState.FAILED,
         reason: lastError instanceof Error ? lastError.message : 'Execution failed after max attempts',
       });
-      await BudgetManager.releaseBudget(params.context.executionId);
       throw new ExecutionLoopError(
-        `Agent '${params.agentId}' failed execution after ${this.MAX_ATTEMPTS} attempts.`
+        `Agent '${params.agentId}' failed execution after ${maxAttempts} attempts.`
       );
     }
 
@@ -136,7 +150,11 @@ export class ExecutionLoop {
       output: result,
     });
 
-    const targetState = verdictToTransition(evalResult.verdict as EvaluatorVerdict);
+    const targetState = evalResult.verdict === 'ESCALATE'
+      ? AgentLifecycleState.AWAITING_APPROVAL
+      : evalResult.verdict === 'ACCEPT'
+        ? verdictToTransition(evalResult.verdict as EvaluatorVerdict)
+        : AgentLifecycleState.FAILED;
 
     await transitionLifecycle({
       agentId: params.agentId,
@@ -147,25 +165,25 @@ export class ExecutionLoop {
       reason: `Evaluator verdict: ${evalResult.verdict}`,
     });
 
-    // 8. Non-blocking Shadow Execution Trigger
-    ShadowExecutor.executeShadow({
-      correlationId: params.context.correlationId,
-      agentId: params.agentId,
-      algorithmVersion: 'shadow-eval-v2',
-      productionResult: result,
-      shadowFn: async () => ({ shadowNote: 'Shadow execution verified OK' }),
-    });
-
-    // 9. Reconcile only provider-authoritative spend.  When a provider does
-    // not report billable usage, release the estimate rather than recording a
-    // fabricated "actual" amount.
-    const actualSpend = result.actualCostMinorUnits;
-    if (typeof actualSpend === 'bigint' && actualSpend >= BigInt(0)) {
-      await BudgetManager.reconcileBudget({ executionId: params.context.executionId, actualMinor: actualSpend });
-    } else {
-      await BudgetManager.releaseBudget(params.context.executionId);
+    if (evalResult.verdict !== 'ACCEPT') {
+      throw new ExecutionLoopError(`Agent output was not accepted: ${evalResult.verdict}. Review is required.`);
     }
 
     return result;
+    } finally {
+      // Every path after reservation settles, including evaluation/logging
+      // failures. Unknown provider spend remains conservatively accounted for.
+      if (!executionStarted) {
+        await BudgetManager.releaseBudget(params.context.executionId, billable);
+      } else {
+        const actualSpend = result?.actualCostMinorUnits;
+        const knownSpend = (typeof actualSpend === 'bigint' && actualSpend >= BigInt(0)) ||
+          (typeof actualSpend === 'number' && Number.isSafeInteger(actualSpend) && actualSpend >= 0);
+        await BudgetManager.reconcileBudget({
+          executionId: params.context.executionId,
+          actualMinor: billable && knownSpend ? BigInt(actualSpend as bigint | number) : estimatedMinor,
+        });
+      }
+    }
   }
 }

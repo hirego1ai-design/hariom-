@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { handleApiError, ApiError, readBoundedTextBody } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { GatewayName } from "@/lib/payments/PaymentGatewayInterface";
+import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       throw new ApiError("Invalid JSON payload", 400);
     }
 
-    const { event, payload } = body;
+    const { event } = body;
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
     const requestedProvider = req.nextUrl.searchParams.get("provider")?.toUpperCase();
@@ -99,14 +99,18 @@ export async function POST(req: NextRequest) {
       throw new ApiError("Webhook provider does not match the payment order gateway", 400);
     }
 
-    // We can extract basic company/plan data if order missing but required for failure cases
-    const baseCompanyId = verification.companyId || payload?.companyId || payload?.metadata?.companyId;
-
     // 3. Handle Payment Failure / Rejection Events
     if (verification.status === "FAILED" || verification.status === "REJECTED" || event === "payment.failed") {
-      const failCompanyId = paymentOrder?.companyId || baseCompanyId;
+      const failCompanyId = paymentOrder?.companyId;
       if (failCompanyId) {
         await prisma.$transaction(async (tx) => {
+          // Serialize failure with success on the order row. A late failure
+          // event must never overwrite a captured order or release its promo.
+          const failedOrder = await tx.paymentOrder.updateMany({
+            where: { orderId: paymentOrder!.orderId, status: { not: "SUCCESS" } },
+            data: { status: "FAILED" },
+          });
+          if (failedOrder.count !== 1) return;
           const currentOrder = paymentOrder
             ? await tx.paymentOrder.findUnique({ where: { orderId: paymentOrder.orderId } })
             : null;
@@ -226,31 +230,37 @@ export async function POST(req: NextRequest) {
           };
         }
 
-        // Update PaymentOrder Status
-        await tx.paymentOrder.update({
-          where: { orderId: paymentOrder.orderId },
+        // Conditional update locks this order until commit. Concurrent events,
+        // even with different payment IDs, can provision this order only once.
+        const claimedOrder = await tx.paymentOrder.updateMany({
+          where: { orderId: paymentOrder.orderId, status: { not: "SUCCESS" } },
           data: { status: "SUCCESS", gatewayTxId }
         });
+        if (claimedOrder.count !== 1) {
+          return { duplicate: true, gatewayTxId, message: "Payment order already fulfilled." };
+        }
 
         // A discount capacity slot was atomically reserved before the gateway
         // order was created. Convert that exact reservation to usage; never
         // reject a captured payment because another checkout used the last slot.
         if (paymentOrder.promoCode) {
-          if (paymentOrder.promoReservationState !== "RESERVED") {
-            throw new ApiError("Payment order has no active promo reservation.", 409);
-          }
+          // Re-read after claiming: an earlier failure may have released its
+          // reservation before a later captured event arrived.
+          const currentOrder = await tx.paymentOrder.findUnique({ where: { orderId: paymentOrder.orderId } });
           const reservedPromos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
             SELECT "id", "reservedUsage"
             FROM "PromoCode"
             WHERE "code" = ${paymentOrder.promoCode.toUpperCase()}
             FOR UPDATE
           `;
-          if (reservedPromos.length !== 1 || reservedPromos[0].reservedUsage < 1) {
+          const wasReserved = currentOrder?.promoReservationState === "RESERVED";
+          if (reservedPromos.length !== 1 || (wasReserved && reservedPromos[0].reservedUsage < 1) ||
+              (!wasReserved && currentOrder?.promoReservationState !== "RELEASED")) {
             throw new ApiError("Promo reservation is unavailable for this payment order.", 409);
           }
           await tx.promoCode.update({
             where: { id: reservedPromos[0].id },
-            data: { usageCount: { increment: 1 }, reservedUsage: { decrement: 1 } },
+            data: { usageCount: { increment: 1 }, reservedUsage: wasReserved ? { decrement: 1 } : undefined },
           });
           await tx.paymentOrder.update({
             where: { orderId: paymentOrder.orderId },
@@ -274,19 +284,24 @@ export async function POST(req: NextRequest) {
         });
 
         // Activate Subscription
+        // Different paid orders for the same company must not create competing
+        // active subscriptions or lose a concurrent renewal period.
+        await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE`;
         const now = new Date();
-        const expiry = new Date();
+        const existingSub = await tx.companySubscription.findFirst({ where: { companyId }, orderBy: { endDate: "desc" } });
+        const renewCurrent = existingSub?.status === "ACTIVE" && existingSub.planId === plan.id && existingSub.endDate > now;
+        const expiry = new Date(renewCurrent ? existingSub.endDate : now);
         expiry.setMonth(expiry.getMonth() + (plan.validityMonths || 1));
 
-        const existingSub = await tx.companySubscription.findFirst({ where: { companyId } });
         if (existingSub) {
           await tx.companySubscription.update({
             where: { id: existingSub.id },
             data: {
               planId: plan.id,
               status: "ACTIVE",
-              startDate: now,
+              startDate: renewCurrent ? existingSub.startDate : now,
               endDate: expiry,
+              paymentId: gatewayTxId,
             },
           });
         } else {
@@ -297,23 +312,27 @@ export async function POST(req: NextRequest) {
               status: "ACTIVE",
               startDate: now,
               endDate: expiry,
+              paymentId: gatewayTxId,
             },
           });
         }
 
         // Provision Credits
+        const quotaCredits = subscriptionCredits(plan);
         const credits = await tx.companyCredits.upsert({
           where: { companyId },
           update: {
             jobPostsLeft: { increment: plan.jobPostsQuota },
             resumeUnlocksLeft: { increment: plan.resumeUnlocksQuota },
             aiInterviewsLeft: { increment: plan.aiInterviewsQuota },
+            aiAgentCreditsLeft: { increment: plan.aiInterviewsQuota },
+            applicationsLeft: { increment: quotaCredits.applicationsLeft },
+            resumeDownloadsLeft: { increment: quotaCredits.resumeDownloadsLeft },
+            backgroundVerificationsLeft: { increment: quotaCredits.backgroundVerificationsLeft },
           },
           create: {
             companyId,
-            jobPostsLeft: plan.jobPostsQuota,
-            resumeUnlocksLeft: plan.resumeUnlocksQuota,
-            aiInterviewsLeft: plan.aiInterviewsQuota,
+            ...quotaCredits,
           },
         });
 

@@ -12,7 +12,7 @@ Use this procedure only with a new, empty staging database. Do not run the initi
 ## 2. Provision infrastructure
 
 1. Create a new empty PostgreSQL database named for staging.
-2. Provision Redis, or retain the Compose Redis service for isolated staging.
+2. Provision an Upstash Redis REST database for staging and keep its URL and token in the staging secret manager.
 3. Configure the staging hostname and TLS certificate.
 4. Restrict PostgreSQL and Redis network access to the application environment; do not expose them publicly.
 
@@ -47,6 +47,7 @@ Check application logs and verify the service is reachable over HTTPS.
 - AI request with a configured sandbox provider and a clear error when its provider is unavailable.
 - WhatsApp sandbox webhook verification, duplicate event handling, opt-in status, and onboarding handoff.
 - Upload an allowed file and confirm that unauthorized access is denied.
+- Configure a staging SIEM receiver, invoke the security-audit worker with `INTERNAL_API_KEY`, and verify one event is delivered and duplicate event IDs are deduplicated by the receiver. See `docs/SECURITY_AUDIT_DELIVERY.md`.
 
 ## 6. Release gate
 

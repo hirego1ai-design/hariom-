@@ -1,10 +1,18 @@
 import { prisma } from '@/lib/prisma';
 import { AiCompanyBudget, BudgetReservation } from '@prisma/client';
+import { assertAndConsumeAiEntitlement, AiEntitlementError } from './AiEntitlements';
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'BudgetExceededError';
+  }
+}
+
+export class BudgetNotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BudgetNotConfiguredError';
   }
 }
 
@@ -22,8 +30,12 @@ export class BudgetManager {
     correlationId: string;
     estimatedMinor: bigint;
     ttlSeconds?: number;
+    billableAgentId?: string;
   }): Promise<BudgetReservation> {
     const { companyId, executionId, correlationId, estimatedMinor, ttlSeconds = 3600 } = params;
+    if (estimatedMinor < BigInt(0) || !Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
+      throw new RangeError('Budget reservations require a non-negative amount and positive integer TTL');
+    }
 
     try {
       return await prisma.$transaction(async (tx) => {
@@ -32,16 +44,26 @@ export class BudgetManager {
         `;
         const budget = budgets[0];
 
-        if (budget) {
-          const currentSpend = BigInt(budget.currentSpendMinorUnits);
-          const reservedSpend = BigInt(budget.reservedSpendMinorUnits);
-          const limit = BigInt(budget.monthlyLimitMinorUnits);
+        // A missing row used to create an unbounded reservation. This is a
+        // financial authorization boundary, so absence must deny execution.
+        if (!budget) {
+          throw new BudgetNotConfiguredError('AI budget is not configured for this company');
+        }
 
-          if (currentSpend + reservedSpend + estimatedMinor > limit) {
-            if (budget.isHardCapEnabled) {
-              throw new BudgetExceededError('Budget exceeded');
-            }
+        const currentSpend = BigInt(budget.currentSpendMinorUnits);
+        const reservedSpend = BigInt(budget.reservedSpendMinorUnits);
+        const limit = BigInt(budget.monthlyLimitMinorUnits);
+
+        if (currentSpend + reservedSpend + estimatedMinor > limit) {
+          if (budget.isHardCapEnabled) {
+            throw new BudgetExceededError('Budget exceeded');
           }
+        }
+
+        // Debit and reservation share a transaction. Rejected budgets and
+        // duplicate execution IDs must never consume an additional AI credit.
+        if (params.billableAgentId) {
+          await assertAndConsumeAiEntitlement(companyId, params.billableAgentId, tx);
         }
 
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
@@ -57,20 +79,18 @@ export class BudgetManager {
           },
         });
 
-        if (budget) {
-          await tx.aiCompanyBudget.update({
-            where: { id: budget.id },
-            data: {
-              reservedSpendMinorUnits: BigInt(budget.reservedSpendMinorUnits) + estimatedMinor,
-            },
-          });
-        }
+        await tx.aiCompanyBudget.update({
+          where: { id: budget.id },
+          data: {
+            reservedSpendMinorUnits: BigInt(budget.reservedSpendMinorUnits) + estimatedMinor,
+          },
+        });
 
         return reservation;
       });
     } catch (err) {
-      if (err instanceof BudgetExceededError) throw err;
-      if (process.env.NODE_ENV === "production") throw err;
+      if (err instanceof BudgetExceededError || err instanceof BudgetNotConfiguredError || err instanceof AiEntitlementError) throw err;
+      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw err;
       // Development/test-only fallback. It is never available to production
       // callers, where a failed budget reservation must fail closed.
       return {
@@ -90,6 +110,7 @@ export class BudgetManager {
 
   public static async reconcileBudget(params: { executionId: string; actualMinor: bigint }): Promise<void> {
     const { executionId, actualMinor } = params;
+    if (actualMinor < BigInt(0)) throw new RangeError('Actual spend cannot be negative');
 
     try {
       await prisma.$transaction(async (tx) => {
@@ -127,11 +148,11 @@ export class BudgetManager {
         }
       });
     } catch (error) {
-      if (process.env.NODE_ENV === "production") throw error;
+      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw error;
     }
   }
 
-  public static async releaseBudget(executionId: string): Promise<void> {
+  public static async releaseBudget(executionId: string, refundAiCredit = false): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const reservations = await tx.$queryRaw<BudgetReservation[]>`
         SELECT * FROM "BudgetReservation" WHERE "executionId" = ${executionId} AND "status" = 'HELD' FOR UPDATE
@@ -158,14 +179,24 @@ export class BudgetManager {
         await tx.aiCompanyBudget.update({
           where: { id: budget.id },
           data: {
-            reservedSpendMinorUnits: BigInt(budget.reservedSpendMinorUnits) - BigInt(reservation.reservedMinor),
-          },
+              reservedSpendMinorUnits: BigInt(budget.reservedSpendMinorUnits) - BigInt(reservation.reservedMinor),
+            },
+          });
+      }
+
+      // Match reservation's budget -> credits lock order. Only the execution
+      // owner requests this before execution; the HELD lock prevents repeats.
+      if (refundAiCredit) {
+        await tx.companyCredits.update({
+          where: { companyId: reservation.companyId },
+          data: { aiAgentCreditsLeft: { increment: 1 } },
         });
       }
     });
   }
 
-  public static async expireStaleReservations(): Promise<number> {
+  public static async expireStaleReservations(batchSize = 100, stopAt = Number.POSITIVE_INFINITY): Promise<number> {
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) throw new Error('Invalid reservation recovery batch size');
     let expiredCount = 0;
     const now = new Date();
 
@@ -174,14 +205,20 @@ export class BudgetManager {
         status: 'HELD',
         expiresAt: { lt: now },
       },
+      take: batchSize,
+      orderBy: { expiresAt: 'asc' },
     });
 
     for (const reservation of staleReservations) {
+      if (Date.now() >= stopAt) break;
       try {
-        await BudgetManager.releaseBudget(reservation.executionId);
+        // A dead worker may have reached the provider. Expiry is not proof of
+        // zero spend, so preserve the held estimate instead of freeing it.
+        await BudgetManager.reconcileBudget({ executionId: reservation.executionId, actualMinor: reservation.reservedMinor });
         expiredCount++;
       } catch (err) {
         console.error(`Failed to release stale budget reservation ${reservation.id}`, err);
+        throw new Error('Budget reservation recovery failed; retry after restoring database availability.');
       }
     }
 

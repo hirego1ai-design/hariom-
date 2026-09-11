@@ -293,15 +293,71 @@ export default function EmployerJobListingsPolishedPage() {
     }
   };
 
-  // Bulk actions handlers
-  const handleBulkStatusChange = (status: JobListing["status"]) => {
-    setJobs(prev => prev.map(j => selectedJobIds.includes(j.id) ? { ...j, status } : j));
-    setSelectedJobIds([]);
+  // Bulk actions are persisted one job at a time through the tenant-scoped API.
+  // Do not update local state for a job until its server-side change succeeds.
+  const handleBulkStatusChange = async (status: JobListing["status"]) => {
+    if (selectedJobIds.length === 0) return;
+
+    const apiStatus = status === "Active" ? "ACTIVE" : status === "Paused" ? "PAUSED" : status === "Closed" ? "CLOSED" : "DRAFT";
+    const selectedIds = [...selectedJobIds];
+    const results = await Promise.allSettled(
+      selectedIds.map(async (id) => {
+        const response = await fetch(`/api/employer/jobs/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: apiStatus }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to update job status");
+        return id;
+      }),
+    );
+
+    const updatedIds = new Set(
+      results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
+    );
+    const failedCount = results.length - updatedIds.size;
+
+    if (updatedIds.size > 0) {
+      setJobs((previous) => previous.map((job) => updatedIds.has(job.id) ? { ...job, status } : job));
+    }
+    setSelectedJobIds(failedCount === 0 ? [] : selectedIds.filter((id) => !updatedIds.has(id)));
+    triggerToast(
+      failedCount === 0
+        ? `${updatedIds.size} job${updatedIds.size === 1 ? "" : "s"} updated to ${status}.`
+        : `${updatedIds.size} job${updatedIds.size === 1 ? "" : "s"} updated; ${failedCount} failed and remain selected.`,
+    );
   };
 
-  const handleBulkDelete = () => {
-    setJobs(prev => prev.filter(j => !selectedJobIds.includes(j.id)));
-    setSelectedJobIds([]);
+  const handleBulkDelete = async () => {
+    if (selectedJobIds.length === 0) return;
+    if (!confirm(`Permanently delete ${selectedJobIds.length} selected job listing${selectedJobIds.length === 1 ? "" : "s"}?`)) return;
+
+    const selectedIds = [...selectedJobIds];
+    const results = await Promise.allSettled(
+      selectedIds.map(async (id) => {
+        const response = await fetch(`/api/employer/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to delete job");
+        return id;
+      }),
+    );
+
+    const deletedIds = new Set(
+      results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
+    );
+    const failedCount = results.length - deletedIds.size;
+
+    if (deletedIds.size > 0) {
+      setJobs((previous) => previous.filter((job) => !deletedIds.has(job.id)));
+      if (activeDrawerJob && deletedIds.has(activeDrawerJob.id)) setActiveDrawerJob(null);
+    }
+    setSelectedJobIds(failedCount === 0 ? [] : selectedIds.filter((id) => !deletedIds.has(id)));
+    triggerToast(
+      failedCount === 0
+        ? `${deletedIds.size} job${deletedIds.size === 1 ? "" : "s"} deleted.`
+        : `${deletedIds.size} job${deletedIds.size === 1 ? "" : "s"} deleted; ${failedCount} failed and remain selected.`,
+    );
   };
 
   const handleTriggerStatus = async (id: string, newStatus: JobListing["status"]) => {

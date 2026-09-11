@@ -1,114 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import * as fs from "fs";
-import * as path from "path";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { configuredSecurityHeaders } from "@/lib/securityHeaders";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { prisma } from "@/lib/prisma";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
-let securityPolicy = {
-  minPasswordLength: 8,
-  sessionTimeoutHours: 12,
-  ipWhitelistingEnabled: false,
-  sslTlsGrade: "A+",
-  tlsVersion: "TLS 1.3",
-  contentSecurityPolicyEnabled: true,
-  rateLimitingActive: true,
-  activeSessionsCount: 0,
-  lastVulnerabilityScan: new Date().toISOString(),
-  vulnerabilitiesFound: 0,
-};
-
-const CONFIG_ID = "global-admin-config";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function readSecurityPolicy() {
-  if (process.env.MOCK_DB === "true") return securityPolicy;
-  const stored = await prisma.adminConfiguration.findUnique({ where: { id: CONFIG_ID } });
-  if (!stored || !isRecord(stored.securityPolicy)) return securityPolicy;
-  return { ...securityPolicy, ...stored.securityPolicy };
-}
-
-const policySchema = z.object({
-  minPasswordLength: z.number().int().min(8).max(128).optional(),
-  sessionTimeoutHours: z.number().finite().min(1).max(168).optional(),
-  ipWhitelistingEnabled: z.boolean().optional(),
-  contentSecurityPolicyEnabled: z.boolean().optional(),
-  rateLimitingActive: z.boolean().optional(),
-  twoFactorEnforced: z.boolean().optional(),
-}).strip().refine((value) => Object.keys(value).length > 0, "At least one security policy field is required.");
-
+/**
+ * This endpoint intentionally reports only evidence the application can
+ * observe. TLS grades, vulnerability scan results, compliance attestations
+ * and active session counts need external scanners or a dedicated telemetry
+ * source; reporting invented values for them is materially worse than leaving
+ * them unmeasured.
+ */
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
-    const currentPolicy = await readSecurityPolicy();
-    let calculatedScore = 40;
-
-    // Check real security layers
-    const hasMiddleware = fs.existsSync(path.join(process.cwd(), "src", "middleware.ts")) || fs.existsSync(path.join(process.cwd(), "src", "proxy.ts"));
-    if (hasMiddleware) calculatedScore += 15;
-    if (currentPolicy.rateLimitingActive) calculatedScore += 10;
-    if (currentPolicy.contentSecurityPolicyEnabled) calculatedScore += 10;
-    if (process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET) calculatedScore += 10;
-    if (process.env.NODE_ENV === "production") calculatedScore += 5;
-    const hasRealDbUrl = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("prod_password_2026");
-    if (hasRealDbUrl) calculatedScore += 10;
+    const headers = configuredSecurityHeaders(process.env.NODE_ENV !== "production");
 
     return NextResponse.json({
       success: true,
-      rating: calculatedScore >= 90 ? "A+" : calculatedScore >= 80 ? "A" : calculatedScore >= 70 ? "B+" : calculatedScore >= 60 ? "B" : "C",
-      score: calculatedScore,
-      securityLayers: {
-        edgeMiddleware: hasMiddleware,
-        jwtAuthentication: true,
-        bcryptPasswordHashing: true,
-        rateLimiting: currentPolicy.rateLimitingActive,
-        inputSanitization: true,
-        zodValidation: true,
-        csrfProtection: false,
-        twoFactorAuth: false,
-        soc2Compliance: false,
-        gdprCompliance: false,
+      observedAt: new Date().toISOString(),
+      posture: "CONFIGURATION_EVIDENCE_ONLY",
+      summary: "This view reports application-configured controls. It is not a TLS, vulnerability, compliance, or penetration-test certification.",
+      applicationControls: {
+        edgeProxy: true,
+        contentSecurityPolicy: {
+          configured: Boolean(headers["Content-Security-Policy"]),
+          mode: "enforced",
+          value: headers["Content-Security-Policy"],
+        },
+        hsts: {
+          configured: true,
+          value: "max-age=63072000; includeSubDomains; preload",
+        },
+        clickjackingProtection: headers["X-Frame-Options"] === "DENY",
+        mimeSniffingProtection: headers["X-Content-Type-Options"] === "nosniff",
+        crossOriginIsolation: headers["Cross-Origin-Opener-Policy"] === "same-origin"
+          && headers["Cross-Origin-Resource-Policy"] === "same-origin",
       },
-      securityPolicy: currentPolicy,
+      measurements: {
+        tls: { status: "NOT_MEASURED", reason: "Run an external TLS scanner against the deployed hostname." },
+        vulnerabilities: { status: "NOT_MEASURED", reason: "Connect an SCA/SAST scanner and persist its signed results." },
+        activeSessions: { status: "NOT_MEASURED", reason: "JWT sessions are not a database-backed session inventory." },
+        compliance: { status: "NOT_MEASURED", reason: "Compliance requires an independent audit and evidence program." },
+      },
     });
   } catch (error) {
     return handleApiError(error);
   }
 }
 
+/**
+ * The former endpoint persisted UI switches that did not change deployed
+ * headers or infrastructure. Keep an explicit response for existing clients
+ * instead of silently presenting a simulated security control as real.
+ */
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAdminSession(req);
     await enforceRateLimit(req, `admin_security_policy:${session.id}`, 10, 60_000);
-    const body = await readValidatedJson(req, policySchema);
-    const currentPolicy = await readSecurityPolicy();
-    const nextPolicy = { ...currentPolicy, ...body };
-    if (process.env.MOCK_DB === "true") {
-      securityPolicy = nextPolicy;
-    } else {
-      const existing = await prisma.adminConfiguration.findUnique({ where: { id: CONFIG_ID } });
-      await prisma.adminConfiguration.upsert({
-        where: { id: CONFIG_ID },
-        create: { id: CONFIG_ID, securityPolicy: nextPolicy, platformConfig: existing?.platformConfig ?? undefined },
-        update: { securityPolicy: nextPolicy },
-      });
-    }
-    await logAuditEvent({
-      userId: session.id,
-      action: "SECURITY_POLICY_UPDATED",
-      resource: "Security policy",
-      ipAddress: req.headers.get("x-forwarded-for") || undefined,
-    });
-    return NextResponse.json({
-      success: true,
-      message: "Security policy updated successfully.",
-      securityPolicy: nextPolicy,
-    });
+    throw new ApiError(
+      "Security posture is read-only. Configure deployed controls through the application configuration and infrastructure change process.",
+      409,
+    );
   } catch (error) {
     return handleApiError(error);
   }

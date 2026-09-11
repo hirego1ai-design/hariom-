@@ -9,7 +9,15 @@ export interface ProctoringViolation {
   severity: "low" | "medium" | "high";
 }
 
-export default function ProctoringEngine({ onViolationCountChange }: { onViolationCountChange?: (count: number) => void }) {
+const telemetryTypeByViolation: Record<ProctoringViolation["type"], string> = {
+  "Tab Switch": "TAB_SWITCH",
+  "Copy-Paste Attempt": "COPY_PASTE_DETECTED",
+  "Right Click Blocked": "BROWSER_UNFOCUSED",
+  "Face Missing": "FACE_NOT_DETECTED",
+  "Background Noise": "AUDIO_ANOMALY",
+};
+
+export default function ProctoringEngine({ interviewId, onViolationCountChange }: { interviewId?: string; onViolationCountChange?: (count: number) => void }) {
   const [violations, setViolations] = useState<ProctoringViolation[]>([]);
   const [cheatingScore, setCheatingScore] = useState<number>(0);
 
@@ -29,13 +37,16 @@ export default function ProctoringEngine({ onViolationCountChange }: { onViolati
     const weight = severity === "high" ? 25 : severity === "medium" ? 15 : 5;
     setCheatingScore((prev) => Math.min(100, prev + weight));
 
-    // Push live telemetry to API
-    fetch("/api/proctoring/telemetry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ violationType: type, severity }),
-    }).catch(() => {});
-  }, [onViolationCountChange]);
+    // Push the raw browser observation only. The server owns severity and
+    // scoring; this UI must not be treated as an authoritative decision.
+    if (interviewId) {
+      fetch("/api/proctoring/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interviewId, violationType: telemetryTypeByViolation[type] }),
+      }).catch(() => {});
+    }
+  }, [interviewId, onViolationCountChange]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -76,35 +87,13 @@ export default function ProctoringEngine({ onViolationCountChange }: { onViolati
         </div>
 
         <div className="flex items-center gap-3 font-mono text-xs">
-          <span className="text-text-muted">Cheating Risk Score:</span>
+          <span className="text-text-muted">Advisory review score:</span>
           <span className={`px-2.5 py-0.5 rounded-full font-bold ${
             cheatingScore > 40 ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-green/20 text-green border border-green/30"
           }`}>
             {cheatingScore}% {cheatingScore > 40 ? "(Flagged)" : "(Clean)"}
           </span>
         </div>
-      </div>
-
-      {/* Manual Simulation Triggers for Proctoring Verification */}
-      <div className="flex flex-wrap gap-2 text-xs">
-        <button
-          onClick={() => addViolation("Tab Switch", "high")}
-          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-mono text-[11px]"
-        >
-          + Simulate Tab Switch
-        </button>
-        <button
-          onClick={() => addViolation("Copy-Paste Attempt", "medium")}
-          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-mono text-[11px]"
-        >
-          + Simulate Copy Block
-        </button>
-        <button
-          onClick={() => addViolation("Face Missing", "high")}
-          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-mono text-[11px]"
-        >
-          + Simulate Face Missing
-        </button>
       </div>
 
       {/* Violation Feed */}

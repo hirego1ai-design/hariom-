@@ -6,6 +6,7 @@ import Link from "next/link";
 
 type StageId =
   | "Applied"
+  | "Shortlisted"
   | "AI Screening"
   | "Video Resume Review"
   | "Assessment"
@@ -28,19 +29,12 @@ interface StageConfig {
 }
 
 const STAGES: StageConfig[] = [
-  { id: "Applied", label: "Applied", color: "text-[#448AFF]", bgColor: "bg-[#448AFF]/10", borderColor: "border-[#448AFF]/30" },
   { id: "AI Screening", label: "AI Screening", color: "text-[#7C4DFF]", bgColor: "bg-[#7C4DFF]/10", borderColor: "border-[#7C4DFF]/30" },
-  { id: "Video Resume Review", label: "Video Resume Review", color: "text-[#00BCD4]", bgColor: "bg-[#00BCD4]/10", borderColor: "border-[#00BCD4]/30" },
   { id: "Assessment", label: "Assessment", color: "text-[#FF9800]", bgColor: "bg-[#FF9800]/10", borderColor: "border-[#FF9800]/30" },
   { id: "AI Interview", label: "AI Interview", color: "text-[#E040FB]", bgColor: "bg-[#E040FB]/10", borderColor: "border-[#E040FB]/30" },
-  { id: "Technical Interview", label: "Tech Interview", color: "text-[#2F80ED]", bgColor: "bg-[#2F80ED]/10", borderColor: "border-[#2F80ED]/30" },
-  { id: "HR Interview", label: "HR Interview", color: "text-[#26A69A]", bgColor: "bg-[#26A69A]/10", borderColor: "border-[#26A69A]/30" },
-  { id: "Client Interview", label: "Client Interview", color: "text-[#5C6BC0]", bgColor: "bg-[#5C6BC0]/10", borderColor: "border-[#5C6BC0]/30" },
-  { id: "Offer", label: "Offer", color: "text-[#66BB6A]", bgColor: "bg-[#66BB6A]/10", borderColor: "border-[#66BB6A]/30" },
-  { id: "Documentation", label: "Documentation", color: "text-[#8D6E63]", bgColor: "bg-[#8D6E63]/10", borderColor: "border-[#8D6E63]/30" },
+  { id: "Shortlisted", label: "Shortlisted", color: "text-[#66BB6A]", bgColor: "bg-[#66BB6A]/10", borderColor: "border-[#66BB6A]/30" },
   { id: "Joined", label: "Joined", color: "text-[#2E7D32]", bgColor: "bg-[#2E7D32]/10", borderColor: "border-[#2E7D32]/30" },
   { id: "Rejected", label: "Rejected", color: "text-[#EF5350]", bgColor: "bg-[#EF5350]/10", borderColor: "border-[#EF5350]/30" },
-  { id: "Withdrawn", label: "Withdrawn", color: "text-[#78909C]", bgColor: "bg-[#78909C]/10", borderColor: "border-[#78909C]/30" },
 ];
 
 export default function HiringPipelinePage() {
@@ -67,11 +61,10 @@ export default function HiringPipelinePage() {
   }, [candidates]);
 
   // Handle Drag / Move candidate action
-  const handleMove = (candidateId: string, targetStage: StageId) => {
-    const candidate = candidates.find((c) => c.id === candidateId);
+  const handleMove = async (applicationId: string, targetStage: StageId) => {
+    const candidate = candidates.find((c) => c.applicationId === applicationId);
     if (!candidate) return;
-    updateCandidateStage(candidateId, targetStage);
-    showToast(`Moved ${candidate.name} to ${targetStage}`);
+    if (await updateCandidateStage(applicationId, targetStage)) showToast(`Moved ${candidate.name} to ${targetStage}`);
   };
 
   const showToast = (message: string) => {
@@ -107,7 +100,7 @@ export default function HiringPipelinePage() {
     const avgScore = total ? Math.round(filteredCandidates.reduce((acc, c) => acc + c.matchScore, 0) / total) : 0;
     const highlyRecCount = filteredCandidates.filter((c) => c.recommendation === "Highly Recommended").length;
     const joinedCount = filteredCandidates.filter((c) => c.stage === "Joined").length;
-    const offersCount = filteredCandidates.filter((c) => c.stage === "Offer").length;
+    const offersCount = filteredCandidates.filter((c) => c.stage === "Shortlisted").length;
     
     // Average experience calculation
     const avgExpVal = total 
@@ -167,7 +160,7 @@ export default function HiringPipelinePage() {
           <p className="font-display text-2xl text-green mt-1">{stats.avgScore}%</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
-          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Offers Out</p>
+          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Shortlisted</p>
           <p className="font-display text-2xl text-secondary mt-1">{stats.offersCount}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
@@ -422,9 +415,9 @@ export default function HiringPipelinePage() {
                     <div className="flex-1 flex flex-col gap-3 overflow-y-auto max-h-[560px] pr-1">
                       {stageCandidates.map((c) => (
                         <CandidateCard
-                          key={c.id}
+                          key={c.applicationId}
                           candidate={c}
-                          onMoveStage={(stage) => handleMove(c.id, stage)}
+                          onMoveStage={(stage) => handleMove(c.applicationId, stage)}
                           expandedNotesCard={expandedNotesCard}
                           setExpandedNotesCard={setExpandedNotesCard}
                         />
@@ -446,7 +439,7 @@ export default function HiringPipelinePage() {
           <div className="flex-1 flex flex-col gap-4">
             {filteredCandidates.map((c) => (
               <div
-                key={c.id}
+                key={c.applicationId}
                 className="glass-card p-5 rounded-2xl border border-white/10 bg-[#141418] hover:border-secondary/40 hover:scale-[1.01] transition-all duration-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
               >
                 <Link href={`/employer/full-candidate-profile-employer-view?id=${c.id}`} className="flex items-start gap-4 hover:opacity-80 transition-opacity relative z-10">
@@ -483,7 +476,7 @@ export default function HiringPipelinePage() {
                     <span className="text-[10px] text-text-muted font-bold uppercase">Pipeline Stage</span>
                     <select
                       value={c.stage}
-                      onChange={(e) => handleMove(c.id, e.target.value as StageId)}
+                      onChange={(e) => handleMove(c.applicationId, e.target.value as StageId)}
                       className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none w-full"
                     >
                       {STAGES.map((s) => (
@@ -544,7 +537,7 @@ export default function HiringPipelinePage() {
                 .filter((c) => c.recommendation === "Highly Recommended")
                 .slice(0, 2)
                 .map((c) => (
-                  <div key={c.id} className="p-3 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3">
+                  <div key={c.applicationId} className="p-3 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3">
                     <img src={c.avatar} alt={c.name} className="w-8 h-8 rounded-full object-cover" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-white truncate">{c.name}</p>
@@ -658,11 +651,11 @@ function CandidateCard({
         </div>
         {isNotesExpanded ? (
           <p className="text-text-secondary leading-normal bg-white/5 p-2 rounded-lg border border-white/5">
-            {candidate.recruiterNotes}
+            {candidate.recruiterNotes || "No recruiter notes recorded."}
           </p>
         ) : (
           <p className="text-text-muted truncate leading-normal">
-            {candidate.recruiterNotes}
+            {candidate.recruiterNotes || "No recruiter notes recorded."}
           </p>
         )}
       </div>

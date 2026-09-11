@@ -111,5 +111,35 @@ The production integrity reconciliation was also applied:
 `prisma/migrations/20260831100000_production_integrity_reconcile/migration.sql`.
 It added the application uniqueness index, nullable provider-usage telemetry,
 promo reservation fields, and nullable video-score fields after verifying no
-duplicate application pairs existed. The security advisor remains at zero
-lints; performance notices are informational only.
+duplicate application pairs existed. At that time, the security advisor had no
+findings; performance notices were informational only.
+
+## RLS defense in depth update
+
+On 2026-09-08, RLS was enabled on every application-owned table in the
+`Hariom` staging project through the reviewed migration
+`20260908093000_enable_public_table_rls`. Prisma's
+`_prisma_migrations` ledger was intentionally excluded.
+
+This application has no Supabase browser client and does not use Supabase Auth:
+all data access goes through server-side Prisma with custom JWT authorization.
+Accordingly, no `auth.uid()` policies were added and no privileges were granted
+to `anon` or `authenticated`. Post-deployment verification confirmed that all
+79 application tables have RLS enabled and those roles cannot select from the
+`User` table. Supabase may report informational `rls_enabled_no_policy` notices;
+these are expected because Data API access is deliberately denied.
+
+## Prisma migration-ledger follow-up
+
+The following schema changes were applied directly to the `Hariom` staging
+project through Supabase MCP on 2026-09-08:
+
+- `20260905090000_add_ai_agent_credits`
+- `20260905100000_add_security_audit_outbox`
+- `20260908093000_enable_public_table_rls`
+
+They are not yet recorded in Prisma's `_prisma_migrations` ledger. Before any
+future `prisma migrate deploy` against this database, use the staging
+`DATABASE_URL` to mark each existing migration as applied with
+`npx prisma migrate resolve --applied <migration_name>`. Do not rerun their SQL
+or manually insert migration-ledger rows.

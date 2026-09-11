@@ -1,11 +1,13 @@
 import { runReferralTestSuite } from "../src/tests/referrals.test";
+import { assertDisposableTestEnvironment, withBlockedProviderNetwork } from "../src/tests/test-safety";
 
 async function main() {
+  assertDisposableTestEnvironment();
   console.log("===============================================================");
   console.log("   HIREGO REFERRAL ENGINE — PHASE 1 AUTOMATED VERIFICATION   ");
   console.log("===============================================================\n");
 
-  const { passed, failed, results } = await runReferralTestSuite();
+  const { passed, failed, results } = await withBlockedProviderNetwork(runReferralTestSuite);
 
   results.forEach((r, idx) => {
     const icon = r.success ? "✅" : "❌";

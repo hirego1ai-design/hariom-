@@ -447,8 +447,33 @@ model AuditLog {
   ipAddress String?
   details   String?
   createdAt DateTime @default(now())
+  siemEvent SecurityAuditOutboxEvent?
 
   @@index([companyId, createdAt])
+}
+
+// Every persisted audit record gets exactly one immutable delivery envelope.
+// A separate worker can claim PENDING records and forward them to a SIEM
+// without making request handling depend on an external SIEM credential.
+model SecurityAuditOutboxEvent {
+  id            String   @id @default(uuid())
+  auditLogId    String   @unique
+  auditLog      AuditLog @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+  eventType     String   @default("security.audit.v1")
+  payload       Json
+  payloadSha256 String
+  status        String   @default("PENDING")
+  attempts      Int      @default(0)
+  availableAt   DateTime @default(now())
+  leaseId       String?
+  leasedUntil   DateTime?
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@index([createdAt])
 }
 
 // Global admin-managed configuration. JSON keeps the existing API contract
@@ -764,6 +789,7 @@ model CompanyCredits {
   jobPostsLeft                Int      @default(0)
   resumeUnlocksLeft           Int      @default(0)
   aiInterviewsLeft            Int      @default(0)
+  aiAgentCreditsLeft          Int      @default(0)
   applicationsLeft            Int      @default(0)
   resumeDownloadsLeft         Int      @default(0)
   backgroundVerificationsLeft Int      @default(0)

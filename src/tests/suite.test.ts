@@ -1,9 +1,8 @@
 import { calculateCommercialFee } from "@/utils/pricing";
 import { agreementsDb } from "@/lib/agreements-db";
 import { invoicesDb } from "@/lib/invoices-db";
-import { dispatchAiTask } from "@/utils/aiRouter";
-import { generateAndSendOtp, verifyOtpCode } from "@/lib/otp";
 import { validatePasswordStrength, hasRoleAccess, sanitizeUserInput } from "@/lib/auth";
+import { assertDisposableTestEnvironment, withBlockedProviderNetwork } from "./test-safety";
 
 export interface TestResult {
   name: string;
@@ -20,6 +19,11 @@ export async function runAllTests(): Promise<{
   skippedCount: number;
   results: TestResult[];
 }> {
+  assertDisposableTestEnvironment();
+  return withBlockedProviderNetwork(runIsolatedTests);
+}
+
+async function runIsolatedTests() {
   const results: TestResult[] = [];
 
   // 1. Commercial Pricing Engine Tests
@@ -70,26 +74,8 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Invoices Engine - Creation & Payment", category: "Invoices", passed: false, message: e.message });
   }
 
-  // 4. Multi-LLM Router safety test. A missing provider is an explicit error;
-  // it must never turn into a simulated production score or fake usage data.
-  try {
-    const isPlaceholder = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes("sk-proj-hirego-openai-production-key") || process.env.OPENAI_API_KEY.includes("placeholder");
-    if (isPlaceholder) {
-      let rejected = false;
-      try {
-        await dispatchAiTask({ task: "RESUME_SCORE", prompt: "Test prompt" });
-      } catch {
-        rejected = true;
-      }
-      results.push({ name: "AI Router - Missing provider fails explicitly without simulated output", category: "AI Router", passed: rejected });
-    } else {
-      const aiRes = await dispatchAiTask({ task: "RESUME_SCORE", prompt: "Test prompt" });
-      const pass6 = aiRes.success && aiRes.log.costEstUsd === null;
-      results.push({ name: "AI Router - Provider telemetry does not invent cost", category: "AI Router", passed: pass6 });
-    }
-  } catch (e: any) {
-    results.push({ name: "Multi-LLM Router - Dispatch & Telemetry Logging", category: "AI Router", passed: false, message: e.message });
-  }
+  results.push({ name: "AI Router - Live provider integration", category: "AI Router", passed: false, skipped: true,
+    message: "Requires a separately authorized provider sandbox; regression tests must not spend real AI credits." });
 
   // 5. Security & Auth Tests
   try {
@@ -127,23 +113,8 @@ export async function runAllTests(): Promise<{
     results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
   }
 
-  // 7. OTP Engine Verification Tests
-  try {
-    const testEmail = "candidate.test@hirego.ai";
-    const otpRes = await generateAndSendOtp(testEmail, "VERIFY_EMAIL");
-    const passOtp1 = otpRes.success;
-    results.push({ name: "OTP Engine - 6-Digit Generation & Persistence", category: "OTP", passed: passOtp1 });
-
-    const invalidVerify = await verifyOtpCode(testEmail, "000000", "VERIFY_EMAIL");
-    const passOtp2 = !invalidVerify.valid;
-    results.push({ name: "OTP Engine - Rejection of Invalid Code", category: "OTP", passed: passOtp2 });
-
-    const validVerify = await verifyOtpCode(testEmail, "123456", "VERIFY_EMAIL");
-    const passOtp3 = validVerify.valid;
-    results.push({ name: "OTP Engine - Code Verification & Consumption", category: "OTP", passed: passOtp3 });
-  } catch (e: any) {
-    results.push({ name: "OTP Engine - Verification Suite", category: "OTP", passed: false, message: e.message });
-  }
+  results.push({ name: "OTP Engine - Live email delivery", category: "OTP", passed: false, skipped: true,
+    message: "Requires an isolated mail transport; fixed OTP 123456 is not a valid cryptographic OTP assertion." });
 
   // 8. Referral Engine & Managed Hiring Auditor Tests
   try {
@@ -271,21 +242,6 @@ export async function runAllTests(): Promise<{
 
 // Direct CLI execution support for CI & npm test
 if (process.argv[1]?.includes("suite.test")) {
-  const databaseUrl = process.env.DATABASE_URL || "";
-  const directUrl = process.env.DIRECT_URL || "";
-  const isTestDb = process.env.HIREGO_TEST_DATABASE === "1";
-  const isDisposable = (url: string) =>
-    url.includes("localhost") ||
-    url.includes("127.0.0.1") ||
-    url.includes("hirego_ci") ||
-    url.includes("test");
-
-  if (!isTestDb || (!isDisposable(databaseUrl) && !isDisposable(directUrl))) {
-    console.error("FATAL: Test runner blocked. You are attempting to run tests against a live/production database.");
-    console.error("To run tests safely, you must set HIREGO_TEST_DATABASE=1 and configure DATABASE_URL/DIRECT_URL to a local/disposable database.");
-    process.exit(1);
-  }
-
   runAllTests()
     .then((res) => {
       console.log("\n========================================");

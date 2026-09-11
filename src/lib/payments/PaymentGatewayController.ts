@@ -33,14 +33,17 @@ export class PaymentGatewayController {
     STRIPE: new StripeGateway(),
   };
 
-  private static cachedConfig: GatewayConfigState | null = null;
+  // The database is authoritative. A short TTL avoids serving an obsolete
+  // payment routing policy indefinitely across serverless instances.
+  private static cachedConfig: { value: GatewayConfigState; expiresAt: number } | null = null;
+  private static readonly CONFIG_CACHE_TTL_MS = 30_000;
 
   /**
    * Fetch current admin gateway configuration (or initialize default)
    */
   static async getConfig(): Promise<GatewayConfigState> {
-    if (this.cachedConfig) {
-      return this.cachedConfig;
+    if (this.cachedConfig && this.cachedConfig.expiresAt > Date.now()) {
+      return this.cachedConfig.value;
     }
 
     try {
@@ -49,7 +52,7 @@ export class PaymentGatewayController {
       });
 
       if (configRecord) {
-        this.cachedConfig = {
+        const configured: GatewayConfigState = {
           mode: configRecord.mode as any,
           primaryGateway: configRecord.primaryGateway as any,
           autoFailover: configRecord.autoFailover,
@@ -59,14 +62,16 @@ export class PaymentGatewayController {
         };
         if (process.env.NODE_ENV === "production") {
           for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
-            this.cachedConfig.gatewaysStatus[gw] = "DISABLED";
+            configured.gatewaysStatus[gw] = "DISABLED";
           }
         }
-        return this.cachedConfig;
+        this.cachedConfig = { value: configured, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
+        return configured;
       }
     } catch (error) {
       if (process.env.NODE_ENV === "production") {
         console.error("Failed to load gateway config from DB:", error);
+        throw new Error("Payment gateway configuration is temporarily unavailable.");
       }
     }
 
@@ -92,6 +97,9 @@ export class PaymentGatewayController {
       }
     }
     
+    if (!isProduction) {
+      this.cachedConfig = { value: defaultConfig, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
+    }
     return defaultConfig;
   }
 
@@ -116,8 +124,6 @@ export class PaymentGatewayController {
       }
     }
     
-    this.cachedConfig = updated;
-
     try {
       await prisma.paymentGatewayConfig.upsert({
         where: { id: "global-gateway-config" },
@@ -144,6 +150,10 @@ export class PaymentGatewayController {
         throw error;
       }
     }
+
+    // Persist first, then update only this instance's cache. Other instances
+    // refresh from the database within the bounded TTL above.
+    this.cachedConfig = { value: updated, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
 
     return updated;
   }

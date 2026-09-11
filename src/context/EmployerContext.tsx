@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { fetchEmployerCandidates, pipelineStageLabels, pipelineStageStatus } from "@/lib/employerCandidates";
 // Remove mock imports
 
 type Job = any;
@@ -24,7 +25,7 @@ interface EmployerContextType {
   draftJob: DraftJob;
   addJob: (job: Job) => void;
   updateDraftJob: (data: Partial<DraftJob>) => void;
-  updateCandidateStage: (candidateId: string, newStage: string) => void;
+  updateCandidateStage: (applicationId: string, newStage: string) => Promise<boolean>;
   removeJob: (jobId: string) => void;
   isLoading: boolean;
 }
@@ -81,13 +82,8 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function fetchCandidates() {
       try {
-        const res = await fetch("/api/employer/candidates");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.candidates) {
-            setCandidates(data.candidates);
-          }
-        }
+        const data = await fetchEmployerCandidates<Candidate>();
+        setCandidates(data.map(candidate => ({ ...candidate, stage: pipelineStageLabels[candidate.stage] || candidate.stage })));
       } catch (err) {
         console.error("Failed to fetch employer candidates:", err);
       } finally {
@@ -117,40 +113,12 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateCandidateStage = async (candidateId: string, newStage: string) => {
-    const candidate = candidates.find(c => c.id === candidateId);
-    if (!candidate?.applicationId) return;
-
-    // Map frontend stage names to database ApplicationStatus enums
-    const mapStageToDbStatus = (stage: string): string => {
-      switch (stage) {
-        case "Applied":
-          return "SCREENING"; // fallback since APPLIED isn't in stage PATCH zod enum
-        case "AI Screening":
-        case "Video Resume Review":
-          return "SCREENING";
-        case "Assessment":
-          return "ASSESSMENT";
-        case "AI Interview":
-          return "AI_INTERVIEW";
-        case "Technical Interview":
-        case "HR Interview":
-        case "Client Interview":
-        case "Offer":
-        case "Documentation":
-          return "SHORTLISTED";
-        case "Joined":
-          return "HIRED";
-        case "Rejected":
-        case "Withdrawn":
-          return "REJECTED";
-        default:
-          return "SCREENING";
-      }
-    };
+  const updateCandidateStage = async (applicationId: string, newStage: string): Promise<boolean> => {
+    const candidate = candidates.find(c => c.applicationId === applicationId);
+    if (!candidate?.applicationId) return false;
 
     try {
-      const dbStage = mapStageToDbStatus(newStage);
+      const dbStage = pipelineStageStatus(newStage);
       const res = await fetch(`/api/employer/candidates/${candidate.applicationId}/stage`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -159,10 +127,12 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update stage");
 
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c));
+      setCandidates(prev => prev.map(c => c.applicationId === applicationId ? { ...c, stage: pipelineStageLabels[data.stage] || newStage } : c));
+      return true;
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Failed to update candidate stage.");
+      return false;
     }
   };
 
@@ -178,7 +148,7 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
       updateDraftJob,
       updateCandidateStage,
       removeJob,
-      isLoading
+      isLoading: isLoading || isCandidatesLoading
     }}>
       {children}
     </EmployerContext.Provider>
