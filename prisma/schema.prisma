@@ -109,6 +109,7 @@ model User {
   @@index([phoneNumber])
   candidateNotesAuthored EmployerCandidateNote[]
   candidateTagsCreated EmployerCandidateTag[]
+  candidateCollectionsCreated EmployerCandidateCollection[]
 }
 
 enum CandidateAvailabilityStatus {
@@ -177,6 +178,7 @@ model Company {
   interviewProcesses   JobInterviewProcess[]
   candidateNotes        EmployerCandidateNote[]
   candidateTags         EmployerCandidateTag[]
+  candidateCollections  EmployerCandidateCollection[]
 }
 
 enum InvitationStatus {
@@ -369,6 +371,20 @@ model EmployerCandidateTag {
   createdBy     User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt     DateTime    @default(now())
   @@unique([applicationId, label])
+  @@index([companyId])
+}
+
+model EmployerCandidateCollection {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  name        String
+  candidateIds Json    @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([companyId, name])
   @@index([companyId])
 }
 
