@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +41,9 @@ export async function POST(request: NextRequest) {
     const body = await readValidatedJson(request, schema);
     const normalizedText = body.questionText.replace(/\s+/g, " ").trim();
     const normalizedRole = body.roleTitle.replace(/\s+/g, " ").trim();
-    const question = await prisma.$transaction(async (tx) => {
+    let question;
+    try {
+      question = await prisma.$transaction(async (tx) => {
       const family = await tx.recordedAssessmentQuestionBank.findMany({
         where: { questionKey: body.questionKey },
         select: { id: true, version: true, isActive: true },
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
       if (family.some((item) => item.isActive)) {
         throw new ApiError("Retire the active version before publishing a replacement.", 409);
       }
-      return tx.recordedAssessmentQuestionBank.create({
+        return tx.recordedAssessmentQuestionBank.create({
         data: {
           ...body,
           roleTitle: normalizedRole,
@@ -57,8 +60,17 @@ export async function POST(request: NextRequest) {
           version: (family[0]?.version ?? 0) + 1,
           readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
         },
-      });
-    });
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      // Concurrent admins can calculate the same next version. The unique
+      // questionKey/version index remains authoritative and turns that race
+      // into an explicit retry instead of an opaque database failure.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) {
+        throw new ApiError("This question family changed while you were publishing. Reload the bank and publish again.", 409);
+      }
+      throw error;
+    }
     return NextResponse.json({ success: true, question }, { status: 201 });
   } catch (error) { return handleApiError(error); }
 }
