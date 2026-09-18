@@ -239,13 +239,21 @@ export async function runHiringWorkflowTests(): Promise<{
       );
       await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
 
+      const withdrawalProcess = await prisma.jobInterviewProcess.create({ data: { jobId: jobListingA.id, companyId: companyA.id, isActive: true } });
+      const withdrawalRound = await prisma.interviewRound.create({
+        data: { processId: withdrawalProcess.id, sequence: 1, name: "Withdrawal regression round", interviewType: "VIDEO", durationMins: 45 },
+      });
+      const withdrawalProgress = await prisma.interviewRoundProgress.create({
+        data: { applicationId: applicationA.id, roundId: withdrawalRound.id, interviewId: interviewA.id, status: "SCHEDULED" },
+      });
       const resWithdraw = await callApplicationPatch(candidateToken, applicationA.id);
       const withdrawnApplication = await prisma.application.findUnique({ where: { id: applicationA.id } });
       const cancelledByWithdrawal = await prisma.interview.findUnique({ where: { id: interviewA.id } });
+      const cancelledProgress = await prisma.interviewRoundProgress.findUnique({ where: { id: withdrawalProgress.id } });
       assert(
         "Candidate withdrawal is transactional and cancels active interviews",
-        resWithdraw.status === 200 && withdrawnApplication?.status === "WITHDRAWN" && cancelledByWithdrawal?.status === "CANCELLED",
-        "Owned application became WITHDRAWN and scheduled interview was cancelled"
+        resWithdraw.status === 200 && withdrawnApplication?.status === "WITHDRAWN" && cancelledByWithdrawal?.status === "CANCELLED" && cancelledProgress?.status === "CANCELLED",
+        "Owned application became WITHDRAWN and both interview and round progress were cancelled"
       );
       const resWithdrawReplay = await callApplicationPatch(candidateToken, applicationA.id);
       assert(
@@ -255,6 +263,16 @@ export async function runHiringWorkflowTests(): Promise<{
       );
       await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
       await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "SCHEDULED" } });
+      await prisma.interviewRoundProgress.update({ where: { id: withdrawalProgress.id }, data: { status: "LIVE" } });
+      const resWithdrawLive = await callApplicationPatch(candidateToken, applicationA.id);
+      const applicationAfterLiveAttempt = await prisma.application.findUnique({ where: { id: applicationA.id } });
+      assert(
+        "Candidate cannot withdraw while an interview round is live",
+        resWithdrawLive.status === 409 && applicationAfterLiveAttempt?.status === "ASSESSMENT",
+        "Live interview blocks withdrawal without mutating application state"
+      );
+      await prisma.interviewRoundProgress.delete({ where: { id: withdrawalProgress.id } });
+      await prisma.jobInterviewProcess.delete({ where: { id: withdrawalProcess.id } });
 
       await prisma.application.update({ where: { id: applicationA.id }, data: { status: "REJECTED" } });
       const resReopenRejected = await callStagePatch(tokenA, applicationA.id, "SCREENING");
