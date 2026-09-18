@@ -81,21 +81,8 @@ function EmployerInterviewSchedulerContent() {
           </label>
           <div className="grid md:grid-cols-2 gap-4">
             <label className="block text-sm text-text-secondary">
-              Round
-              <select value={round} onChange={(e) => setRound(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white">
-                <option value="HR_SCREENING">HR screening</option>
-                <option value="TECHNICAL">Technical</option>
-                <option value="OPERATIONS">Operations / Leadership</option>
-                <option value="SYSTEM_DESIGN">System design</option>
-                <option value="FINAL">Final employer</option>
-              </select>
-            </label>
-            <label className="block text-sm text-text-secondary">
-              Mode
-              <select value={mode} onChange={(e) => setMode(e.target.value as any)} className="mt-2 w-full input-pill h-11 px-4 text-white">
-                <option value="ONLINE">Online · HireGo portal</option>
-                <option value="OFFLINE">Offline · In person</option>
-              </select>
+              Configured round ID
+              <input value={roundId} onChange={(e) => setRoundId(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" placeholder="Select a configured interview round" />
             </label>
             <label className="block text-sm text-text-secondary">
               Date
