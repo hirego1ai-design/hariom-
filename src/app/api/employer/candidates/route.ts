@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
           include: {
             candidateProfile: { include: {
               user: { select: { name: true } },
+              readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } },
               videoResumes: {
                 where: { OR: [{ retentionExpiresAt: null }, { retentionExpiresAt: { gt: new Date() } }] },
                 select: { id: true },
