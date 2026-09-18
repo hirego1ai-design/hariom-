@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(request: NextRequest) {
+ try {
+  await enforceRateLimit(request, "promo_validate", 30, 60_000);
   const session = await getCurrentSession(request.headers);
   if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
-  const planId = searchParams.get("planId");
+  const code = searchParams.get("code")?.trim().toUpperCase();
+  const planId = searchParams.get("planId")?.trim();
 
-  if (!code || !planId) {
+  if (!code || !planId || code.length > 64 || planId.length > 128) {
     return NextResponse.json({ success: false, error: "Missing code or planId parameter" }, { status: 400 });
   }
 
@@ -49,4 +52,5 @@ export async function GET(request: NextRequest) {
     finalPrice,
     savings: discountAmount,
   });
+ } catch (error) { return handleApiError(error); }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
 const savedJobSchema = z.object({ jobId: z.string().uuid() }).strict();
@@ -13,6 +13,7 @@ async function requireCandidate(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_saved_jobs", 60, 60_000);
     const session = await requireCandidate(request);
     const savedJobs = await prisma.savedJob.findMany({ where: { userId: session.id }, include: { job: { include: { company: { select: { name: true, logoUrl: true, location: true } } } } }, orderBy: { createdAt: "desc" } });
     return NextResponse.json({ success: true, savedJobs: savedJobs.map((saved) => ({ id: saved.id, jobId: saved.jobId, savedAt: saved.createdAt, job: saved.job })) });
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_saved_jobs", 60, 60_000);
     const session = await requireCandidate(request);
     const { jobId } = await readValidatedJson(request, savedJobSchema);
     const job = await prisma.jobListing.findFirst({ where: { id: jobId, status: "ACTIVE" }, select: { id: true } });
@@ -32,6 +34,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_saved_jobs", 60, 60_000);
     const session = await requireCandidate(request);
     const jobId = new URL(request.url).searchParams.get("jobId");
     const parsed = savedJobSchema.safeParse({ jobId });

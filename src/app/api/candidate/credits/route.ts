@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
 async function candidateProfile(request: NextRequest) {
@@ -13,6 +13,7 @@ async function candidateProfile(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_credits_get", 60, 60_000);
     const profile = await candidateProfile(request);
     const [wallet, ledger, services] = await Promise.all([
       prisma.candidateCreditWallet.upsert({

@@ -13,6 +13,7 @@ import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_security_status", 30, 60_000);
     const headers = configuredSecurityHeaders(process.env.NODE_ENV !== "production");
 
     return NextResponse.json({

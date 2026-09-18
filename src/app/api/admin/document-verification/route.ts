@@ -3,6 +3,7 @@ import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createDevDocumentVerification, getDevDocumentVerifications } from "@/lib/document-verification-store";
 import { z } from "zod";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 // Document types that require admin verification
 const DOCUMENT_TYPES = [
@@ -22,7 +23,7 @@ const documentSubmissionSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   companyName: z.string().trim().max(255).optional(),
   employerId: z.string().trim().min(1).max(191).optional(),
-});
+}).strict();
 
 export type DocumentType = typeof DOCUMENT_TYPES[number];
 
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Authentication required", 401);
     if (session.role !== "ADMIN") return jsonError("Administrator access required", 403);
+    await enforceRateLimit(req, "admin_document_verification_read", 60, 60_000);
 
     const { searchParams } = new URL(req.url);
     const rawStatus = searchParams.get("status");
@@ -143,12 +145,14 @@ export async function POST(req: NextRequest) {
       return jsonError("Unauthorized access", 401);
     }
 
+    await enforceRateLimit(req, "document_verification_submit", 20, 60_000);
     const parsed = documentSubmissionSchema.safeParse(await req.json());
     if (!parsed.success) return jsonError("Invalid document submission", 400);
     const { docType, fileUrl, fileName, companyName, employerId: requestedEmployerId } = parsed.data;
 
     // Employers may submit only for their own account. Admins may submit on behalf
     // of an employer when an employerId is explicitly provided.
+    if (requestedEmployerId && session.role !== "ADMIN") return jsonError("employerId is administrator-controlled", 403);
     const employerId = session.role === "ADMIN" && requestedEmployerId ? requestedEmployerId : session.id;
     let employerProfile;
     let databaseAvailable = true;

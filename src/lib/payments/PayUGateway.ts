@@ -43,7 +43,7 @@ export class PayUGateway implements PaymentGateway {
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const gatewayTxId = jsonPayload?.txnid || jsonPayload?.mihpayid || "";
-    const status = jsonPayload?.status === "success" ? "SUCCESS" : "FAILED";
+    const status: VerifyWebhookResult["status"] = jsonPayload?.status === "success" ? "SUCCESS" : jsonPayload?.status === "failure" || jsonPayload?.status === "failed" ? "FAILED" : "PENDING";
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
 
     if (!merchantSalt) {
@@ -113,6 +113,35 @@ export class PayUGateway implements PaymentGateway {
   }
 
   async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+    const key = process.env.PAYU_MERCHANT_KEY;
+    const salt = process.env.PAYU_MERCHANT_SALT;
+    if (!key || !salt) {
+      if (process.env.NODE_ENV === "production") throw new Error("PayU reconciliation credentials are not configured.");
+      return { status: "PENDING" };
+    }
+    if (!/^[A-Za-z0-9_~-]{1,128}$/.test(gatewayTxId)) throw new Error("Invalid PayU transaction id.");
+    const command = "verify_payment";
+    const hash = crypto.createHash("sha512").update(`${key}|${command}|${gatewayTxId}|${salt}`).digest("hex");
+    const body = new URLSearchParams({ key, command, var1: gatewayTxId, hash });
+    const endpoint = process.env.NODE_ENV === "production"
+      ? "https://info.payu.in/merchant/postservice?form=2"
+      : "https://test.payu.in/merchant/postservice?form=2";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`PayU reconciliation failed with HTTP ${response.status}.`);
+    const payload = await response.json();
+    const details = payload?.transaction_details?.[gatewayTxId];
+    const nativeStatus = String(details?.status ?? "").toLowerCase();
+    const unmapped = String(details?.unmappedstatus ?? "").toLowerCase();
+    const status = nativeStatus === "success" && (unmapped === "captured" || unmapped === "success")
+      ? "SUCCESS"
+      : ["failure", "failed"].includes(nativeStatus) ? "FAILED" : "PENDING";
+    return { status, rawResponse: payload };
   }
 }

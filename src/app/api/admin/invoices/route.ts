@@ -5,11 +5,12 @@ import { ApiError, handleApiError, readValidatedJson, enforceRateLimit, getClien
 import { z } from "zod";
 
 const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
-const createSchema = z.object({ action: z.literal("create").optional(), agreementId: z.string().min(1), companyName: z.string().trim().min(1).max(200).optional(), candidateName: z.string().max(200).optional(), jobTitle: z.string().max(200).optional(), amount: z.number().finite().positive().max(1000000000), taxAmount: z.number().finite().nonnegative().max(1000000000).optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), dueDate: z.string().date().optional(), status: z.literal("UNPAID").optional() }).strict();
+const createSchema = z.object({ action: z.literal("create").optional(), agreementId: z.string().min(1), companyName: z.string().trim().min(1).max(200).optional(), candidateName: z.string().trim().min(1).max(200).optional(), jobTitle: z.string().trim().min(1).max(200).optional(), amount: z.number().finite().positive().max(1000000000), taxAmount: z.number().finite().nonnegative().max(1000000000).optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), dueDate: z.string().date().optional(), status: z.literal("UNPAID").optional() }).strict();
 
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_invoices_read", 60, 60_000);
     const invoices = await invoicesDb.getInvoices();
     const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
     const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
@@ -57,8 +58,8 @@ export async function POST(req: NextRequest) {
     const created = await invoicesDb.createInvoice({
       agreementId: body.agreementId,
       companyName: body.companyName,
-      candidateName: body.candidateName || "Candidate Placement",
-      jobTitle: body.jobTitle || "Software Engineer",
+      candidateName: body.candidateName,
+      jobTitle: body.jobTitle,
       amount,
       taxAmount,
       totalAmount,

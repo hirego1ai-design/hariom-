@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { RecoveryWorkerState } from "@/lib/workflows/RecoveryWorkerState";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,8 @@ export async function readRecoveryWorkerLiveness() {
 
 export async function GET(request: Request) {
   try {
-    await requireAdminSession(request);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_system_queues:${admin.id}`, 30, 60_000);
     const [events, audit, whatsapp, video, recoveryWorker] = await Promise.all([
       prisma.outboxEntry.groupBy({ by: ["status"], _count: { _all: true } }),
       prisma.securityAuditOutboxEvent.groupBy({ by: ["status"], _count: { _all: true } }),

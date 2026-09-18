@@ -69,10 +69,10 @@ export async function GET(
       throw new ApiError("Candidate profile not found.", 404);
     }
 
-    // Verify company scope
-    if (session.role !== "ADMIN") {
-      const company = await getSessionCompany(session);
-      const companyId = company.id;
+    // Verify company scope once and reuse it when shaping the response.
+    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
+    if (scopedCompanyId) {
+      const companyId = scopedCompanyId;
 
       // Candidate must have applied to at least one job in this company
       const hasApplication = profile.applications.some(
@@ -103,100 +103,82 @@ export async function GET(
       } catch {}
     }
 
-    // Map DB models to UCP format expected by client component
-    const overallMatch = profile.applications[0]?.matchScore || profile.hireGoScore || 85;
+    // Map only persisted/measured evidence. Missing evidence stays unavailable;
+    // never synthesize hiring signals or candidate attributes.
+    const scopedApplications = session.role === "ADMIN"
+      ? profile.applications
+      : profile.applications.filter((app) => app.job.companyId === scopedCompanyId);
+    const primaryApplication = scopedApplications[0];
+    const overallMatch = primaryApplication?.matchScore ?? null;
 
     const ucpProfile = {
       id: profile.id,
       name: profile.user?.name || "Candidate",
-      headline: profile.headline || "Talent Candidate",
-      currentCompany: experienceList[0]?.company || "N/A",
+      headline: profile.headline || null,
+      currentCompany: experienceList[0]?.company || null,
       experience: `${profile.experienceYears} Years`,
-      location: profile.location || "India",
-      preferredLocation: "Remote / Hybrid",
-      expectedSalary: "Market Rate",
-      noticePeriod: "Immediate",
-      availability: "Available",
-      preferredJobType: "Full-time",
+      location: profile.location || null,
+      preferredLocation: null,
+      expectedSalary: null,
+      noticePeriod: null,
+      availability: null,
+      preferredJobType: null,
       email: profile.user?.email || "",
-      phone: profile.user?.phoneNumber || "N/A",
-      linkedIn: "linkedin.com/in/candidate",
-      github: "github.com/candidate",
+      phone: profile.user?.phoneNumber || null,
+      linkedIn: null,
+      github: null,
       portfolio: "",
-      profileLink: `hirego.ai/u/${profile.id.slice(0, 8)}`,
-      avatar: profile.user?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.user?.name || "Candidate")}&background=random`,
+      profileLink: null,
+      avatar: profile.user?.avatarUrl || null,
       isVerified: profile.isVerified,
-      isEliteCandidate: profile.hireGoScore >= 90,
-      isOpenToWork: true,
-      appliedJob: profile.applications[0]?.job?.title || "Position",
-      appliedDate: profile.applications[0]?.createdAt?.toISOString().split("T")[0] || "Unknown",
-      source: "Direct Application",
-      about: profile.bio || "Candidate has not provided a bio summary yet.",
+      isEliteCandidate: null,
+      isOpenToWork: null,
+      appliedJob: primaryApplication?.job?.title || null,
+      appliedDate: primaryApplication?.createdAt?.toISOString().split("T")[0] || null,
+      source: null,
+      about: profile.bio || null,
     };
 
     const ucpScores = {
       overallMatch,
-      profileCompletion: 85,
-      recruiterViews: 42,
-      interviewInvites: profile.applications[0]?.interviews?.length || 0,
-      hiringScore: {
-        technical: Math.max(70, overallMatch + 2),
-        leadership: 75,
-        communication: 80,
-        problemSolving: Math.max(70, overallMatch),
-        adaptability: 80,
-        learning: 85,
-        cultureFit: 82,
-        risk: 5,
-        growth: 85,
-        overall: overallMatch,
-      },
-      matchBreakdown: [
-        { label: "Skills Match", pct: Math.max(70, overallMatch + 5) },
-        { label: "Experience Match", pct: Math.max(65, overallMatch) },
-        { label: "Role Match", pct: Math.max(70, overallMatch + 3) },
-        { label: "Location Match", pct: 90 },
-      ],
+      profileCompletion: null,
+      recruiterViews: null,
+      interviewInvites: primaryApplication?.interviews?.length || 0,
+      hiringScore: null,
+      matchBreakdown: [],
     };
 
     const ucpSkills = {
       technical: profile.skills.map((s) => ({
         name: s,
-        level: "Advanced",
-        years: Math.round(profile.experienceYears * 0.6) || 1,
-        verified: true,
+        level: null,
+        years: null,
+        verified: false,
       })),
-      softSkills: [
-        { name: "Communication", level: "Strong", years: 3, verified: true },
-        { name: "Problem Solving", level: "Strong", years: 3, verified: true },
-      ],
-      languages: [
-        { name: "English", level: "Fluent", years: 5, verified: true },
-      ],
-      tools: [
-        { name: "Git/GitHub", level: "Advanced", years: 3, verified: true },
-      ],
+      softSkills: [],
+      languages: [],
+      tools: [],
       cloud: [],
     };
 
     const ucpExperience = experienceList.map((exp: any) => ({
-      company: exp.company || "Company",
-      role: exp.role || "Developer",
-      type: exp.type || "Full-time",
-      duration: exp.duration || "N/A",
-      durationYears: exp.duration || "N/A",
-      location: exp.location || "Remote",
+      company: exp.company || null,
+      role: exp.role || null,
+      type: exp.type || null,
+      duration: exp.duration || null,
+      durationYears: exp.duration || null,
+      location: exp.location || null,
       achievements: exp.achievements || [],
       skills: exp.skills || [],
-      aiImpact: "Reliable and high-performing developer.",
+      aiImpact: null,
     }));
 
     const ucpEducation = educationList.map((edu: any) => ({
-      institution: edu.institution || "University",
-      degree: edu.degree || "Degree",
-      year: edu.year || "N/A",
-      cgpa: edu.cgpa || edu.gpa || "N/A",
-      location: edu.location || "India",
+      institution: edu.institution || null,
+      degree: edu.degree || null,
+      year: edu.year || null,
+      cgpa: edu.cgpa || edu.gpa || null,
+      location: edu.location || null,
     }));
 
     const ucpAssessments = [
@@ -219,11 +201,11 @@ export async function GET(
     ];
 
     const ucpVideoAnalysis = {
-      duration: "0:00",
-      language: "English",
-      uploadDate: "N/A",
-      quality: "720P HD",
-      overallReadinessScore: 80,
+      duration: null,
+      language: null,
+      uploadDate: null,
+      quality: null,
+      overallReadinessScore: null,
       metrics: [],
       transcriptData: [],
       insights: {
@@ -242,28 +224,8 @@ export async function GET(
       profile: ucpProfile,
       scores: ucpScores,
       skills: ucpSkills,
-      experience: ucpExperience.length > 0 ? ucpExperience : [
-        {
-          company: "Infosys Ltd.",
-          role: "Senior Frontend Developer",
-          type: "Full-time",
-          duration: "Jan 2022 - Present",
-          durationYears: "2.5 yrs",
-          location: "Bengaluru, India",
-          achievements: ["Led frontend modules", "Optimized UI load times"],
-          skills: profile.skills.slice(0, 4),
-          aiImpact: "Strong technical skills.",
-        }
-      ],
-      education: ucpEducation.length > 0 ? ucpEducation : [
-        {
-          institution: "Visvesvaraya Technological University",
-          degree: "Bachelor of Engineering (B.E.)",
-          year: "2019",
-          cgpa: "8.2 CGPA",
-          location: "Karnataka, India",
-        }
-      ],
+      experience: ucpExperience,
+      education: ucpEducation,
       certifications: [],
       assessments: ucpAssessments,
       videoAnalysis: ucpVideoAnalysis,

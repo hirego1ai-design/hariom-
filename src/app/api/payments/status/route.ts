@@ -1,67 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { z } from "zod";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
+
+const querySchema = z.object({
+  orderId: z.string().trim().min(8).max(160).optional(),
+  gatewayOrderId: z.string().trim().min(4).max(200).optional(),
+  txId: z.string().trim().min(4).max(200).optional(),
+}).strict().refine((v) => Boolean(v.orderId || v.gatewayOrderId || v.txId), "A payment identifier is required.");
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
-
-    const { searchParams } = new URL(req.url);
-    const orderId = searchParams.get("orderId");
-    const gatewayOrderId = searchParams.get("gatewayOrderId");
-    const txId = searchParams.get("txId");
-
-    const profile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
-    });
-    if (!profile || !profile.companyId) {
-      return jsonError("No employer profile found for this account", 403);
-    }
-    const companyId = profile.companyId;
+    await enforceRateLimit(req, "payment_status", 60, 60_000);
+    const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "ADMIN") throw new ApiError("Administrator payment lookup requires an explicitly scoped administration endpoint.", 400);
+    const company = await getSessionCompany(session);
+    const companyId = company.id;
+    const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()));
 
     const paymentOrder = await prisma.paymentOrder.findFirst({
       where: {
         companyId,
         OR: [
-          ...(orderId ? [{ orderId }] : []),
-          ...(gatewayOrderId ? [{ gatewayOrderId }] : []),
-          ...(txId ? [{ gatewayTxId: txId }, { gatewayOrderId: txId }, { orderId: txId }] : []),
+          ...(query.orderId ? [{ orderId: query.orderId }] : []),
+          ...(query.gatewayOrderId ? [{ gatewayOrderId: query.gatewayOrderId }] : []),
+          ...(query.txId ? [{ gatewayTxId: query.txId }, { gatewayOrderId: query.txId }, { orderId: query.txId }] : []),
         ],
       },
     });
+    if (!paymentOrder) throw new ApiError("Payment order not found.", 404);
 
-    let transaction = null;
-    const searchKey = paymentOrder?.gatewayTxId || txId || gatewayOrderId || orderId || "";
-    
-    if (searchKey) {
-      transaction = await prisma.paymentTransaction.findFirst({
-        where: {
-          companyId,
-          gatewayTxId: searchKey,
-        },
-      });
-    }
+    const transaction = paymentOrder.gatewayTxId
+      ? await prisma.paymentTransaction.findFirst({ where: { companyId, gatewayTxId: paymentOrder.gatewayTxId } })
+      : null;
 
-    // Fetch active subscription & live credits for company
     const [subscription, credits] = await Promise.all([
-      prisma.companySubscription.findFirst({
-        where: { companyId, status: "ACTIVE" },
-        include: { plan: true },
-      }),
-      prisma.companyCredits.findUnique({
-        where: { companyId },
-      }),
+      prisma.companySubscription.findFirst({ where: { companyId, status: "ACTIVE" }, include: { plan: true } }),
+      prisma.companyCredits.findUnique({ where: { companyId } }),
     ]);
 
     if (!transaction) {
-      // If transaction not found yet, return PENDING status to allow webhook polling
       return NextResponse.json({
         success: true,
-        status: "PENDING",
-        message: "Payment transaction awaiting gateway webhook confirmation.",
+        status: paymentOrder.status === "FAILED" ? "FAILED" : "PENDING",
+        message: paymentOrder.status === "FAILED" ? "Payment attempt failed." : "Payment transaction awaiting gateway webhook confirmation.",
         transaction: null,
         subscription,
         credits,
@@ -70,20 +53,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      status: transaction.status, // "SUCCESS" | "PENDING" | "FAILED" | "REJECTED"
-      transaction: {
-        id: transaction.id,
-        gatewayTxId: transaction.gatewayTxId,
-        provider: transaction.provider,
-        amount: transaction.amount,
-        currency: transaction.currency,
-        status: transaction.status,
-        createdAt: transaction.createdAt,
-      },
+      status: transaction.status,
+      transaction: { id: transaction.id, gatewayTxId: transaction.gatewayTxId, provider: transaction.provider, amount: transaction.amount, currency: transaction.currency, status: transaction.status, createdAt: transaction.createdAt },
       subscription,
       credits,
     });
-  } catch (error) {
-    return handleApiError(error);
-  }
+  } catch (error) { return handleApiError(error); }
 }

@@ -104,6 +104,15 @@ export async function getPrivateObject(objectKey: string): Promise<Buffer> {
   return readFile(devObjectPath(objectKey));
 }
 
+export async function readPrivateObjectForSecurityScan(objectKey: string): Promise<Buffer> {
+  if (!isProduction()) return readFile(devObjectPath(objectKey));
+  const { client, bucket } = s3Client();
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }));
+  if (!response.Body) throw new StorageUnavailableError("Stored object has no readable body");
+  const bytes = await response.Body.transformToByteArray();
+  return Buffer.from(bytes);
+}
+
 export async function getPrivateDownloadUrl(objectKey: string, fileName: string) {
   if (!isProduction()) return null;
   const { client, bucket } = s3Client();

@@ -6,10 +6,10 @@ import {
   CreateOrderResult,
   VerifyWebhookParams,
   VerifyWebhookResult,
+  AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
 import { RazorpayGateway } from "./RazorpayGateway";
 import { PayUGateway } from "./PayUGateway";
-import { PhonePeGateway } from "./PhonePeGateway";
 import { StripeGateway } from "./StripeGateway";
 
 export interface GatewayConfigState {
@@ -23,13 +23,16 @@ export interface GatewayConfigState {
 
 // Production safety invariant: Incomplete providers CANNOT be enabled in production
 // under any circumstances (even if DB config marks them as healthy) to prevent risk.
-const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "PHONEPE", "STRIPE"]);
+const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "STRIPE"]);
+
+// Providers remain blocked until the release gate explicitly enables them after
+// credentials, webhook secrets, reconciliation, and staging payment tests pass.
+// Admin configuration can prepare routing policy but cannot bypass this invariant.
 
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
     RAZORPAY: new RazorpayGateway(),
     PAYU: new PayUGateway(),
-    PHONEPE: new PhonePeGateway(),
     STRIPE: new StripeGateway(),
   };
 
@@ -37,6 +40,43 @@ export class PaymentGatewayController {
   // payment routing policy indefinitely across serverless instances.
   private static cachedConfig: { value: GatewayConfigState; expiresAt: number } | null = null;
   private static readonly CONFIG_CACHE_TTL_MS = 30_000;
+
+  private static normalizeConfig(raw: Partial<GatewayConfigState>): GatewayConfigState {
+    const providerNames = Object.keys(this.providers) as GatewayName[];
+    const isGateway = (value: unknown): value is GatewayName =>
+      typeof value === "string" && providerNames.includes(value as GatewayName);
+    const rawStatus = raw.gatewaysStatus && typeof raw.gatewaysStatus === "object"
+      ? raw.gatewaysStatus as Partial<Record<GatewayName, unknown>>
+      : {};
+    const gatewaysStatus = Object.fromEntries(providerNames.map((gw) => [
+      gw,
+      ["HEALTHY", "DEGRADED", "DISABLED"].includes(String(rawStatus[gw]))
+        ? rawStatus[gw]
+        : "DISABLED",
+    ])) as GatewayConfigState["gatewaysStatus"];
+
+    if (process.env.NODE_ENV === "production") {
+      for (const gw of PRODUCTION_BLOCKED_GATEWAYS) gatewaysStatus[gw] = "DISABLED";
+    }
+
+    const suppliedPriorities = Array.isArray(raw.priorities) ? raw.priorities.filter(isGateway) : [];
+    const priorities = [...new Set(suppliedPriorities), ...providerNames.filter((gw) => !suppliedPriorities.includes(gw))];
+    const active = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
+    if (active.length === 0) gatewaysStatus.RAZORPAY = "HEALTHY";
+
+    const activeAfterFallback = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
+    let primaryGateway = isGateway(raw.primaryGateway) ? raw.primaryGateway : "RAZORPAY";
+    if (gatewaysStatus[primaryGateway] === "DISABLED") primaryGateway = activeAfterFallback[0];
+
+    return {
+      mode: raw.mode === "MANUAL" ? "MANUAL" : "AUTO",
+      primaryGateway,
+      autoFailover: raw.autoFailover !== false,
+      allowEmployerSelection: raw.allowEmployerSelection === true,
+      gatewaysStatus,
+      priorities,
+    };
+  }
 
   /**
    * Fetch current admin gateway configuration (or initialize default)
@@ -52,19 +92,14 @@ export class PaymentGatewayController {
       });
 
       if (configRecord) {
-        const configured: GatewayConfigState = {
-          mode: configRecord.mode as any,
-          primaryGateway: configRecord.primaryGateway as any,
+        const configured = this.normalizeConfig({
+          mode: configRecord.mode as GatewayConfigState["mode"],
+          primaryGateway: configRecord.primaryGateway as GatewayName,
           autoFailover: configRecord.autoFailover,
           allowEmployerSelection: configRecord.allowEmployerSelection,
-          gatewaysStatus: configRecord.gatewaysStatus as any,
-          priorities: configRecord.priorities as any,
-        };
-        if (process.env.NODE_ENV === "production") {
-          for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
-            configured.gatewaysStatus[gw] = "DISABLED";
-          }
-        }
+          gatewaysStatus: configRecord.gatewaysStatus as GatewayConfigState["gatewaysStatus"],
+          priorities: configRecord.priorities as GatewayName[],
+        });
         this.cachedConfig = { value: configured, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
         return configured;
       }
@@ -85,10 +120,9 @@ export class PaymentGatewayController {
       gatewaysStatus: {
         RAZORPAY: "HEALTHY",
         PAYU: isProduction ? "DISABLED" : "HEALTHY",
-        PHONEPE: isProduction ? "DISABLED" : "HEALTHY",
         STRIPE: isProduction ? "DISABLED" : "HEALTHY",
       },
-      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
+      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "STRIPE"],
     };
 
     if (isProduction) {
@@ -111,11 +145,11 @@ export class PaymentGatewayController {
     const updated: GatewayConfigState = {
       ...current,
       ...newConfig,
-      gatewaysStatus: {
-        ...current.gatewaysStatus,
-        ...(newConfig.gatewaysStatus || {})
-      }
+      gatewaysStatus: { ...current.gatewaysStatus, ...(newConfig.gatewaysStatus || {}) },
     };
+    const providerNames = Object.keys(this.providers) as GatewayName[];
+    if (!providerNames.includes(updated.primaryGateway)) throw new Error("Unknown primary payment gateway.");
+    if (updated.priorities.length !== providerNames.length || new Set(updated.priorities).size !== providerNames.length || updated.priorities.some((gw) => !providerNames.includes(gw))) throw new Error("Gateway priority list must contain every configured provider exactly once.");
 
     // Enforce production safety invariant
     if (process.env.NODE_ENV === "production") {
@@ -123,6 +157,10 @@ export class PaymentGatewayController {
         updated.gatewaysStatus[gw] = "DISABLED";
       }
     }
+    const active = providerNames.filter((gw) => updated.gatewaysStatus[gw] !== "DISABLED");
+    if (active.length === 0) throw new Error("At least one payment gateway must remain enabled.");
+    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED") updated.primaryGateway = active[0];
+    if (updated.mode === "AUTO" && !updated.priorities.some((gw) => updated.gatewaysStatus[gw] !== "DISABLED")) throw new Error("AUTO mode requires an enabled gateway in the priority list.");
     
     try {
       await prisma.paymentGatewayConfig.upsert({
@@ -213,7 +251,12 @@ export class PaymentGatewayController {
         return result;
       } catch (err: any) {
         console.error(`Gateway ${gwName} order creation failed:`, err.message);
-        lastError = err;
+        lastError = err instanceof Error ? err : new Error("Payment gateway order creation failed.");
+        if (err instanceof AmbiguousPaymentOrderError) {
+          // The provider may have accepted the order before the connection failed.
+          // Never create a second provider order until the first outcome is reconciled.
+          throw err;
+        }
 
         // SAFE FAILOVER GUARD: Only failover to next gateway if autoFailover is ON and no order was created
         if (!config.autoFailover || i === candidateSequence.length - 1) {

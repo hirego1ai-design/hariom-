@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export const jobBoostSummary = {
   totalRevenue: 320000,
@@ -73,6 +74,7 @@ export const jobBoostLogs = [
 
 export async function GET(req: NextRequest) {
   await requireAdminSession(req);
+  await enforceRateLimit(req, "admin_revenue_job_boost", 60, 60_000);
   if (!allowRevenueFixtures) {
     return revenueUnavailable(new Error("Job boost revenue has no persisted reporting source."), "Job boost revenue");
   }
