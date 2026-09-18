@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadRevenueTransactions, revenueUnavailable } from "../_shared";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdminSession(request);
+    await enforceRateLimit(request, "admin_revenue_transactions", 60, 60_000);
     const { searchParams } = request.nextUrl;
-    const search = searchParams.get("search")?.trim().toLowerCase() || "";
+    const search = searchParams.get("search")?.trim().toLowerCase().slice(0, 200) || "";
     const source = searchParams.get("source") || "All";
     const status = searchParams.get("status") || "All";
     const gateway = searchParams.get("gateway") || "All";
