@@ -113,10 +113,9 @@ export async function batchMatchCandidates(jobId: string, options?: any) {
     const candidate = app.candidateProfile;
     if (!candidate) continue;
     const availability = candidate.availabilityStatus;
-    if (availability === 'NOT_LOOKING' || availability === 'JOINED' || availability === 'TEMPORARILY_UNAVAILABLE') {
-      suppressedUnavailable++;
-      continue;
-    }
+    // An application is an explicit expression of interest in this specific job.
+    // Global availability is informative here; it must not hide an organic applicant.
+    if (availability === 'NOT_LOOKING' || availability === 'JOINED' || availability === 'TEMPORARILY_UNAVAILABLE') suppressedUnavailable++;
     if (availability === 'RECONFIRMATION_REQUIRED') reconfirmationRequired++;
     
     const match = computeMatchScore(candidate, job);
@@ -144,7 +143,7 @@ export async function batchMatchCandidates(jobId: string, options?: any) {
   return {
     matchedCount: results.length,
     evaluatedApplications: job.applications.length,
-    suppressedUnavailable,
+    unavailableApplicantSignals: suppressedUnavailable,
     reconfirmationRequired,
     statusUnchanged,
     results
