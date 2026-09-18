@@ -131,7 +131,7 @@ export async function runManagedHiringJoinTests(): Promise<{
         data: {
           candidateProfileId: candidateProfile.id,
           jobId: jobListing.id,
-          status: "ASSESSMENT",
+          status: "SHORTLISTED",
           annualCtc: 2000000,
         },
       });
@@ -149,6 +149,9 @@ export async function runManagedHiringJoinTests(): Promise<{
           feeType: "PERCENTAGE",
           feeValue: 10.0, // 10% placement fee
           taxRatePct: 18.0, // 18% GST
+          invoiceRule: "DAY_25",
+          signedAt: new Date(Date.now() - 2 * 86400000),
+          validityStartDate: new Date(Date.now() - 30 * 86400000),
           status: "ACTIVE",
           validityEndDate: new Date(Date.now() + 365 * 86400000),
         },
@@ -166,6 +169,9 @@ export async function runManagedHiringJoinTests(): Promise<{
           feeType: "PERCENTAGE",
           feeValue: 15.0,
           taxRatePct: 18.0,
+          invoiceRule: "DAY_25",
+          signedAt: new Date(Date.now() - 2 * 86400000),
+          validityStartDate: new Date(Date.now() - 30 * 86400000),
           status: "ACTIVE",
           validityEndDate: new Date(Date.now() + 365 * 86400000),
         },
@@ -187,11 +193,14 @@ export async function runManagedHiringJoinTests(): Promise<{
         sessionVersion: 0,
       });
 
+      const joinedAt = new Date(Date.now() - 3600000).toISOString();
+      const joiningFields = { annualCtc: 2000000, joinedAt, termsAccepted: true as const };
+
       // --- 1. Test Role Privilege (Recruiter Rejected) ---
       const res1 = await callJoinApi(tokenRecruiter, {
         applicationId: application.id,
         agreementId: agreementA.id,
-        idempotencyKey: `ikey-${testId}-1`,
+        ...joiningFields,
       });
       assert(
         "Recruiters are forbidden from generating commercial invoices",
@@ -203,30 +212,29 @@ export async function runManagedHiringJoinTests(): Promise<{
       const res2 = await callJoinApi(tokenEmployer, {
         applicationId: application.id,
         agreementId: agreementB.id, // Agreement from Company B
-        idempotencyKey: `ikey-${testId}-2`,
+        ...joiningFields,
       });
       assert(
         "Agreement from another company must be rejected",
-        res2.status === 403 && res2.json.error.includes("Agreement belongs to another company"),
+        res2.status === 403 && res2.json.error.includes("Agreement does not belong to this company"),
         "Request correctly rejected when using agreement belonging to Company B"
       );
 
       // --- 3. Test Secure Financial Calculation and Idempotency ---
-      const ikey = `ikey-${testId}-3`;
       const res3 = await callJoinApi(tokenEmployer, {
         applicationId: application.id,
         agreementId: agreementA.id,
-        idempotencyKey: ikey,
+        ...joiningFields,
       });
 
       // 10% fee on 20 Lakhs is 200,000. 18% tax on 200,000 is 36,000. Total amount: 236,000.
-      const invoice = res3.json.invoice;
+      const placement = res3.json.placement;
       assert(
         "Invoice fee, tax, and total amount calculated from database parameters",
         res3.status === 201 && 
-        invoice.amount === 200000 && 
-        invoice.taxAmount === 36000 && 
-        invoice.totalAmount === 236000,
+        Number(placement.amount) === 200000 && 
+        Number(placement.taxAmount) === 36000 && 
+        Number(placement.totalAmount) === 236000,
         "Server computed invoice details securely from database records"
       );
 
@@ -234,12 +242,12 @@ export async function runManagedHiringJoinTests(): Promise<{
       const res4 = await callJoinApi(tokenEmployer, {
         applicationId: application.id,
         agreementId: agreementA.id,
-        idempotencyKey: ikey,
+        ...joiningFields,
       });
       assert(
-        "Idempotency: duplicate request returns the original invoice without recreation",
-        res4.status === 200 && res4.json.duplicate === true && res4.json.invoice.id === invoice.id,
-        "Durable IdempotencyRecord verified with correct response payload return"
+        "Idempotency: duplicate joining confirmation returns the original placement",
+        res4.status === 200 && res4.json.duplicate === true && res4.json.placement.id === placement.id,
+        "Application-scoped durable placement replay returns the original record"
       );
 
       // --- 4. Test Simultaneous Concurrent Join Requests (Promise.all) ---
@@ -265,24 +273,26 @@ export async function runManagedHiringJoinTests(): Promise<{
         data: {
           candidateProfileId: candidateProfile2.id,
           jobId: jobListing.id,
-          status: "ASSESSMENT",
+          status: "SHORTLISTED",
           annualCtc: 3000000, // 30 Lakhs CTC
         },
       });
-
-      const concurrentIkey = `ikey-concurrent-${testId}`;
 
       // Dispatch 2 simultaneous requests with the exact same company and idempotencyKey
       const [concResA, concResB] = await Promise.all([
         callJoinApi(tokenEmployer, {
           applicationId: application2.id,
           agreementId: agreementA.id,
-          idempotencyKey: concurrentIkey,
+          annualCtc: 3000000,
+          joinedAt,
+          termsAccepted: true,
         }),
         callJoinApi(tokenEmployer, {
           applicationId: application2.id,
           agreementId: agreementA.id,
-          idempotencyKey: concurrentIkey,
+          annualCtc: 3000000,
+          joinedAt,
+          termsAccepted: true,
         }),
       ]);
 
@@ -292,13 +302,8 @@ export async function runManagedHiringJoinTests(): Promise<{
       const bothControlled = validStatuses.includes(concResA.status) && validStatuses.includes(concResB.status);
       const neither500 = concResA.status !== 500 && concResB.status !== 500;
 
-      // Count invoices created for agreementA and candidate 2
-      const candidate2Invoices = await prisma.invoice.findMany({
-        where: {
-          agreementId: agreementA.id,
-          candidateName: "Concurrent Test Candidate",
-        },
-      });
+      // DAY_25 billing creates one durable placement now; invoice creation is deferred to the worker.
+      const candidate2Placements = await prisma.pphPlacement.findMany({ where: { applicationId: application2.id } });
 
       // Verify application status is HIRED exactly once
       const app2After = await prisma.application.findUnique({
@@ -307,25 +312,27 @@ export async function runManagedHiringJoinTests(): Promise<{
 
       assert(
         "Simultaneous concurrent join requests produce exactly one invoice and no 500 errors",
-        bothControlled && neither500 && has201 && candidate2Invoices.length === 1 && app2After?.status === "HIRED",
-        `Concurrent requests handled cleanly (statusA: ${concResA.status}, statusB: ${concResB.status}, invoiceCount: ${candidate2Invoices.length})`
+        bothControlled && neither500 && has201 && candidate2Placements.length === 1 && app2After?.status === "HIRED",
+        `Concurrent requests handled cleanly (statusA: ${concResA.status}, statusB: ${concResB.status}, placementCount: ${candidate2Placements.length})`
       );
 
       // Verify subsequent replay gets original invoice
       const concReplay = await callJoinApi(tokenEmployer, {
         applicationId: application2.id,
         agreementId: agreementA.id,
-        idempotencyKey: concurrentIkey,
+        annualCtc: 3000000,
+        joinedAt,
+        termsAccepted: true,
       });
 
       assert(
-        "Subsequent retry after concurrent execution returns original invoice",
-        concReplay.status === 200 && concReplay.json.duplicate === true && concReplay.json.invoice.id === candidate2Invoices[0]?.id,
-        "Replay returns verified original invoice ID"
+        "Subsequent retry after concurrent execution returns original placement",
+        concReplay.status === 200 && concReplay.json.duplicate === true && concReplay.json.placement.id === candidate2Placements[0]?.id,
+        "Replay returns verified original placement ID"
       );
 
       // Cleanup
-      await prisma.idempotencyRecord.deleteMany({ where: { companyId: companyA.id } }).catch(() => undefined);
+      await prisma.pphPlacement.deleteMany({ where: { companyId: companyA.id } }).catch(() => undefined);
       await prisma.invoice.deleteMany({ where: { agreementId: { in: [agreementA.id, agreementB.id] } } }).catch(() => undefined);
       await prisma.commercialAgreement.deleteMany({ where: { id: { in: [agreementA.id, agreementB.id] } } }).catch(() => undefined);
       await prisma.application.deleteMany({ where: { id: { in: [application.id, application2.id] } } }).catch(() => undefined);
