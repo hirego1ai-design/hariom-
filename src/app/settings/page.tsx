@@ -58,10 +58,10 @@ export default function CandidateSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+    <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-primary text-white px-5 py-3 rounded-2xl shadow-2xl font-bold text-xs flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px]">check_circle</span>
@@ -69,7 +69,7 @@ export default function CandidateSettingsPage() {
           </div>
         )}
 
-        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
+        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-outline flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
           <div>
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
               Personal Settings
@@ -79,7 +79,7 @@ export default function CandidateSettingsPage() {
 
           <Link
             href="/dashboard"
-            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md border border-white/10"
+            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md border border-outline"
           >
             <span className="material-symbols-outlined text-[16px]">arrow_back</span>
             <span className="hidden sm:inline">Dashboard</span>
@@ -87,8 +87,8 @@ export default function CandidateSettingsPage() {
         </header>
 
         <main className="flex-1 p-6 lg:p-10 space-y-6 max-w-4xl w-full mx-auto overflow-y-auto">
-          <form onSubmit={handleSave} className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-6">
-            <div className="flex items-center gap-5 pb-6 border-b border-white/10">
+          <form onSubmit={handleSave} className="glass-card p-6 lg:p-8 rounded-3xl border border-outline space-y-6">
+            <div className="flex items-center gap-5 pb-6 border-b border-outline">
               <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-primary text-3xl">
                 <span className="material-symbols-outlined text-[32px]">person</span>
               </div>
@@ -151,7 +151,7 @@ export default function CandidateSettingsPage() {
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Share your experience, technical leadership, and goals..."
-                className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-white outline-none focus:border-primary resize-none leading-relaxed"
+                className="w-full p-4 rounded-2xl bg-surface-container border border-outline text-xs text-white outline-none focus:border-primary resize-none leading-relaxed"
               />
             </div>
 
