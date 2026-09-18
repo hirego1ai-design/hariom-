@@ -1,15 +1,21 @@
 import { prisma } from "@/lib/prisma";
+import { requireMalwareScannerEnv } from "@/lib/env";
 
 export type UploadScanResult = { status: "CLEAN" | "INFECTED" | "ERROR"; detail?: string };
 
 export async function scanUpload(fileId: string, data: Buffer): Promise<UploadScanResult> {
-  const endpoint = process.env.MALWARE_SCANNER_URL?.trim();
-  const token = process.env.MALWARE_SCANNER_TOKEN?.trim();
-  if (!endpoint) {
-    if (process.env.NODE_ENV === "production") return { status: "ERROR", detail: "Malware scanner is not configured." };
-    return { status: "CLEAN", detail: "Development scan bypass." };
+  let endpoint = process.env.MALWARE_SCANNER_URL?.trim();
+  let token = process.env.MALWARE_SCANNER_TOKEN?.trim();
+  if (process.env.NODE_ENV === "production") {
+    try {
+      const config = requireMalwareScannerEnv();
+      endpoint = config.url;
+      token = config.token;
+    } catch (error) {
+      return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured." };
+    }
   }
-  if (!/^https:\/\//i.test(endpoint) && process.env.NODE_ENV === "production") return { status: "ERROR", detail: "Malware scanner must use HTTPS." };
+  if (!endpoint) return { status: "CLEAN", detail: "Development scan bypass." };
   try {
     const res = await fetch(endpoint, {
       method: "POST",
