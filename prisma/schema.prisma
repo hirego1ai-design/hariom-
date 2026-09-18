@@ -525,7 +525,6 @@ model AuditLog {
   siemEvent SecurityAuditOutboxEvent?
 
   @@index([companyId, createdAt])
-  @@index([scanStatus, createdAt])
 }
 
 // Every persisted audit record gets exactly one immutable delivery envelope.
@@ -581,6 +580,7 @@ model StoredFile {
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
+  @@index([scanStatus, createdAt])
 }
 
 model AiUsage {
