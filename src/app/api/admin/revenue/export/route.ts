@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadRevenueTransactions, revenueUnavailable } from "../_shared";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -8,7 +9,8 @@ function csvCell(value: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminSession(request);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_revenue_export:${admin.id}`, 10, 60_000);
   const format = request.nextUrl.searchParams.get("format") || "csv";
   if (format !== "csv") {
     return NextResponse.json(
@@ -24,6 +26,8 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
         "Content-Disposition": `attachment; filename="hirego_revenue_${new Date().toISOString().slice(0, 10)}.csv"`,
       },
     });
