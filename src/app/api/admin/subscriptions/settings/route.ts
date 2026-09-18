@@ -6,7 +6,7 @@ import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@
 
 const promoSchema = z.object({
   code: z.string().trim().min(3).max(64).regex(/^[A-Za-z0-9_-]+$/),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]),
+  discountType: z.enum(["PERCENTAGE", "FLAT"]),
   discountValue: z.number().finite().positive().max(100000000),
   maxUsage: z.number().int().positive().max(1000000).optional(),
   validUntil: z.string().datetime().optional(),
@@ -15,7 +15,7 @@ const promoSchema = z.object({
 const serviceCostSchema = z.object({
   serviceKey: z.string().trim().min(1).max(100),
   creditCost: z.number().int().min(0).max(1000000),
-  billingType: z.string().trim().min(1).max(50),
+  billingType: z.enum(["CREDIT_BASED", "INCLUDED", "PAID_ADDON"]),
 }).strict();
 
 async function requireAdmin(request: NextRequest) {
