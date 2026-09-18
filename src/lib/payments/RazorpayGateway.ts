@@ -6,8 +6,8 @@ import {
   CreateOrderResult,
   VerifyWebhookParams,
   VerifyWebhookResult,
+  AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
-import { AmbiguousPaymentOrderError } from "./PaymentGatewayController";
 
 export class RazorpayGateway implements PaymentGateway {
   name: GatewayName = "RAZORPAY";
