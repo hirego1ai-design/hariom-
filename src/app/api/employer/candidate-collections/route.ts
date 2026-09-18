@@ -1,0 +1,11 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { ApiError, getCurrentSession, handleApiError, readValidatedJson } from "@/lib";
+import { getSessionCompany } from "@/lib/routeAuthorization";
+const createSchema=z.object({name:z.string().trim().min(1).max(80)}).strict();
+const updateSchema=z.object({collectionId:z.string().uuid(),candidateIds:z.array(z.string().uuid()).max(500)}).strict();
+async function ctx(req:NextRequest){const s=await getCurrentSession(req.headers);if(!s||!["EMPLOYER","RECRUITER","ADMIN"].includes(s.role))throw new ApiError("Employer access required.",403);const company=await getSessionCompany(s);return{s,company};}
+export async function GET(req:NextRequest){try{const{company}=await ctx(req);const collections=await prisma.employerCandidateCollection.findMany({where:{companyId:company.id},select:{id:true,name:true,candidateIds:true},orderBy:{createdAt:"asc"}});return NextResponse.json({success:true,collections});}catch(e){return handleApiError(e);}}
+export async function POST(req:NextRequest){try{const{s,company}=await ctx(req);const{name}=await readValidatedJson(req,createSchema);const collection=await prisma.employerCandidateCollection.create({data:{companyId:company.id,createdById:s.id,name,candidateIds:[]},select:{id:true,name:true,candidateIds:true}});return NextResponse.json({success:true,collection},{status:201});}catch(e){return handleApiError(e);}}
+export async function PATCH(req:NextRequest){try{const{company}=await ctx(req);const{collectionId,candidateIds}=await readValidatedJson(req,updateSchema);const valid=await prisma.application.findMany({where:{candidateProfileId:{in:candidateIds},job:{companyId:company.id}},select:{candidateProfileId:true}});const allowed=[...new Set(valid.map(a=>a.candidateProfileId))];if(allowed.length!==new Set(candidateIds).size)throw new ApiError("Collection contains candidates outside your company pipeline.",403);const result=await prisma.employerCandidateCollection.updateMany({where:{id:collectionId,companyId:company.id},data:{candidateIds:allowed}});if(!result.count)throw new ApiError("Collection not found.",404);return NextResponse.json({success:true,candidateIds:allowed});}catch(e){return handleApiError(e);}}
