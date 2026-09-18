@@ -30,12 +30,10 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
     include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
   });
   if (!interview) return null;
-  if (session.role === "ADMIN") return interview;
-
   const candidateUserId = interview.application.candidateProfile?.userId;
   if (session.role === "CANDIDATE") return session.id === candidateUserId ? interview : null;
   if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") return null;
-  if (interview.roundProgress?.round.interviewers.length && !interview.roundProgress.round.interviewers.some((item) => item.userId === session.id)) return null;
+  if (!interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id)) return null;
   if (session.role === "ADMIN") return interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id) ? interview : null;
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
