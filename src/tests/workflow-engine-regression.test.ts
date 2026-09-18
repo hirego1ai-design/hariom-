@@ -48,9 +48,14 @@ function stubWorkflow(t: TestContext, failCompletionWrite = false) {
 }
 
 test('workflow creation failure is propagated without a fake workflow', async (t) => {
+  stubMethod(t, prisma.jobListing, 'findUnique', async () => ({ companyId: 'company-a' }));
   stubMethod(t, prisma.workflowInstance, 'create', async () => { throw new Error('database offline'); });
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
   await assert.rejects(WorkflowEngine.startWorkflow({
-    workflowType: 'test', initialStep: 'initial', initiatedBy: 'tester', correlationId: 'test', checkpointState: {},
+    workflowType: 'JOB_REQUIREMENT', companyId: 'company-a', jobId: 'job-a',
+    initialStep: 'initial', initiatedBy: 'tester', correlationId: 'test', checkpointState: {},
+    context: createTenantContext('company-a', 'tester', Role.EMPLOYER),
   }), /database offline/);
 });
 
@@ -113,19 +118,35 @@ test('third failed attempt records durable failure and a dead letter', async (t)
 });
 
 test('approval pause propagates persistence failure', async (t) => {
-  stubMethod(t, prisma.workflowInstance, 'update', async () => { throw new Error('pause database offline'); });
-  await assert.rejects(WorkflowEngine.pauseForApproval('workflow-test', 'approve'), /pause database offline/);
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
+  stubMethod(t, prisma, '$transaction', async () => { throw new Error('pause database offline'); });
+  await assert.rejects(WorkflowEngine.requestConsequentialAction({
+    workflowId: 'workflow-test', stepName: 'approve', actionType: 'CANDIDATE_SELECTION',
+    action: { candidateId: 'candidate-a' },
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  }), /pause database offline/);
 });
 
-test('resume requires an approver and propagates conditional update failure', async (t) => {
-  let writes = 0;
-  stubMethod(t, prisma.workflowInstance, 'update', async ({ where }: any) => {
-    writes++;
-    assert.deepEqual(where, { id: 'workflow-test', status: 'PAUSED_FOR_APPROVAL' });
-    throw new Error('paused workflow not found');
-  });
-  await assert.rejects(WorkflowEngine.resumeWorkflow('workflow-test', '   '), /approver is required/);
-  assert.equal(writes, 0);
-  await assert.rejects(WorkflowEngine.resumeWorkflow('workflow-test', 'reviewer'), /paused workflow not found/);
-  assert.equal(writes, 1);
+test('resume approved workflow rejects pending approvals', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'PAUSED_FOR_APPROVAL' }));
+  stubMethod(t, prisma.workflowApproval, 'count', async ({ where }: any) => where.decision === 'PENDING' ? 1 : 0);
+  await assert.rejects(WorkflowEngine.resumeApprovedWorkflow({
+    workflowId: 'workflow-test',
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  }), /pending consequential approvals/);
+});
+
+test('rejected consequential approval prevents workflow resume', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'PAUSED_FOR_APPROVAL' }));
+  stubMethod(t, prisma.workflowApproval, 'count', async ({ where }: any) => where.decision === 'REJECTED' ? 1 : 0);
+  await assert.rejects(WorkflowEngine.resumeApprovedWorkflow({
+    workflowId: 'workflow-test',
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  }), /rejected consequential action/);
 });
