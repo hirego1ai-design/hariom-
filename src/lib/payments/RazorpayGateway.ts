@@ -7,6 +7,7 @@ import {
   VerifyWebhookParams,
   VerifyWebhookResult,
 } from "./PaymentGatewayInterface";
+import { AmbiguousPaymentOrderError } from "./PaymentGatewayController";
 
 export class RazorpayGateway implements PaymentGateway {
   name: GatewayName = "RAZORPAY";
@@ -60,9 +61,15 @@ export class RazorpayGateway implements PaymentGateway {
         throw new Error(
           `Razorpay order creation failed (${res.status}${getRazorpayErrorDetail(data) ? `: ${getRazorpayErrorDetail(data)}` : ""}).`
         );
-      } catch (err: any) {
-        console.error("Razorpay Live API Order Creation Failed:", err.message);
-        throw err; // Allow Controller to capture exception for safe failover if order was NOT created
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Razorpay order request failed.";
+        console.error("Razorpay Live API Order Creation Failed:", message);
+        // A timeout/network failure can happen after Razorpay accepted the POST.
+        // Its outcome is therefore ambiguous and must not trigger a second gateway order.
+        if (err instanceof TypeError || (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError"))) {
+          throw new AmbiguousPaymentOrderError("Razorpay order outcome is unknown and requires reconciliation.", "RAZORPAY");
+        }
+        throw err;
       }
     }
 
