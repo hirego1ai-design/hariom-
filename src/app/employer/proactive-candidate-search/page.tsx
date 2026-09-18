@@ -51,7 +51,8 @@ const DEFAULT_COLLECTIONS: Collection[] = [
 
 const PINNED_FILTER_PRESETS = [
   { label: "Recorded match > 90%", key: "matchScore", value: "90" },
-  { label: "Immediate Joiners", key: "noticePeriod", value: "Immediate" },
+  { label: "Confirmed available", key: "availability", value: "ACTIVE_CONFIRMED" },
+  { label: "Job-Ready", key: "jobReady", value: "true" },
   { label: "Remote", key: "location", value: "Remote" },
   { label: "Notice < 30 Days", key: "noticePeriod", value: "30" },
 ];
@@ -244,11 +245,11 @@ export default function CandidateMarketplace() {
   const insights = useMemo(() => {
     const meetAll = candidates.filter(c => c.matchScore >= 85).length;
     const notReviewed = candidates.filter(c => c.stage === "Applied").length;
-    const availableNow = candidates.filter(c => c.noticePeriod === "Immediate" || c.availability?.includes("next week")).length;
+    const availableNow = candidates.filter(c => c.availability === "ACTIVE_CONFIRMED").length;
     return [
       { icon: "check_circle", text: `${meetAll} candidates meet all requirements`, color: T.green },
       { icon: "visibility_off", text: `${notReviewed} candidates not yet reviewed`, color: T.yellow },
-      { icon: "schedule", text: `${availableNow} available immediately`, color: T.blue },
+      { icon: "schedule", text: `${availableNow} candidates confirmed available`, color: T.blue },
     ];
   }, [candidates]);
 
