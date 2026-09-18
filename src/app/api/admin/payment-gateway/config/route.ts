@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
+import { PaymentGatewayController, type GatewayConfigState } from "@/lib/payments/PaymentGatewayController";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const admin=await requireAdminSession(req);
     await enforceRateLimit(req,`admin_payment_gateway_config_update:${admin.id}`,10,60_000);
     const body=await readValidatedJson(req,gatewayConfigSchema);
-    const updatedConfig=await PaymentGatewayController.updateConfig(body);
+    const updatedConfig=await PaymentGatewayController.updateConfig(body as Partial<GatewayConfigState>);
     await logAuditEvent({userId:admin.id,action:"PAYMENT_GATEWAY_CONFIG_UPDATED",resource:"Payment gateway configuration",ipAddress:req.headers.get("x-forwarded-for")||undefined,details:"Payment gateway routing configuration updated; credentials were not accepted by this endpoint."});
     return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig},{headers:{"Cache-Control":"no-store"}});
   } catch(error){return handleApiError(error);}
