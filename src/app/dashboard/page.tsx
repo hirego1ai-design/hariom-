@@ -482,138 +482,25 @@ export default function CandidateDashboardPage() {
               </div>
             </div>
 
-            {/* Right Column: AI Job Recommendations & Applications */}
+            {/* Right Column: Job discovery entry point */}
             <div className="lg:col-span-8 space-y-gutter">
-              <div className="flex items-center justify-between">
+              <div
+                className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5"
+                style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--outline)", boxShadow: "var(--shadow-card)" }}
+              >
                 <div>
-                  <h2 className="font-bold text-xl" style={{ color: "var(--text-primary)" }}>Recommended Opportunities</h2>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Matched using your AI Resume Vector Profile</p>
+                  <h2 className="font-bold text-xl" style={{ color: "var(--text-primary)" }}>Find your next opportunity</h2>
+                  <p className="text-sm mt-1 max-w-xl" style={{ color: "var(--text-muted)" }}>
+                    Browse active jobs from HireGo employers. Personalized recommendations will appear only when verified matching data is available.
+                  </p>
                 </div>
-                <Link href="/jobs" className="text-xs font-bold hover:underline" style={{ color: "var(--primary)" }}>
-                  Browse All 248 Jobs →
+                <Link
+                  href="/jobs"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl px-5 text-sm font-bold text-white whitespace-nowrap"
+                  style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))", boxShadow: "var(--shadow-btn-red)" }}
+                >
+                  Browse active jobs
                 </Link>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
-                {/* Job Card 1 */}
-                <div
-                  className="p-5 rounded-2xl border transition-all flex flex-col justify-between group"
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    border: "1px solid var(--outline)",
-                    boxShadow: "var(--shadow-card)",
-                  }}
-                >
-                  <div>
-                    <div className="flex justify-between items-start mb-3">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs"
-                        style={{
-                          backgroundColor: "var(--primary-container-bg)",
-                          color: "var(--primary)",
-                          border: "1px solid var(--primary)",
-                        }}
-                      >
-                        TS
-                      </div>
-                      <span
-                        className="px-2.5 py-1 rounded-full font-bold text-[10px]"
-                        style={{
-                          backgroundColor: "rgba(52,168,83,0.12)",
-                          color: "var(--color-green)",
-                          border: "1px solid rgba(52,168,83,0.2)",
-                        }}
-                      >
-                        98% AI Match
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-base group-hover:text-primary transition-colors" style={{ color: "var(--text-primary)" }}>
-                      Staff Frontend Engineer
-                    </h4>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>TechCorp Global • Bengaluru (Hybrid)</p>
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {["Next.js 16", "TypeScript", "WebRTC"].map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2 py-0.5 rounded text-[11px]"
-                          style={{ backgroundColor: "var(--surface-container-high)", color: "var(--text-secondary)" }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-5 pt-3 flex items-center justify-between" style={{ borderTop: "1px solid var(--outline)" }}>
-                    <span className="text-xs font-bold font-mono" style={{ color: "var(--text-primary)" }}>₹38L – ₹48L / yr</span>
-                    <Link
-                      href="/jobs"
-                      className="px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-all shadow-sm"
-                      style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))" }}
-                    >
-                      Quick Apply
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Job Card 2 */}
-                <div
-                  className="p-5 rounded-2xl border transition-all flex flex-col justify-between group"
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    border: "1px solid var(--outline)",
-                    boxShadow: "var(--shadow-card)",
-                  }}
-                >
-                  <div>
-                    <div className="flex justify-between items-start mb-3">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs"
-                        style={{
-                          backgroundColor: "var(--secondary-container-bg)",
-                          color: "var(--secondary)",
-                          border: "1px solid var(--secondary)",
-                        }}
-                      >
-                        AI
-                      </div>
-                      <span
-                        className="px-2.5 py-1 rounded-full font-bold text-[10px]"
-                        style={{
-                          backgroundColor: "rgba(52,168,83,0.12)",
-                          color: "var(--color-green)",
-                          border: "1px solid rgba(52,168,83,0.2)",
-                        }}
-                      >
-                        95% AI Match
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-base group-hover:text-primary transition-colors" style={{ color: "var(--text-primary)" }}>
-                      Lead AI UI Architect
-                    </h4>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Apex AI Labs • Remote</p>
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {["Design Systems", "LLM Ops"].map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2 py-0.5 rounded text-[11px]"
-                          style={{ backgroundColor: "var(--surface-container-high)", color: "var(--text-secondary)" }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-5 pt-3 flex items-center justify-between" style={{ borderTop: "1px solid var(--outline)" }}>
-                    <span className="text-xs font-bold font-mono" style={{ color: "var(--text-primary)" }}>₹42L – ₹55L / yr</span>
-                    <Link
-                      href="/jobs"
-                      className="px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-all shadow-sm"
-                      style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))" }}
-                    >
-                      Quick Apply
-                    </Link>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
