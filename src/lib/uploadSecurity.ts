@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireMalwareScannerEnv } from "@/lib/env";
-import { readPrivateObjectForSecurityScan } from "@/lib/storage";
+import { deleteObject, readPrivateObjectForSecurityScan } from "@/lib/storage";
 
 export type UploadScanResult = { status: "CLEAN" | "INFECTED" | "ERROR"; detail?: string };
 
@@ -85,15 +85,28 @@ export async function purgeExpiredInfectedUploads(limit = 25, retentionDays = 30
     where: { deletedAt: null, scanStatus: "INFECTED", scanCheckedAt: { lt: cutoff } },
     orderBy: { scanCheckedAt: "asc" },
     take,
-    select: { id: true },
+    select: { id: true, objectKey: true },
   });
   let purged = 0;
   for (const file of files) {
-    const result = await prisma.storedFile.updateMany({
+    const claimed = await prisma.storedFile.updateMany({
       where: { id: file.id, deletedAt: null, scanStatus: "INFECTED", scanCheckedAt: { lt: cutoff } },
-      data: { deletedAt: new Date(), scanDetail: "Malware quarantine retention expired; object scheduled for storage cleanup." },
+      data: { scanStatus: "PURGING", scanDetail: "Malware quarantine retention expired; deleting private object." },
     });
-    purged += result.count;
+    if (claimed.count !== 1) continue;
+    try {
+      await deleteObject(file.objectKey);
+      await prisma.storedFile.update({
+        where: { id: file.id },
+        data: { deletedAt: new Date(), scanDetail: "Malware quarantine retention expired; private object deleted." },
+      });
+      purged += 1;
+    } catch (error) {
+      await prisma.storedFile.update({
+        where: { id: file.id },
+        data: { scanStatus: "INFECTED", scanDetail: error instanceof Error ? `Storage cleanup failed: ${error.message.slice(0, 450)}` : "Storage cleanup failed." },
+      });
+    }
   }
   return { purged, retentionDays: days };
 }
