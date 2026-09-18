@@ -18,7 +18,7 @@ const roundSchema = z.object({
   previousFeedbackVisibility: z.enum(["FULL", "SUMMARY_ONLY", "HIDDEN_UNTIL_OWN_FEEDBACK", "HIDDEN"]).default("HIDDEN_UNTIL_OWN_FEEDBACK"),
   interviewerUserIds: z.array(z.string().min(1)).max(10).default([]),
 });
-const bodySchema = z.object({ rounds: z.array(roundSchema).min(1).max(12) });
+const bodySchema = z.object({ rounds: z.array(roundSchema).min(1).max(4) });
 
 async function context(req: NextRequest, jobId: string) {
   const session = await getCurrentSession(req.headers);
