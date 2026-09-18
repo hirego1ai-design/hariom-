@@ -75,3 +75,25 @@ export async function rescanQuarantinedUploads(limit = 25) {
   }
   return { processed: results.length, results };
 }
+
+
+export async function purgeExpiredInfectedUploads(limit = 25, retentionDays = 30) {
+  const take = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const days = Math.max(1, Math.min(365, Math.trunc(retentionDays)));
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  const files = await prisma.storedFile.findMany({
+    where: { deletedAt: null, scanStatus: "INFECTED", scanCheckedAt: { lt: cutoff } },
+    orderBy: { scanCheckedAt: "asc" },
+    take,
+    select: { id: true },
+  });
+  let purged = 0;
+  for (const file of files) {
+    const result = await prisma.storedFile.updateMany({
+      where: { id: file.id, deletedAt: null, scanStatus: "INFECTED", scanCheckedAt: { lt: cutoff } },
+      data: { deletedAt: new Date(), scanDetail: "Malware quarantine retention expired; object scheduled for storage cleanup." },
+    });
+    purged += result.count;
+  }
+  return { purged, retentionDays: days };
+}
