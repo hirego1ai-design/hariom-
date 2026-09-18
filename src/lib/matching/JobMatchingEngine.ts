@@ -106,10 +106,18 @@ export async function batchMatchCandidates(jobId: string, options?: any) {
   let statusUnchanged = 0;
   
   const results = [];
+  let suppressedUnavailable = 0;
+  let reconfirmationRequired = 0;
   
   for (const app of job.applications) {
     const candidate = app.candidateProfile;
     if (!candidate) continue;
+    const availability = candidate.availabilityStatus;
+    if (availability === 'NOT_LOOKING' || availability === 'JOINED' || availability === 'TEMPORARILY_UNAVAILABLE') {
+      suppressedUnavailable++;
+      continue;
+    }
+    if (availability === 'RECONFIRMATION_REQUIRED') reconfirmationRequired++;
     
     const match = computeMatchScore(candidate, job);
     
@@ -127,12 +135,17 @@ export async function batchMatchCandidates(jobId: string, options?: any) {
     results.push({
       applicationId: app.id,
       candidateId: candidate.id,
+      availabilityStatus: availability,
+      availabilityConfirmedAt: candidate.lastAvailabilityConfirmedAt,
       ...match
     });
   }
   
   return {
-    matchedCount: job.applications.length,
+    matchedCount: results.length,
+    evaluatedApplications: job.applications.length,
+    suppressedUnavailable,
+    reconfirmationRequired,
     statusUnchanged,
     results
   };
