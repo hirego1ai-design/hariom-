@@ -12,7 +12,7 @@ const schema = z.object({
   skillTags: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   questionText: z.string().trim().min(8).max(500),
   answerDurationSeconds: z.union([z.literal(30), z.literal(60)]),
-  version: z.number().int().min(1).default(1),
+  difficulty: z.enum(["BASIC"]).default("BASIC"),
   isActive: z.boolean().default(true),
 });
 
@@ -37,8 +37,25 @@ export async function POST(request: NextRequest) {
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required to curate the question bank.", 403);
     const body = await readValidatedJson(request, schema);
+    const normalizedText = body.questionText.replace(/\s+/g, " ").trim();
+    const normalizedRole = body.roleTitle.replace(/\s+/g, " ").trim();
+    const duplicate = await prisma.recordedAssessmentQuestionBank.findFirst({
+      where: {
+        roleTitle: { equals: normalizedRole, mode: "insensitive" },
+        questionText: { equals: normalizedText, mode: "insensitive" },
+        industry: body.industry ?? null,
+        department: body.department ?? null,
+        isActive: true,
+      },
+      select: { id: true, version: true },
+    });
+    if (duplicate) throw new ApiError(`An active copy of this curated question already exists (v${duplicate.version}). Create a new version by retiring the old question first.`, 409);
+    const latest = await prisma.recordedAssessmentQuestionBank.findFirst({
+      where: { roleTitle: { equals: normalizedRole, mode: "insensitive" }, questionText: { equals: normalizedText, mode: "insensitive" } },
+      orderBy: { version: "desc" }, select: { version: true },
+    });
     const question = await prisma.recordedAssessmentQuestionBank.create({
-      data: { ...body, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS },
+      data: { ...body, roleTitle: normalizedRole, questionText: normalizedText, version: (latest?.version ?? 0) + 1, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS },
     });
     return NextResponse.json({ success: true, question }, { status: 201 });
   } catch (error) { return handleApiError(error); }

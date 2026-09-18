@@ -34,9 +34,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await readValidatedJson(request, schema);
     if (body.isActive) {
       const roleWords = job.title.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
-      const available = await prisma.recordedAssessmentQuestionBank.count({
+      const pool = await prisma.recordedAssessmentQuestionBank.findMany({
         where: { isActive: true, OR: roleWords.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" } })) },
+        select: { industry: true, department: true },
+        take: 250,
       });
+      const industry = job.company.industry?.toLowerCase() || null;
+      const department = job.department?.toLowerCase() || null;
+      const available = pool.filter((question) =>
+        (!question.industry || (!!industry && question.industry.toLowerCase() === industry)) &&
+        (!question.department || (!!department && question.department.toLowerCase() === department))
+      ).length;
       if (available < body.questionCount) throw new ApiError(`Question bank readiness failed: ${available} role-related questions found, but ${body.questionCount} are required. Add curated questions before activating this assessment.`, 409);
     }
     const config = await prisma.recordedAssessmentConfig.upsert({
