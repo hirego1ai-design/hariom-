@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     if (fraud.status === FraudStatus.FRAUD_HOLD) throw new ApiError("Payout requests are suspended pending security compliance review.", 403);
     if (fraud.status === FraudStatus.ADMIN_REVIEW) throw new ApiError("Payout requests are suspended while the account is under administrative review.", 403);
 
-    const payoutAddress = body.payoutAddress ?? body.upiId;\n    if (!payoutAddress) throw new ApiError("Payout address is required.", 422);
+    const payoutAddress = body.payoutAddress ?? body.upiId;
+    if (!payoutAddress) throw new ApiError("Payout address is required.", 422);
     const payout = await referralDb.requestPayout({
       referrerId: session.id,
       amount: body.amount,
