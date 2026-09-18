@@ -40,10 +40,15 @@ export async function POST(request: NextRequest) {
       include: { interviewers: true },
     });
     if (!round) return NextResponse.json({ success: false, error: "Interview round is not configured for this job." }, { status: 400 });
-    const mode = round.interviewType === "IN_PERSON" || round.interviewType === "OFFLINE" ? "OFFLINE" : "ONLINE";
+    const configuredType = round.interviewType.toUpperCase();
+    const mode = configuredType === "IN_PERSON" || configuredType === "OFFLINE"
+      ? "OFFLINE"
+      : configuredType === "PHONE"
+        ? "PHONE"
+        : "ONLINE";
     const durationMins = round.durationMins;
     if (mode === "OFFLINE" && !body.address) return NextResponse.json({ success: false, error: "Address is required for this configured offline round." }, { status: 400 });
-    if (mode === "OFFLINE" && !body.contactNumber) return NextResponse.json({ success: false, error: "Contact number is required for this configured offline round." }, { status: 400 });
+    if ((mode === "OFFLINE" || mode === "PHONE") && !body.contactNumber) return NextResponse.json({ success: false, error: `Contact number is required for this configured ${mode.toLowerCase()} round.` }, { status: 400 });
     if (!round.interviewers.some((interviewer) => interviewer.required)) return NextResponse.json({ success: false, error: "Assign at least one required interviewer before scheduling this round." }, { status: 400 });
     const existingProgress = await prisma.interviewRoundProgress.findUnique({ where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } } });
     if (existingProgress?.interviewId) return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
@@ -57,7 +62,11 @@ export async function POST(request: NextRequest) {
       }
     }
     const roomId = `room-${crypto.randomUUID()}`;
-    const roomUrl = mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
+    const roomUrl = mode === "ONLINE"
+      ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}`
+      : mode === "PHONE"
+        ? `PHONE:${JSON.stringify({ contactNumber: body.contactNumber || null })}`
+        : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
     const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
       const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
