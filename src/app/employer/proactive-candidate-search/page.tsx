@@ -111,7 +111,6 @@ export default function CandidateMarketplace() {
       const v = localStorage.getItem("hg_view"); if (v) setViewMode(v as ViewMode);
       const pf = localStorage.getItem("hg_pinned"); if (pf) setPinnedFilters(JSON.parse(pf));
       const ss = localStorage.getItem("hg_saved"); if (ss) setSavedSearches(JSON.parse(ss));
-      const tags = localStorage.getItem("hg_tags"); if (tags) setCandidateTags(JSON.parse(tags));
       const cols = localStorage.getItem("hg_collections"); if (cols) setCollections(JSON.parse(cols));
     } catch {}
   }, []);
@@ -121,7 +120,6 @@ export default function CandidateMarketplace() {
   useEffect(() => { localStorage.setItem("hg_view", viewMode); }, [viewMode]);
   useEffect(() => { localStorage.setItem("hg_pinned", JSON.stringify(pinnedFilters)); }, [pinnedFilters]);
   useEffect(() => { localStorage.setItem("hg_saved", JSON.stringify(savedSearches)); }, [savedSearches]);
-  useEffect(() => { localStorage.setItem("hg_tags", JSON.stringify(candidateTags)); }, [candidateTags]);
   useEffect(() => { localStorage.setItem("hg_collections", JSON.stringify(collections)); }, [collections]);
 
   // ─── Filtering & Sorting ───
@@ -213,8 +211,9 @@ export default function CandidateMarketplace() {
   const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAll = () => setSelected(prev => prev.size === paginatedCandidates.length ? new Set() : new Set(paginatedCandidates.map(c => c.id)));
   const toggleSort = (col: string) => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("desc"); } };
-  const addTag = (cId: string, tag: Tag) => { setCandidateTags(prev => ({ ...prev, [cId]: [...(prev[cId] || []).filter(t => t.label !== tag.label), tag] })); setTagDropdownId(null); triggerToast(`Tag "${tag.label}" added`); };
-  const removeTag = (cId: string, label: string) => { setCandidateTags(prev => ({ ...prev, [cId]: (prev[cId] || []).filter(t => t.label !== label) })); };
+  const loadTags = async (cId: string) => { const candidate=candidates.find(c=>c.id===cId); if(!candidate?.applicationId)return; try { const res=await fetch(`/api/employer/candidates/${candidate.applicationId}/tags`); const data=await res.json(); if(res.ok&&data.success) setCandidateTags(prev=>({...prev,[cId]:data.tags.map((t:any)=>({label:t.label,color:TAG_PRESETS.find(p=>p.label===t.label)?.color||T.slate}))})); } catch { triggerToast("Could not load tags."); } };
+  const addTag = async (cId: string, tag: Tag) => { const candidate=candidates.find(c=>c.id===cId); if(!candidate?.applicationId)return; try { const res=await fetch(`/api/employer/candidates/${candidate.applicationId}/tags`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({label:tag.label})}); const data=await res.json(); if(!res.ok)throw new Error(data.error||"Failed to add tag"); setCandidateTags(prev=>({...prev,[cId]:[...(prev[cId]||[]).filter(t=>t.label!==tag.label),tag]})); setTagDropdownId(null); triggerToast(`Tag "${tag.label}" saved`); } catch(e:any){triggerToast(e.message||"Could not add tag.");} };
+  const removeTag = async (cId: string, label: string) => { const candidate=candidates.find(c=>c.id===cId); if(!candidate?.applicationId)return; try { const res=await fetch(`/api/employer/candidates/${candidate.applicationId}/tags`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({label})}); if(!res.ok)throw new Error("Failed to remove tag"); setCandidateTags(prev=>({...prev,[cId]:(prev[cId]||[]).filter(t=>t.label!==label)})); } catch { triggerToast("Could not remove tag."); } };
   const loadNotes = async (candidateId: string) => {
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate?.applicationId) return;
@@ -477,7 +476,7 @@ export default function CandidateMarketplace() {
                                 {t.label} ×
                               </span>
                             ))}
-                            <button onClick={() => setTagDropdownId(tagDropdownId === c.id ? null : c.id)} className="text-slate-600 hover:text-white">
+                            <button onClick={() => { const opening=tagDropdownId !== c.id; setTagDropdownId(opening ? c.id : null); if(opening) void loadTags(c.id); }} className="text-slate-600 hover:text-white">
                               <span className="material-symbols-outlined text-[12px]">sell</span>
                             </button>
                           </div>
