@@ -102,6 +102,12 @@ export async function POST(req: NextRequest) {
     const body = await readValidatedJson(req, roomActionSchema, 64 * 1024);
     const interview = await findAuthorizedInterview(session, body.roomId);
     if (!interview) return jsonError("Forbidden: Unauthorized room signaling action.", 403);
+    if (body.action !== "COMPLETE" && (session.role === "EMPLOYER" || session.role === "RECRUITER")) {
+      const blocking = await prisma.interviewRoundProgress.count({
+        where: { status: "ENDED_PENDING_FEEDBACK", interviewId: { not: interview.id }, round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
+      });
+      if (blocking > 0) throw new ApiError("Complete your pending mandatory interview feedback before joining another interview.", 409);
+    }
     if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
 
     if (body.action === "COMPLETE") {
