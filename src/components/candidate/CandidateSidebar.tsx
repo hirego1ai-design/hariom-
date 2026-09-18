@@ -53,7 +53,7 @@ export default function CandidateSidebar() {
     <>
       {/* Floating Vertical Navigation Rail */}
       <aside
-        className="fixed top-4 left-4 h-[calc(100vh-32px)] w-[78px] z-50 flex flex-col items-center py-4 backdrop-blur-xl rounded-[26px] select-none transition-all duration-300"
+        className="fixed top-4 left-4 h-[calc(100vh-32px)] w-[78px] z-50 hidden md:flex flex flex-col items-center py-4 backdrop-blur-xl rounded-[26px] select-none transition-all duration-300"
         style={{
           backgroundColor: "var(--surface-container-low)",
           border: "1px solid var(--outline)",
