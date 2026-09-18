@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { dispatchRecordedAssessmentAnalysis } from "@/lib/recordedAssessmentAnalysis";
+import { dispatchRecordedAssessmentAnalysis, enqueueRecordedAssessmentAnalysis } from "@/lib/recordedAssessmentAnalysis";
 
 const schema = z.object({
   attemptQuestionId: z.string().uuid(),
@@ -55,9 +55,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!winner || winner.storedFileId !== file.id) throw new ApiError("This question already has a saved response.", 409);
       return NextResponse.json({ success: true, response: { id: winner.id, durationSeconds: winner.durationSeconds, mediaType: winner.mediaType, analysisStatus: winner.analysisStatus }, idempotent: true });
     }
-    // Media persistence is the candidate-facing success boundary. Analysis is
-    // asynchronous enrichment; worker/config failure must never make a saved
-    // answer look lost and trigger a duplicate recording attempt.
+    // Persist the recovery job before returning success. Serverless runtimes may
+    // freeze immediately after the response, so fire-and-forget alone is unsafe.
+    await enqueueRecordedAssessmentAnalysis(response.id);
+    // Worker execution remains asynchronous enrichment; dispatch failure must not
+    // make a persisted answer look lost or trigger a duplicate recording attempt.
     void dispatchRecordedAssessmentAnalysis(response.id).catch((error) => {
       console.error("Recorded assessment analysis dispatch failed after response persistence", { responseId: response.id, error });
     });
