@@ -5,13 +5,20 @@ import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSe
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
 
+const gatewayStatusSchema = z.enum(["HEALTHY", "DEGRADED", "DISABLED"]);
+const gatewayNameSchema = z.enum(["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"]);
 const gatewayConfigSchema = z.object({
-  razorpayEnabled: z.boolean().optional(),
-  cashfreeEnabled: z.boolean().optional(),
-  stripeEnabled: z.boolean().optional(),
-  primaryGateway: z.enum(["RAZORPAY","CASHFREE","STRIPE"]).optional(),
+  mode: z.enum(["AUTO", "MANUAL"]).optional(),
+  primaryGateway: gatewayNameSchema.optional(),
   autoFailover: z.boolean().optional(),
-  testMode: z.boolean().optional(),
+  allowEmployerSelection: z.boolean().optional(),
+  gatewaysStatus: z.object({
+    RAZORPAY: gatewayStatusSchema.optional(),
+    PAYU: gatewayStatusSchema.optional(),
+    PHONEPE: gatewayStatusSchema.optional(),
+    STRIPE: gatewayStatusSchema.optional(),
+  }).strict().optional(),
+  priorities: z.array(gatewayNameSchema).min(1).max(4).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
 }).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {
