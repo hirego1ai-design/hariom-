@@ -10,7 +10,6 @@ import {
 } from "./PaymentGatewayInterface";
 import { RazorpayGateway } from "./RazorpayGateway";
 import { PayUGateway } from "./PayUGateway";
-import { PhonePeGateway } from "./PhonePeGateway";
 import { StripeGateway } from "./StripeGateway";
 
 export interface GatewayConfigState {
@@ -24,13 +23,12 @@ export interface GatewayConfigState {
 
 // Production safety invariant: Incomplete providers CANNOT be enabled in production
 // under any circumstances (even if DB config marks them as healthy) to prevent risk.
-const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "PHONEPE", "STRIPE"]);
+const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "STRIPE"]);
 
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
     RAZORPAY: new RazorpayGateway(),
     PAYU: new PayUGateway(),
-    PHONEPE: new PhonePeGateway(),
     STRIPE: new StripeGateway(),
   };
 
@@ -86,10 +84,9 @@ export class PaymentGatewayController {
       gatewaysStatus: {
         RAZORPAY: "HEALTHY",
         PAYU: isProduction ? "DISABLED" : "HEALTHY",
-        PHONEPE: isProduction ? "DISABLED" : "HEALTHY",
         STRIPE: isProduction ? "DISABLED" : "HEALTHY",
       },
-      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
+      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "STRIPE"],
     };
 
     if (isProduction) {
