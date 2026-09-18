@@ -24,6 +24,14 @@ const mainNavItems: NavRailItem[] = [
   { id: "notifications", label: "Notifications", href: "/notifications", icon: "notifications" },
 ];
 
+const mobileNavItems: NavRailItem[] = [
+  { id: "dashboard", label: "Home", href: "/dashboard", icon: "dashboard" },
+  { id: "jobs", label: "Jobs", href: "/jobs", icon: "work" },
+  { id: "applications", label: "Applications", href: "/applications", icon: "description" },
+  { id: "notifications", label: "Alerts", href: "/notifications", icon: "notifications" },
+  { id: "profile", label: "Profile", href: "/profile", icon: "person" },
+];
+
 const aiCopilotNavItems: NavRailItem[] = [
   { id: "mcq", label: "Assigned Assessments", href: "/assessment/mcq", icon: "fact_check", isAi: true },
   { id: "typing", label: "Typing Practice", href: "/assessment/typing/active", icon: "keyboard", isAi: true },
@@ -157,6 +165,18 @@ export default function CandidateSidebar() {
           })}
         </nav>
       </aside>
+
+      <nav aria-label="Candidate mobile navigation" className="fixed md:hidden bottom-0 inset-x-0 z-50 border-t border-outline bg-bg-card/95 backdrop-blur-xl" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div className="grid grid-cols-5 min-h-[64px]">
+          {mobileNavItems.map((item) => {
+            const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/");
+            return <Link key={item.id} href={item.href} aria-current={isActive ? "page" : undefined} className="min-h-[56px] min-w-0 px-1 py-2 flex flex-col items-center justify-center gap-1 rounded-xl" style={{ color: isActive ? "var(--primary)" : "var(--text-muted)" }}>
+              <span aria-hidden="true" className="material-symbols-outlined text-[22px]">{item.icon}</span>
+              <span className="text-[10px] leading-tight font-semibold truncate max-w-full">{item.label}</span>
+            </Link>;
+          })}
+        </div>
+      </nav>
 
       {/* Vertical Separation Line */}
       <div
