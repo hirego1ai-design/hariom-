@@ -94,6 +94,8 @@ model User {
   notifications         Notification[]
   aiUsages              AiUsage[]
   proctoringEvents      ProctoringTelemetry[]
+  interviewRoundAssignments InterviewRoundInterviewer[]
+  interviewFeedbacks        InterviewFeedback[]
   storedFiles           StoredFile[]
   savedJobs             SavedJob[]
   referralsInitiated    ReferralAttribution[] @relation("UserReferrer")
@@ -158,6 +160,7 @@ model Company {
   commercialAgreements CommercialAgreement[]
   storedFiles          StoredFile[]
   auditLogs            AuditLog[]
+  interviewProcesses   JobInterviewProcess[]
 }
 
 enum InvitationStatus {
@@ -226,6 +229,7 @@ model JobListing {
   applications   Application[]
   savedBy        SavedJob[]
   mcqAssessments McqAssessment[]
+  interviewProcess JobInterviewProcess?
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -315,6 +319,7 @@ model Application {
   pphPlacement       PphPlacement?
 
   interviews Interview[]
+  roundProgress InterviewRoundProgress[]
 
   @@unique([candidateProfileId, jobId])
 }
@@ -393,6 +398,8 @@ model Interview {
   aiFeedback       String?
   proctoringEvents ProctoringTelemetry[]
   signals          InterviewSignal[]
+  roundProgress    InterviewRoundProgress?
+  feedbacks        InterviewFeedback[]
   createdAt        DateTime              @default(now())
 }
 
@@ -1154,6 +1161,120 @@ model ShadowExecutionLog {
 // ================================================================
 // MODEL 12: HIRING OUTCOME FEEDBACK
 // ================================================================
+
+
+enum CandidateFeedbackPolicy {
+  REQUIRED
+  OPTIONAL
+  NOT_SHARED
+}
+
+enum PreviousFeedbackVisibility {
+  FULL
+  SUMMARY_ONLY
+  HIDDEN_UNTIL_OWN_FEEDBACK
+  HIDDEN
+}
+
+enum InterviewRoundProgressStatus {
+  PENDING
+  SCHEDULED
+  LIVE
+  ENDED_PENDING_FEEDBACK
+  ROUND_COMPLETE
+  TRANSFERRED
+  CANCELLED
+}
+
+model JobInterviewProcess {
+  id        String   @id @default(uuid())
+  jobId     String   @unique
+  job       JobListing @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rounds    InterviewRound[]
+
+  @@index([companyId])
+}
+
+model InterviewRound {
+  id                         String   @id @default(uuid())
+  processId                  String
+  process                    JobInterviewProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  sequence                   Int
+  name                       String
+  purpose                    String?
+  department                 String?
+  interviewType              String   @default("VIDEO")
+  durationMins               Int      @default(30)
+  mandatory                  Boolean  @default(true)
+  mandatoryFeedback          Boolean  @default(true)
+  candidateFeedbackPolicy    CandidateFeedbackPolicy @default(OPTIONAL)
+  previousFeedbackVisibility PreviousFeedbackVisibility @default(HIDDEN_UNTIL_OWN_FEEDBACK)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  interviewers               InterviewRoundInterviewer[]
+  progress                   InterviewRoundProgress[]
+
+  @@unique([processId, sequence])
+  @@index([processId])
+}
+
+model InterviewRoundInterviewer {
+  id        String   @id @default(uuid())
+  roundId   String
+  round     InterviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  required  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([roundId, userId])
+  @@index([userId])
+}
+
+model InterviewRoundProgress {
+  id            String   @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  roundId       String
+  round         InterviewRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  interviewId   String?  @unique
+  interview     Interview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+  status        InterviewRoundProgressStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  feedbacks     InterviewFeedback[]
+
+  @@unique([applicationId, roundId])
+  @@index([applicationId, status])
+}
+
+model InterviewFeedback {
+  id               String   @id @default(uuid())
+  interviewId      String
+  interview        Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  roundProgressId  String?
+  roundProgress    InterviewRoundProgress? @relation(fields: [roundProgressId], references: [id], onDelete: SetNull)
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  recommendation   String
+  internalFeedback Json
+  candidateFeedback String?
+  candidateVisible Boolean  @default(false)
+  finalizedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([interviewId, authorId])
+  @@index([roundProgressId])
+  @@index([authorId, finalizedAt])
+}
 
 model HiringOutcomeFeedback {
   id                  String   @id @default(uuid())
