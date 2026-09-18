@@ -43,7 +43,7 @@ export interface VerifyWebhookResult {
   planId?: string;
   amount?: number;
   currency?: string;
-  status: "SUCCESS" | "FAILED" | "REJECTED";
+  status: "SUCCESS" | "FAILED" | "PENDING" | "REJECTED";
   rawPayload: any;
   error?: string;
 }
