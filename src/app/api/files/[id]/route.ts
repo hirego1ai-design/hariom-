@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return jsonError("File not found", 404);
     const file = await prisma.storedFile.findFirst({ where: { id, deletedAt: null } });
     if (!file) return jsonError("File not found", 404);
+    if (file.scanStatus !== "CLEAN") return jsonError("File is quarantined and unavailable", 423);
     if (file.category === "PAYMENT_RECEIPT" && session.role !== "ADMIN" && session.role !== "EMPLOYER") {
       return jsonError("Forbidden", 403);
     }
