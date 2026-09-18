@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { getAuditLogs, logAuditEvent } from "@/lib/auditLogger";
 
@@ -296,6 +296,7 @@ export const managedHiringAuditLogs: ManagedHiringAuditLog[] = [
 export async function GET(req: Request) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_managed_hiring_config_read", 30, 60_000);
     if (process.env.MOCK_DB !== "true") {
       const stored = await prisma.adminConfiguration.findUnique({ where: { id: "global-admin-config" } });
       const persistedLogs = await getAuditLogs(200);
@@ -331,10 +332,17 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_managed_hiring_config_write", 10, 60_000);
     const body = await req.json();
-    const { updatedConfig, config, auditEntry, adminActor, reason } = body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("Invalid configuration payload", 400);
+    const keys = Object.keys(body);
+    if (keys.some((key) => !["updatedConfig", "config", "auditEntry", "reason"].includes(key))) throw new ApiError("Unknown configuration field", 400);
+    const { updatedConfig, config, auditEntry, reason } = body as Record<string, any>;
 
     const payloadConfig = updatedConfig || config;
+    if (!payloadConfig || typeof payloadConfig !== "object" || Array.isArray(payloadConfig)) throw new ApiError("Managed hiring configuration is required", 400);
+    const encoded = JSON.stringify(payloadConfig);
+    if (encoded.length > 100_000) throw new ApiError("Managed hiring configuration payload is too large", 413);
 
     if (payloadConfig) {
       const nextConfig = {
