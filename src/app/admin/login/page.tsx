@@ -47,15 +47,15 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      <div className="min-h-screen bg-[#0E0E0E] flex flex-col items-center justify-center p-4 relative overflow-hidden flex-1">
+    <div className="min-h-screen bg-bg-page flex text-text-primary">
+      <div className="min-h-screen bg-bg-page flex flex-col items-center justify-center p-4 relative overflow-hidden flex-1">
         {/* Background Ambient Glows */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
 
         <div className="w-full max-w-[440px] flex flex-col items-center z-10">
           {/* Brand Anchor */}
           <div className="mb-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-primary-light flex items-center justify-center shadow-2xl border border-white/10 mb-2">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-primary-light flex items-center justify-center shadow-2xl border border-outline mb-2">
               <span className="material-symbols-outlined text-white text-[32px]">shield_person</span>
             </div>
             <h1 className="font-display-lg text-2xl font-bold text-text-primary tracking-tight text-center">
@@ -67,7 +67,7 @@ export default function AdminLoginPage() {
           </div>
 
           {/* Login Form Card */}
-          <div className="glass-card w-full p-6 lg:p-8 rounded-2xl border border-white/10 shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="glass-card w-full p-6 lg:p-8 rounded-2xl border border-outline shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
             {error && (
               <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">error</span>
@@ -86,7 +86,7 @@ export default function AdminLoginPage() {
                     alternate_email
                   </span>
                   <input
-                    className="w-full h-11 rounded-full bg-[#1E1E1E] border border-white/10 pl-11 pr-5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
+                    className="w-full h-11 rounded-full bg-[#1E1E1E] border border-outline pl-11 pr-5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
                     id="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -109,7 +109,7 @@ export default function AdminLoginPage() {
                     lock_reset
                   </span>
                   <input
-                    className="w-full h-11 rounded-full bg-[#1E1E1E] border border-white/10 pl-11 pr-11 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
+                    className="w-full h-11 rounded-full bg-[#1E1E1E] border border-outline pl-11 pr-11 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
                     id="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
