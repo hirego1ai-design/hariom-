@@ -15,9 +15,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       include: {
         candidateProfile: { select: { user: { select: { id: true, name: true, email: true } } } },
         proctoringEvents: { orderBy: { createdAt: "asc" } },
-        questions: { orderBy: { orderIndex: "asc" }, include: { response: { include: { storedFile: { select: { id: true, mimeType: true } } } } } },
+        questions: { orderBy: { orderIndex: "asc" }, include: { response: { select: { id: true, durationSeconds: true, mediaType: true, analysisStatus: true, transcript: true, analysisResult: true, storedFile: { select: { mimeType: true } } } } } },
       },
     });
-    return NextResponse.json({ success: true, attempts });
+    const reviewAttempts = attempts.map((attempt) => ({
+      ...attempt,
+      questions: attempt.questions.map((question) => ({
+        ...question,
+        response: question.response ? {
+          ...question.response,
+          mediaUrl: `/api/employer/recorded-assessment/responses/${question.response.id}/media`,
+        } : null,
+      })),
+    }));
+    return NextResponse.json({ success: true, attempts: reviewAttempts });
   } catch (error) { return handleApiError(error); }
 }
