@@ -157,6 +157,7 @@ async function dispatchWorkerJob(params: {
         downloadUrl: params.downloadUrl,
         claimedDurationSeconds: params.durationSeconds,
         callbackUrl,
+        claimToken: claim.claimToken,
       }),
     });
     if (!res.ok) {
