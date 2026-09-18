@@ -4,7 +4,16 @@ import { referralDb } from "@/lib/referral-db";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { z } from "zod";
 
-const payoutActionSchema = z.object({ payoutId: z.string().trim().min(1).max(191), action: z.enum(["APPROVE", "MARK_PAID", "PROCESS", "REJECT"]), transactionRef: z.string().trim().min(3).max(200).optional(), adminNotes: z.string().trim().max(1000).optional(), rejectionReason: z.string().trim().max(1000).optional() }).strict();
+const payoutActionSchema = z.object({
+  payoutId: z.string().trim().min(1).max(191),
+  action: z.enum(["APPROVE", "MARK_PAID", "REJECT"]),
+  transactionRef: z.string().trim().min(3).max(200).optional(),
+  adminNotes: z.string().trim().max(1000).optional(),
+  rejectionReason: z.string().trim().min(3).max(1000).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.action === "MARK_PAID" && !value.transactionRef) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["transactionRef"], message: "Settlement transaction reference is required." });
+  if (value.action === "REJECT" && !value.rejectionReason) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rejectionReason"], message: "Rejection reason is required." });
+});
 
 export async function GET(request: Request) {
   try {
@@ -61,7 +70,7 @@ export async function POST(request: Request) {
       });
     }
 
-    if (action === "MARK_PAID" || action === "PROCESS") {
+    if (action === "MARK_PAID") {
       if (!transactionRef || !transactionRef.trim()) {
         return NextResponse.json({ success: false, error: "A valid transactionRef / UTR is required to mark payout as PAID." }, { status: 400 });
       }
@@ -84,7 +93,7 @@ export async function POST(request: Request) {
       const payout = await referralDb.adminRejectPayout(
         payoutId,
         session.id,
-        rejectionReason || "Rejected by administrator."
+        rejectionReason!
       );
       if (!payout) {
         return NextResponse.json({ success: false, error: "Payout request not found" }, { status: 404 });
