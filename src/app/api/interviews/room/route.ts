@@ -63,6 +63,21 @@ export async function GET(req: NextRequest) {
     const interview = await findAuthorizedInterview(session, roomId);
     if (!interview) return jsonError("Forbidden: You are not an authorized participant for this interview.", 403);
 
+    if (!["SCHEDULED", "RESCHEDULED", "LIVE"].includes(interview.status)) {
+      return NextResponse.json({
+        success: true,
+        room: {
+          roomId,
+          interviewId: interview.id,
+          status: ["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status) ? "COMPLETED" : "CLOSED",
+          participantCount: 0,
+          isHost: session.role !== "CANDIDATE",
+          iceServers: [],
+          signaling: { offers: [], answers: [], candidates: [] },
+        },
+      });
+    }
+
     const now = new Date();
     await prisma.interviewSignal.deleteMany({ where: { interviewId: interview.id, expiresAt: { lte: now } } });
     const signals = await prisma.interviewSignal.findMany({
