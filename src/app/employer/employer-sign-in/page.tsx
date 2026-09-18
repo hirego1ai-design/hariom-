@@ -23,7 +23,7 @@ function EmployerSignInContent() {
 
   if (roleParam === "admin") {
     return (
-      <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-white">
+      <div className="min-h-screen bg-bg-page flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-3">
           <span className="material-symbols-outlined text-[36px] text-amber-400 animate-spin">
             progress_activity
@@ -71,10 +71,10 @@ function EmployerSignInContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Employer Features */}
-        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
           {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-amber-400 tracking-tight font-bold">
@@ -149,7 +149,7 @@ function EmployerSignInContent() {
             
             {/* Segmented Control Pill Toggle */}
             <div className="flex justify-center mb-4">
-              <div className="p-1 rounded-full flex items-center border border-white/10 bg-white/5 backdrop-blur-md">
+              <div className="p-1 rounded-full flex items-center border border-outline bg-surface-container backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => router.push("/login")}
@@ -168,48 +168,12 @@ function EmployerSignInContent() {
 
             {/* Header */}
             <div className="mb-4 text-center">
-              <h1 className="font-display-xl text-lg font-bold text-amber-400 mb-1">
+              <h1 className="font-headline-md font-bold text-amber-400 mb-1">
                 Employer Login
               </h1>
-              <p className="font-body-lg text-[11px] text-text-secondary">
+              <p className="font-body-md text-sm text-text-secondary">
                 Access your hiring workspace
               </p>
-            </div>
-
-            {/* Social SSO Buttons */}
-            <div className="mb-3">
-              <button
-                type="button"
-                className="w-full h-9 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-text-primary flex items-center justify-center gap-2 transition-all"
-              >
-                <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
-                  <path
-                    d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"
-                    fill="#4285F4"
-                  />
-                  <path
-                    d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"
-                    fill="#34A853"
-                  />
-                  <path
-                    d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"
-                    fill="#FBBC05"
-                  />
-                  <path
-                    d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z"
-                    fill="#EA4335"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
-            </div>
-
-            <div className="relative flex items-center my-3">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="mx-2 text-[9.5px] text-text-secondary uppercase font-bold tracking-wider">
-                or corporate email
-              </span>
-              <div className="flex-1 h-px bg-white/10" />
             </div>
 
             {/* Form */}
@@ -222,7 +186,7 @@ function EmployerSignInContent() {
                 </label>
                 <input
                   name="email"
-                  className="input-pill w-full h-9.5 text-xs text-text-primary px-3.5"
+                  className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5"
                   placeholder="name@company.com"
                   type="email"
                   required
@@ -245,7 +209,7 @@ function EmployerSignInContent() {
                 <div className="relative">
                   <input
                     name="password"
-                    className="input-pill w-full h-9.5 text-xs text-text-primary px-3.5 pr-9"
+                    className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5 pr-9"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
                     required
@@ -282,7 +246,7 @@ function EmployerSignInContent() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full h-10 rounded-xl font-bold text-xs text-black bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 shadow-md hover:shadow-amber-500/25 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 transition-all group"
+                  className="w-full h-11 rounded-xl font-bold text-xs text-black bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 shadow-md hover:shadow-amber-500/25 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 transition-all group"
                 >
                   {isSubmitting ? (
                     <>
@@ -318,7 +282,7 @@ function EmployerSignInContent() {
 
 export default function EmployerSignInPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0E0E0E]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-bg-page" />}>
       <EmployerSignInContent />
     </Suspense>
   );
