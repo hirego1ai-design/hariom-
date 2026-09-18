@@ -26,7 +26,7 @@ const roomActionSchema = z.object({
 
 async function findAuthorizedInterview(session: { id: string; role: string }, roomId: string) {
   const interview = await prisma.interview.findFirst({
-    where: { OR: [{ id: roomId }, { roomUrl: { contains: roomId } }] },
+    where: { OR: [{ id: roomId }, { roomUrl: `/employer/active-video-interview-interviewer-view?roomId=${roomId}` }] },
     include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
   });
   if (!interview) return null;
@@ -34,8 +34,9 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
 
   const candidateUserId = interview.application.candidateProfile?.userId;
   if (session.role === "CANDIDATE") return session.id === candidateUserId ? interview : null;
-  if (session.role !== "EMPLOYER" && session.role !== "RECRUITER") return null;
+  if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") return null;
   if (interview.roundProgress?.round.interviewers.length && !interview.roundProgress.round.interviewers.some((item) => item.userId === session.id)) return null;
+  if (session.role === "ADMIN") return interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id) ? interview : null;
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
 }
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
     const body = await readValidatedJson(req, roomActionSchema, 64 * 1024);
     const interview = await findAuthorizedInterview(session, body.roomId);
     if (!interview) return jsonError("Forbidden: Unauthorized room signaling action.", 403);
-    if (body.action !== "COMPLETE" && (session.role === "EMPLOYER" || session.role === "RECRUITER")) {
+    if (body.action !== "COMPLETE" && session.role !== "CANDIDATE") {
       const blocking = await prisma.interviewRoundProgress.count({
         where: { status: "ENDED_PENDING_FEEDBACK", interviewId: { not: interview.id }, round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
       });
