@@ -81,7 +81,7 @@ export class WorkflowEngine {
     });
   }
 
-  static async assertApprovedAction(params: { workflowId: string; stepName: string; action: unknown; context: TenantContext }): Promise<void> {
+  static async consumeApprovedAction(params: { workflowId: string; stepName: string; action: unknown; context: TenantContext }): Promise<void> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
@@ -89,5 +89,7 @@ export class WorkflowEngine {
       where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: actionDigest(params.action) } },
     });
     if (!approval || approval.decision !== 'APPROVED' || !approval.decidedBy || !approval.decidedAt) throw new Error('Persisted human approval is required for this exact action');
+    const consumed = await prisma.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt: new Date() } });
+    if (consumed.count !== 1) throw new Error('Approval has already been consumed');
   }
 }
