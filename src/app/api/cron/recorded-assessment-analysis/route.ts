@@ -31,7 +31,7 @@ async function run(request: NextRequest) {
     where: {
       OR: [
         { status: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } },
-        { status: "PROCESSING", startedAt: { lt: staleBefore } },
+        { status: "PROCESSING", OR: [{ startedAt: { lt: staleBefore } }, { startedAt: null }] },
       ],
     },
     orderBy: { updatedAt: "asc" },
@@ -43,10 +43,18 @@ async function run(request: NextRequest) {
     if (job.attempts >= job.maxAttempts) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "max-attempts" }); continue; }
     if (job.status !== "PROCESSING" && now.getTime() - job.updatedAt.getTime() < retryDelayMs(job.attempts)) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "backoff" }); continue; }
     if (job.status === "PROCESSING") {
-      await prisma.$transaction([
-        prisma.recordedAssessmentAnalysisJob.update({ where: { id: job.id }, data: { status: "BLOCKED_INFRA", error: "Worker callback timed out; queued for bounded recovery.", completedAt: now } }),
-        prisma.recordedAssessmentResponse.update({ where: { id: job.responseId }, data: { analysisStatus: "BLOCKED_INFRA" } }),
-      ]);
+      const claimed = await prisma.recordedAssessmentAnalysisJob.updateMany({
+        where: { id: job.id, status: "PROCESSING", OR: [{ startedAt: { lt: staleBefore } }, { startedAt: null }] },
+        data: { status: "BLOCKED_INFRA", error: "Worker callback timed out; queued for bounded recovery.", completedAt: null },
+      });
+      if (claimed.count !== 1) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "claimed-elsewhere" }); continue; }
+      await prisma.recordedAssessmentResponse.updateMany({ where: { id: job.responseId, analysisStatus: "PROCESSING" }, data: { analysisStatus: "BLOCKED_INFRA" } });
+    } else {
+      const claimed = await prisma.recordedAssessmentAnalysisJob.updateMany({
+        where: { id: job.id, status: job.status, attempts: job.attempts },
+        data: { updatedAt: now },
+      });
+      if (claimed.count !== 1) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "claimed-elsewhere" }); continue; }
     }
     try {
       await dispatchRecordedAssessmentAnalysis(job.responseId);
