@@ -47,7 +47,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
         });
         if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
-        await tx.application.update({ where: { id: interview.applicationId }, data: { status: "REJECTED" } });
+        const rejected = await tx.application.updateMany({
+          where: { id: interview.applicationId, status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] } },
+          data: { status: "REJECTED" },
+        });
+        if (rejected.count !== 1) {
+          throw new ApiError("Application is already in a terminal state and cannot be rejected from this interview round.", 409);
+        }
         return { action: "REJECT" as const, nextRound: null };
       }
       const nextRound = await tx.interviewRound.findUnique({
