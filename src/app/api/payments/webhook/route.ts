@@ -179,6 +179,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (verification.status === "PENDING") {
+      return NextResponse.json({
+        success: true,
+        received: true,
+        status: "PENDING",
+        message: "Nonterminal payment event acknowledged without changing subscription, credits, promo usage, or payment-order state.",
+      });
+    }
+
     // 4. Handle Payment Success Events with Amount Integrity Check & Atomic Transaction
     const isPaymentSuccess = verification.status === "SUCCESS";
 
