@@ -39,7 +39,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
-DO $
+DO $role_guard$
 DECLARE
   target_role text;
 BEGIN
@@ -50,4 +50,4 @@ BEGIN
     END IF;
   END LOOP;
 END
-$;
+$role_guard$;
