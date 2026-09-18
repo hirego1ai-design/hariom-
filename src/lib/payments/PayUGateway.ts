@@ -43,7 +43,7 @@ export class PayUGateway implements PaymentGateway {
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const gatewayTxId = jsonPayload?.txnid || jsonPayload?.mihpayid || "";
-    const status = jsonPayload?.status === "success" ? "SUCCESS" : "FAILED";
+    const status: VerifyWebhookResult["status"] = jsonPayload?.status === "success" ? "SUCCESS" : jsonPayload?.status === "failure" || jsonPayload?.status === "failed" ? "FAILED" : "PENDING";
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
 
     if (!merchantSalt) {
@@ -112,7 +112,7 @@ export class PayUGateway implements PaymentGateway {
     };
   }
 
-  async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+  async getPaymentStatus(_gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
+    return { status: "PENDING" };
   }
 }
