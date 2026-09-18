@@ -93,9 +93,11 @@ export class WorkflowEngine {
     if (consumed.count !== 1) throw new Error('Approval has already been consumed');
   }
 
-  static async recoverInterruptedSteps(workflowId: string): Promise<number> {
+  static async recoverInterruptedSteps(workflowId: string, context: TenantContext): Promise<number> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: workflowId } });
     if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(context, workflow.companyId);
+    RbacGuard.assertRole(context, APPROVER_ROLES);
     // A RUNNING row does not prove whether an external side effect happened.
     // Never replay it automatically. Mark it failed for explicit idempotent
     // recovery and preserve evidence for operators/workers.
