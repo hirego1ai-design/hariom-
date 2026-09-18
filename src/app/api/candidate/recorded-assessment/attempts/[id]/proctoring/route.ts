@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const result = await prisma.$transaction(async (tx) => {
       const attempt = await tx.recordedAssessmentAttempt.findFirst({
         where: { id, candidateProfile: { userId: session.id }, status: "IN_PROGRESS" },
-        include: { jobListing: { select: { recordedAssessmentConfig: true } } },
+        include: { candidateProfile: { select: { userId: true } }, jobListing: { select: { recordedAssessmentConfig: true } } },
       });
       if (!attempt) throw new ApiError("Active assessment attempt not found.", 404);
       if (!attempt.jobListing.recordedAssessmentConfig?.proctoringEnabled) {
@@ -69,6 +69,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           data: { status: "TERMINATED_PROCTORING", terminatedAt: new Date() },
         });
         if (changed.count !== 1) throw new ApiError("Assessment state changed; reload the attempt.", 409);
+
+        // Termination creates a review case, not a suspension. Automated
+        // telemetry must never cross the human-review boundary by itself.
+        const openReview = await tx.recordedAssessmentRestriction.findFirst({
+          where: { userId: attempt.candidateProfile.userId, attemptId: id, status: { in: ["PENDING_REVIEW", "ACTIVE"] } },
+          select: { id: true },
+        });
+        if (!openReview) {
+          const evidenceEvents = await tx.recordedAssessmentProctoringEvent.findMany({
+            where: { attemptId: id }, orderBy: { createdAt: "asc" }, take: 100,
+          });
+          await tx.recordedAssessmentRestriction.create({
+            data: {
+              userId: attempt.candidateProfile.userId,
+              attemptId: id,
+              status: "PENDING_REVIEW",
+              proposedMonths: 1,
+              reason: "Assessment terminated after continued warning-worthy proctoring events. Administrator review is required before any account restriction.",
+              evidence: { events: evidenceEvents.map((item) => ({ id: item.id, type: item.eventType, severity: item.severity, warningNumber: item.warningNumber, evidence: item.evidence, createdAt: item.createdAt })) },
+            },
+          });
+        }
       }
       return { eventId: event.id, warningNumber, terminated, duplicate: false };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
