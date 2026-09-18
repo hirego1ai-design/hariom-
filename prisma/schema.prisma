@@ -655,6 +655,7 @@ enum PaymentStatus {
   PAID
   UNPAID
   OVERDUE
+  PENDING_VERIFICATION
 }
 
 model Invoice {
@@ -804,17 +805,18 @@ model SubscriptionPlan {
 }
 
 model CompanySubscription {
-  id        String           @id @default(uuid())
-  companyId String
-  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  planId    String
-  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
-  startDate DateTime         @default(now())
-  endDate   DateTime
-  status    String           @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
-  paymentId String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id                  String           @id @default(uuid())
+  companyId           String
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                SubscriptionPlan @relation(fields: [planId], references: [id])
+  entitlementSnapshot Json?
+  startDate           DateTime         @default(now())
+  endDate             DateTime
+  status              String           @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+  paymentId           String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 }
 
 model CompanyCredits {
@@ -1577,6 +1579,7 @@ model PaymentOrder {
   orderId               String   @unique
   companyId             String
   planId                String
+  planSnapshot          Json?
   originalAmount        Float
   discountAmount        Float    @default(0)
   expectedAmount        Float

@@ -1,6 +1,6 @@
 import { calculateCommercialFee } from "@/utils/pricing";
 import { agreementsDb } from "@/lib/agreements-db";
-import { invoicesDb } from "@/lib/invoices-db";
+import { receiptDownloadUrl, receiptNotes, rejectionStatus } from "@/lib/invoiceReceiptState";
 import { validatePasswordStrength, hasRoleAccess, sanitizeUserInput } from "@/lib/auth";
 import { assertDisposableTestEnvironment, withBlockedProviderNetwork } from "./test-safety";
 
@@ -52,26 +52,19 @@ async function runIsolatedTests() {
     results.push({ name: "Agreements Engine - Requirement Fetching", category: "Agreements", passed: false, message: e.message });
   }
 
-  // 3. Invoices Engine Tests
+  // 3. Invoice receipt state helpers (database transitions are covered by the
+  // disposable-database billing integration suite below).
   try {
-    const newInv = await invoicesDb.createInvoice({
-      agreementId: "agr-test",
-      companyName: "TestCorp",
-      amount: 100000,
-      taxAmount: 18000,
-      totalAmount: 118000,
-      currency: "INR",
-      status: "UNPAID",
-      dueDate: "2026-09-01",
-    });
-    const pass4 = newInv.status === "UNPAID" && newInv.totalAmount === 118000;
-    results.push({ name: "Invoices Engine - Creation & Calculation", category: "Invoices", passed: pass4 });
+    const notes = JSON.stringify({ notes: "Bank transfer", storedFileId: "file-123", bankTransferRef: "UTR-12345" });
+    const parsed = receiptNotes(notes);
+    const pass4 = parsed.bankTransferRef === "UTR-12345" && receiptDownloadUrl(notes) === "/api/files/file-123";
+    results.push({ name: "Invoice receipt metadata is parsed into a private download URL", category: "Invoices", passed: pass4 });
 
-    const paidInv = await invoicesDb.markAsPaid(newInv.id);
-    const pass5 = paidInv?.status === "PAID";
-    results.push({ name: "Invoices Engine - Payment Status Transition", category: "Invoices", passed: pass5 });
+    const pass5 = rejectionStatus("2026-09-01", new Date("2026-09-02T00:00:00.000Z")) === "OVERDUE"
+      && rejectionStatus("2026-09-02", new Date("2026-09-02T23:59:59.000Z")) === "UNPAID";
+    results.push({ name: "Rejected receipt restores the correct outstanding status", category: "Invoices", passed: pass5 });
   } catch (e: any) {
-    results.push({ name: "Invoices Engine - Creation & Payment", category: "Invoices", passed: false, message: e.message });
+    results.push({ name: "Invoice receipt state helpers", category: "Invoices", passed: false, message: e.message });
   }
 
   results.push({ name: "AI Router - Live provider integration", category: "AI Router", passed: false, skipped: true,

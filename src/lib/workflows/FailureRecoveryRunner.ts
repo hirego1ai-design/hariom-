@@ -3,6 +3,8 @@ import { BudgetManager } from '../governance/BudgetManager';
 import { prisma } from '@/lib/prisma';
 import { registerProductionConsumers } from '../events/ProductionConsumers';
 import { PphBillingWorker } from '../pph-billing';
+import { WhatsAppQueueRecovery, type WhatsAppRecoveryReport } from '../whatsapp-queue';
+import { SecurityAuditDeliveryWorker, type SecurityAuditDeliveryReport } from '../securityAuditDelivery';
 
 export interface RecoveryReport {
   pphBilling?: { invoiced: number; held: number };
@@ -10,6 +12,8 @@ export interface RecoveryReport {
   expiredReservations: number;
   failedWorkflowsEnqueued: number;
   outbox: OutboxPollReport;
+  whatsapp?: WhatsAppRecoveryReport;
+  securityAudit?: SecurityAuditDeliveryReport;
   timeBudgetExhausted: boolean;
 }
 
@@ -25,6 +29,15 @@ export class FailureRecoveryRunner {
     const pphBilling = await PphBillingWorker.run(20, Math.min(stopAt, Date.now() + 15_000));
     // 1. Reclaim abandoned Outbox PROCESSING rows & process PENDING rows
     const outbox = await OutboxPoller.pollAndProcess(20, 90_000, stopAt);
+
+    // Republish durable WhatsApp records that lost queue delivery, and drain
+    // the security audit outbox when an external SIEM is configured.
+    const whatsapp = Date.now() < stopAt
+      ? await WhatsAppQueueRecovery.run(5, stopAt)
+      : { eligible: 0, scheduled: 0, failed: 0, timeBudgetExhausted: true };
+    const securityAudit = Date.now() < stopAt
+      ? await SecurityAuditDeliveryWorker.run(4)
+      : { configured: Boolean(process.env.SIEM_WEBHOOK_URL && process.env.SIEM_WEBHOOK_TOKEN), pending: 0, delivered: 0, retried: 0, failed: 0, unclaimed: 0 };
 
     // 2. Expire stale held budget reservations
     const expiredReservations = Date.now() < stopAt ? await BudgetManager.expireStaleReservations(20, stopAt) : 0;
@@ -67,6 +80,8 @@ export class FailureRecoveryRunner {
       expiredReservations,
       failedWorkflowsEnqueued,
       outbox,
+      whatsapp,
+      securityAudit,
       timeBudgetExhausted: Date.now() >= stopAt,
     };
   }

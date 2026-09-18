@@ -17,6 +17,16 @@ export default function EmployerBillingManagementPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!["image/png", "image/jpeg", "application/pdf"].includes(file.type)) {
+        alert("Only PNG, JPEG, or PDF receipts are accepted.");
+        e.target.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Receipt files must be 5 MB or smaller.");
+        e.target.value = "";
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setReceiptUrl(reader.result as string);
@@ -358,7 +368,7 @@ export default function EmployerBillingManagementPage() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="text"
-                                value={receiptUrl.startsWith("data:") ? "Image Attached (Receipt Loaded)" : receiptUrl}
+                                value={receiptUrl.startsWith("data:application/pdf") ? "PDF Attached (Receipt Loaded)" : receiptUrl.startsWith("data:") ? "Image Attached (Receipt Loaded)" : receiptUrl}
                                 readOnly={true}
                                 placeholder="Select receipt screenshot..."
                                 className="flex-1 bg-[#121215] border border-white/10 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 outline-none"
@@ -367,7 +377,7 @@ export default function EmployerBillingManagementPage() {
                                 <span>Attach Receipt</span>
                                 <input
                                   type="file"
-                                  accept="image/*"
+                                  accept="image/png,image/jpeg,application/pdf"
                                   className="hidden"
                                   onChange={handleFileChange}
                                 />
@@ -375,7 +385,11 @@ export default function EmployerBillingManagementPage() {
                             </div>
                             {receiptUrl && (
                               <div className="relative mt-1 w-full max-h-24 rounded-lg overflow-hidden border border-white/10 bg-black flex items-center justify-center">
-                                <img src={receiptUrl} className="max-h-24 object-contain w-full" alt="Receipt Preview" />
+                                {receiptUrl.startsWith("data:application/pdf") ? (
+                                  <span className="p-5 text-xs text-slate-300">PDF receipt attached</span>
+                                ) : (
+                                  <img src={receiptUrl} className="max-h-24 object-contain w-full" alt="Receipt Preview" />
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => setReceiptUrl("")}

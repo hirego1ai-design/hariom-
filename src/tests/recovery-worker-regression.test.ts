@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import { prisma } from '../lib/prisma';
 import { FailureRecoveryRunner, type RecoveryReport } from '../lib/workflows/FailureRecoveryRunner';
-import { RecoveryWorkerState } from '../lib/workflows/RecoveryWorkerState';
+import { recoveryReportNeedsAttention, RecoveryWorkerState } from '../lib/workflows/RecoveryWorkerState';
 import { OutboxPoller } from '../lib/events/Outbox';
 import { BudgetManager } from '../lib/governance/BudgetManager';
 import { PphBillingWorker } from '../lib/pph-billing';
+import { WhatsAppQueueRecovery } from '../lib/whatsapp-queue';
+import { SecurityAuditDeliveryWorker } from '../lib/securityAuditDelivery';
 import { GET, POST } from '../app/api/internal/workflows/recover/route';
 
 const workerKey = 'offline-test-worker-key-32-characters-long';
@@ -78,6 +80,17 @@ test('stale or unhandled-event heartbeat is unhealthy for monitoring', async (t)
   assert.equal((await GET(request())).status, 503);
 });
 
+test('integrated queue failures and undeliverable audit backlog require attention', () => {
+  assert.equal(recoveryReportNeedsAttention({
+    ...report,
+    whatsapp: { eligible: 1, scheduled: 0, failed: 1, timeBudgetExhausted: false },
+  }), true);
+  assert.equal(recoveryReportNeedsAttention({
+    ...report,
+    securityAudit: { configured: false, pending: 2, delivered: 0, retried: 0, failed: 0, unclaimed: 0 },
+  }), true);
+});
+
 test('recovery scans are bounded and a concurrently advanced workflow is not failed', async (t) => {
   t.mock.method(PphBillingWorker, 'run', async () => ({ invoiced: 0, held: 0 }));
   t.mock.method(OutboxPoller, 'pollAndProcess', async (batch: number, lease: number, stopAt: number) => {
@@ -85,6 +98,14 @@ test('recovery scans are bounded and a concurrently advanced workflow is not fai
     return report.outbox;
   });
   t.mock.method(BudgetManager, 'expireStaleReservations', async (batch: number) => { assert.equal(batch, 20); return 2; });
+  t.mock.method(WhatsAppQueueRecovery, 'run', async (batch: number, stopAt: number) => {
+    assert.equal(batch, 5); assert.ok(stopAt > Date.now());
+    return { eligible: 1, scheduled: 1, failed: 0, timeBudgetExhausted: false };
+  });
+  t.mock.method(SecurityAuditDeliveryWorker, 'run', async (batch: number) => {
+    assert.equal(batch, 4);
+    return { configured: true, pending: 0, delivered: 1, retried: 0, failed: 0, unclaimed: 0 };
+  });
   const updatedAt = new Date(Date.now() - 11 * 60_000);
   stubMethod(t, prisma.workflowInstance, 'findMany', async (args: any) => {
     assert.equal(args.take, 20);
@@ -99,6 +120,8 @@ test('recovery scans are bounded and a concurrently advanced workflow is not fai
   const result = await FailureRecoveryRunner.runRecoveryPass();
   assert.equal(result.failedWorkflowsEnqueued, 0);
   assert.equal(result.reclaimedOutboxEntries, 1);
+  assert.equal(result.whatsapp?.scheduled, 1);
+  assert.equal(result.securityAudit?.delivered, 1);
 });
 
 test('reservation recovery is bounded and conservatively accounts for uncertain provider spend', async (t) => {

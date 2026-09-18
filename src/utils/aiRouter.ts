@@ -58,7 +58,10 @@ const allowLocalAiCache = process.env.NODE_ENV !== "production";
 let openaiClient: OpenAI | null = null;
 if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("sk-proj-hirego-openai-production-key")) {
   try {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // Provider calls are never replayed automatically: a timed-out request may
+    // already have been billed and completed remotely. ExecutionLoop owns the
+    // durable execution id and conservatively accounts ambiguous spend.
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
   } catch {
     openaiClient = null;
   }
@@ -167,25 +170,21 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    await prisma.aiExecutionLog.create({
-      data: {
-        id: log.id,
-        task: log.task,
-        provider: log.provider,
-        model: log.model,
-        promptTokens: log.promptTokens,
-        completionTokens: log.completionTokens,
-        totalTokens: log.totalTokens,
-        latencyMs: log.latencyMs,
-        costEstUsd: log.costEstUsd,
-        status: log.status,
-        timestamp: new Date(log.timestamp),
-      },
-    });
-  } catch {
-    // Database fallback
-  }
+  await prisma.aiExecutionLog.create({
+    data: {
+      id: log.id,
+      task: log.task,
+      provider: log.provider,
+      model: log.model,
+      promptTokens: log.promptTokens,
+      completionTokens: log.completionTokens,
+      totalTokens: log.totalTokens,
+      latencyMs: log.latencyMs,
+      costEstUsd: log.costEstUsd,
+      status: log.status,
+      timestamp: new Date(log.timestamp),
+    },
+  });
 
   if (allowLocalAiCache) {
     promptResponseCache.set(cacheKey, { resultText: responseText, timestamp: Date.now() });

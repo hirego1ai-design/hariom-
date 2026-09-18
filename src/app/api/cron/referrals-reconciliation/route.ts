@@ -32,9 +32,10 @@ function verifyCronSecret(req: NextRequest): { authorized: boolean; reason?: str
     return { authorized: true };
   }
 
-  // Non-production fallback (Dev / Staging / Test)
-  // If CRON_SECRET is not configured in dev, require explicit test secret or dev bypass header
-  if (providedSecret === "dev-cron-secret" || !isProduction) {
+  // Non-production fallback (Dev / Test). Keep the route authenticated even
+  // when a developer has not configured a local secret; an unauthenticated
+  // staging deployment must never become a public reconciliation trigger.
+  if (!isProduction && providedSecret === "dev-cron-secret") {
     return { authorized: true };
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { razorpayCheckoutFields } from "@/lib/payments/subscriptionCredits";
@@ -15,6 +15,8 @@ export default function EmployerSubscriptionsStorePage() {
   const [loading, setLoading] = useState(true);
   const [checkoutPlan, setCheckoutPlan] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const checkoutRequestKey = useRef<string | null>(null);
+  const checkoutInFlight = useRef(false);
   const [gatewayConfig, setGatewayConfig] = useState<any>({
     mode: "AUTO",
     primaryGateway: "RAZORPAY",
@@ -102,13 +104,15 @@ export default function EmployerSubscriptionsStorePage() {
   };
 
   const handleSubscribe = async () => {
-    if (!checkoutPlan) return;
+    if (!checkoutPlan || checkoutInFlight.current) return;
+    checkoutInFlight.current = true;
+    checkoutRequestKey.current ||= crypto.randomUUID();
     setSubmitting(true);
 
     try {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": checkoutRequestKey.current },
         body: JSON.stringify({
           planId: checkoutPlan.id,
           promoCode: couponCode ? couponCode.trim().toUpperCase() : undefined,
@@ -166,6 +170,7 @@ export default function EmployerSubscriptionsStorePage() {
       console.error("Checkout initiation error:", err);
       alert("Checkout error: " + err.message);
     } finally {
+      checkoutInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -428,6 +433,7 @@ export default function EmployerSubscriptionsStorePage() {
 
                     <button
                       onClick={() => {
+                        checkoutRequestKey.current = crypto.randomUUID();
                         setCheckoutPlan(p);
                         setPromoDetails(null);
                         setCouponCode("");

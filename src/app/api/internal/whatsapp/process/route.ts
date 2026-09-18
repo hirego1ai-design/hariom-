@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       }
 
       await markWhatsAppMessageRead(event.providerEventId);
-      await markWhatsAppJobProcessed(event.id);
+      await markWhatsAppJobProcessed(event);
       return NextResponse.json({ success: true });
     } catch (error) {
       // Scheduling failures are infrastructure failures. The event was reset

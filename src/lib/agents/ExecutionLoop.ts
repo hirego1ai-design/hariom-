@@ -7,6 +7,7 @@ import { BudgetManager } from '../governance/BudgetManager';
 import { AgentEvaluator } from '../governance/AgentEvaluator';
 import { isBillableAiAgent } from '../governance/AiEntitlements';
 import { validateTenantAccess } from '../security/TenantContext';
+import { TraceRecorder } from '../telemetry/TraceRecorder';
 
 export class ExecutionLoopError extends Error {
   constructor(message: string) {
@@ -169,6 +170,21 @@ export class ExecutionLoop {
       throw new ExecutionLoopError(`Agent output was not accepted: ${evalResult.verdict}. Review is required.`);
     }
 
+    const actualSpend = result.actualCostMinorUnits;
+    const traceSpend = (typeof actualSpend === 'bigint' && actualSpend >= BigInt(0)) ||
+      (typeof actualSpend === 'number' && Number.isSafeInteger(actualSpend) && actualSpend >= 0)
+      ? BigInt(actualSpend as bigint | number)
+      : estimatedMinor;
+    await TraceRecorder.record({
+      traceId: params.context.executionId,
+      correlationId: params.context.correlationId,
+      executionId: params.context.executionId,
+      companyId: params.companyId,
+      agentId: params.agentId,
+      costMinorUnits: traceSpend,
+      status: 'COMPLETED',
+      metadata: { evaluatorVerdict: evalResult.verdict },
+    });
     return result;
     } finally {
       // Every path after reservation settles, including evaluation/logging

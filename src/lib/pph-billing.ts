@@ -72,8 +72,8 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
     if (agreement.status !== "ACTIVE" || !agreement.signedAt || agreement.invoiceRule !== PPH_RULE) {
       throw new ApiError("A signed active agreement with the DAY_25 invoice rule is required. Existing agreements must be amended and accepted first.", 409);
     }
-    if (joinedAt < agreement.validityStartDate || joinedAt > agreement.validityEndDate || agreement.signedAt > now) {
-      throw new ApiError("Joining is outside the accepted agreement validity period.", 422);
+    if (joinedAt < agreement.validityStartDate || joinedAt > agreement.validityEndDate || agreement.signedAt > joinedAt) {
+      throw new ApiError("Joining is outside the accepted agreement validity period or predates agreement acceptance.", 422);
     }
     if (!Number.isInteger(agreement.creditDays) || agreement.creditDays < 0 || agreement.creditDays > 365 || agreement.advancePaymentAmount !== 0) {
       throw new ApiError("Invalid payment period or advance payment requires manual reconciliation before scheduling.", 409);
@@ -116,7 +116,20 @@ export class PphBillingWorker {
           await tx.pphPlacement.update({ where: { id: placement.id }, data: { status: "HOLD", holdReason: "Agreement or hiring status requires reconciliation." } });
           return "held";
         }
-        const snapshot = z.object({ companyName: z.string(), candidateName: z.string().nullable(), jobTitle: z.string() }).parse(placement.termsSnapshot);
+        const snapshotResult = z.object({ companyName: z.string(), candidateName: z.string().nullable(), jobTitle: z.string() }).safeParse(placement.termsSnapshot);
+        if (!snapshotResult.success) {
+          // Quarantine corrupt evidence instead of repeatedly blocking all later
+          // placements and the other recovery workloads. Persistence failures
+          // still propagate; a hold is only reported after it commits.
+          await tx.pphPlacement.update({ where: { id: placement.id }, data: {
+            status: "HOLD", holdReason: "Invalid approved terms snapshot; HireGo reconciliation required.",
+          } });
+          await tx.agreementEvent.create({ data: { agreementId: placement.agreementId,
+            performedBy: "SYSTEM_PPH_BILLING", eventType: "PPH_BILLING_HELD",
+            notes: `Placement ${placement.id}: invalid approved terms snapshot; no invoice created.` } });
+          return "held";
+        }
+        const snapshot = snapshotResult.data;
         const invoice = await tx.invoice.create({ data: {
           id: randomUUID(), invoiceNumber: `PPH-${placement.id}`, agreementId: placement.agreementId,
           ...snapshot, amount: placement.amount.toNumber(), taxAmount: placement.taxAmount.toNumber(), totalAmount: placement.totalAmount.toNumber(),

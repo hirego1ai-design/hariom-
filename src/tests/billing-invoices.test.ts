@@ -5,6 +5,7 @@ import { GET as getInvoicesHandler } from "@/app/api/employer/billing/invoices/r
 import { POST as payInvoiceHandler } from "@/app/api/employer/billing/invoices/[id]/pay/route";
 import { POST as receiptInvoiceHandler } from "@/app/api/employer/billing/invoices/[id]/receipt/route";
 import { GET as getFileHandler } from "@/app/api/files/[id]/route";
+import { POST as reviewInvoiceHandler } from "@/app/api/admin/invoices/route";
 import { NextRequest } from "next/server";
 import { createSessionToken } from "@/lib/auth";
 import fs from "fs";
@@ -95,11 +96,26 @@ export async function runBillingInvoicesTests(): Promise<{
       return { status: res.status };
     };
 
+    const callReviewInvoice = async (sessionToken: string, body: Record<string, unknown>) => {
+      const req = new NextRequest("http://localhost/api/admin/invoices", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const res = await reviewInvoiceHandler(req);
+      const json = await res.json();
+      return { status: res.status, json };
+    };
+
     let companyA: any = null;
     let companyB: any = null;
     let employerA: any = null;
     let recruiterA: any = null;
     let employerB: any = null;
+    let admin: any = null;
     let agreementA: any = null;
     let agreementB: any = null;
     let invoiceA: any = null;
@@ -125,6 +141,10 @@ export async function runBillingInvoicesTests(): Promise<{
         data: { email: `employer-b-${testId}@hirego.test`, name: "Employer B", passwordHash: "d", role: "EMPLOYER" },
       });
       await prisma.employerProfile.create({ data: { userId: employerB.id, companyId: companyB.id } });
+
+      admin = await prisma.user.create({
+        data: { email: `admin-${testId}@hirego.test`, name: "Billing Admin", passwordHash: "d", role: "ADMIN" },
+      });
 
       // Agreements
       agreementA = await prisma.commercialAgreement.create({
@@ -207,6 +227,14 @@ export async function runBillingInvoicesTests(): Promise<{
         email: employerB.email,
         name: employerB.name,
         role: "EMPLOYER",
+        sessionVersion: 0,
+      });
+
+      const tokenAdmin = createSessionToken({
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        role: "ADMIN",
         sessionVersion: 0,
       });
 
@@ -314,18 +342,14 @@ export async function runBillingInvoicesTests(): Promise<{
       let fileExistsOnDisk = false;
       let storedFileRecord: any = null;
 
-      if (parsedNotes.bankTransferReceiptUrl) {
-        const devStoragePath = path.resolve(process.cwd(), ".data", "private-uploads", parsedNotes.bankTransferReceiptUrl);
-        fileExistsOnDisk = fs.existsSync(devStoragePath);
-        
-        storedFileRecord = await prisma.storedFile.findFirst({
-          where: { objectKey: parsedNotes.bankTransferReceiptUrl },
+      if (parsedNotes.storedFileId) {
+        storedFileRecord = await prisma.storedFile.findUnique({
+          where: { id: parsedNotes.storedFileId },
         });
-
-        // Cleanup local file
-        if (fileExistsOnDisk) {
-          fs.unlinkSync(devStoragePath);
-        }
+        const devStoragePath = storedFileRecord
+          ? path.resolve(process.cwd(), ".data", "private-uploads", storedFileRecord.objectKey)
+          : "";
+        fileExistsOnDisk = fs.existsSync(devStoragePath);
       }
 
       // Verify that the receipt is not exposed via a public URL
@@ -333,6 +357,10 @@ export async function runBillingInvoicesTests(): Promise<{
         parsedNotes.bankTransferReceiptUrl.startsWith("http://") || 
         parsedNotes.bankTransferReceiptUrl.startsWith("https://")
       );
+      const submissionAudit = await prisma.auditLog.findFirst({
+        where: { resource: `Invoice:${invoiceA.id}`, action: "INVOICE_RECEIPT_SUBMITTED" },
+        include: { siemEvent: true },
+      });
 
       assert(
         "Receipt upload writes to secure private storage, populates StoredFile, and is not exposed publicly",
@@ -342,33 +370,30 @@ export async function runBillingInvoicesTests(): Promise<{
         fileExistsOnDisk &&
         storedFileRecord !== null &&
         storedFileRecord.category === "PAYMENT_RECEIPT" &&
+        submissionAudit?.siemEvent?.status === "PENDING" &&
         !isPublicUrl,
-        "Private file verified, database metadata logged, not publicly exposed, and status set to PENDING_VERIFICATION"
+        "Private file, pending status, audit row, and SIEM outbox event were committed without a public object URL"
       );
 
       // --- Scenario 8: Verify private file access controls (/api/files/[id]) ---
-      const testStoredFile = await prisma.storedFile.create({
-        data: {
-          ownerId: employerA.id,
-          companyId: companyA.id,
-          objectKey: `test-receipts/probe-${testId}.png`,
-          category: "PAYMENT_RECEIPT",
-          originalName: "test-receipt.png",
-          mimeType: "image/png",
-          sizeBytes: 100,
-        },
-      });
-
       // 8a: Cross-company employer B should receive 403
-      const resFileCross = await callGetFile(tokenEmployerB, testStoredFile.id);
+      const resFileCross = await callGetFile(tokenEmployerB, storedFileRecord.id);
       assert(
         "File access rejected for cross-company employer",
         resFileCross.status === 403,
         "Cross-company file access correctly denied with 403"
       );
 
-      // 8b: Company owner employer A should be allowed (status 200 or 307)
-      const resFileOwner = await callGetFile(tokenEmployerA, testStoredFile.id);
+      // 8b: A same-company recruiter is not authorized to read financial proof.
+      const resFileRecruiter = await callGetFile(tokenRecruiterA, storedFileRecord.id);
+      assert(
+        "Payment receipt download rejected for recruiter role",
+        resFileRecruiter.status === 403,
+        "Recruiter cannot bypass billing RBAC through the generic file route"
+      );
+
+      // 8c: Company owner employer A should be allowed (status 200 or 307)
+      const resFileOwner = await callGetFile(tokenEmployerA, storedFileRecord.id);
       const isAllowedStatus = resFileOwner.status === 200 || resFileOwner.status === 307;
       assert(
         "File access permitted for authorized company owner",
@@ -376,17 +401,52 @@ export async function runBillingInvoicesTests(): Promise<{
         `Authorized file access returned status ${resFileOwner.status}`
       );
 
+      // --- Scenario 9: Admin review is CAS-protected and audited atomically ---
+      const expectedUpdatedAt = dbInvoiceAfterReceipt!.updatedAt.toISOString();
+      const resReview = await callReviewInvoice(tokenAdmin, {
+        action: "mark_paid",
+        invoiceId: invoiceA.id,
+        expectedUpdatedAt,
+      });
+      const dbInvoiceAfterReview = await prisma.invoice.findUnique({ where: { id: invoiceA.id } });
+      const reviewAuditCount = await prisma.auditLog.count({
+        where: { resource: `Invoice:${invoiceA.id}`, action: "INVOICE_RECEIPT_APPROVED" },
+      });
+      assert(
+        "Admin can approve a submitted receipt with a durable audit event",
+        resReview.status === 200 && dbInvoiceAfterReview?.status === "PAID" && reviewAuditCount === 1,
+        "Receipt approval, PAID transition, and audit persistence completed together"
+      );
+
+      const replayReview = await callReviewInvoice(tokenAdmin, {
+        action: "mark_paid",
+        invoiceId: invoiceA.id,
+        expectedUpdatedAt,
+      });
+      const reviewAuditCountAfterReplay = await prisma.auditLog.count({
+        where: { resource: `Invoice:${invoiceA.id}`, action: "INVOICE_RECEIPT_APPROVED" },
+      });
+      assert(
+        "Stale admin approval replay is rejected without a duplicate audit",
+        replayReview.status === 409 && reviewAuditCountAfterReplay === 1,
+        "Compare-and-swap review blocked the replay"
+      );
+
       // Cleanup StoredFiles created by test
       if (storedFileRecord) {
+        const devStoragePath = path.resolve(process.cwd(), ".data", "private-uploads", storedFileRecord.objectKey);
+        if (fs.existsSync(devStoragePath)) fs.unlinkSync(devStoragePath);
         await prisma.storedFile.delete({ where: { id: storedFileRecord.id } }).catch(() => undefined);
       }
-      await prisma.storedFile.delete({ where: { id: testStoredFile.id } }).catch(() => undefined);
 
       // Final Cleanup
+      const auditRows = await prisma.auditLog.findMany({ where: { resource: `Invoice:${invoiceA.id}` }, select: { id: true } });
+      await prisma.securityAuditOutboxEvent.deleteMany({ where: { auditLogId: { in: auditRows.map(row => row.id) } } }).catch(() => undefined);
+      await prisma.auditLog.deleteMany({ where: { id: { in: auditRows.map(row => row.id) } } }).catch(() => undefined);
       await prisma.invoice.deleteMany({ where: { id: { in: [invoiceA.id, invoiceB.id] } } }).catch(() => undefined);
       await prisma.commercialAgreement.deleteMany({ where: { id: { in: [agreementA.id, agreementB.id] } } }).catch(() => undefined);
       await prisma.employerProfile.deleteMany({ where: { userId: { in: [employerA.id, recruiterA.id, employerB.id] } } }).catch(() => undefined);
-      await prisma.user.deleteMany({ where: { id: { in: [employerA.id, recruiterA.id, employerB.id] } } }).catch(() => undefined);
+      await prisma.user.deleteMany({ where: { id: { in: [employerA.id, recruiterA.id, employerB.id, admin.id] } } }).catch(() => undefined);
       await prisma.company.deleteMany({ where: { id: { in: [companyA.id, companyB.id] } } }).catch(() => undefined);
 
     } catch (err: any) {

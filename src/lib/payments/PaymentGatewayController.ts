@@ -172,14 +172,17 @@ export class PaymentGatewayController {
 
     if (config.allowEmployerSelection && requestedGateway && (requestedGateway in this.providers)) {
       const selected = requestedGateway as GatewayName;
-      if (config.gatewaysStatus[selected] !== "DISABLED") {
-        candidateSequence.push(selected);
+      if (config.gatewaysStatus[selected] === "DISABLED") {
+        throw new Error(`Selected payment gateway ${selected} is disabled.`);
       }
+      candidateSequence.push(selected);
     }
 
     if (candidateSequence.length === 0) {
       if (config.mode === "MANUAL") {
-        candidateSequence.push(config.primaryGateway);
+        if (config.gatewaysStatus[config.primaryGateway] !== "DISABLED") {
+          candidateSequence.push(config.primaryGateway);
+        }
       } else {
         // AUTO mode: use priority list filtered by HEALTHY / DEGRADED status
         candidateSequence = config.priorities.filter(
@@ -227,7 +230,22 @@ export class PaymentGatewayController {
    * Route webhook verification to appropriate provider
    */
   static async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
-    const provider = this.providers[params.provider] || this.providers.RAZORPAY;
+    // Runtime input reaches this boundary from HTTP headers/query parameters;
+    // do not let an unknown name inherit Razorpay's verifier. Production-
+    // blocked adapters are incomplete and therefore may not authorize any
+    // financial side effect, even if stale database configuration references
+    // one of them.
+    if (!Object.prototype.hasOwnProperty.call(this.providers, params.provider) ||
+        (process.env.NODE_ENV === "production" && PRODUCTION_BLOCKED_GATEWAYS.has(params.provider))) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: null,
+        error: "Unsupported payment webhook provider.",
+      };
+    }
+    const provider = this.providers[params.provider];
     return provider.verifyWebhook(params);
   }
 }

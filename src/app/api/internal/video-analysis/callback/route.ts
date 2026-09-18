@@ -3,6 +3,8 @@ import { z } from "zod";
 import { handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
+import { canApplyVideoAnalysisCallback, VIDEO_ANALYSIS_TERMINAL_STATUSES } from "@/lib/videoAnalysisState";
+import { Prisma } from "@prisma/client";
 
 const callbackSchema = z.object({
   jobId: z.string().uuid(),
@@ -15,27 +17,27 @@ const callbackSchema = z.object({
   analysisVersion: z.string().optional(),
   result: z
     .object({
-      transcript: z.string().optional(),
-      detectedLanguage: z.string().optional(),
-      wordsPerMinute: z.number().optional(),
-      pauseRatio: z.number().optional(),
-      fillerWordCount: z.number().int().optional(),
-      transcriptConfidence: z.number().optional(),
+      transcript: z.string().max(30_000).optional(),
+      detectedLanguage: z.string().trim().min(1).max(32).optional(),
+      wordsPerMinute: z.number().finite().min(0).max(1_000).optional(),
+      pauseRatio: z.number().finite().min(0).max(1).optional(),
+      fillerWordCount: z.number().int().min(0).max(100_000).optional(),
+      transcriptConfidence: z.number().finite().min(0).max(1).optional(),
       lowConfidence: z.boolean().optional(),
-      audioQuality: z.string().optional(),
-      facePresenceRatio: z.number().nullable().optional(),
-      cameraFacingRatioEstimate: z.number().nullable().optional(),
-      headPoseIndicators: z.any().nullable().optional(),
-      postureIndicators: z.any().nullable().optional(),
+      audioQuality: z.string().max(500).optional(),
+      facePresenceRatio: z.number().finite().min(0).max(1).nullable().optional(),
+      cameraFacingRatioEstimate: z.number().finite().min(0).max(1).nullable().optional(),
+      headPoseIndicators: z.unknown().nullable().optional(),
+      postureIndicators: z.unknown().nullable().optional(),
       communicationScore: z.number().int().min(0).max(100).nullable().optional(),
       clarityScore: z.number().int().min(0).max(100).nullable().optional(),
       confidenceScore: z.number().int().min(0).max(100).nullable().optional(),
       professionalism: z.number().int().min(0).max(100).nullable().optional(),
       speechDeliveryScore: z.number().int().min(0).max(100).nullable().optional(),
       contentStructureScore: z.number().int().min(0).max(100).nullable().optional(),
-      strengths: z.array(z.string()).optional(),
-      improvementSuggestions: z.array(z.string()).optional(),
-      actualDurationSeconds: z.number().optional(),
+      strengths: z.array(z.string().trim().min(1).max(500)).max(25).optional(),
+      improvementSuggestions: z.array(z.string().trim().min(1).max(500)).max(25).optional(),
+      actualDurationSeconds: z.number().finite().min(0).max(121).optional(),
     })
     .optional(),
 });
@@ -69,25 +71,28 @@ export async function POST(request: NextRequest) {
       return jsonError("Forbidden: videoResumeId does not match job record", 403);
     }
 
-    // Handle repeated callbacks idempotently
-    if (job.status === "COMPLETED" && body.status === "COMPLETED") {
-      return NextResponse.json({ success: true, message: "Job already completed (idempotent)" });
+    // Every terminal status is immutable. This covers exact replays and also
+    // prevents a delayed failure from replacing a completed result (or vice
+    // versa). Operators must explicitly create/requeue a new job to retry.
+    if (!canApplyVideoAnalysisCallback(job.status)) {
+      return NextResponse.json({ success: true, message: "Job already terminal (idempotent)", status: job.status });
     }
 
     const now = new Date();
 
     if (body.status === "COMPLETED" && body.result) {
       const res = body.result;
-      await prisma.$transaction([
-        prisma.videoAnalysisJob.update({
-          where: { id: body.jobId },
+      const applied = await prisma.$transaction(async (tx) => {
+        const claim = await tx.videoAnalysisJob.updateMany({
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
           data: {
             status: "COMPLETED",
-            result: body.result,
+            result: body.result as Prisma.InputJsonValue,
             completedAt: now,
           },
-        }),
-        prisma.videoResume.update({
+        });
+        if (claim.count !== 1) return false;
+        await tx.videoResume.update({
           where: { id: body.videoResumeId },
           data: {
             analysisStatus: "COMPLETED",
@@ -101,8 +106,8 @@ export async function POST(request: NextRequest) {
             audioQuality: res.audioQuality ?? null,
             facePresenceRatio: res.facePresenceRatio ?? null,
             cameraFacingRatioEstimate: res.cameraFacingRatioEstimate ?? null,
-            headPoseIndicators: res.headPoseIndicators ?? undefined,
-            postureIndicators: res.postureIndicators ?? undefined,
+            headPoseIndicators: res.headPoseIndicators === undefined ? undefined : res.headPoseIndicators as Prisma.InputJsonValue,
+            postureIndicators: res.postureIndicators === undefined ? undefined : res.postureIndicators as Prisma.InputJsonValue,
             communicationScore: res.communicationScore ?? null,
             clarityScore: res.clarityScore ?? null,
             confidenceScore: res.confidenceScore ?? null,
@@ -118,26 +123,31 @@ export async function POST(request: NextRequest) {
             completedAt: now,
             analysisError: null,
           },
-        }),
-      ]);
+        });
+        return true;
+      });
+      if (!applied) return NextResponse.json({ success: true, message: "Job already terminal (idempotent)" });
     } else {
-      await prisma.$transaction([
-        prisma.videoAnalysisJob.update({
-          where: { id: body.jobId },
+      const applied = await prisma.$transaction(async (tx) => {
+        const claim = await tx.videoAnalysisJob.updateMany({
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
           data: {
             status: body.status,
             error: body.error || "Analysis failed",
             completedAt: now,
           },
-        }),
-        prisma.videoResume.update({
+        });
+        if (claim.count !== 1) return false;
+        await tx.videoResume.update({
           where: { id: body.videoResumeId },
           data: {
             analysisStatus: body.status,
             analysisError: body.error || "Analysis processing failed",
           },
-        }),
-      ]);
+        });
+        return true;
+      });
+      if (!applied) return NextResponse.json({ success: true, message: "Job already terminal (idempotent)" });
     }
 
     return NextResponse.json({ success: true, jobId: body.jobId, status: body.status });

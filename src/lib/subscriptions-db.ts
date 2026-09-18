@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { randomUUID } from "node:crypto";
+import { createPurchasedPlanSnapshot, type PurchasedPlanSnapshot } from "./payments/planSnapshot";
 
 export interface SubscriptionPlanRecord {
   id: string;
@@ -24,6 +25,7 @@ export interface CompanySubscriptionRecord {
   id: string;
   companyId: string;
   planId: string;
+  entitlementSnapshot?: PurchasedPlanSnapshot;
   startDate: string;
   endDate: string;
   status: "ACTIVE" | "EXPIRED" | "CANCELLED";
@@ -445,6 +447,7 @@ class SubscriptionsDb {
       id: `sub-${Date.now()}`,
       companyId,
       planId,
+      entitlementSnapshot: createPurchasedPlanSnapshot(plan),
       startDate,
       endDate,
       status: "ACTIVE",
@@ -483,6 +486,7 @@ class SubscriptionsDb {
           id: r.id,
           companyId: r.companyId,
           planId: r.planId,
+          entitlementSnapshot: r.entitlementSnapshot as PurchasedPlanSnapshot | undefined,
           startDate: r.startDate.toISOString(),
           endDate: r.endDate.toISOString(),
           status: r.status as any,

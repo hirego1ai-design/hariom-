@@ -8,23 +8,48 @@ const internalHttp = process.env.ALLOW_INTERNAL_HTTP === '1' && ['app', 'localho
 if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && internalHttp)) throw new Error('APP_URL must use HTTPS outside the private local app network.');
 
 let stopping = false;
-process.on('SIGTERM', () => { stopping = true; });
-process.on('SIGINT', () => { stopping = true; });
+let activeController;
+let delayController;
+function stop() {
+  stopping = true;
+  // Railway sends SIGTERM during deploys and restarts. Abort both an active
+  // request and the between-tick wait so the container can exit promptly.
+  activeController?.abort();
+  delayController?.abort();
+}
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
 
 while (!stopping) {
   try {
+    activeController = new AbortController();
     const response = await fetch(endpoint, {
       method: 'POST', headers: { Authorization: `Bearer ${key}` },
-      redirect: 'error', signal: AbortSignal.timeout(70_000),
+      redirect: 'error', signal: AbortSignal.any([activeController.signal, AbortSignal.timeout(70_000)]),
     });
     const result = await response.json();
     if (!response.ok || !result.success) throw new Error(`Recovery tick failed with HTTP ${response.status}`);
-    const attention = result.report && (result.report.pphBilling?.held || result.report.outbox.unhandled || result.report.outbox.failed || result.report.outbox.retried || result.report.failedWorkflowsEnqueued || result.report.timeBudgetExhausted);
+    const attention = result.report && (result.report.pphBilling?.held || result.report.outbox.unhandled || result.report.outbox.failed || result.report.outbox.retried || result.report.failedWorkflowsEnqueued
+      || result.report.whatsapp?.failed || result.report.whatsapp?.timeBudgetExhausted
+      || result.report.securityAudit?.failed || result.report.securityAudit?.retried || result.report.securityAudit?.unclaimed
+      || (result.report.securityAudit?.configured === false && result.report.securityAudit?.pending)
+      || result.report.timeBudgetExhausted);
     console.log(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: attention ? 'attention' : result.skipped || 'completed', report: result.report }));
   } catch (error) {
-    console.error(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: 'failed', message: error instanceof Error ? error.message : 'Request failed' }));
+    if (!stopping) console.error(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: 'failed', message: error instanceof Error ? error.message : 'Request failed' }));
+  } finally {
+    activeController = undefined;
   }
   // A single process never overlaps its own requests. Cross-process exclusion
   // is implemented by the endpoint's owner-checked Redis lease.
-  if (!stopping) await delay(60_000);
+  if (!stopping) {
+    delayController = new AbortController();
+    try {
+      await delay(60_000, undefined, { signal: delayController.signal });
+    } catch (error) {
+      if (!stopping) throw error;
+    } finally {
+      delayController = undefined;
+    }
+  }
 }

@@ -48,12 +48,14 @@ export async function GET(req: NextRequest) {
       let notesText = r.notes || undefined;
       let bankTransferRef = undefined;
       let bankTransferReceiptUrl = undefined;
+      let receiptMimeType = undefined;
       if (r.notes && r.notes.startsWith("{")) {
         try {
           const parsed = JSON.parse(r.notes);
           notesText = parsed.notes || undefined;
           bankTransferRef = parsed.bankTransferRef || undefined;
-          bankTransferReceiptUrl = parsed.bankTransferReceiptUrl || undefined;
+          bankTransferReceiptUrl = typeof parsed.storedFileId === "string" ? `/api/files/${encodeURIComponent(parsed.storedFileId)}` : undefined;
+          receiptMimeType = typeof parsed.receiptMimeType === "string" ? parsed.receiptMimeType : undefined;
         } catch {}
       }
       return {
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
         notes: notesText,
         bankTransferRef,
         bankTransferReceiptUrl,
+        receiptMimeType,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt ? r.updatedAt.toISOString() : undefined,
       };

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError, ApiError, readBoundedTextBody } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { GatewayName } from "@/lib/payments/PaymentGatewayInterface";
-import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
+import { subscriptionCredits, subscriptionExpiry } from "@/lib/payments/subscriptionCredits";
+import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,10 +15,11 @@ export async function POST(req: NextRequest) {
       throw new ApiError("Invalid JSON payload", 400);
     }
 
-    const { event } = body;
-
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
     const requestedProvider = req.nextUrl.searchParams.get("provider")?.toUpperCase();
+    if (requestedProvider && !["RAZORPAY", "STRIPE", "PHONEPE", "PAYU"].includes(requestedProvider)) {
+      throw new ApiError("Unsupported payment webhook provider", 400);
+    }
     const providerParam = ["RAZORPAY", "STRIPE", "PHONEPE", "PAYU"].includes(requestedProvider || "")
       ? (requestedProvider as GatewayName)
       : null;
@@ -46,10 +48,6 @@ export async function POST(req: NextRequest) {
       "";
 
     const { PaymentGatewayController } = await import("@/lib/payments/PaymentGatewayController");
-    const config = await PaymentGatewayController.getConfig();
-    if (config.gatewaysStatus[providerHeader] === "DISABLED") {
-      throw new ApiError("This payment provider is disabled", 403);
-    }
     const verification = await PaymentGatewayController.verifyWebhook({
       rawBody,
       signature,
@@ -72,6 +70,31 @@ export async function POST(req: NextRequest) {
     // result. Never accept a separately supplied client/body identifier.
     const gatewayTxId = verification.gatewayTxId;
 
+    const paymentOrder = await prisma.paymentOrder.findFirst({
+      where: {
+        OR: [
+          ...(verification.gatewayOrderId ? [{ gatewayOrderId: verification.gatewayOrderId }] : []),
+          ...(verification.gatewayTxId ? [{ gatewayTxId: verification.gatewayTxId }] : []),
+        ],
+      },
+    });
+
+    // Disabling a gateway blocks new checkouts, but must not strand a payment
+    // order that was already created with that provider. Unknown or unbound
+    // events from a disabled provider remain rejected.
+    const config = await PaymentGatewayController.getConfig();
+    if (config.gatewaysStatus[providerHeader] === "DISABLED" && paymentOrder?.gateway !== providerHeader) {
+      throw new ApiError("This payment provider is disabled", 403);
+    }
+
+    if (paymentOrder && (!paymentOrder.gateway || paymentOrder.gateway !== providerHeader)) {
+      throw new ApiError("Webhook provider does not match the payment order gateway", 400);
+    }
+    if (paymentOrder && verification.gatewayOrderId &&
+        paymentOrder.gatewayOrderId !== verification.gatewayOrderId) {
+      throw new ApiError("Webhook order does not match the authoritative payment order", 400);
+    }
+
     // 2. Strict Gateway Transaction Idempotency Pre-Check
     if (gatewayTxId) {
       const existingTx = await prisma.paymentTransaction.findUnique({
@@ -86,28 +109,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const paymentOrder = await prisma.paymentOrder.findFirst({
-      where: {
-        OR: [
-          ...(verification.gatewayOrderId ? [{ gatewayOrderId: verification.gatewayOrderId }] : []),
-          ...(verification.gatewayTxId ? [{ gatewayTxId: verification.gatewayTxId }] : []),
-        ],
-      },
-    });
-
-    if (paymentOrder && (!paymentOrder.gateway || paymentOrder.gateway !== providerHeader)) {
-      throw new ApiError("Webhook provider does not match the payment order gateway", 400);
-    }
-
     // 3. Handle Payment Failure / Rejection Events
-    if (verification.status === "FAILED" || verification.status === "REJECTED" || event === "payment.failed") {
+    if (verification.status === "FAILED" || verification.status === "REJECTED") {
       const failCompanyId = paymentOrder?.companyId;
       if (failCompanyId) {
         await prisma.$transaction(async (tx) => {
           // Serialize failure with success on the order row. A late failure
           // event must never overwrite a captured order or release its promo.
           const failedOrder = await tx.paymentOrder.updateMany({
-            where: { orderId: paymentOrder!.orderId, status: { not: "SUCCESS" } },
+            // A failure notification is a state transition, not an event log.
+            // Claim it once so provider retries cannot duplicate audit rows.
+            where: { orderId: paymentOrder!.orderId, status: { in: ["INITIATED", "CREATED"] } },
             data: { status: "FAILED" },
           });
           if (failedOrder.count !== 1) return;
@@ -168,11 +180,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Handle Payment Success Events with Amount Integrity Check & Atomic Transaction
-    const isPaymentSuccess =
-      verification.status === "SUCCESS" ||
-      event === "payment.captured" ||
-      event === "checkout.session.completed" ||
-      event === "payment_intent.succeeded";
+    const isPaymentSuccess = verification.status === "SUCCESS";
 
     if (isPaymentSuccess) {
       if (!gatewayTxId || !verification.gatewayOrderId) {
@@ -189,12 +197,25 @@ export async function POST(req: NextRequest) {
       const planId = paymentOrder.planId;
       const expectedAmount = paymentOrder.expectedAmount;
 
+      let planSnapshot;
+      try {
+        planSnapshot = parsePurchasedPlanSnapshot(paymentOrder.planSnapshot);
+      } catch {
+        throw new ApiError(
+          "Payment order commercial snapshot is missing or invalid; manual reconciliation is required.",
+          409,
+        );
+      }
+      if (planSnapshot.planId !== planId) {
+        throw new ApiError("Payment order commercial snapshot does not match the ordered plan.", 409);
+      }
+
       const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
       if (!plan) {
         return NextResponse.json({ success: false, error: "Subscription plan not found" }, { status: 404 });
       }
-      if (verification.currency && verification.currency !== plan.currency) {
-        throw new ApiError("Gateway payment currency does not match the subscription plan", 400);
+      if (verification.currency && verification.currency !== planSnapshot.currency) {
+        throw new ApiError("Gateway payment currency does not match the purchased plan", 400);
       }
       if (verification.companyId && verification.companyId !== companyId) {
         throw new ApiError("Gateway payment company does not match the payment order", 400);
@@ -271,12 +292,14 @@ export async function POST(req: NextRequest) {
         // Step 2: Payment status is recorded
         await tx.paymentTransaction.upsert({
           where: { gatewayTxId },
-          update: { status: "SUCCESS", planId: plan.id, amount: expectedAmount, provider: providerHeader },
+          update: { status: "SUCCESS", planId: planSnapshot.planId, amount: expectedAmount,
+            currency: planSnapshot.currency, provider: providerHeader },
           create: {
             gatewayTxId,
             companyId,
-            planId: plan.id,
+            planId: planSnapshot.planId,
             amount: expectedAmount,
+            currency: planSnapshot.currency,
             status: "SUCCESS",
             provider: providerHeader,
             rawPayload: body,
@@ -289,15 +312,15 @@ export async function POST(req: NextRequest) {
         await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE`;
         const now = new Date();
         const existingSub = await tx.companySubscription.findFirst({ where: { companyId }, orderBy: { endDate: "desc" } });
-        const renewCurrent = existingSub?.status === "ACTIVE" && existingSub.planId === plan.id && existingSub.endDate > now;
-        const expiry = new Date(renewCurrent ? existingSub.endDate : now);
-        expiry.setMonth(expiry.getMonth() + (plan.validityMonths || 1));
+        const renewCurrent = existingSub?.status === "ACTIVE" && existingSub.planId === planSnapshot.planId && existingSub.endDate > now;
+        const expiry = subscriptionExpiry(renewCurrent ? existingSub.endDate : now, planSnapshot.validityMonths);
 
         if (existingSub) {
           await tx.companySubscription.update({
             where: { id: existingSub.id },
             data: {
-              planId: plan.id,
+              planId: planSnapshot.planId,
+              entitlementSnapshot: planSnapshot,
               status: "ACTIVE",
               startDate: renewCurrent ? existingSub.startDate : now,
               endDate: expiry,
@@ -308,7 +331,8 @@ export async function POST(req: NextRequest) {
           await tx.companySubscription.create({
             data: {
               companyId,
-              planId: plan.id,
+              planId: planSnapshot.planId,
+              entitlementSnapshot: planSnapshot,
               status: "ACTIVE",
               startDate: now,
               endDate: expiry,
@@ -318,14 +342,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Provision Credits
-        const quotaCredits = subscriptionCredits(plan);
+        const quotaCredits = subscriptionCredits(planSnapshot);
         const credits = await tx.companyCredits.upsert({
           where: { companyId },
           update: {
-            jobPostsLeft: { increment: plan.jobPostsQuota },
-            resumeUnlocksLeft: { increment: plan.resumeUnlocksQuota },
-            aiInterviewsLeft: { increment: plan.aiInterviewsQuota },
-            aiAgentCreditsLeft: { increment: plan.aiInterviewsQuota },
+            jobPostsLeft: { increment: planSnapshot.jobPostsQuota },
+            resumeUnlocksLeft: { increment: planSnapshot.resumeUnlocksQuota },
+            aiInterviewsLeft: { increment: planSnapshot.aiInterviewsQuota },
+            aiAgentCreditsLeft: { increment: planSnapshot.aiInterviewsQuota },
             applicationsLeft: { increment: quotaCredits.applicationsLeft },
             resumeDownloadsLeft: { increment: quotaCredits.resumeDownloadsLeft },
             backgroundVerificationsLeft: { increment: quotaCredits.backgroundVerificationsLeft },
@@ -343,7 +367,7 @@ export async function POST(req: NextRequest) {
             companyId,
             amount: expectedAmount,
             provider: providerHeader,
-            planId: plan.id,
+            planId: planSnapshot.planId,
             transactionId: gatewayTxId,
             tx,
           },
@@ -364,7 +388,7 @@ export async function POST(req: NextRequest) {
               payload: {
                 gatewayTxId,
                 companyId,
-                planId: plan.id,
+                planId: planSnapshot.planId,
                 amount: expectedAmount,
                 provider: providerHeader,
                 rewardId: referralResult.reward?.id || null,
@@ -384,7 +408,7 @@ export async function POST(req: NextRequest) {
             companyId,
             action: "PAYMENT_AND_REFERRAL_COMMITTED",
             resource: "/api/payments/webhook",
-            details: `Payment SUCCESS for plan ${plan.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
           },
         });
 

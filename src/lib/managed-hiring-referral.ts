@@ -435,17 +435,27 @@ export async function reconcileManagedHiringWarrantyLocks(): Promise<ReconcileWa
           status: ReferralStatus.LOCKED as any,
           lockExpiresAt: { lte: now },
         },
+        orderBy: { lockExpiresAt: "asc" },
+        take: 100,
       });
 
       for (const rew of expiredDbRewards) {
-        await client.referralReward.update({
-          where: { id: rew.id },
+        // Claim the exact still-expired LOCKED row. Concurrent cron requests
+        // may scan the same snapshot, but only one is allowed to unlock and
+        // account for a reward.
+        const unlocked = await client.referralReward.updateMany({
+          where: {
+            id: rew.id,
+            status: ReferralStatus.LOCKED as any,
+            lockExpiresAt: { lte: now },
+          },
           data: {
             status: ReferralStatus.ELIGIBLE as any,
             isLocked: false,
             unlockedAt: now,
           },
         });
+        if (unlocked.count !== 1) continue;
 
         unlockedCount++;
         totalAmountUnlocked += rew.rewardAmount;

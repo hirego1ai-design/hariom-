@@ -8,11 +8,13 @@ Set `SIEM_WEBHOOK_URL` and `SIEM_WEBHOOK_TOKEN` in the deployment secret manager
 
 ## Schedule
 
-Use the platform scheduler to issue an authenticated `POST` every minute to:
+The central workflow recovery pass delivers a bounded audit batch whenever SIEM configuration is present, so production does not need a second scheduler. Configure the Railway recovery scheduler described in `WORKFLOW_RECOVERY_WORKER.md`.
+
+For an operator-triggered repair pass, issue an authenticated `POST` to:
 
 `https://<application-host>/api/internal/security-audit/process`
 
-Send the deployment's `INTERNAL_API_KEY` in either `Authorization: Bearer <key>` or `x-api-key`. Do not expose this endpoint to browser clients or add its credential to source control.
+Send the deployment's `INTERNAL_API_KEY` in either `Authorization: Bearer <key>` or `x-api-key`. Do not expose this endpoint to browser clients, use it as the normal schedule, or add its credential to source control.
 
 Each run leases at most 20 events and sends no more than four deliveries concurrently. A delivery has a five-second timeout. Transient failures (timeouts, 408, 425, 429, and 5xx) use exponential backoff and become terminal after ten attempts. Other 4xx responses are terminal immediately because retrying them cannot repair a malformed or unauthorized SIEM request.
 

@@ -31,13 +31,41 @@ export function requireStorageEnv() {
 }
 
 export function getVideoAnalysisConfig() {
+  const enabled = process.env.VIDEO_ANALYSIS_ENABLED === "true";
+  let workerUrl = process.env.VIDEO_ANALYSIS_WORKER_URL?.trim() || "http://localhost:8000";
+  let internalToken = process.env.VIDEO_ANALYSIS_INTERNAL_TOKEN?.trim() || "dev-internal-token-change-in-prod";
+  const maxSeconds = Number(process.env.VIDEO_ANALYSIS_MAX_SECONDS || 120);
+  const timeoutSeconds = Number(process.env.VIDEO_ANALYSIS_TIMEOUT_SECONDS || 600);
+  const retentionDays = Number(process.env.VIDEO_ANALYSIS_RETENTION_DAYS || 30);
+
+  if (enabled && process.env.NODE_ENV === "production") {
+    workerUrl = requireProductionEnv("VIDEO_ANALYSIS_WORKER_URL");
+    internalToken = requireProductionEnv("VIDEO_ANALYSIS_INTERNAL_TOKEN");
+    const parsedWorkerUrl = new URL(workerUrl);
+    if (parsedWorkerUrl.protocol !== "https:" || parsedWorkerUrl.username || parsedWorkerUrl.password) {
+      throw new Error("VIDEO_ANALYSIS_WORKER_URL must be a credential-free HTTPS URL in production.");
+    }
+    if (internalToken.length < 32) {
+      throw new Error("VIDEO_ANALYSIS_INTERNAL_TOKEN must contain at least 32 characters in production.");
+    }
+    if (!Number.isInteger(maxSeconds) || maxSeconds !== 120) {
+      throw new Error("VIDEO_ANALYSIS_MAX_SECONDS must be exactly 120 in production.");
+    }
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 3_600) {
+      throw new Error("VIDEO_ANALYSIS_TIMEOUT_SECONDS must be an integer between 30 and 3600.");
+    }
+    if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3_650) {
+      throw new Error("VIDEO_ANALYSIS_RETENTION_DAYS must be an integer between 1 and 3650.");
+    }
+  }
+
   return {
-    enabled: process.env.VIDEO_ANALYSIS_ENABLED === "true",
-    workerUrl: process.env.VIDEO_ANALYSIS_WORKER_URL?.trim() || "http://localhost:8000",
-    internalToken: process.env.VIDEO_ANALYSIS_INTERNAL_TOKEN?.trim() || "dev-internal-token-change-in-prod",
-    maxSeconds: Number(process.env.VIDEO_ANALYSIS_MAX_SECONDS || 120),
-    timeoutSeconds: Number(process.env.VIDEO_ANALYSIS_TIMEOUT_SECONDS || 600),
-    retentionDays: Number(process.env.VIDEO_ANALYSIS_RETENTION_DAYS || 30),
+    enabled,
+    workerUrl,
+    internalToken,
+    maxSeconds,
+    timeoutSeconds,
+    retentionDays,
     whisperModelSize: process.env.WHISPER_MODEL_SIZE?.trim() || "small",
     whisperDevice: process.env.WHISPER_DEVICE?.trim() || "cpu",
     whisperComputeType: process.env.WHISPER_COMPUTE_TYPE?.trim() || "int8",

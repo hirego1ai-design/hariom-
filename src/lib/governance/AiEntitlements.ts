@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
 
 /**
  * Only agents that can invoke a metered model need a subscription entitlement
@@ -53,7 +54,7 @@ export async function assertAndConsumeAiEntitlement(companyId: string, agentId: 
         startDate: { lte: new Date() },
         endDate: { gt: new Date() },
       },
-      include: { plan: { select: { featuresAllowed: true } } },
+      select: { entitlementSnapshot: true },
       orderBy: { endDate: "desc" },
     });
 
@@ -61,7 +62,13 @@ export async function assertAndConsumeAiEntitlement(companyId: string, agentId: 
       throw new AiEntitlementError("An active AI-enabled subscription is required.");
     }
 
-    const grantedFeatures = new Set(subscription.plan.featuresAllowed.map(normalizedFeature));
+    let planSnapshot;
+    try {
+      planSnapshot = parsePurchasedPlanSnapshot(subscription.entitlementSnapshot);
+    } catch {
+      throw new AiEntitlementError("Your subscription terms are unavailable; contact support before using a billed AI agent.");
+    }
+    const grantedFeatures = new Set(planSnapshot.featuresAllowed.map(normalizedFeature));
     const hasFeature = grantedFeatures.has("ALL_FEATURES") || requiredFeatures.some((feature) => grantedFeatures.has(feature));
     if (!hasFeature) {
       throw new AiEntitlementError("Your subscription does not include this AI agent.");

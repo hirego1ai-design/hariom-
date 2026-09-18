@@ -33,6 +33,10 @@ WHISPER_COMPUTE_TYPE=int8
 WHISPER_MODEL_DIR=/app/.model_cache
 VIDEO_ANALYSIS_INTERNAL_TOKEN=generate-a-secure-random-64-char-hex-token
 VIDEO_ANALYSIS_MAX_SECONDS=120
+VIDEO_ANALYSIS_MAX_DOWNLOAD_BYTES=104857600
+VIDEO_ANALYSIS_MAX_CONCURRENT_JOBS=2
+VIDEO_ANALYSIS_CALLBACK_ORIGIN=https://your-verified-vercel-domain.example
+ENVIRONMENT=production
 ```
 
 3. **Configure Healthcheck Path:**
@@ -45,4 +49,9 @@ VIDEO_ANALYSIS_MAX_SECONDS=120
 VIDEO_ANALYSIS_ENABLED=true
 VIDEO_ANALYSIS_WORKER_URL=https://video-analysis-worker.up.railway.app
 VIDEO_ANALYSIS_INTERNAL_TOKEN=same-secure-token-as-worker
+VIDEO_ANALYSIS_MAX_SECONDS=120
+VIDEO_ANALYSIS_TIMEOUT_SECONDS=600
+VIDEO_ANALYSIS_RETENTION_DAYS=30
 ```
+
+Production startup fails closed unless the callback origin uses HTTPS, the shared token is non-placeholder and at least 32 characters, and the numeric safety limits are valid. The Railway process accepts work only while a bounded local slot is available; callers receive HTTP 503 when the replica is at capacity.

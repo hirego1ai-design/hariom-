@@ -27,7 +27,11 @@ test('AI execution accounting and worker safety (isolated contracts)', async (t)
     $queryRaw: async (sql: TemplateStringsArray, ...values: unknown[]) => sql.join('').includes('"BudgetReservation"')
       ? state.reservations.filter((row) => row.executionId === values[0] && row.status === 'HELD')
       : [{ id: 'budget', companyId: 'tenant-a', currentSpendMinorUnits: state.spend, reservedSpendMinorUnits: state.held, monthlyLimitMinorUnits: state.limit, isHardCapEnabled: true }],
-    companySubscription: { findFirst: async () => ({ plan: { featuresAllowed: ['ALL_FEATURES'] } }) },
+    companySubscription: { findFirst: async () => ({ entitlementSnapshot: {
+      version: 1, planId: 'plan-test', name: 'Test', price: 100, currency: 'INR', validityMonths: 1,
+      jobPostsQuota: 1, resumeUnlocksQuota: 1, aiInterviewsQuota: 1, applicationsQuota: 1,
+      resumeDownloadsQuota: 1, backgroundVerificationsQuota: 1, featuresAllowed: ['ALL_FEATURES'],
+    } }) },
     companyCredits: {
       updateMany: async () => { if (state.credits < 1) return { count: 0 }; state.credits--; return { count: 1 }; },
       update: async () => { state.credits++; },
@@ -54,6 +58,7 @@ test('AI execution accounting and worker safety (isolated contracts)', async (t)
       if (lifecycleFailureAt === data.currentState) throw new Error('Lifecycle DB offline'); return {};
     } },
     agentEvaluationLog: { create: async () => { if (evaluationFailure) throw new Error('Evaluation DB offline'); return { id: 'evaluation' }; } },
+    traceRecord: { upsert: async ({ create }: { create: Record<string, unknown> }) => ({ id: 'trace', ...create }) },
   };
   const globals = globalThis as unknown as { prisma?: unknown };
   const originalPrisma = globals.prisma;

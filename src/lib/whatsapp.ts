@@ -171,7 +171,7 @@ export async function sendWhatsAppTextMessage(
         type: "text",
         text: { body: message },
       }),
-    });
+    }, { maxRetries: 0 });
 
     if (!response.ok) {
       return { sent: false, reason: `WhatsApp API returned ${response.status}` };
@@ -226,7 +226,7 @@ export async function sendWhatsAppInteractiveList(
           },
         },
       }),
-    });
+    }, { maxRetries: 0 });
 
     if (!response.ok) {
       return { sent: false, reason: `WhatsApp API returned ${response.status}` };
@@ -281,7 +281,7 @@ export async function sendWhatsAppButtonMessage(
           },
         },
       }),
-    });
+    }, { maxRetries: 0 });
 
     if (!response.ok) {
       return { sent: false, reason: `WhatsApp API returned ${response.status}` };

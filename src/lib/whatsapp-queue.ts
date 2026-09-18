@@ -57,6 +57,7 @@ async function publishWhatsAppInboundJob(eventId: string, delayMs = 0): Promise<
     method: "POST",
     headers,
     body: JSON.stringify({ eventId }),
+    signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) throw new WhatsAppQueueUnavailableError(`QStash rejected WhatsApp dispatch with status ${response.status}.`);
 }
@@ -95,9 +96,21 @@ export async function claimWhatsAppInboundEvent(eventId: string) {
   return prisma.whatsAppInboundEvent.findUnique({ where: { id: eventId } });
 }
 
-export async function markWhatsAppJobProcessed(eventId: string) {
-  await prisma.whatsAppInboundEvent.update({
-    where: { id: eventId },
+type ClaimedWhatsAppEvent = {
+  id: string;
+  processingStartedAt: Date | null;
+};
+
+export async function markWhatsAppJobProcessed(event: ClaimedWhatsAppEvent | string) {
+  const eventId = typeof event === "string" ? event : event.id;
+  const claimStartedAt = typeof event === "string" ? undefined : event.processingStartedAt;
+  const settled = await prisma.whatsAppInboundEvent.updateMany({
+    where: {
+      id: eventId,
+      processed: false,
+      processingStatus: "PROCESSING",
+      ...(claimStartedAt ? { processingStartedAt: claimStartedAt } : {}),
+    },
     data: {
       processed: true,
       processingStatus: "PROCESSED",
@@ -108,6 +121,7 @@ export async function markWhatsAppJobProcessed(eventId: string) {
       processedAt: new Date(),
     },
   });
+  return settled.count === 1;
 }
 
 async function terminallyFailWhatsAppJob(params: {
@@ -116,13 +130,19 @@ async function terminallyFailWhatsAppJob(params: {
   messageType: string;
   receivedAt: Date;
   attemptCount: number;
+  processingStartedAt: Date | null;
   error: string;
   errorType: WhatsAppRetryErrorType;
 }) {
   const errorMessage = sanitizedFailureMessage(params.error);
   await prisma.$transaction(async (tx) => {
-    await tx.whatsAppInboundEvent.updateMany({
-      where: { id: params.eventId, processed: false, processingStatus: { not: "FAILED" } },
+    const settled = await tx.whatsAppInboundEvent.updateMany({
+      where: {
+        id: params.eventId,
+        processed: false,
+        processingStatus: "PROCESSING",
+        ...(params.processingStartedAt ? { processingStartedAt: params.processingStartedAt } : {}),
+      },
       data: {
         processingStatus: "FAILED",
         processingError: errorMessage,
@@ -131,6 +151,7 @@ async function terminallyFailWhatsAppJob(params: {
         messageText: null,
       },
     });
+    if (settled.count !== 1) return;
     await tx.deadLetterJob.upsert({
       where: { sourceType_sourceId: { sourceType: "WHATSAPP_INBOUND", sourceId: params.eventId } },
       create: {
@@ -157,7 +178,7 @@ async function terminallyFailWhatsAppJob(params: {
  * QStash's one infrastructure retry can safely invoke the worker again.
  */
 export async function markWhatsAppJobRetry(
-  event: { id: string; providerEventId: string; messageType: string; receivedAt: Date; attemptCount: number },
+  event: { id: string; providerEventId: string; messageType: string; receivedAt: Date; attemptCount: number; processingStartedAt: Date | null },
   error: string,
   retryable = true,
   errorType: WhatsAppRetryErrorType = "PROCESSING_FAILURE"
@@ -169,7 +190,12 @@ export async function markWhatsAppJobRetry(
 
   const delayMs = retryDelayMs(event.attemptCount);
   await prisma.whatsAppInboundEvent.updateMany({
-    where: { id: event.id, processed: false, processingStatus: "PROCESSING" },
+    where: {
+      id: event.id,
+      processed: false,
+      processingStatus: "PROCESSING",
+      ...(event.processingStartedAt ? { processingStartedAt: event.processingStartedAt } : {}),
+    },
     data: {
       processingStatus: "RETRY",
       processingError: sanitizedFailureMessage(error),
@@ -178,6 +204,66 @@ export async function markWhatsAppJobRetry(
     },
   });
   return { terminal: false, delayMs };
+}
+
+export interface WhatsAppRecoveryReport {
+  eligible: number;
+  scheduled: number;
+  failed: number;
+  timeBudgetExhausted: boolean;
+}
+
+/**
+ * Restores queue delivery after an ingress/scheduler crash. It does not claim
+ * or process business work; it only republishes bounded durable event IDs.
+ * The worker's database claim remains the idempotency boundary.
+ */
+export async function recoverWhatsAppInboundEvents(
+  batchSize = 10,
+  stopAt = Number.POSITIVE_INFINITY,
+): Promise<WhatsAppRecoveryReport> {
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) {
+    throw new RangeError("WhatsApp recovery batch size must be between 1 and 100.");
+  }
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - STALE_PROCESSING_MS);
+  const events = await prisma.whatsAppInboundEvent.findMany({
+    where: {
+      processed: false,
+      OR: [
+        { processingStatus: "PENDING" },
+        { processingStatus: "RETRY", nextAttemptAt: { lte: now } },
+        { processingStatus: "PROCESSING", processingStartedAt: { lte: staleBefore } },
+      ],
+    },
+    select: { id: true },
+    take: batchSize,
+    orderBy: { receivedAt: "asc" },
+  });
+
+  let scheduled = 0;
+  let failed = 0;
+  for (const event of events) {
+    if (Date.now() >= stopAt) break;
+    try {
+      await publishWhatsAppInboundJob(event.id);
+      scheduled++;
+    } catch {
+      // Continue past a poison/transient publish failure so one event cannot
+      // block recovery of the rest. The row remains eligible for a later pass.
+      failed++;
+    }
+  }
+  return {
+    eligible: events.length,
+    scheduled,
+    failed,
+    timeBudgetExhausted: Date.now() >= stopAt,
+  };
+}
+
+export class WhatsAppQueueRecovery {
+  static run = recoverWhatsAppInboundEvents;
 }
 
 export async function restoreWhatsAppJobPending(eventId: string) {

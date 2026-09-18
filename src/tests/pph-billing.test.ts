@@ -124,3 +124,60 @@ test("invoice and completion rollback together on crash and retry issues exactly
   assert.equal(f.invoices.length, 0); assert.equal(f.placements[0].status, "SCHEDULED");
   f.failUpdate(false); await PphBillingWorker.run(20, Date.now() + 10000, eligible); assert.equal(f.invoices.length, 1);
 });
+
+test("joining rejects unapproved advances and invalid payment windows without persisting", async t => {
+  const f = fixture(t);
+  f.agreement.advancePaymentAmount = 1000;
+  await assert.rejects(confirmPphJoining(input, actor, joined), /reconciliation/);
+  f.agreement.advancePaymentAmount = 0;
+  for (const creditDays of [-1, 1.5, 366]) {
+    f.agreement.creditDays = creditDays;
+    await assert.rejects(confirmPphJoining(input, actor, joined), /payment period/);
+  }
+  assert.equal(f.placements.length, 0); assert.equal(f.invoices.length, 0);
+});
+
+test("joining rejects dates outside contract validity and foreign actors before writes", async t => {
+  const f = fixture(t);
+  await assert.rejects(confirmPphJoining(input, { ...actor, companyId: "other" }, joined), /owning employer/);
+  f.agreement.validityStartDate = new Date("2026-08-02");
+  await assert.rejects(confirmPphJoining(input, actor, joined), /validity/);
+  f.agreement.validityStartDate = new Date("2026-07-01");
+  f.agreement.validityEndDate = new Date("2026-07-31");
+  await assert.rejects(confirmPphJoining(input, actor, joined), /validity/);
+  assert.equal(f.placements.length, 0); assert.equal(f.invoices.length, 0);
+});
+
+test("joining cannot be billed under an agreement accepted after the joining date", async t => {
+  const f = fixture(t);
+  f.agreement.signedAt = new Date("2026-08-02T00:00:00.000Z");
+  await assert.rejects(confirmPphJoining(input, actor, new Date("2026-08-03T00:00:00.000Z")), /predates agreement acceptance/);
+  assert.equal(f.placements.length, 0);
+  assert.equal(f.invoices.length, 0);
+});
+
+test("an exhausted worker deadline or zero batch does not issue an eligible invoice", async t => {
+  const f = fixture(t); await confirmPphJoining(input, actor, joined);
+  assert.deepEqual(await PphBillingWorker.run(20, Date.now() - 1, eligible), { invoiced: 0, held: 0 });
+  assert.deepEqual(await PphBillingWorker.run(0, Date.now() + 10000, eligible), { invoiced: 0, held: 0 });
+  assert.equal(f.invoices.length, 0); assert.equal(f.placements[0].status, "SCHEDULED");
+});
+
+test("fixed fees and zero-credit terms retain the approved issuance amount and date", async t => {
+  const f = fixture(t);
+  f.agreement.feeType = "FIXED"; f.agreement.feeValue = 10000;
+  f.agreement.discountPercentage = 10; f.agreement.creditDays = 0;
+  await confirmPphJoining(input, actor, joined);
+  await PphBillingWorker.run(20, Date.now() + 10000, eligible);
+  assert.equal(f.invoices[0].amount, 9000); assert.equal(f.invoices[0].taxAmount, 1620);
+  assert.equal(f.invoices[0].totalAmount, 10620); assert.equal(f.invoices[0].dueDate, "2026-08-26");
+});
+
+test("malformed terms snapshot is held for reconciliation without issuing an invoice", async t => {
+  const f = fixture(t); await confirmPphJoining(input, actor, joined);
+  f.placements[0].termsSnapshot = { companyName: 12 };
+  assert.deepEqual(await PphBillingWorker.run(20, Date.now() + 10000, eligible), { invoiced: 0, held: 1 });
+  assert.equal(f.invoices.length, 0); assert.equal(f.placements[0].status, "HOLD");
+  assert.ok(f.placements[0].holdReason);
+  assert.deepEqual(await PphBillingWorker.run(20, Date.now() + 10000, eligible), { invoiced: 0, held: 0 });
+});

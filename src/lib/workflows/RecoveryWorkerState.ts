@@ -35,6 +35,21 @@ export interface RecoveryHeartbeat {
   report?: RecoveryReport;
 }
 
+export function recoveryReportNeedsAttention(report: RecoveryReport): boolean {
+  return (report.pphBilling?.held ?? 0) > 0
+    || report.outbox.unhandled > 0
+    || report.failedWorkflowsEnqueued > 0
+    || report.outbox.failed > 0
+    || report.outbox.retried > 0
+    || (report.whatsapp?.failed ?? 0) > 0
+    || Boolean(report.whatsapp?.timeBudgetExhausted)
+    || (report.securityAudit?.failed ?? 0) > 0
+    || (report.securityAudit?.retried ?? 0) > 0
+    || (report.securityAudit?.unclaimed ?? 0) > 0
+    || (report.securityAudit?.configured === false && (report.securityAudit?.pending ?? 0) > 0)
+    || report.timeBudgetExhausted;
+}
+
 export class RecoveryWorkerState {
   static async claim(): Promise<RecoveryHeartbeat | null> {
     const heartbeat: RecoveryHeartbeat = { runId: randomUUID(), startedAt: new Date().toISOString(), state: 'running' };
@@ -52,7 +67,7 @@ export class RecoveryWorkerState {
   static async finish(heartbeat: RecoveryHeartbeat, report?: RecoveryReport): Promise<boolean> {
     const finished: RecoveryHeartbeat = {
       ...heartbeat, finishedAt: new Date().toISOString(),
-      state: report ? ((report.pphBilling?.held ?? 0) > 0 || report.outbox.unhandled > 0 || report.failedWorkflowsEnqueued > 0 || report.outbox.failed > 0 || report.outbox.retried > 0 || report.timeBudgetExhausted ? 'attention' : 'completed') : 'failed',
+      state: report ? (recoveryReportNeedsAttention(report) ? 'attention' : 'completed') : 'failed',
       ...(report ? { report } : {}),
     };
     const saved = await redis().eval<[string, string], number>(

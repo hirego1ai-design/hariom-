@@ -3,6 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
+import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
 
 
 async function resolveCompanyId(userId: string) {
@@ -33,7 +34,13 @@ export async function GET(request: NextRequest) {
 
   let activePlan = null;
   if (activeSubscription) {
-    activePlan = await subscriptionsDb.getSubscriptionPlanById(activeSubscription.planId);
+    const snapshot = parsePurchasedPlanSnapshot(activeSubscription.entitlementSnapshot);
+    activePlan = {
+      ...snapshot,
+      id: snapshot.planId,
+      description: "Purchased subscription terms",
+      isArchived: false,
+    };
   }
 
   // Calculate derived subscription state

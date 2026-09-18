@@ -39,6 +39,10 @@ Expected response:
 - **Cause:** Missing system graphics libraries on headless Linux.
 - **Fix:** Ensure `opencv-python-headless` is used instead of `opencv-python`, and `libgl1` + `libglib2.0-0` are installed in the Docker image.
 
+## Delivery and recovery limitation
+
+The worker retries an idempotent terminal callback up to three times and limits concurrent jobs per replica. Its FastAPI background task is not a durable queue: a container crash after acceptance can leave the database job in `PROCESSING`. No automated stale-video redispatch worker is currently implemented, because redispatch requires a fresh signed media URL and an operator-approved retry policy. Alert on old `PROCESSING` jobs and reconcile them before retrying. Do not describe this path as exactly-once or fully crash-recoverable.
+
 ## Data Retention & Cleanup
 
-A periodic cron job runs to remove expired raw video files according to `VIDEO_ANALYSIS_RETENTION_DAYS` (default 30 days) while preserving the anonymized metrics and transcripts in Postgres.
+`VIDEO_ANALYSIS_RETENTION_DAYS` records the intended policy, but no verified production cleanup worker currently removes expired raw media. Configure a storage lifecycle rule or implement and test a cleanup job before production video retention is considered complete.

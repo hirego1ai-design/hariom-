@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { invoicesDb } from "@/lib/invoices-db";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { ApiError, handleApiError, readValidatedJson, enforceRateLimit, getClientIp } from "@/lib/apiSecurity";
+import { z } from "zod";
+
+const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
+const createSchema = z.object({ action: z.literal("create").optional(), agreementId: z.string().min(1), companyName: z.string().trim().min(1).max(200).optional(), candidateName: z.string().max(200).optional(), jobTitle: z.string().max(200).optional(), amount: z.number().finite().positive().max(1000000000), taxAmount: z.number().finite().nonnegative().max(1000000000).optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), dueDate: z.string().date().optional(), status: z.literal("UNPAID").optional() }).strict();
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,7 +13,7 @@ export async function GET(req: NextRequest) {
     const invoices = await invoicesDb.getInvoices();
     const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
     const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
-    const totalOverdue = invoices.filter((i) => i.status === "OVERDUE" || i.status === "UNPAID").reduce((acc, i) => acc + i.totalAmount, 0);
+    const totalOverdue = invoices.filter((i) => i.status !== "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
 
     return NextResponse.json({
       success: true,
@@ -23,27 +27,21 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    const body = await req.json();
+    const session = await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_invoice_review", 30, 60000);
+    const body = await readValidatedJson(req, z.union([reviewSchema, createSchema]));
 
     if (body.action === "mark_paid") {
-      const updated = await invoicesDb.markAsPaid(body.invoiceId, body.paidDate);
+      if (body.paidDate && body.paidDate > new Date().toISOString().slice(0, 10)) throw new ApiError("Payment date cannot be in the future", 400);
+      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "approve", session.id, body.paidDate, body.expectedUpdatedAt, getClientIp(req));
       if (!updated) {
         return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
       }
       return NextResponse.json({ success: true, message: "Invoice marked as paid", invoice: updated });
     }
 
-    if (body.action === "submit_receipt") {
-      const updated = await invoicesDb.submitBankReceipt(body.invoiceId, body.bankTransferRef, body.bankTransferReceiptUrl || "");
-      if (!updated) {
-        return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
-      }
-      return NextResponse.json({ success: true, message: "Bank receipt submitted successfully", invoice: updated });
-    }
-
     if (body.action === "reject_receipt") {
-      const updated = await invoicesDb.updateInvoiceStatus(body.invoiceId, "UNPAID");
+      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "reject", session.id, undefined, body.expectedUpdatedAt, getClientIp(req));
       if (!updated) {
         return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
       }
@@ -51,19 +49,13 @@ export async function POST(req: NextRequest) {
     }
 
 
-    const requiredFields = ["companyName", "amount"];
-    for (const f of requiredFields) {
-      if (!body[f]) {
-        return NextResponse.json({ success: false, error: `Missing required field: ${f}` }, { status: 400 });
-      }
-    }
-
+    if ("invoiceId" in body) throw new ApiError("Invalid action", 400);
     const amount = Number(body.amount);
-    const taxAmount = Number(body.taxAmount) || Math.round(amount * 0.18);
+    const taxAmount = body.taxAmount ?? Math.round(amount * 0.18 * 100) / 100;
     const totalAmount = amount + taxAmount;
 
     const created = await invoicesDb.createInvoice({
-      agreementId: body.agreementId || "agr-1001",
+      agreementId: body.agreementId,
       companyName: body.companyName,
       candidateName: body.candidateName || "Candidate Placement",
       jobTitle: body.jobTitle || "Software Engineer",

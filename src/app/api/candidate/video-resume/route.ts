@@ -98,9 +98,10 @@ export async function POST(request: NextRequest) {
     // Generate secure worker download URL (signed R2/S3 URL in production)
     const downloadUrl = await getWorkerDownloadUrl(file.objectKey);
 
-    // Asynchronously dispatch to worker service if enabled
+    // Await acceptance before returning. Detached promises are not durable in
+    // a serverless runtime and can be terminated when the response completes.
     if (config.enabled && config.workerUrl) {
-      dispatchWorkerJob({
+      await dispatchWorkerJob({
         jobId: job.id,
         videoResumeId: saved.id,
         fileId: file.id,
@@ -109,8 +110,6 @@ export async function POST(request: NextRequest) {
         durationSeconds: body.durationSeconds,
         workerUrl: config.workerUrl,
         token: config.internalToken,
-      }).catch((err) => {
-        console.error("Worker dispatch error:", err);
       });
     }
 
@@ -158,30 +157,42 @@ async function dispatchWorkerJob(params: {
       }),
     });
     if (!res.ok) {
-      const txt = await res.text();
-      console.error(`Worker responded with status ${res.status}: ${txt}`);
+      console.error(`Video analysis worker rejected dispatch with HTTP ${res.status}.`);
       await prisma.$transaction([
-        prisma.videoAnalysisJob.update({
-          where: { id: params.jobId },
-          data: { status: "BLOCKED_INFRA", error: `Worker error ${res.status}: ${txt}` },
+        prisma.videoAnalysisJob.updateMany({
+          where: { id: params.jobId, status: "PENDING" },
+          data: { status: "BLOCKED_INFRA", error: `Worker rejected dispatch with HTTP ${res.status}.`, completedAt: new Date() },
         }),
-        prisma.videoResume.update({
-          where: { id: params.videoResumeId },
+        prisma.videoResume.updateMany({
+          where: { id: params.videoResumeId, analysisStatus: "PENDING" },
           data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service returned error" },
         }),
-      ]).catch(() => undefined);
+      ]);
+      return;
     }
-  } catch (e) {
-    console.error("Failed to reach video-analysis-worker:", e);
+    // A very fast callback may already have completed the job. The conditional
+    // update cannot regress that terminal result back to PROCESSING.
     await prisma.$transaction([
-      prisma.videoAnalysisJob.update({
-        where: { id: params.jobId },
-        data: { status: "BLOCKED_INFRA", error: "Worker connection failed" },
+      prisma.videoAnalysisJob.updateMany({
+        where: { id: params.jobId, status: "PENDING" },
+        data: { status: "PROCESSING", startedAt: new Date(), attempts: { increment: 1 } },
       }),
-      prisma.videoResume.update({
-        where: { id: params.videoResumeId },
+      prisma.videoResume.updateMany({
+        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
+        data: { analysisStatus: "PROCESSING", startedAt: new Date() },
+      }),
+    ]);
+  } catch (e) {
+    console.error("Failed to reach video-analysis-worker.");
+    await prisma.$transaction([
+      prisma.videoAnalysisJob.updateMany({
+        where: { id: params.jobId, status: "PENDING" },
+        data: { status: "BLOCKED_INFRA", error: "Worker connection failed", completedAt: new Date() },
+      }),
+      prisma.videoResume.updateMany({
+        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
         data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service unavailable" },
       }),
-    ]).catch(() => undefined);
+    ]);
   }
 }

@@ -1,0 +1,10 @@
+FROM node:20-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --chown=node:node scripts/run-recovery-scheduler.mjs /app/run-recovery-scheduler.mjs
+
+USER node
+
+CMD ["node", "/app/run-recovery-scheduler.mjs"]

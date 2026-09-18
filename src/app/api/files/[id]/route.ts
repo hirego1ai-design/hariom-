@@ -22,6 +22,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const file = await prisma.storedFile.findFirst({ where: { id, deletedAt: null } });
     if (!file) return jsonError("File not found", 404);
+    if (file.category === "PAYMENT_RECEIPT" && session.role !== "ADMIN" && session.role !== "EMPLOYER") {
+      return jsonError("Forbidden", 403);
+    }
     if (!(await canAccessFile(session.id, session.role, file))) return jsonError("Forbidden", 403);
 
     const signedUrl = await getPrivateDownloadUrl(file.objectKey, file.originalName);

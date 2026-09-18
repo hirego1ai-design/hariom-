@@ -13,6 +13,7 @@ export default function AdminInvoicesPage() {
   const [selectedReceiptInvoice, setSelectedReceiptInvoice] = useState<any>(null);
 
   const [companyName, setCompanyName] = useState("");
+  const [agreementId, setAgreementId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [amount, setAmount] = useState(150000);
@@ -22,14 +23,14 @@ export default function AdminInvoicesPage() {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject_receipt", invoiceId }),
+        body: JSON.stringify({ action: "reject_receipt", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
       if (data.success) {
-        alert("Bank transfer receipt rejected. Status reverted to UNPAID.");
+        alert("Receipt rejected. Invoice remains outstanding.");
         setSelectedReceiptInvoice(null);
         loadData();
-      }
+      } else { alert(data.error || "Review failed"); }
     } catch (err) {
       console.error(err);
     }
@@ -57,12 +58,13 @@ export default function AdminInvoicesPage() {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_paid", invoiceId }),
+        body: JSON.stringify({ action: "mark_paid", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
       if (data.success) {
+        setSelectedReceiptInvoice(null);
         loadData();
-      }
+      } else { alert(data.error || "Payment confirmation failed"); }
     } catch (err) {
       console.error(err);
     }
@@ -73,13 +75,13 @@ export default function AdminInvoicesPage() {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, candidateName, jobTitle, amount }),
+        body: JSON.stringify({ agreementId, companyName, candidateName, jobTitle, amount }),
       });
       const data = await res.json();
       if (data.success) {
         setShowCreateModal(false);
         loadData();
-      }
+      } else { alert(data.error || "Invoice creation failed"); }
     } catch (err) {
       console.error(err);
     }
@@ -168,14 +170,6 @@ export default function AdminInvoicesPage() {
                       </button>
                     )}
 
-                    {inv.status === "UNPAID" && (
-                      <button
-                        onClick={() => handleMarkPaid(inv.id)}
-                        className="px-4 py-2 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90"
-                      >
-                        Record Payment
-                      </button>
-                    )}
                   </div>
                 </div>
               ))}
@@ -188,6 +182,9 @@ export default function AdminInvoicesPage() {
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
               <h3 className="text-lg font-bold text-white">Generate Commercial Invoice</h3>
+              <label className="text-xs text-slate-400 block">Commercial Agreement ID
+                <input value={agreementId} onChange={e => setAgreementId(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
+              </label>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Company Name</label>
                 <input
@@ -260,16 +257,28 @@ export default function AdminInvoicesPage() {
                 <div className="space-y-1">
                   <span className="text-xs font-bold text-slate-400 block">Submitted Payment Receipt Screenshot</span>
                   <div className="border border-white/10 rounded-xl overflow-hidden bg-black max-h-56 flex items-center justify-center">
-                    {selectedReceiptInvoice.bankTransferReceiptUrl ? (
+                    {selectedReceiptInvoice.bankTransferReceiptUrl && selectedReceiptInvoice.receiptMimeType !== "application/pdf" ? (
                       <img
                         src={selectedReceiptInvoice.bankTransferReceiptUrl}
                         alt="Receipt Screenshot"
                         className="max-h-56 object-contain"
                       />
+                    ) : selectedReceiptInvoice.bankTransferReceiptUrl ? (
+                      <div className="p-8 text-xs text-slate-400">PDF receipt ready to open or download</div>
                     ) : (
                       <div className="p-8 text-xs text-slate-500 italic">No receipt image attached</div>
                     )}
                   </div>
+                  {selectedReceiptInvoice.bankTransferReceiptUrl && (
+                    <a
+                      href={selectedReceiptInvoice.bankTransferReceiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex text-xs font-bold text-[#26A69A] hover:underline"
+                    >
+                      Open or download submitted receipt
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -278,7 +287,7 @@ export default function AdminInvoicesPage() {
                   onClick={() => handleRejectReceipt(selectedReceiptInvoice.id)}
                   className="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30 rounded-xl text-xs font-bold transition-all"
                 >
-                  Reject & Revert to UNPAID
+                  Reject Receipt
                 </button>
                 <div className="flex gap-2">
                   <button
@@ -288,10 +297,7 @@ export default function AdminInvoicesPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      handleMarkPaid(selectedReceiptInvoice.id);
-                      setSelectedReceiptInvoice(null);
-                    }}
+                    onClick={() => handleMarkPaid(selectedReceiptInvoice.id)}
                     className="px-5 py-2 bg-[#26A69A] text-white text-xs font-bold rounded-xl shadow-lg hover:bg-[#26A69A]/90 transition-all"
                   >
                     Approve & Mark Paid
