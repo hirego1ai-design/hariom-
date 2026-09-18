@@ -8,6 +8,7 @@ const SIGNAL_TTL_MS = 10 * 60 * 1_000;
 const roomActionSchema = z.object({
   roomId: z.string().min(1).max(256),
   action: z.enum(["OFFER", "ANSWER", "ICE_CANDIDATE", "COMPLETE"]),
+  targetId: z.string().uuid().optional(),
   sdp: z.object({ type: z.string().max(32), sdp: z.string().max(50_000) }).optional(),
   candidate: z.object({
     candidate: z.string().max(4_000),
@@ -79,6 +80,8 @@ export async function GET(req: NextRequest) {
       select: { id: true, senderId: true, type: true, payload: true },
       take: 300,
     });
+    const assignedInterviewerIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
+    const authorizedParticipantIds = [candidateUserId, ...assignedInterviewerIds].filter((id): id is string => Boolean(id));
     const participantIds = new Set([session.id, ...signals.map((signal) => signal.senderId)]);
 
     return NextResponse.json({
@@ -88,6 +91,8 @@ export async function GET(req: NextRequest) {
         interviewId: interview.id,
         status: interview.status === "COMPLETED" ? "COMPLETED" : "ACTIVE",
         participantCount: participantIds.size,
+        participantId: session.id,
+        authorizedParticipantIds,
         isHost: session.role !== "CANDIDATE",
         iceServers: iceServers(),
         signaling: {
@@ -124,7 +129,16 @@ export async function POST(req: NextRequest) {
         if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
       });
     } else {
-      const payload = body.action === "ICE_CANDIDATE" ? { candidate: body.candidate } : { sdp: body.sdp };
+      if (body.targetId) {
+        const candidateUserId = interview.application.candidateProfile?.userId;
+        const assignedIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
+        if (![candidateUserId, ...assignedIds].includes(body.targetId) || body.targetId === session.id) {
+          throw new ApiError("Signal target is not an authorized room participant.", 403);
+        }
+      }
+      const payload = body.action === "ICE_CANDIDATE"
+        ? { candidate: body.candidate, targetId: body.targetId || null }
+        : { sdp: body.sdp, targetId: body.targetId || null };
       await prisma.interviewSignal.create({
         data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
       });
