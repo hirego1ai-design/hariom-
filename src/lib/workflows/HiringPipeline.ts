@@ -205,6 +205,10 @@ export class HiringPipeline {
       }
     );
 
+    // Advisory completion is not a hiring decision. Refuse completion if
+    // any consequential approval is still pending or approved-but-unconsumed.
+    await WorkflowEngine.assertNoUnresolvedConsequentialActions(workflow.id);
+
     // Publish Pipeline Completed System Event via Outbox
     await prisma.$transaction(async (tx) => {
     await OutboxPublisher.publish({
