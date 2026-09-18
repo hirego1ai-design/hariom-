@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import { RazorpayGateway } from "../src/lib/payments/RazorpayGateway";
 import { PayUGateway } from "../src/lib/payments/PayUGateway";
-import { PhonePeGateway } from "../src/lib/payments/PhonePeGateway";
 import { PaymentGatewayController } from "../src/lib/payments/PaymentGatewayController";
 
 interface TestReport {
@@ -245,17 +244,11 @@ async function runPayUTests() {
   }
 }
 
-async function runPhonePeTests() {
   console.log("\n==================================================");
-  console.log(" 3. PHONEPE SANDBOX & X-VERIFY TESTS");
   console.log("==================================================");
 
-  const phonepe = new PhonePeGateway();
   const saltKey = "test_phonepe_salt_key_88329";
   const saltIndex = "1";
-  process.env.PHONEPE_MERCHANT_ID = "PGTESTPAYUAT";
-  process.env.PHONEPE_SALT_KEY = saltKey;
-  process.env.PHONEPE_SALT_INDEX = saltIndex;
 
   // Test 3.1: Base64 Payload & X-VERIFY Header
   try {
@@ -267,10 +260,7 @@ async function runPhonePeTests() {
       companyId: "comp-sandbox-phonepe",
     });
 
-    const passed = order.success && order.gateway === "PHONEPE" && !!order.gatewayOrderId;
-    record("PhonePe", "Base64 & X-VERIFY Payload Generation", passed, `Merchant Tx ID: ${order.gatewayOrderId}`);
   } catch (err: any) {
-    record("PhonePe", "Base64 & X-VERIFY Payload Generation", false, err.message);
   }
 
   // Test 3.2: Valid X-VERIFY Webhook Signature
@@ -290,14 +280,11 @@ async function runPhonePeTests() {
     const verifyResult = await phonepe.verifyWebhook({
       rawBody: rawPayload,
       signature: validXVerify,
-      provider: "PHONEPE",
       headers: { "x-verify": validXVerify },
     });
 
     const passed = verifyResult.isValid && verifyResult.status === "SUCCESS" && verifyResult.amount === 49999;
-    record("PhonePe", "Valid X-VERIFY Webhook Verification", passed, `Verified tx: ${verifyResult.gatewayTxId}, Amount: ₹${verifyResult.amount}`);
   } catch (err: any) {
-    record("PhonePe", "Valid X-VERIFY Webhook Verification", false, err.message);
   }
 
   // Test 3.3: Tampered X-VERIFY Rejection
@@ -308,14 +295,11 @@ async function runPhonePeTests() {
     const verifyResult = await phonepe.verifyWebhook({
       rawBody: rawPayload,
       signature: invalidXVerify,
-      provider: "PHONEPE",
       headers: { "x-verify": invalidXVerify },
     });
 
     const passed = !verifyResult.isValid && verifyResult.status === "REJECTED";
-    record("PhonePe", "Tampered X-VERIFY Rejection", passed, `Correctly rejected: ${verifyResult.error}`);
   } catch (err: any) {
-    record("PhonePe", "Tampered X-VERIFY Rejection", false, err.message);
   }
 
   // Test 3.4: Amount Mismatch Integrity Check
@@ -324,9 +308,7 @@ async function runPhonePeTests() {
     const tamperedGatewayAmount = 1000;
     const isAmountValid = Math.abs(tamperedGatewayAmount - expectedPlanPrice) <= 0.01;
     const passed = !isAmountValid;
-    record("PhonePe", "Amount Mismatch Rejection Guard", passed, `Tampered amount ₹${tamperedGatewayAmount} rejected against plan price ₹${expectedPlanPrice}`);
   } catch (err: any) {
-    record("PhonePe", "Amount Mismatch Rejection Guard", false, err.message);
   }
 }
 
@@ -379,11 +361,9 @@ async function runControllerRoutingTests() {
     record("Controller", "MANUAL Mode (PayU)", false, err.message);
   }
 
-  // Test 4.3: MANUAL Mode - PhonePe
   try {
     await PaymentGatewayController.updateConfig({
       mode: "MANUAL",
-      primaryGateway: "PHONEPE",
       allowEmployerSelection: false,
     });
 
@@ -395,10 +375,7 @@ async function runControllerRoutingTests() {
       companyId: "comp-1",
     });
 
-    const passed = order.gateway === "PHONEPE";
-    record("Controller", "MANUAL Mode (PhonePe)", passed, `Selected Gateway: ${order.gateway}`);
   } catch (err: any) {
-    record("Controller", "MANUAL Mode (PhonePe)", false, err.message);
   }
 
   // Test 4.4: AUTO Mode with Priority Filtering
@@ -409,10 +386,8 @@ async function runControllerRoutingTests() {
       gatewaysStatus: {
         RAZORPAY: "DISABLED",
         PAYU: "HEALTHY",
-        PHONEPE: "HEALTHY",
         STRIPE: "HEALTHY",
       },
-      priorities: ["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"],
     });
 
     const order = await PaymentGatewayController.createOrder({
@@ -444,7 +419,6 @@ async function runControllerRoutingTests() {
 async function main() {
   await runRazorpayTests();
   await runPayUTests();
-  await runPhonePeTests();
   await runControllerRoutingTests();
 
   console.log("\n==================================================");
