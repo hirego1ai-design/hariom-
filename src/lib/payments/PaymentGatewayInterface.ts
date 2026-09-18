@@ -1,4 +1,4 @@
-export type GatewayName = "RAZORPAY" | "PAYU" | "PHONEPE" | "STRIPE";
+export type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
 
 export class AmbiguousPaymentOrderError extends Error {
   constructor(message: string, public readonly provider: GatewayName) {
