@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
+import { persistScanResult, scanUpload } from "@/lib/uploadSecurity";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
 const ALLOWED_MIME_TYPES = [
@@ -102,6 +103,12 @@ export async function POST(req: NextRequest) {
       data: buffer,
       extension: serverExt,
     });
+
+    const scanResult = await scanUpload(storedFile.id, buffer);
+    await persistScanResult(storedFile.id, scanResult);
+    if (scanResult.status !== "CLEAN") {
+      throw new ApiError(scanResult.status === "INFECTED" ? "Upload rejected by malware scanning." : "Upload is quarantined pending a successful malware scan.", 422);
+    }
 
     return NextResponse.json({
       success: true,
