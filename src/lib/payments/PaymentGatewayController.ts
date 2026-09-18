@@ -25,6 +25,10 @@ export interface GatewayConfigState {
 // under any circumstances (even if DB config marks them as healthy) to prevent risk.
 const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "STRIPE"]);
 
+// Providers remain blocked until the release gate explicitly enables them after
+// credentials, webhook secrets, reconciliation, and staging payment tests pass.
+// Admin configuration can prepare routing policy but cannot bypass this invariant.
+
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
     RAZORPAY: new RazorpayGateway(),
