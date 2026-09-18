@@ -215,12 +215,22 @@ export async function runAuditFixesTests(): Promise<{
         headers: {},
       });
 
-      const passed = productionOrderRejected && !rejectedApiSecret.isValid;
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (!url.endsWith("/v1/payments/pay_status_test")) throw new Error("Unexpected Razorpay status URL");
+        return new Response(JSON.stringify({ id: "pay_status_test", status: "authorized" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch;
+      const pendingStatus = await rzp.getPaymentStatus("pay_status_test");
+
+      const passed = productionOrderRejected && !rejectedApiSecret.isValid && pendingStatus.status === "PENDING";
       results.push({
         name: "Razorpay Gateway - production never mocks failed orders and requires dedicated webhook secret",
         category: "Payments",
         passed,
-        message: passed ? undefined : "Production provider failure created an order or an API/generic secret authenticated a webhook.",
+        message: passed ? undefined : "Production provider failure created an order, an API/generic secret authenticated a webhook, or status lookup fabricated success.",
       });
     } finally {
       restoreEnvironment();
