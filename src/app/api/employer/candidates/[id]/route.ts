@@ -69,10 +69,10 @@ export async function GET(
       throw new ApiError("Candidate profile not found.", 404);
     }
 
-    // Verify company scope
-    if (session.role !== "ADMIN") {
-      const company = await getSessionCompany(session);
-      const companyId = company.id;
+    // Verify company scope once and reuse it when shaping the response.
+    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
+    if (scopedCompanyId) {
+      const companyId = scopedCompanyId;
 
       // Candidate must have applied to at least one job in this company
       const hasApplication = profile.applications.some(
@@ -107,36 +107,36 @@ export async function GET(
     // never synthesize hiring signals or candidate attributes.
     const scopedApplications = session.role === "ADMIN"
       ? profile.applications
-      : profile.applications.filter((app) => app.job.companyId === (await getSessionCompany(session)).id);
+      : profile.applications.filter((app) => app.job.companyId === scopedCompanyId);
     const primaryApplication = scopedApplications[0];
     const overallMatch = primaryApplication?.matchScore ?? null;
 
     const ucpProfile = {
       id: profile.id,
       name: profile.user?.name || "Candidate",
-      headline: profile.headline || "Talent Candidate",
-      currentCompany: experienceList[0]?.company || "N/A",
+      headline: profile.headline || null,
+      currentCompany: experienceList[0]?.company || null,
       experience: `${profile.experienceYears} Years`,
-      location: profile.location || "India",
+      location: profile.location || null,
       preferredLocation: null,
       expectedSalary: null,
       noticePeriod: null,
       availability: null,
       preferredJobType: null,
       email: profile.user?.email || "",
-      phone: profile.user?.phoneNumber || "N/A",
+      phone: profile.user?.phoneNumber || null,
       linkedIn: null,
       github: null,
       portfolio: "",
-      profileLink: `hirego.ai/u/${profile.id.slice(0, 8)}`,
-      avatar: profile.user?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.user?.name || "Candidate")}&background=random`,
+      profileLink: null,
+      avatar: profile.user?.avatarUrl || null,
       isVerified: profile.isVerified,
-      isEliteCandidate: false,
+      isEliteCandidate: null,
       isOpenToWork: null,
       appliedJob: primaryApplication?.job?.title || null,
       appliedDate: primaryApplication?.createdAt?.toISOString().split("T")[0] || null,
-      source: "Direct Application",
-      about: profile.bio || "Candidate has not provided a bio summary yet.",
+      source: null,
+      about: profile.bio || null,
     };
 
     const ucpScores = {
@@ -162,23 +162,23 @@ export async function GET(
     };
 
     const ucpExperience = experienceList.map((exp: any) => ({
-      company: exp.company || "Company",
-      role: exp.role || "Developer",
-      type: exp.type || "Full-time",
-      duration: exp.duration || "N/A",
-      durationYears: exp.duration || "N/A",
-      location: exp.location || "Remote",
+      company: exp.company || null,
+      role: exp.role || null,
+      type: exp.type || null,
+      duration: exp.duration || null,
+      durationYears: exp.duration || null,
+      location: exp.location || null,
       achievements: exp.achievements || [],
       skills: exp.skills || [],
       aiImpact: null,
     }));
 
     const ucpEducation = educationList.map((edu: any) => ({
-      institution: edu.institution || "University",
-      degree: edu.degree || "Degree",
-      year: edu.year || "N/A",
-      cgpa: edu.cgpa || edu.gpa || "N/A",
-      location: edu.location || "India",
+      institution: edu.institution || null,
+      degree: edu.degree || null,
+      year: edu.year || null,
+      cgpa: edu.cgpa || edu.gpa || null,
+      location: edu.location || null,
     }));
 
     const ucpAssessments = [
@@ -201,10 +201,10 @@ export async function GET(
     ];
 
     const ucpVideoAnalysis = {
-      duration: "0:00",
-      language: "English",
-      uploadDate: "N/A",
-      quality: "720P HD",
+      duration: null,
+      language: null,
+      uploadDate: null,
+      quality: null,
       overallReadinessScore: null,
       metrics: [],
       transcriptData: [],
