@@ -91,39 +91,39 @@ export default function JobsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-white flex">
+    <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
-      <main className="w-full max-w-6xl mx-auto px-6 py-10">
+      <main className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 md:ml-[116px]">
         <h1 className="text-3xl font-bold">Find jobs</h1>
-        <p className="mt-2 text-sm text-gray-400">Only active jobs from HireGo employers are shown.</p>
+        <p className="mt-2 text-sm text-text-muted">Only active jobs from HireGo employers are shown.</p>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by title, skill, or company"
-          className="mt-6 w-full rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 outline-none focus:border-indigo-500"
+          className="mt-6 w-full min-h-11 rounded-xl border border-outline bg-bg-card px-4 py-3 text-sm text-text-primary outline-none focus:border-primary"
         />
         {notice && <p className="mt-4 rounded-lg border border-emerald-700 bg-emerald-950/40 p-3 text-sm text-emerald-300">{notice}</p>}
         {error && <p className="mt-4 rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
-        {loading && <p className="mt-8 text-gray-400">Loading jobs…</p>}
-        {!loading && !error && jobs.length === 0 && <p className="mt-8 rounded-xl border border-gray-800 bg-gray-900 p-6 text-gray-300">No active jobs match this search.</p>}
+        {loading && <p className="mt-8 text-text-muted">Loading jobs…</p>}
+        {!loading && !error && jobs.length === 0 && <p className="mt-8 rounded-xl border border-outline bg-bg-card p-6 text-text-secondary">No active jobs match this search.</p>}
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           {jobs.map((job) => {
             const applied = appliedJobs.includes(job.id);
             const saved = savedJobs.includes(job.id);
             return (
-              <article key={job.id} className="rounded-xl border border-gray-800 bg-gray-900 p-6">
-                <p className="text-sm text-indigo-300">{job.company.name}</p>
+              <article key={job.id} className="rounded-xl border border-outline bg-bg-card p-6">
+                <p className="text-sm text-primary">{job.company.name}</p>
                 <h2 className="mt-1 text-xl font-semibold">{job.title}</h2>
-                <p className="mt-2 text-sm text-gray-400">{job.location} · {job.type}</p>
-                {job.salaryRange && <p className="mt-1 text-sm text-gray-400">{job.salaryRange}</p>}
-                <p className="mt-4 line-clamp-3 text-sm text-gray-300">{job.description}</p>
-                {job.requirements.length > 0 && <p className="mt-4 text-xs text-gray-400">Skills: {job.requirements.join(", ")}</p>}
+                <p className="mt-2 text-sm text-text-muted">{job.location} · {job.type}</p>
+                {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>}
+                <p className="mt-4 line-clamp-3 text-sm text-text-secondary">{job.description}</p>
+                {job.requirements.length > 0 && <p className="mt-4 text-xs text-text-muted">Skills: {job.requirements.join(", ")}</p>}
                 <div className="mt-6 flex gap-3">
-                  <Link href={`/jobs/${job.id}`} className="rounded-lg border border-gray-600 px-4 py-2 text-sm hover:bg-gray-800">Details</Link>
-                  <button onClick={() => apply(job)} disabled={applied} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 hover:bg-indigo-500">
+                  <Link href={`/jobs/${job.id}`} className="min-h-11 inline-flex items-center rounded-lg border border-outline px-4 py-2 text-sm hover:bg-surface-container-high">Details</Link>
+                  <button onClick={() => apply(job)} disabled={applied} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-90">
                     {applied ? "Applied" : "Apply"}
                   </button>
-                  <button onClick={() => toggleSaved(job.id)} className="rounded-lg border border-gray-600 px-4 py-2 text-sm hover:bg-gray-800">
+                  <button onClick={() => toggleSaved(job.id)} className="min-h-11 rounded-lg border border-outline px-4 py-2 text-sm hover:bg-surface-container-high">
                     {saved ? "Saved" : "Save"}
                   </button>
                 </div>
