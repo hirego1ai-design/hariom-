@@ -8,17 +8,14 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 const schema = z.object({
   applicationId: z.string().min(1),
   scheduledAt: z.string().datetime(),
-  durationMins: z.number().int().min(15).max(240).default(60),
-  mode: z.enum(["ONLINE", "OFFLINE"]),
+  durationMins: z.number().int().min(15).max(240).optional(),
+  mode: z.enum(["ONLINE", "OFFLINE"]).optional(),
   roundId: z.string().min(1),
   address: z.string().optional(),
   contactNumber: z.string().optional(),
   instructions: z.string().max(2000).optional(),
   notifyEmail: z.boolean().default(true),
   notifyWhatsapp: z.boolean().default(false),
-}).superRefine((data, ctx) => {
-  if (data.mode === "OFFLINE" && !data.address) ctx.addIssue({ code: "custom", path: ["address"], message: "Address is required for an offline interview." });
-  if (data.mode === "OFFLINE" && !data.contactNumber) ctx.addIssue({ code: "custom", path: ["contactNumber"], message: "Contact number is required for an offline interview." });
 });
 
 export async function POST(request: NextRequest) {
@@ -37,6 +34,10 @@ export async function POST(request: NextRequest) {
       include: { interviewers: true },
     });
     if (!round) return NextResponse.json({ success: false, error: "Interview round is not configured for this job." }, { status: 400 });
+    const mode = round.interviewType === "IN_PERSON" || round.interviewType === "OFFLINE" ? "OFFLINE" : "ONLINE";
+    const durationMins = round.durationMins;
+    if (mode === "OFFLINE" && !body.address) return NextResponse.json({ success: false, error: "Address is required for this configured offline round." }, { status: 400 });
+    if (mode === "OFFLINE" && !body.contactNumber) return NextResponse.json({ success: false, error: "Contact number is required for this configured offline round." }, { status: 400 });
     if (round.interviewers.length === 0) return NextResponse.json({ success: false, error: "Assign at least one interviewer before scheduling this round." }, { status: 400 });
     const existingProgress = await prisma.interviewRoundProgress.findUnique({ where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } } });
     if (existingProgress?.interviewId) return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
@@ -50,10 +51,10 @@ export async function POST(request: NextRequest) {
       }
     }
     const roomId = `room-${crypto.randomUUID()}`;
-    const roomUrl = body.mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
-    const metadata = JSON.stringify({ mode: body.mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
+    const roomUrl = mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
+    const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
-      const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: body.durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
+      const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
       await tx.interviewRoundProgress.upsert({
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
         update: { interviewId: created.id, status: "SCHEDULED" },
@@ -61,12 +62,12 @@ export async function POST(request: NextRequest) {
       });
       return created;
     });
-    await prisma.notification.create({ data: { userId: application.candidateProfile.userId, title: `${round.name} interview scheduled`, message: `Your ${body.mode.toLowerCase()} interview is scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`, type: "INTERVIEW" } }).catch(() => undefined);
+    await prisma.notification.create({ data: { userId: application.candidateProfile.userId, title: `${round.name} interview scheduled`, message: `Your ${mode.toLowerCase()} interview is scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`, type: "INTERVIEW" } }).catch(() => undefined);
     if (body.notifyEmail && application.candidateProfile.user?.email) {
-      await sendEmail({ to: application.candidateProfile.user.email, subject: "HireGo AI interview scheduled", html: `<p>Your ${round.name} interview is scheduled for <strong>${new Date(body.scheduledAt).toLocaleString()}</strong>.</p><p>Mode: ${body.mode}</p>${body.mode === "OFFLINE" ? `<p>Address: ${body.address}<br/>Contact: ${body.contactNumber}</p>` : `<p>Join from your HireGo interview portal.</p>`}` }).catch(() => undefined);
+      await sendEmail({ to: application.candidateProfile.user.email, subject: "HireGo AI interview scheduled", html: `<p>Your ${round.name} interview is scheduled for <strong>${new Date(body.scheduledAt).toLocaleString()}</strong>.</p><p>Mode: ${mode}</p>${mode === "OFFLINE" ? `<p>Address: ${body.address}<br/>Contact: ${body.contactNumber}</p>` : `<p>Join from your HireGo interview portal.</p>`}` }).catch(() => undefined);
     }
     const whatsapp = body.notifyWhatsapp && application.candidateProfile.user?.phoneNumber ? await sendWhatsAppMessage(application.candidateProfile.user.phoneNumber, `HireGo AI ${round.name} interview scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`) : { sent: false, reason: body.notifyWhatsapp ? "Candidate phone number is missing." : "Not selected." };
-    return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: body.mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
+    return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
