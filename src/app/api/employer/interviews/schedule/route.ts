@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const durationMins = round.durationMins;
     if (mode === "OFFLINE" && !body.address) return NextResponse.json({ success: false, error: "Address is required for this configured offline round." }, { status: 400 });
     if (mode === "OFFLINE" && !body.contactNumber) return NextResponse.json({ success: false, error: "Contact number is required for this configured offline round." }, { status: 400 });
-    if (round.interviewers.length === 0) return NextResponse.json({ success: false, error: "Assign at least one interviewer before scheduling this round." }, { status: 400 });
+    if (!round.interviewers.some((interviewer) => interviewer.required)) return NextResponse.json({ success: false, error: "Assign at least one required interviewer before scheduling this round." }, { status: 400 });
     const existingProgress = await prisma.interviewRoundProgress.findUnique({ where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } } });
     if (existingProgress?.interviewId) return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
     if (round.sequence > 1) {
