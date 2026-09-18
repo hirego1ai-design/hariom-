@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           readinessRecords: { some: { roleTitle: job.jobReadyRoleTitle, seniority: job.jobReadySeniority, status: "JOB_READY", OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] } },
         } : {}),
       },
-      select: { id: true, headline: true, location: true, skills: true, experienceYears: true, lastAvailabilityConfirmedAt: true, readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } } },
+      select: { id: true, headline: true, location: true, skills: true, experienceYears: true, lastAvailabilityConfirmedAt: true, user: { select: { name: true } }, readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } } },
       orderBy: { lastAvailabilityConfirmedAt: "desc" },
       take: 100,
     });
