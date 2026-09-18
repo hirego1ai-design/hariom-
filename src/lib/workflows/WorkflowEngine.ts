@@ -17,8 +17,19 @@ const APPROVAL_ROLE_POLICY: Record<string, Role[]> = {
   DESTRUCTIVE: [Role.ADMIN],
 };
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>).sort().reduce<Record<string, unknown>>((out, key) => {
+      out[key] = canonicalize((value as Record<string, unknown>)[key]);
+      return out;
+    }, {});
+  }
+  return value;
+}
+
 function actionDigest(action: unknown): string {
-  return createHash('sha256').update(JSON.stringify(action ?? null)).digest('hex');
+  return createHash('sha256').update(JSON.stringify(canonicalize(action ?? null))).digest('hex');
 }
 
 export class WorkflowEngine {
