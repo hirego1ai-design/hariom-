@@ -5,6 +5,15 @@ import { ApiError } from "@/lib/apiSecurity";
 export const RECORDED_ASSESSMENT_READING_SECONDS = 10;
 export const RECORDED_ASSESSMENT_ANSWER_SECONDS = [30, 60] as const;
 
+const ROLE_STOP_WORDS = new Set(["senior","junior","jr","sr","lead","associate","executive","specialist","engineer","developer"]);
+function roleTokens(value: string) { return value.toLowerCase().replace(/[^a-z0-9+#. ]/g, " ").split(/\s+/).filter((token) => token.length > 1 && !ROLE_STOP_WORDS.has(token)); }
+function roleAffinity(jobRole: string, bankRole: string) {
+  const job = new Set(roleTokens(jobRole)); const bank = new Set(roleTokens(bankRole));
+  if (!job.size || !bank.size) return 0;
+  const overlap = [...job].filter((token) => bank.has(token)).length;
+  return overlap / Math.max(job.size, bank.size);
+}
+
 export async function resolveEmployerCompanyId(userId: string) {
   const profile = await prisma.employerProfile.findUnique({ where: { userId }, select: { companyId: true } });
   if (!profile?.companyId) throw new ApiError("Employer profile not found.", 403);
@@ -48,19 +57,32 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
   const department = application.job.department?.trim() || null;
   const requirements = application.job.requirements.map((v) => v.toLowerCase());
 
+  // Retrieve a bounded role-family pool, then rank deterministically. Exact
+  // title equality is too brittle for real job titles such as "Sr React
+  // Developer" vs "React Developer", while unrestricted fuzzy matching risks
+  // serving unrelated questions.
+  const roleWords = roleTokens(roleTitle);
   const candidates = await prisma.recordedAssessmentQuestionBank.findMany({
     where: {
       isActive: true,
-      roleTitle: { equals: roleTitle, mode: "insensitive" },
-      OR: [{ industry }, { industry: null }],
-      AND: [{ OR: [{ department }, { department: null }] }],
+      ...(roleWords.length ? { OR: roleWords.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" as const } })) } : { roleTitle: { equals: roleTitle, mode: "insensitive" as const } }),
     },
     orderBy: [{ version: "desc" }, { updatedAt: "desc" }],
-    take: Math.max(config.questionCount * 4, config.questionCount),
+    take: Math.max(config.questionCount * 12, 100),
   });
-  const ranked = [...candidates].sort((a, b) => {
-    const score = (q: typeof a) => q.skillTags.reduce((n, tag) => n + (requirements.some((r) => r.includes(tag.toLowerCase())) ? 1 : 0), 0);
-    return score(b) - score(a);
+  const eligible = candidates.filter((q) => {
+    const roleScore = roleAffinity(roleTitle, q.roleTitle);
+    const industryMatch = !q.industry || (!!industry && q.industry.toLowerCase() === industry.toLowerCase());
+    const departmentMatch = !q.department || (!!department && q.department.toLowerCase() === department.toLowerCase());
+    return roleScore >= 0.5 && industryMatch && departmentMatch;
+  });
+  const ranked = [...eligible].sort((a, b) => {
+    const score = (q: typeof a) => {
+      const skillScore = q.skillTags.reduce((n, tag) => n + (requirements.some((r) => r.includes(tag.toLowerCase())) ? 1 : 0), 0);
+      const contextScore = (q.industry ? 2 : 0) + (q.department ? 1 : 0);
+      return roleAffinity(roleTitle, q.roleTitle) * 10 + skillScore * 2 + contextScore;
+    };
+    return score(b) - score(a) || b.version - a.version || a.id.localeCompare(b.id);
   });
   const selected = ranked.slice(0, config.questionCount);
   if (selected.length < config.questionCount) {
@@ -89,7 +111,7 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
             skillTags: q.skillTags,
             orderIndex: index,
             readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
-            answerDurationSeconds: q.answerDurationSeconds,
+            answerDurationSeconds: config.defaultAnswerSeconds,
             sourceVersion: q.version,
             difficulty: q.difficulty,
             industry: q.industry,

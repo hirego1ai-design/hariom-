@@ -30,8 +30,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const session = await getCurrentSession(request.headers);
     if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) throw new ApiError("Employer access required.", 403);
     const { id } = await params;
-    await assertEmployerOwnsJob(session.id, session.role, id);
+    const job = await assertEmployerOwnsJob(session.id, session.role, id);
     const body = await readValidatedJson(request, schema);
+    if (body.isActive) {
+      const roleWords = job.title.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+      const available = await prisma.recordedAssessmentQuestionBank.count({
+        where: { isActive: true, OR: roleWords.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" } })) },
+      });
+      if (available < body.questionCount) throw new ApiError(`Question bank readiness failed: ${available} role-related questions found, but ${body.questionCount} are required. Add curated questions before activating this assessment.`, 409);
+    }
     const config = await prisma.recordedAssessmentConfig.upsert({
       where: { jobListingId: id },
       update: { ...body, defaultReadingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS },
