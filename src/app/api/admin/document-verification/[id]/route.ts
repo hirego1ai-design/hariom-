@@ -7,7 +7,7 @@ import { enforceRateLimit } from "@/lib/apiSecurity";
 const verificationActionSchema = z.object({
   action: z.enum(["Verified", "Rejected"]),
   notes: z.string().trim().max(2000).optional(),
-});
+}).strict();
 
 export async function POST(
   req: NextRequest,
