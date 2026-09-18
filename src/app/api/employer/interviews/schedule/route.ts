@@ -23,6 +23,12 @@ export async function POST(request: NextRequest) {
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const body = schema.parse(await request.json());
+    if (session.role !== "CANDIDATE") {
+      const blocking = await prisma.interviewRoundProgress.count({
+        where: { status: "ENDED_PENDING_FEEDBACK", round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
+      });
+      if (blocking > 0) return NextResponse.json({ success: false, error: "Complete your pending mandatory interview feedback before scheduling another interview." }, { status: 409 });
+    }
     const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: true }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
     if (session.role !== "ADMIN") {
