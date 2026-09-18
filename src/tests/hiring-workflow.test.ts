@@ -373,6 +373,23 @@ export async function runHiringWorkflowTests(): Promise<{
       );
       await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "CANCELLED" } });
 
+      // Room authorization intentionally requires assignment to a configured round.
+      // Recreate that production invariant here after the withdrawal regression
+      // process above was removed, so these tests exercise terminal-room behavior
+      // rather than failing earlier at participant authorization.
+      const roomProcess = await prisma.jobInterviewProcess.create({
+        data: { jobId: jobListingA.id, companyId: companyA.id, isActive: true },
+      });
+      const roomRound = await prisma.interviewRound.create({
+        data: { processId: roomProcess.id, sequence: 1, name: "Closed room regression round", interviewType: "VIDEO", durationMins: 45 },
+      });
+      await prisma.interviewRoundInterviewer.create({
+        data: { roundId: roomRound.id, userId: employerA.id, required: true },
+      });
+      await prisma.interviewRoundProgress.create({
+        data: { applicationId: applicationA.id, roundId: roomRound.id, interviewId: interviewA.id, status: "CANCELLED" },
+      });
+
       const closedRoom = await callRoomGet(tokenA, interviewA.id);
       assert(
         "Cancelled interview room does not expose signaling or ICE credentials",
