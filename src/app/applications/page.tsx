@@ -34,7 +34,7 @@ export default function ApplicationsTrackerPage() {
                       app.status === "INTERVIEWING" ? "badge-yellow" : "badge-blue",
             icon: "work",
             iconColor: "var(--primary)",
-            matchScore: app.matchScore || 85,
+            matchScore: typeof app.matchScore === "number" ? app.matchScore : null,
             targetUrl: `/applications/${app.id}`,
             isOffer: app.status === "OFFERED"
           })));
@@ -62,10 +62,10 @@ export default function ApplicationsTrackerPage() {
       <CandidateSidebar />
 
       {/* Main Workspace */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
         {/* Fixed Header */}
         <header
-          className="fixed top-0 left-[116px] right-0 z-40 backdrop-blur-xl flex justify-between items-center px-gutter h-20 shadow-sm"
+          className="fixed top-0 left-0 md:left-[116px] right-0 z-40 backdrop-blur-xl flex justify-between items-center px-gutter h-20 shadow-sm"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -103,11 +103,11 @@ export default function ApplicationsTrackerPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
             {[
               { id: "all",          label: `All (${applications.length})` },
-              { id: "active",       label: "Active (1)" },
-              { id: "under_review", label: "Under Review (1)" },
-              { id: "shortlisted",  label: "Shortlisted (1)" },
-              { id: "offers",       label: "Offers (1)" },
-              { id: "rejected",     label: "Rejected (1)" },
+              { id: "active",       label: `Active (${applications.filter((app) => app.status === "Active").length})` },
+              { id: "under_review", label: `Under Review (${applications.filter((app) => app.status === "Under Review").length})` },
+              { id: "shortlisted",  label: `Shortlisted (${applications.filter((app) => app.status === "Shortlisted").length})` },
+              { id: "offers",       label: `Offers (${applications.filter((app) => app.status === "Offer Received").length})` },
+              { id: "rejected",     label: `Rejected (${applications.filter((app) => app.status === "Rejected").length})` },
             ].map((tab) => {
               const isSelected = activeTab === tab.id;
               return (
@@ -218,10 +218,7 @@ export default function ApplicationsTrackerPage() {
                     </div>
 
                     <div className="mt-4 pt-4 flex flex-wrap items-center justify-between gap-4" style={{ borderTop: "1px solid var(--outline)" }}>
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[18px]" style={{ color: "var(--color-green-light, #2E7D32)" }}>verified</span>
-                        <span className="text-xs font-bold font-mono" style={{ color: "var(--text-primary)" }}>{app.matchScore}% Match Score</span>
-                      </div>
+                      <div className="flex items-center gap-2">{app.matchScore !== null ? <><span className="material-symbols-outlined text-[18px]" style={{ color: "var(--color-green-light, #2E7D32)" }}>verified</span><span className="text-xs font-bold font-mono" style={{ color: "var(--text-primary)" }}>{app.matchScore}% Match Score</span></> : <span className="text-xs" style={{ color: "var(--text-muted)" }}>Match score not available</span>}</div>
 
                       <div className="flex items-center gap-2">
                         {(app.tags || []).map((t: any, idx: any) => (
