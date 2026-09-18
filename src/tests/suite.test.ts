@@ -220,6 +220,16 @@ async function runIsolatedTests() {
     results.push({ name: "Hiring workflow test suite", category: "Hiring Workflow", passed: false, message: e.message });
   }
 
+  // 18. Phase 5 agent security boundary. These offline regressions prove that
+  // model-selected consequential tools and agent-context spoofing fail closed.
+  try {
+    const { runPhase5AgentSecurityTests } = await import("./phase5-agent-security.test");
+    const phase5Security = await runPhase5AgentSecurityTests();
+    results.push(...phase5Security.results);
+  } catch (e: any) {
+    results.push({ name: "Phase 5 agent security suite", category: "Phase 5 Agent Security", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const failedCount = results.length - passedCount - skippedCount;
