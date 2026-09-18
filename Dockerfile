@@ -1,7 +1,7 @@
 # Step 1: Base image
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 
 # Step 2: Dependencies
 FROM base AS deps
