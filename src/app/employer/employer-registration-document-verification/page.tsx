@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Loader2, Upload, CheckCircle2 } from "lucide-react";
 
 export default function EmployerDocumentVerificationPage() {
   const router = useRouter();
@@ -119,13 +120,11 @@ export default function EmployerDocumentVerificationPage() {
   const selectedFileForForm = verificationType === "GST" ? docs.gstFile : verificationType === "MSME" ? docs.msmeFile : docs.incFile;
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      
-
-      {/* Main Container - Perfect Centering & Vertical Rhythm */}
-      <div className="w-full max-w-[1050px] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto ml-[116px] lg:ml-auto">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      {/* Main Container */}
+      <div className="w-full max-w-[840px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Stepper */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-7 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
           {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
@@ -223,10 +222,10 @@ export default function EmployerDocumentVerificationPage() {
         </section>
 
         {/* Right Side: Centered Document Collection Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-5 lg:p-7">
-          <div className="w-full max-w-[540px] mx-auto">
+        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-[460px] mx-auto">
             {/* Header */}
-            <div className="mb-3.5 text-center md:text-left">
+            <div className="mb-3 text-center md:text-left">
               <h1 className="font-display-xl text-xl font-bold text-primary mb-1">
                 KYC & Document Collection
               </h1>
@@ -293,21 +292,19 @@ export default function EmployerDocumentVerificationPage() {
               {/* Submit Button */}
               <div className="pt-0.5">
                 <button
-                  className="btn-3d-red w-full h-10.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md"
+                  className="btn-3d-red w-full h-11 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md"
                   type="submit"
                   disabled={loading}
                 >
                   {loading ? (
                     <>
-                      <span className="material-symbols-outlined text-[16px] animate-spin">loading</span>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
                       <span>Uploading Documents...</span>
                     </>
                   ) : (
                     <>
                       <span>Submit KYC & Complete Verification</span>
-                      <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                        arrow_forward
-                      </span>
+                      <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
                     </>
                   )}
                 </button>

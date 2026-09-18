@@ -65,9 +65,8 @@ export default function EmployerPlanSelectionPage() {
   const activePlans = plans.filter(p => !p.isArchived);
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      
-      <div className="max-w-6xl mx-auto py-4 px-4 overflow-hidden ml-[116px] lg:ml-auto w-full">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary">
+      <div className="max-w-5xl mx-auto py-6 px-4 overflow-hidden w-full">
         {/* Registration Progress Stepper */}
         <div className="flex justify-center mb-6">
           <div className="flex items-center gap-3">

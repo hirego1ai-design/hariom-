@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2, HelpCircle } from "lucide-react";
 
 export default function EmployerOTPVerificationPage() {
   const router = useRouter();
@@ -31,11 +32,10 @@ export default function EmployerOTPVerificationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      
-      <div className="w-full max-w-[1050px] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto ml-[116px] lg:ml-auto">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[800px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-8 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
           {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
@@ -130,11 +130,11 @@ export default function EmployerOTPVerificationPage() {
         </section>
 
         {/* Right Side: OTP Input Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-6 lg:p-8">
-          <div className="w-full max-w-[560px]">
+        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-[420px]">
             {/* Header */}
-            <div className="mb-5">
-              <h1 className="font-display-xl text-headline-md text-primary mb-1">
+            <div className="mb-4">
+              <h1 className="font-display-xl text-[26px] leading-tight font-bold text-primary mb-1">
                 Verify Your Identity
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
@@ -145,7 +145,7 @@ export default function EmployerOTPVerificationPage() {
 
             {/* OTP Form */}
             <form
-              className="space-y-5"
+              className="space-y-4"
               onSubmit={async (e) => {
                 e.preventDefault();
                 const code = otp.join("");
@@ -196,25 +196,30 @@ export default function EmployerOTPVerificationPage() {
               {/* Action Button */}
               <div className="pt-2">
                 <button
-                  className="btn-3d-red w-full h-12 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group"
+                  className="btn-3d-red w-full h-11 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md"
                   type="submit"
                   disabled={submitting}
                 >
-                  <span>{submitting ? "Verifying..." : "Verify and Continue"}</span>
-                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                    arrow_forward
-                  </span>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Verify and Continue</span>
+                      <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>
 
             {/* Support Box */}
-            <div className="mt-5 pt-4 border-t border-white/10">
+            <div className="mt-4 pt-3 border-t border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex-shrink-0 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary text-[18px]">
-                    contact_support
-                  </span>
+                  <HelpCircle className="w-4 h-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-text-primary">

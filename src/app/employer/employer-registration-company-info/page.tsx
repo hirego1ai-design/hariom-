@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, Search, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { INDUSTRY_MASTER } from "@/lib/industry-master";
 
 export default function EmployerCompanyInfoPage() {
@@ -51,11 +52,10 @@ export default function EmployerCompanyInfoPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      
-      <div className="w-full max-w-[980px] max-h-[calc(100vh-32px)] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-4 ml-[116px] lg:ml-auto">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center p-3 sm:p-5 text-text-primary">
+      <div className="w-full max-w-[800px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 lg:p-6 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 justify-between relative">
           {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
@@ -150,11 +150,11 @@ export default function EmployerCompanyInfoPage() {
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-5 lg:p-6 overflow-y-auto">
-          <div className="w-full max-w-[560px]">
+        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-[460px]">
             {/* Header */}
             <div className="mb-3">
-              <h1 className="font-display-xl text-[28px] leading-tight text-primary mb-1">
+              <h1 className="font-display-xl text-[26px] leading-tight text-primary mb-1 font-bold">
                 Create Employer Account
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
@@ -228,7 +228,7 @@ export default function EmployerCompanyInfoPage() {
                     required
                     className="input-pill w-full h-10 text-xs text-text-primary px-4 pr-10"
                   />
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-secondary text-[18px]">search</span>
+                  <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-text-secondary" />
                   {industryOpen && filteredIndustries.length > 0 && (
                     <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-[#1E1E24] shadow-2xl">
                       {filteredIndustries.map((item) => (
@@ -322,13 +322,13 @@ export default function EmployerCompanyInfoPage() {
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px]">
                     {refStatus === "checking" && (
-                      <span className="material-symbols-outlined text-text-muted animate-spin">progress_activity</span>
+                      <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin" />
                     )}
                     {refStatus === "valid" && (
-                      <span className="material-symbols-outlined text-green-400">check_circle</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                     )}
                     {refStatus === "invalid" && (
-                      <span className="material-symbols-outlined text-red-400">cancel</span>
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
                     )}
                   </span>
                 </div>
@@ -347,9 +347,7 @@ export default function EmployerCompanyInfoPage() {
                   disabled={submitting}
                 >
                   <span>{submitting ? "Creating Account..." : "Continue to Verification"}</span>
-                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                    arrow_forward
-                  </span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
               </div>
               {error && <p className="text-center text-xs text-red-300">{error}</p>}

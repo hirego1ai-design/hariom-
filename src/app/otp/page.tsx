@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowRight, Loader2, Edit3 } from "lucide-react";
 
 export default function OTPPage() {
   const router = useRouter();
@@ -309,11 +310,14 @@ export default function OTPPage() {
                 }}
               >
                 {isLoading ? (
-                  <span>Verifying Code...</span>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Verifying Code...</span>
+                  </>
                 ) : (
                   <>
                     <span>Verify & Continue</span>
-                    <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                    <ArrowRight className="w-4 h-4 ml-1" />
                   </>
                 )}
               </button>
@@ -324,7 +328,7 @@ export default function OTPPage() {
                   className="hover:underline flex items-center gap-1 transition-colors"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  <span className="material-symbols-outlined text-[14px]">edit</span> Change Email
+                  <Edit3 className="w-3.5 h-3.5" /> Change Email
                 </Link>
                 <button
                   type="button"

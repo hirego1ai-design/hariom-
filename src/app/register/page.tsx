@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import CandidateSidebar from "@/components/candidate/CandidateSidebar";
+import { ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { syncCandidateRegistrationData } from "@/services/candidateProfileService";
 
 export default function RegisterPage() {
@@ -92,11 +92,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      <CandidateSidebar />
-      <div className="w-full max-w-[1050px] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto ml-[116px] lg:ml-auto">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[840px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-8 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
               HireGo AI
@@ -173,10 +172,10 @@ export default function RegisterPage() {
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-6 lg:p-8">
-          <div className="w-full max-w-[560px]">
-            <div className="mb-5">
-              <h1 className="font-display-xl text-headline-md text-primary mb-1">
+        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-[480px]">
+            <div className="mb-4">
+              <h1 className="font-display-xl text-[26px] leading-tight font-bold text-primary mb-1">
                 Create Account
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
@@ -187,7 +186,7 @@ export default function RegisterPage() {
             {referralCode && (
               <div className="mb-4 p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-xs text-green-400 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 font-bold">
-                  <span className="material-symbols-outlined text-[16px]">verified</span>
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
                   <span>Referral Invite Applied: <span className="font-mono text-white">{referralCode}</span></span>
                 </span>
                 <span className="text-[10px] text-green-300 font-medium">₹250 Welcome Bonus Active</span>
@@ -322,27 +321,30 @@ export default function RegisterPage() {
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
                   >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {showPassword ? "visibility_off" : "visibility"}
-                    </span>
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
 
               <div className="pt-2">
                 <button
-                  className="btn-3d-red w-full h-12 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group disabled:opacity-50"
+                  className="btn-3d-red w-full h-11 rounded-2xl font-bold text-xs text-white flex items-center justify-center gap-2 group disabled:opacity-50 shadow-md"
                   type="submit"
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <span>Creating Account...</span>
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Creating Account...</span>
+                    </>
                   ) : (
                     <>
                       <span>Continue to Verification</span>
-                      <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
-                        arrow_forward
-                      </span>
+                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                     </>
                   )}
                 </button>

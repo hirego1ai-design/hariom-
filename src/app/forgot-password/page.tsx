@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -160,13 +161,13 @@ export default function ForgotPasswordPage() {
             >
               {isSubmitting ? (
                 <>
-                  <span className="material-symbols-outlined text-[15px] animate-spin">progress_activity</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>Sending Code...</span>
                 </>
               ) : (
                 <>
                   <span>Send Recovery Code</span>
-                  <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                  <ArrowRight className="w-4 h-4 ml-1" />
                 </>
               )}
             </button>

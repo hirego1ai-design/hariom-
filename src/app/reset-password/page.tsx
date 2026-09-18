@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowRight, Loader2 } from "lucide-react";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -221,11 +222,14 @@ export default function ResetPasswordPage() {
                   className="btn-3d-red w-full h-10 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <span>Saving Password...</span>
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Saving Password...</span>
+                    </>
                   ) : (
                     <>
                       <span>Save New Password</span>
-                      <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                      <ArrowRight className="w-4 h-4 ml-1" />
                     </>
                   )}
                 </button>
