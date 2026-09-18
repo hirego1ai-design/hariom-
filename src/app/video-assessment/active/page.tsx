@@ -38,8 +38,18 @@ export default function VideoAssessmentActivePage() {
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const busyRef = useRef(false);
+  const warningRef = useRef(0);
 
   const question = attempt?.questions[index];
+
+  const reportProctoring = useCallback(async (eventType: string, severity: "INFO" | "WARNING" | "HIGH", evidence?: Record<string, unknown>) => {
+    if (!attempt || phase === "COMPLETE") return;
+    try {
+      const result = await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/proctoring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventType, severity, evidence }) });
+      if (result.warningNumber) { warningRef.current = result.warningNumber; setMessage(`Proctoring warning ${result.warningNumber} of 3. Keep the assessment visible and camera/microphone active.`); }
+      if (result.terminated) { recorderRef.current?.state !== "inactive" && recorderRef.current?.stop(); setPhase("ERROR"); setMessage("This assessment attempt was ended after repeated proctoring violations. Your existing evidence has been preserved."); }
+    } catch { /* Telemetry failure must not fabricate a violation or silently terminate an attempt. */ }
+  }, [attempt, phase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +79,26 @@ export default function VideoAssessmentActivePage() {
     return () => { local?.getTracks().forEach((track) => track.stop()); streamRef.current = null; };
   }, [attempt?.id, attempt?.mediaType, phase === "COMPLETE"]);
 
-  const completeAttempt = useCallback(async () => {
+  useEffect(() => {
+    if (!attempt || phase === "READY" || phase === "COMPLETE" || phase === "ERROR") return;
+    const onVisibility = () => { if (document.hidden) void reportProctoring("TAB_HIDDEN", "WARNING", { phase }); };
+    const onFullscreen = () => { if (!document.fullscreenElement) void reportProctoring("FULLSCREEN_EXIT", "WARNING", { phase }); };
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("fullscreenchange", onFullscreen);
+    const stream = streamRef.current;
+    const ended = (event: Event) => {
+      const track = event.target as MediaStreamTrack;
+      void reportProctoring(track.kind === "video" ? "CAMERA_INTERRUPTED" : "MIC_INTERRUPTED", "HIGH", { phase });
+    };
+    stream?.getTracks().forEach((track) => track.addEventListener("ended", ended));
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      stream?.getTracks().forEach((track) => track.removeEventListener("ended", ended));
+    };
+  }, [attempt, phase, reportProctoring]);
+
+    const completeAttempt = useCallback(async () => {
     if (!attempt) return;
     await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/complete`, { method: "POST" });
     setPhase("COMPLETE"); setMessage("Assessment completed. All answers were saved.");
@@ -136,6 +165,7 @@ export default function VideoAssessmentActivePage() {
 
   const startAssessment = () => {
     if (!mediaReady || !question) { setMessage("Camera and microphone must be ready before starting."); return; }
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
     setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); setMessage("");
   };
 
