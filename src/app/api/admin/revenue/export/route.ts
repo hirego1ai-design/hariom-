@@ -4,7 +4,10 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit } from "@/lib/apiSecurity";
 
 function csvCell(value: unknown) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const raw = String(value ?? "");
+  // Prevent spreadsheet formula execution when an administrator opens the export.
+  const safe = /^[=+\-@]/.test(raw) ? "'" + raw : raw;
+  return '"' + safe.replaceAll('"', '""') + '"';
 }
 
 export async function GET(request: NextRequest) {
