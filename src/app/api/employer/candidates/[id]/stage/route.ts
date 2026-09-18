@@ -40,10 +40,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
     }
-    if (application.status === "HIRED") {
-      return NextResponse.json({ success: false, error: "A hired application is final. Use the placement reconciliation workflow for changes." }, { status: 409 });
+    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
+      return NextResponse.json({ success: false, error: "This application is in a terminal state and cannot be changed through the generic pipeline workflow." }, { status: 409 });
     }
-    await prisma.application.update({ where: { id }, data: { status: stage as any } });
+    const updated = await prisma.application.updateMany({
+      where: { id, status: application.status },
+      data: { status: stage as any },
+    });
+    if (updated.count !== 1) {
+      return NextResponse.json({ success: false, error: "Application state changed while this request was being processed. Refresh and try again." }, { status: 409 });
+    }
     return NextResponse.json({ success: true, applicationId: id, stage });
   } catch (error) { if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message }, { status: 400 }); return NextResponse.json({ success: false, error: "Unable to update candidate stage." }, { status: 500 }); }
 }
