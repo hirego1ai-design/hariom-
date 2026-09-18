@@ -111,10 +111,24 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
-      await prisma.$transaction(async (tx) => {
-        await tx.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
-        if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
+      const completed = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.interview.updateMany({
+          where: { id: interview.id, status: { notIn: ["COMPLETED", "FEEDBACK_SUBMITTED"] } },
+          data: { status: "COMPLETED" },
+        });
+        if (claimed.count !== 1) return false;
+        if (interview.roundProgress) {
+          await tx.interviewRoundProgress.updateMany({
+            where: { id: interview.roundProgress.id, status: { in: ["SCHEDULED", "LIVE"] } },
+            data: {
+              status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE",
+              completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date(),
+            },
+          });
+        }
+        return true;
       });
+      if (!completed) return NextResponse.json({ success: true, roomId: body.roomId, status: "COMPLETED", idempotent: true });
     } else {
       const payload = body.action === "ICE_CANDIDATE" ? { candidate: body.candidate } : { sdp: body.sdp };
       await prisma.interviewSignal.create({
