@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     await enforceRateLimit(request, "referrals_payout", 5, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) throw new ApiError("Authentication required.", 401);
-    const body = await readValidatedJson(request, payoutSchema);
+    const rawBody = await request.clone().json().catch(() => null);\n    if (rawBody && typeof rawBody === "object" && ("referrerId" in rawBody || "userId" in rawBody)) {\n      throw new ApiError("Payout identity is derived from the authenticated session.", 403);\n    }\n    const body = await readValidatedJson(request, payoutSchema);
 
     const fraud = await referralDb.getUserFraudProfile(session.id);
     if (fraud.status === FraudStatus.FRAUD_HOLD) throw new ApiError("Payout requests are suspended pending security compliance review.", 403);
