@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrl } from "@/lib/storage";
@@ -14,9 +13,15 @@ export async function dispatchRecordedAssessmentAnalysis(responseId: string) {
     await prisma.recordedAssessmentResponse.update({ where: { id: response.id }, data: { analysisStatus: "BLOCKED_INFRA" } });
     return;
   }
-  const job = await prisma.recordedAssessmentAnalysisJob.create({
-    data: { responseId, idempotencyKey: `assessment-analysis-${responseId}-${crypto.randomUUID()}`, payload: { fileId: response.storedFile.id, objectKey: response.storedFile.objectKey } },
+  // One response owns one logical analysis dispatch. A deterministic key makes
+  // duplicate API calls/network retries converge on the same durable job.
+  const idempotencyKey = `assessment-analysis-${responseId}`;
+  const job = await prisma.recordedAssessmentAnalysisJob.upsert({
+    where: { idempotencyKey },
+    update: {},
+    create: { responseId, idempotencyKey, payload: { fileId: response.storedFile.id, objectKey: response.storedFile.objectKey } },
   });
+  if (["PROCESSING", "COMPLETED"].includes(job.status)) return;
   const downloadUrl = await getWorkerDownloadUrl(response.storedFile.objectKey);
   try {
     const origin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "") || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
@@ -35,13 +40,13 @@ export async function dispatchRecordedAssessmentAnalysis(responseId: string) {
     });
     if (!result.ok) throw new Error(`Worker rejected dispatch with HTTP ${result.status}`);
     await prisma.$transaction([
-      prisma.recordedAssessmentAnalysisJob.updateMany({ where: { id: job.id, status: "PENDING" }, data: { status: "PROCESSING", startedAt: new Date(), attempts: { increment: 1 } } }),
-      prisma.recordedAssessmentResponse.updateMany({ where: { id: response.id, analysisStatus: "PENDING" }, data: { analysisStatus: "PROCESSING" } }),
+      prisma.recordedAssessmentAnalysisJob.updateMany({ where: { id: job.id, status: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } }, data: { status: "PROCESSING", startedAt: new Date(), attempts: { increment: 1 } } }),
+      prisma.recordedAssessmentResponse.updateMany({ where: { id: response.id, analysisStatus: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } }, data: { analysisStatus: "PROCESSING" } }),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Worker dispatch failed";
     await prisma.$transaction([
-      prisma.recordedAssessmentAnalysisJob.update({ where: { id: job.id }, data: { status: "BLOCKED_INFRA", error: message, completedAt: new Date() } }),
+      prisma.recordedAssessmentAnalysisJob.update({ where: { id: job.id }, data: { status: "BLOCKED_INFRA", error: message, completedAt: new Date(), attempts: { increment: 1 } } }),
       prisma.recordedAssessmentResponse.update({ where: { id: response.id }, data: { analysisStatus: "BLOCKED_INFRA" } }),
     ]);
   }

@@ -8,12 +8,13 @@ import { prisma } from "@/lib/prisma";
 const schema = z.object({
   jobId: z.string().uuid(), videoResumeId: z.string().uuid(),
   status: z.enum(["COMPLETED","FAILED","BLOCKED_INFRA"]), error: z.string().nullable().optional(),
-  result: z.object({ transcript: z.string().max(30000).optional() }).passthrough().optional(),
-}).passthrough();
+  result: z.object({ transcript: z.string().max(30000).optional(), signals: z.array(z.object({ type: z.string().max(80), confidence: z.number().min(0).max(1).optional(), detail: z.string().max(1000).optional() }).strict()).max(100).optional(), metrics: z.record(z.string().max(80), z.number().finite()).optional() }).strict().optional(),
+}).strict();
 
 export async function POST(request: NextRequest) {
   try {
     const config = getVideoAnalysisConfig();
+    if (!config.enabled || !config.internalToken) return jsonError("Assessment analysis callback is not configured", 503);
     if (request.headers.get("Authorization") !== `Bearer ${config.internalToken}`) return jsonError("Unauthorized internal callback token", 401);
     const body = await readValidatedJson(request, schema);
     const job = await prisma.recordedAssessmentAnalysisJob.findUnique({ where: { id: body.jobId } });
