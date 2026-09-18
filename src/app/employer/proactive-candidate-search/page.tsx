@@ -32,13 +32,7 @@ const TAG_PRESETS: Tag[] = [
 
 const PIPELINE_STAGES = ["Applied", "AI Screening", "Technical Interview", "HR Interview", "Assessment", "Offer", "Hired", "Rejected"];
 
-const DEFAULT_COLLECTIONS: Collection[] = [
-  { id: "all", name: "All Candidates", icon: "groups", candidateIds: [] },
-  { id: "shortlisted", name: "Shortlisted", icon: "star", candidateIds: [] },
-  { id: "interview-week", name: "Interview This Week", icon: "event", candidateIds: [] },
-  { id: "future-talent", name: "Future Talent", icon: "diamond", candidateIds: [] },
-  { id: "priority", name: "Priority Candidates", icon: "priority_high", candidateIds: [] },
-];
+const DEFAULT_COLLECTIONS: Collection[] = [{ id: "all", name: "All Candidates", icon: "groups", candidateIds: [] }];
 
 const PINNED_FILTER_PRESETS = [
   { label: "Recorded match > 90%", key: "matchScore", value: "90" },
@@ -111,7 +105,6 @@ export default function CandidateMarketplace() {
       const v = localStorage.getItem("hg_view"); if (v) setViewMode(v as ViewMode);
       const pf = localStorage.getItem("hg_pinned"); if (pf) setPinnedFilters(JSON.parse(pf));
       const ss = localStorage.getItem("hg_saved"); if (ss) setSavedSearches(JSON.parse(ss));
-      const cols = localStorage.getItem("hg_collections"); if (cols) setCollections(JSON.parse(cols));
     } catch {}
   }, []);
 
@@ -120,7 +113,12 @@ export default function CandidateMarketplace() {
   useEffect(() => { localStorage.setItem("hg_view", viewMode); }, [viewMode]);
   useEffect(() => { localStorage.setItem("hg_pinned", JSON.stringify(pinnedFilters)); }, [pinnedFilters]);
   useEffect(() => { localStorage.setItem("hg_saved", JSON.stringify(savedSearches)); }, [savedSearches]);
-  useEffect(() => { localStorage.setItem("hg_collections", JSON.stringify(collections)); }, [collections]);
+
+  useEffect(() => {
+    let cancelled=false;
+    (async()=>{try{const res=await fetch("/api/employer/candidate-collections");const data=await res.json();if(!cancelled&&res.ok&&data.success)setCollections([DEFAULT_COLLECTIONS[0],...data.collections.map((x:any)=>({id:x.id,name:x.name,icon:"folder",candidateIds:Array.isArray(x.candidateIds)?x.candidateIds:[]}))]);}catch{if(!cancelled)triggerToast("Could not load collections.");}})();
+    return()=>{cancelled=true;};
+  }, []);
 
   // ─── Filtering & Sorting ───
   const filteredCandidates = useMemo(() => {
@@ -223,8 +221,8 @@ export default function CandidateMarketplace() {
   const saveSearch = () => { if (!saveSearchName.trim()) return; setSavedSearches(prev => [...prev, { name: saveSearchName, query: searchQuery, filters: { ...activeFilters } }]); setSaveSearchName(""); setSaveSearchOpen(false); triggerToast(`Search "${saveSearchName}" saved`); };
   const loadSearch = (s: SavedSearch) => { setSearchQuery(s.query); setActiveFilters(s.filters); triggerToast(`Loaded "${s.name}"`); };
   const togglePinFilter = (key: string) => { setPinnedFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); };
-  const addToCollection = (colId: string, cIds: string[]) => { setCollections(prev => prev.map(c => c.id === colId ? { ...c, candidateIds: [...new Set([...c.candidateIds, ...cIds])] } : c)); triggerToast(`Added to collection`); };
-  const createCollection = () => { if (!newCollName.trim()) return; setCollections(prev => [...prev, { id: `col-${Date.now()}`, name: newCollName, icon: "folder", candidateIds: [] }]); setNewCollName(""); triggerToast(`Collection "${newCollName}" created`); };
+  const addToCollection = async (colId: string, cIds: string[]) => { if(colId==="all")return; const col=collections.find(c=>c.id===colId);if(!col)return;const candidateIds=[...new Set([...col.candidateIds,...cIds])];try{const res=await fetch("/api/employer/candidate-collections",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({collectionId:colId,candidateIds})});const data=await res.json();if(!res.ok)throw new Error(data.error||"Failed to update collection");setCollections(prev=>prev.map(c=>c.id===colId?{...c,candidateIds:data.candidateIds}:c));triggerToast("Added to collection");}catch(e:any){triggerToast(e.message||"Could not update collection.");} };
+  const createCollection = async () => { if(!newCollName.trim())return;try{const res=await fetch("/api/employer/candidate-collections",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name:newCollName})});const data=await res.json();if(!res.ok)throw new Error(data.error||"Failed to create collection");setCollections(prev=>[...prev,{id:data.collection.id,name:data.collection.name,icon:"folder",candidateIds:[]}]);setNewCollName("");triggerToast(`Collection "${data.collection.name}" created`);}catch(e:any){triggerToast(e.message||"Could not create collection.");} };
 
   const previewCandidate = previewId ? candidates.find(c => c.id === previewId) : null;
   const selectedCandidates = candidates.filter(c => selected.has(c.id));
