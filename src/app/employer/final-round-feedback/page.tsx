@@ -2,49 +2,70 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
-const ratingOptions = ["STRONG_HIRE", "HIRE", "NEUTRAL", "NO_HIRE", "STRONG_NO"] as const;
-const scoreFields = [
-  ["communication", "Communication"], ["technical", "Technical Proficiency"], ["cultureFit", "Culture Fit"], ["problemSolving", "Problem Solving"], ["enthusiasm", "Enthusiasm"],
-] as const;
+type Policy = { roundName: string; mandatoryFeedback: boolean; candidateFeedbackPolicy: "REQUIRED" | "OPTIONAL" | "NOT_SHARED" } | null;
 
-export default function FinalRoundFeedbackPage() {
-  const [interviewId, setInterviewId] = useState("");
-  useEffect(() => setInterviewId(new URLSearchParams(window.location.search).get("interviewId") || ""), []);
-  const [rating, setRating] = useState<typeof ratingOptions[number] | "">("");
-  const [scores, setScores] = useState<Record<string, number>>({ communication: 5, technical: 5, cultureFit: 5, problemSolving: 5, enthusiasm: 5 });
+export default function InterviewFeedbackPage() {
+  const params = useSearchParams();
+  const interviewId = params.get("interviewId") || "";
+  const [policy, setPolicy] = useState<Policy>(null);
+  const [recommendation, setRecommendation] = useState<"PROCEED"|"ON_HOLD"|"REJECT"| "">("");
   const [strengths, setStrengths] = useState("");
-  const [improvement, setImprovement] = useState("");
-  const [recommendation, setRecommendation] = useState<"PROCEED" | "ON_HOLD" | "REJECT" | "">("");
+  const [concerns, setConcerns] = useState("");
+  const [notes, setNotes] = useState("");
+  const [candidateFeedback, setCandidateFeedback] = useState("");
+  const [finalized, setFinalized] = useState(false);
+  const [loading, setLoading] = useState(Boolean(interviewId));
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!interviewId) return;
+    fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}/feedback`, { cache: "no-store" })
+      .then(async r => { const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||"Unable to load feedback."); return d; })
+      .then(d => {
+        setPolicy(d.policy || null);
+        if (d.feedback) {
+          setRecommendation(d.feedback.recommendation || "");
+          const internal = d.feedback.internalFeedback || {};
+          setStrengths(internal.strengths || ""); setConcerns(internal.concerns || ""); setNotes(internal.notes || "");
+          setCandidateFeedback(d.feedback.candidateFeedback || ""); setFinalized(Boolean(d.feedback.finalizedAt));
+        }
+      }).catch(e=>setError(e instanceof Error?e.message:"Unable to load feedback.")).finally(()=>setLoading(false));
+  },[interviewId]);
 
   async function submit(e: FormEvent) {
     e.preventDefault(); setError(""); setSuccess("");
-    if (!interviewId) { setError("This feedback form is missing the interview ID. Open it from a specific interview."); return; }
-    if (!rating || !recommendation) { setError("Select an overall rating and final recommendation."); return; }
-    if (strengths.trim().length < 50 || improvement.trim().length < 50) { setError("Strengths and improvement notes must each be at least 50 characters."); return; }
+    if (!interviewId) { setError("Open feedback from a specific interview."); return; }
+    if (!recommendation || strengths.trim().length < 10) { setError("Select a recommendation and provide meaningful strengths/observations."); return; }
+    if (policy?.candidateFeedbackPolicy === "REQUIRED" && !candidateFeedback.trim()) { setError("Candidate-facing feedback is required for this round."); return; }
     setSaving(true);
     try {
-      const response = await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ overallRating: rating, ...scores, strengths, improvement, recommendation, redFlags: [] }) });
-      const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || "Unable to submit feedback.");
-      setSuccess(result.message); 
-    } catch (err) { setError(err instanceof Error ? err.message : "Unable to submit feedback."); }
-    finally { setSaving(false); }
+      const r=await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}/feedback`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({recommendation,strengths,concerns,notes,candidateFeedback:policy?.candidateFeedbackPolicy==="NOT_SHARED"?null:candidateFeedback})});
+      const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||"Unable to submit feedback.");
+      setFinalized(true); setSuccess(d.roundComplete ? "Feedback finalized. All required panel feedback is complete for this round." : `Feedback finalized. Waiting for ${d.pendingFeedbackCount} required panelist(s).`);
+    } catch(e){setError(e instanceof Error?e.message:"Unable to submit feedback.");} finally{setSaving(false);}
   }
 
-  return <PageContainer><div className="max-w-4xl mx-auto py-8 px-4">
-    <div className="mb-7"><p className="text-primary text-xs font-bold uppercase tracking-[0.2em] mb-2">Interview workflow · Final round</p><h1 className="font-display-lg text-3xl text-text-primary mb-2">Final Round Feedback</h1><p className="text-text-secondary text-sm">Complete the scorecard before moving the candidate to the next hiring decision.</p></div>
-    <form onSubmit={submit} className="space-y-5">
-      <section className="glass-card rounded-xl p-5"><h2 className="text-white font-bold mb-4">Overall rating</h2><div className="grid grid-cols-2 md:grid-cols-5 gap-2">{ratingOptions.map(option => <button type="button" key={option} onClick={() => setRating(option)} className={`rounded-lg border p-3 text-xs font-bold ${rating === option ? "bg-primary text-white border-primary" : "border-white/10 text-text-secondary hover:bg-white/5"}`}>{option.replaceAll("_", " ")}</button>)}</div></section>
-      <section className="glass-card rounded-xl p-5"><h2 className="text-white font-bold mb-4">Competency scores</h2><div className="space-y-4">{scoreFields.map(([key, label]) => <label key={key} className="block text-sm text-text-secondary"> <span className="flex justify-between"><span>{label}</span><b className="text-primary">{scores[key]}</b></span><input className="w-full accent-red-500" type="range" min="1" max="10" value={scores[key]} onChange={e => setScores({ ...scores, [key]: Number(e.target.value) })} /></label>)}</div></section>
-      <div className="grid md:grid-cols-2 gap-5"><label className="glass-card rounded-xl p-5 text-sm text-text-secondary">Key strengths<textarea className="mt-3 w-full h-36 rounded-lg bg-black/20 border border-white/10 p-3 text-white" minLength={50} value={strengths} onChange={e => setStrengths(e.target.value)} placeholder="At least 50 characters" /></label><label className="glass-card rounded-xl p-5 text-sm text-text-secondary">Areas to improve<textarea className="mt-3 w-full h-36 rounded-lg bg-black/20 border border-white/10 p-3 text-white" minLength={50} value={improvement} onChange={e => setImprovement(e.target.value)} placeholder="At least 50 characters" /></label></div>
-      <section className="glass-card rounded-xl p-5"><h2 className="text-white font-bold mb-4">Final recommendation</h2><div className="flex flex-wrap gap-2">{(["PROCEED", "ON_HOLD", "REJECT"] as const).map(option => <button type="button" key={option} onClick={() => setRecommendation(option)} className={`rounded-lg border px-5 py-3 text-xs font-bold ${recommendation === option ? "bg-primary text-white border-primary" : "border-white/10 text-text-secondary hover:bg-white/5"}`}>{option.replace("_", " ")}</button>)}</div></section>
-      {error && <p className="rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-300">{error}</p>}{success && <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-300">{success}</p>}
-      <div className="flex gap-3"><button disabled={saving} type="submit" className="btn-primary-red h-12 px-7 rounded-full text-white font-bold">{saving ? "Submitting..." : "Submit Final Feedback"}</button><Link href="/employer/upcoming-interviews-list" className="h-12 px-7 rounded-full border border-white/10 text-text-secondary flex items-center">Back to Interviews</Link></div>
-    </form>
-  </div></PageContainer>;
+  return <PageContainer><main className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mb-7"><p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-primary">Interview workflow</p><h1 className="text-3xl font-bold text-text-primary">Interview feedback</h1><p className="mt-2 text-sm text-text-secondary">{policy?.roundName ? `${policy.roundName} · ` : ""}Your internal feedback is private to authorized hiring-team members.</p></div>
+    {!interviewId && <div className="rounded-2xl border border-outline bg-bg-card p-8 text-center"><p className="font-semibold text-text-primary">No interview selected</p><Link href="/employer/upcoming-interviews-list" className="mt-4 inline-flex h-11 items-center rounded-full border border-outline px-5 text-sm font-bold text-text-primary">Back to interviews</Link></div>}
+    {loading && <p className="text-text-secondary">Loading feedback…</p>}
+    {error && <p role="alert" className="mb-5 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">{error}</p>}
+    {success && <p role="status" className="mb-5 rounded-xl border border-success/30 bg-success/10 p-4 text-sm text-text-primary">{success}</p>}
+    {interviewId && !loading && <form onSubmit={submit} className="space-y-5">
+      {finalized && <div className="rounded-xl border border-outline bg-bg-subtle p-4 text-sm text-text-secondary">Your feedback is finalized and read-only. Corrections require an audited amendment workflow.</div>}
+      <section className="rounded-2xl border border-outline bg-bg-card p-5"><h2 className="mb-3 font-bold text-text-primary">Recommendation</h2><div className="flex flex-wrap gap-2">{(["PROCEED","ON_HOLD","REJECT"] as const).map(v=><button disabled={finalized} type="button" key={v} onClick={()=>setRecommendation(v)} className={`min-h-11 rounded-full border px-5 text-sm font-bold ${recommendation===v?"border-primary bg-primary text-white":"border-outline text-text-secondary"} disabled:opacity-60`}>{v.replace("_"," ")}</button>)}</div></section>
+      <section className="grid gap-4 md:grid-cols-2">
+        <label className="rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Strengths / observations<textarea disabled={finalized} value={strengths} onChange={e=>setStrengths(e.target.value)} maxLength={4000} className="mt-3 min-h-36 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /></label>
+        <label className="rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Concerns<textarea disabled={finalized} value={concerns} onChange={e=>setConcerns(e.target.value)} maxLength={4000} className="mt-3 min-h-36 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /></label>
+      </section>
+      <label className="block rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Private interviewer notes<textarea disabled={finalized} value={notes} onChange={e=>setNotes(e.target.value)} maxLength={8000} className="mt-3 min-h-28 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /><span className="mt-2 block text-xs">Never shown to the candidate.</span></label>
+      {policy?.candidateFeedbackPolicy !== "NOT_SHARED" && <label className="block rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Candidate-facing feedback {policy?.candidateFeedbackPolicy==="REQUIRED"?"(required)":"(optional)"}<textarea disabled={finalized} value={candidateFeedback} onChange={e=>setCandidateFeedback(e.target.value)} maxLength={4000} className="mt-3 min-h-28 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /><span className="mt-2 block text-xs">Stored separately from private notes. Release to the candidate is controlled independently.</span></label>}
+      <div className="flex flex-wrap gap-3"><button disabled={saving||finalized} className="btn-3d-red h-12 rounded-full px-7 font-bold text-white disabled:opacity-50">{saving?"Finalizing…":"Finalize my feedback"}</button><Link href="/employer/upcoming-interviews-list" className="flex h-12 items-center rounded-full border border-outline px-7 text-sm font-bold text-text-secondary">Back to interviews</Link></div>
+    </form>}
+  </main></PageContainer>;
 }
