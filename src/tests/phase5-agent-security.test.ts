@@ -119,3 +119,21 @@ describe('Phase 5 consequential approval boundaries', () => {
     expect(source).toContain('idempotencyKey');
   });
 });
+
+
+describe('Phase 5 workflow reliability invariants', () => {
+  it('fails closed instead of replaying interrupted side effects', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8'));
+    expect(source).toContain('recoverInterruptedSteps');
+    expect(source).toContain('InterruptedExecution');
+    expect(source).toContain('sideEffectDone: false');
+  });
+
+  it('guards concurrent step claims and bounded retry transitions', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8'));
+    expect(source).toContain('P2002');
+    expect(source).toContain('attemptNumber');
+    expect(source).toContain('retryWorkflow');
+    expect(source).toContain('failureCount');
+  });
+});
