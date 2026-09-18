@@ -121,12 +121,6 @@ export default function CandidateDashboardPage() {
               title="Messages"
             >
               <span className="material-symbols-outlined text-[20px]">forum</span>
-              <span
-                className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center"
-                style={{ backgroundColor: "var(--primary)" }}
-              >
-                2
-              </span>
             </Link>
 
             <Link
@@ -349,11 +343,11 @@ export default function CandidateDashboardPage() {
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  94
+                  —
                 </span>
-                <span className="text-xs font-bold mb-1" style={{ color: "var(--color-green)" }}>↑ +4.2%</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Complete assessment to calculate</span>
               </div>
-              <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>Top 2.8% for Senior Fullstack Engineers</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Your verified readiness score will appear here.</p>
             </div>
 
             <div
@@ -372,11 +366,11 @@ export default function CandidateDashboardPage() {
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  12
+                  {appliedCount}
                 </span>
-                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>4 Shortlisted</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Tracked applications</span>
               </div>
-              <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>Average response time: 2.4 days</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Updated from your application history.</p>
             </div>
 
             <div
@@ -395,11 +389,11 @@ export default function CandidateDashboardPage() {
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  3
+                  —
                 </span>
-                <span className="text-xs font-bold mb-1" style={{ color: "var(--tertiary)" }}>Next: Today 4 PM</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>No verified schedule loaded</span>
               </div>
-              <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>AI Proctoring Enabled</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Upcoming interviews will appear when scheduled.</p>
             </div>
 
             <div
@@ -418,11 +412,11 @@ export default function CandidateDashboardPage() {
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  248
+                  —
                 </span>
-                <span className="text-xs font-bold mb-1" style={{ color: "var(--color-green)" }}>↑ +38 this week</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>No verified analytics loaded</span>
               </div>
-              <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>Google, Microsoft, Netflix viewed profile</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Profile-view analytics will appear when available.</p>
             </div>
           </div>
 
