@@ -2,6 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrl } from "@/lib/storage";
 
+export async function enqueueRecordedAssessmentAnalysis(responseId: string) {
+  const response = await prisma.recordedAssessmentResponse.findUnique({ where: { id: responseId }, include: { storedFile: true } });
+  if (!response?.storedFile) return null;
+  const idempotencyKey = `assessment-analysis-${responseId}`;
+  return prisma.recordedAssessmentAnalysisJob.upsert({
+    where: { idempotencyKey }, update: {},
+    create: { responseId, idempotencyKey, payload: { fileId: response.storedFile.id, objectKey: response.storedFile.objectKey } },
+  });
+}
+
 export async function dispatchRecordedAssessmentAnalysis(responseId: string) {
   const response = await prisma.recordedAssessmentResponse.findUnique({
     where: { id: responseId },
@@ -13,14 +23,10 @@ export async function dispatchRecordedAssessmentAnalysis(responseId: string) {
     await prisma.recordedAssessmentResponse.update({ where: { id: response.id }, data: { analysisStatus: "BLOCKED_INFRA" } });
     return;
   }
-  // One response owns one logical analysis dispatch. A deterministic key makes
-  // duplicate API calls/network retries converge on the same durable job.
-  const idempotencyKey = `assessment-analysis-${responseId}`;
-  const job = await prisma.recordedAssessmentAnalysisJob.upsert({
-    where: { idempotencyKey },
-    update: {},
-    create: { responseId, idempotencyKey, payload: { fileId: response.storedFile.id, objectKey: response.storedFile.objectKey } },
-  });
+  // The job is normally persisted synchronously with the candidate-facing save.
+  // Upsert keeps recovery/legacy callers safe and idempotent.
+  const job = await enqueueRecordedAssessmentAnalysis(responseId);
+  if (!job) return;
   if (["PROCESSING", "COMPLETED"].includes(job.status)) return;
   const downloadUrl = await getWorkerDownloadUrl(response.storedFile.objectKey);
   try {
