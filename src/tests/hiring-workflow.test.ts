@@ -210,6 +210,22 @@ export async function runHiringWorkflowTests(): Promise<{
         "Update returned status 403 Forbidden"
       );
 
+      const resDirectHire = await callStagePatch(tokenA, applicationA.id, "HIRED");
+      assert(
+        "Generic pipeline cannot bypass joining workflow by setting HIRED",
+        resDirectHire.status === 400,
+        "HIRED is rejected by stage validation and must use the controlled joining workflow"
+      );
+
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "HIRED" } });
+      const resEditHired = await callStagePatch(tokenA, applicationA.id, "REJECTED");
+      assert(
+        "Hired application is protected from generic pipeline edits",
+        resEditHired.status === 409,
+        "Terminal HIRED state requires placement reconciliation"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+
       // 3. Job Status Update Verification
       const resJobPutA = await callJobPut(tokenA, jobListingA.id, { status: "PAUSED" });
       assert(
