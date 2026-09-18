@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_release_status", 30, 60_000);
     // A release is not production-ready until the release process explicitly
     // signs it off after CI, migrations, provider checks, and staging tests.
     // Never report a static 100% score to operators.
@@ -40,7 +41,8 @@ export async function GET(req: NextRequest) {
       completedPhases: completedCount,
       totalPhases: phases.length,
       phases,
-      signedOffAt: signedOff ? new Date().toISOString() : null,
+      signedOffAt: null,
+      note: signedOff ? "Release sign-off flag is enabled; consult the immutable deployment/audit record for the actual sign-off timestamp." : undefined,
     });
   } catch (error) {
     return handleApiError(error);
