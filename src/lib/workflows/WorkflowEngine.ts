@@ -60,9 +60,10 @@ export class WorkflowEngine {
 
   static async executeStep<T>(workflowId: string, stepName: string, attemptNumber: number, inputPayload: unknown, stepFn: () => Promise<T>): Promise<T> {
     if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 3) throw new Error('Workflow step attempt must be between 1 and 3');
-    const workflowState = await prisma.workflowInstance.findUnique({ where: { id: workflowId }, select: { status: true } });
+    const workflowState = await prisma.workflowInstance.findUnique({ where: { id: workflowId }, select: { status: true, failureCount: true } });
     if (!workflowState) throw new Error('Workflow not found');
     if (workflowState.status !== 'RUNNING') throw new Error(`Workflow is not executable while status is ${workflowState.status}`);
+    if (attemptNumber > workflowState.failureCount + 1) throw new Error('Workflow retry attempt cannot skip prior failed attempts');
     const executionKey = `${workflowId}:${stepName}:${attemptNumber}`;
     const previous = await prisma.workflowStepLog.findUnique({ where: { executionKey } });
     if (previous?.status === 'COMPLETED' && previous.sideEffectDone) return previous.outputPayload as T;
@@ -88,7 +89,7 @@ export class WorkflowEngine {
       await prisma.$transaction(async (tx) => {
         const errorMessage = error instanceof Error ? error.message : 'Step execution failed';
         await tx.workflowStepLog.update({ where: { executionKey }, data: { status: 'FAILED', errorMessage } });
-        const workflow = await tx.workflowInstance.update({ where: { id: workflowId }, data: { status: 'FAILED', updatedAt: new Date() } });
+        const workflow = await tx.workflowInstance.update({ where: { id: workflowId }, data: { status: 'FAILED', failureCount: { increment: 1 }, updatedAt: new Date() } });
         if (attemptNumber >= 3) await tx.deadLetterJob.upsert({ where: { sourceType_sourceId: { sourceType: 'WorkflowStep', sourceId: executionKey } }, update: { errorType: 'StepFailed', errorMessage, payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue, status: 'OPEN' }, create: { sourceType: 'WorkflowStep', sourceId: executionKey, correlationId: workflow.correlationId, errorType: 'StepFailed', errorMessage, payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue, status: 'OPEN' } });
       });
       throw error;
