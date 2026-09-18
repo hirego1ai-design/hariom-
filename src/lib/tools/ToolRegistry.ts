@@ -53,18 +53,13 @@ export class ToolRegistry {
       throw new ToolValidationError(`Tool '${toolName}' has side effects and requires a non-empty 'idempotencyKey' parameter.`);
     }
 
+    // Consequential actions are deliberately not executed directly from this
+    // generic agent registry. Approval consumption must be coupled to the
+    // durable side-effect executor/provider idempotency boundary; consuming
+    // approval here before the handler succeeds can strand an approved action
+    // after a provider failure.
     if (isConsequential) {
-      if (!context.workflowId || !context.workflowStep) throw new PermissionDeniedError(`Consequential tool '${toolName}' requires workflow-bound human approval.`);
-      try {
-        await WorkflowEngine.consumeApprovedAction({
-          workflowId: context.workflowId,
-          stepName: context.workflowStep,
-          action: { toolName, params: parsedInputResult.data },
-          context: context.tenantContext,
-        });
-      } catch (error) {
-        throw new PermissionDeniedError(`Consequential tool '${toolName}' approval denied: ${error instanceof Error ? error.message : 'approval unavailable'}`);
-      }
+      throw new PermissionDeniedError(`Consequential tool '${toolName}' requires the durable approved-action executor and cannot run through generic agent dispatch.`);
     }
 
     const currentCount = this.executionToolCounts.get(context.executionId) || 0;
