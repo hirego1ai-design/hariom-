@@ -27,7 +27,7 @@ const roomActionSchema = z.object({
 async function findAuthorizedInterview(session: { id: string; role: string }, roomId: string) {
   const interview = await prisma.interview.findFirst({
     where: { OR: [{ id: roomId }, { roomUrl: { contains: roomId } }] },
-    include: { application: { include: { candidateProfile: true, job: true } } },
+    include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
   });
   if (!interview) return null;
   if (session.role === "ADMIN") return interview;
@@ -35,6 +35,7 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
   const candidateUserId = interview.application.candidateProfile?.userId;
   if (session.role === "CANDIDATE") return session.id === candidateUserId ? interview : null;
   if (session.role !== "EMPLOYER" && session.role !== "RECRUITER") return null;
+  if (interview.roundProgress?.round.interviewers.length && !interview.roundProgress.round.interviewers.some((item) => item.userId === session.id)) return null;
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
 }
@@ -104,7 +105,11 @@ export async function POST(req: NextRequest) {
     if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
 
     if (body.action === "COMPLETE") {
-      await prisma.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
+      if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
+      await prisma.$transaction(async (tx) => {
+        await tx.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
+        if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
+      });
     } else {
       const payload = body.action === "ICE_CANDIDATE" ? { candidate: body.candidate } : { sdp: body.sdp };
       await prisma.interviewSignal.create({
