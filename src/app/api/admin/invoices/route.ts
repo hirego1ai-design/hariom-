@@ -10,6 +10,7 @@ const createSchema = z.object({ action: z.literal("create").optional(), agreemen
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_invoices_read", 60, 60_000);
     const invoices = await invoicesDb.getInvoices();
     const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
     const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
