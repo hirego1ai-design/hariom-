@@ -78,6 +78,21 @@ export async function POST(request: NextRequest) {
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
         select: { interviewId: true, status: true },
       });
+      if (round.sequence > 1) {
+        const previous = await tx.interviewRound.findUnique({
+          where: { processId_sequence: { processId: round.processId, sequence: round.sequence - 1 } },
+          select: { id: true },
+        });
+        if (previous) {
+          const priorProgress = await tx.interviewRoundProgress.findUnique({
+            where: { applicationId_roundId: { applicationId: application.id, roundId: previous.id } },
+            select: { status: true },
+          });
+          if (!priorProgress || !["ROUND_COMPLETE", "TRANSFERRED"].includes(priorProgress.status)) {
+            throw new Error("PREVIOUS_INTERVIEW_ROUND_INCOMPLETE");
+          }
+        }
+      }
       if (progress?.interviewId) {
         throw new Error("INTERVIEW_ROUND_ALREADY_SCHEDULED");
       }
@@ -96,6 +111,7 @@ export async function POST(request: NextRequest) {
     const whatsapp = body.notifyWhatsapp && application.candidateProfile.user?.phoneNumber ? await sendWhatsAppMessage(application.candidateProfile.user.phoneNumber, `HireGo AI ${round.name} interview scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`) : { sent: false, reason: body.notifyWhatsapp ? "Candidate phone number is missing." : "Not selected." };
     return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
