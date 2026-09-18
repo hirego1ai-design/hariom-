@@ -52,6 +52,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         durationMins: interview.durationMins,
         status: interview.status,
         roomUrl: interview.roomUrl,
+        roomId: typeof meta.roomId === "string" ? meta.roomId : interview.id,
         round: typeof meta.round === "string" ? meta.round : "Technical Interview",
         mode: typeof meta.mode === "string" ? meta.mode : interview.roomUrl ? "ONLINE" : "OFFLINE",
         candidateName: interview.application.candidateProfile.user?.name || "Candidate",

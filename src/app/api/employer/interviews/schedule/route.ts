@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    const roomId = `room-${crypto.randomUUID()}`;
+    const roomId = mode === "ONLINE" ? `room-${crypto.randomUUID()}` : null;
     const roomUrl = mode === "ONLINE"
       ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}`
       : mode === "PHONE"
