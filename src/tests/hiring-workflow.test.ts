@@ -256,6 +256,22 @@ export async function runHiringWorkflowTests(): Promise<{
       await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
       await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "SCHEDULED" } });
 
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "REJECTED" } });
+      const resReopenRejected = await callStagePatch(tokenA, applicationA.id, "SCREENING");
+      assert(
+        "Rejected application cannot be resurrected through generic pipeline edits",
+        resReopenRejected.status === 409,
+        "REJECTED is terminal and requires an explicit reconciliation workflow"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "WITHDRAWN" } });
+      const resReopenWithdrawn = await callStagePatch(tokenA, applicationA.id, "ASSESSMENT");
+      assert(
+        "Withdrawn application cannot be resurrected through generic pipeline edits",
+        resReopenWithdrawn.status === 409,
+        "WITHDRAWN is terminal and cannot be changed by an employer stage edit"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+
       // 3. Job Status Update Verification
       const resJobPutA = await callJobPut(tokenA, jobListingA.id, { status: "PAUSED" });
       assert(
