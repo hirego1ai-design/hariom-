@@ -95,20 +95,6 @@ export default function CandidateDashboardPage() {
 
 
           <div className="flex items-center gap-3">
-            {/* Proctor Status Badge */}
-            <div
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs"
-              style={{
-                backgroundColor: "var(--surface-container-high)",
-                border: "1px solid var(--outline)",
-              }}
-            >
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "var(--color-green)" }} />
-              <span className="font-bold text-[11px] uppercase tracking-wider" style={{ color: "var(--color-green)" }}>
-                AI Proctor Active
-              </span>
-            </div>
-
             {/* Quick Links */}
             <Link
               href="/messages/chat"
@@ -276,32 +262,9 @@ export default function CandidateDashboardPage() {
                     Appearance
                   </button>
                   
-                  <button
-                    onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">notifications</span>
-                    Notifications Preferences
-                  </button>
+                  <Link href="/settings/notifications" onClick={() => setProfileOpen(false)} className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2" style={{ color: "var(--text-primary)" }}><span className="material-symbols-outlined text-[16px]">notifications</span>Notifications Preferences</Link>
 
-                  <button
-                    onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">keyboard</span>
-                    Keyboard Shortcuts
-                  </button>
-
-                  <button
-                    onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
-                    style={{ color: "var(--text-primary)" }}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">help</span>
-                    Help & Support
-                  </button>
+                  <Link href="/contact" onClick={() => setProfileOpen(false)} className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2" style={{ color: "var(--text-primary)" }}><span className="material-symbols-outlined text-[16px]">help</span>Help & Support</Link>
                   
                   <div className="h-[1px] my-2" style={{ backgroundColor: "var(--outline)" }} />
                   
