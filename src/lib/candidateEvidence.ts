@@ -13,6 +13,9 @@ type EmployerApplicationEvidence = {
     experienceYears: number;
     user: { name: string } | null;
     videoResumes: { id: string }[];
+    availabilityStatus: string;
+    lastAvailabilityConfirmedAt: Date | null;
+    readinessRecords: { roleTitle: string; seniority: string; score: number | null; validUntil: Date | null }[];
   };
   job: { title: string };
 };
@@ -51,7 +54,10 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     partner: "Not recorded",
     applicationDate: app.createdAt.toISOString().split("T")[0],
     lastActivity: app.updatedAt.toISOString(),
-    availability: "Not provided",
+    availability: profile.availabilityStatus,
+    availabilityConfirmedAt: profile.lastAvailabilityConfirmedAt?.toISOString() || null,
+    jobReady: profile.readinessRecords.some((record) => !record.validUntil || record.validUntil > new Date()),
+    jobReadyRecords: profile.readinessRecords,
   };
 }
 
