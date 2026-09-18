@@ -133,7 +133,8 @@ export class StripeGateway implements PaymentGateway {
       dataObj?.status === "paid" ||
       dataObj?.payment_status === "paid";
 
-    const status = isSuccess ? "SUCCESS" : "FAILED";
+    const isFailure = eventType === "payment_intent.payment_failed" || eventType === "checkout.session.expired" || dataObj?.status === "failed";
+    const status: VerifyWebhookResult["status"] = isSuccess ? "SUCCESS" : isFailure ? "FAILED" : "PENDING";
     const session = eventPayload?.data?.object;
     const gatewayOrderId = session?.id || session?.payment_intent || eventPayload?.id;
 
@@ -150,7 +151,7 @@ export class StripeGateway implements PaymentGateway {
     };
   }
 
-  async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+  async getPaymentStatus(_gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
+    return { status: "PENDING" };
   }
 }
