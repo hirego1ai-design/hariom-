@@ -108,6 +108,24 @@ export class WorkflowEngine {
     }
   }
 
+  static async getWorkflowStatus(params: { workflowId: string; context: TenantContext }) {
+    const workflow = await prisma.workflowInstance.findUnique({
+      where: { id: params.workflowId },
+      select: { id: true, companyId: true, workflowType: true, status: true, currentStep: true, failureCount: true, correlationId: true, createdAt: true, updatedAt: true,
+        approvals: { where: { decision: 'PENDING' }, select: { id: true, stepName: true, actionType: true, requestedAt: true } },
+        stepLogs: { orderBy: { createdAt: 'desc' }, take: 10, select: { stepName: true, attemptNumber: true, status: true, sideEffectDone: true, errorMessage: true, createdAt: true } } },
+    });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    return {
+      id: workflow.id, workflowType: workflow.workflowType, status: workflow.status, currentStep: workflow.currentStep,
+      failureCount: workflow.failureCount, correlationId: workflow.correlationId, createdAt: workflow.createdAt, updatedAt: workflow.updatedAt,
+      pendingApprovals: workflow.approvals,
+      recentSteps: workflow.stepLogs,
+    };
+  }
+
   static async completeWorkflow(params: { workflowId: string; context: TenantContext }): Promise<WorkflowInstance> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
