@@ -69,6 +69,7 @@ class AnalyzeRequest(BaseModel):
     objectKey: str
     claimedDurationSeconds: int
     callbackUrl: str
+    claimToken: str
     downloadUrl: Optional[str] = None
 
 @app.get("/health")
@@ -157,7 +158,8 @@ def process_job(req: AnalyzeRequest):
             else:
                 send_callback(
                     req.callbackUrl, req.jobId, req.videoResumeId, "BLOCKED_INFRA",
-                    f"Media storage target unavailable: {req.objectKey}"
+                    f"Media storage target unavailable: {req.objectKey}",
+                    claim_token=req.claimToken
                 )
                 return
 
@@ -172,7 +174,8 @@ def process_job(req: AnalyzeRequest):
         if res.returncode != 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Corrupt or unsupported media file: {res.stderr}"
+                f"Corrupt or unsupported media file: {res.stderr}",
+                claim_token=req.claimToken
             )
             return
 
@@ -181,14 +184,16 @@ def process_job(req: AnalyzeRequest):
         except ValueError:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                "Malformed duration metadata in media container"
+                "Malformed duration metadata in media container",
+                claim_token=req.claimToken
             )
             return
 
         if actual_duration > MAX_SECONDS + 1.0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Actual media duration ({actual_duration:.1f}s) exceeds strict maximum allowed limit of {int(MAX_SECONDS)}s."
+                f"Actual media duration ({actual_duration:.1f}s) exceeds strict maximum allowed limit of {int(MAX_SECONDS)}s.",
+                claim_token=req.claimToken
             )
             return
 
@@ -202,7 +207,8 @@ def process_job(req: AnalyzeRequest):
         if ffmpeg_res.returncode != 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Audio extraction failed: {ffmpeg_res.stderr}"
+                f"Audio extraction failed: {ffmpeg_res.stderr}",
+                claim_token=req.claimToken
             )
             return
 
@@ -211,7 +217,8 @@ def process_job(req: AnalyzeRequest):
         if model is None:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "BLOCKED_INFRA",
-                "Whisper speech recognition model unavailable on worker"
+                "Whisper speech recognition model unavailable on worker",
+                claim_token=req.claimToken
             )
             return
 
@@ -238,7 +245,8 @@ def process_job(req: AnalyzeRequest):
         if seg_count == 0 or len(transcript_text.strip()) == 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                "No audible speech or transcript extracted from audio stream"
+                "No audible speech or transcript extracted from audio stream",
+                claim_token=req.claimToken
             )
             return
 
@@ -375,7 +383,8 @@ def process_job(req: AnalyzeRequest):
             model_name=f"whisper-{MODEL_SIZE}",
             model_version="1.0.0",
             worker_version="1.0.0",
-            analysis_version="v1"
+            analysis_version="v1",
+            claim_token=req.claimToken
         )
 
     except Exception as e:
@@ -388,6 +397,7 @@ def send_callback(callback_url: str, job_id: str, video_resume_id: str, status: 
     payload = {
         "jobId": job_id,
         "videoResumeId": video_resume_id,
+        "claimToken": kwargs.get("claim_token"),
         "status": status,
         "error": error,
         "result": result,
