@@ -25,9 +25,25 @@ export class WorkflowEngine {
   static async startWorkflow(params: {
     workflowType: string; companyId?: string | null; jobId?: string | null; candidateId?: string | null;
     applicationId?: string | null; correlationId: string; initiatedBy: string; initialStep: string;
-    checkpointState: Record<string, unknown>;
+    checkpointState: Record<string, unknown>; context: TenantContext;
   }): Promise<WorkflowInstance> {
-    const { initialStep, checkpointState, ...data } = params;
+    const { initialStep, checkpointState, context, ...data } = params;
+    if (data.initiatedBy !== context.userId) throw new Error('Workflow initiator must be derived from the authenticated server context');
+    if ((data.companyId ?? null) !== context.companyId && context.userRole !== Role.ADMIN) throw new Error('Workflow company must match the authenticated tenant context');
+    validateTenantAccess(context, data.companyId ?? null);
+    RbacGuard.assertRole(context, [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN]);
+    if (data.jobId) {
+      const job = await prisma.jobListing.findUnique({ where: { id: data.jobId }, select: { companyId: true } });
+      if (!job) throw new Error('Job not found');
+      validateTenantAccess(context, job.companyId);
+      if (data.companyId && job.companyId !== data.companyId) throw new Error('Workflow job does not belong to the workflow company');
+    }
+    if (data.applicationId) {
+      const application = await prisma.application.findUnique({ where: { id: data.applicationId }, select: { job: { select: { companyId: true } } } });
+      if (!application) throw new Error('Application not found');
+      validateTenantAccess(context, application.job.companyId);
+      if (data.companyId && application.job.companyId !== data.companyId) throw new Error('Workflow application does not belong to the workflow company');
+    }
     return prisma.workflowInstance.create({ data: { ...data, currentStep: initialStep, checkpointState: checkpointState as Prisma.InputJsonValue, status: 'RUNNING' } });
   }
 
