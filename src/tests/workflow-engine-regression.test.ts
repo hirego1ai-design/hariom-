@@ -181,3 +181,47 @@ test('duplicate decided approval request cannot re-pause workflow', async (t) =>
   }), /already decided/);
   assert.equal(workflowWrites, 0);
 });
+
+
+test('approving one action keeps workflow paused while another approval is pending', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  const workflow = { id: 'workflow-test', companyId: 'company-a', status: 'PAUSED_FOR_APPROVAL' };
+  const approval = {
+    id: 'approval-a', workflowInstanceId: workflow.id, companyId: workflow.companyId,
+    stepName: 'select', actionType: 'CANDIDATE_SELECTION', actionDigest: 'digest-a',
+    decision: 'PENDING', workflowInstance: workflow,
+  };
+  let persistedStatus = '';
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => approval);
+  stubMethod(t, prisma.workflowApproval, 'updateMany', async () => ({ count: 1 }));
+  stubMethod(t, prisma.workflowApproval, 'count', async () => 1);
+  stubMethod(t, prisma.workflowInstance, 'update', async ({ data }: any) => {
+    persistedStatus = data.status; return { ...workflow, status: data.status };
+  });
+  stubMethod(t, prisma.auditLog, 'create', async ({ data }: any) => data);
+  stubMethod(t, prisma.securityAuditOutboxEvent, 'create', async ({ data }: any) => data);
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
+  await WorkflowEngine.decideApproval({
+    approvalId: approval.id, decision: 'APPROVED',
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  });
+  assert.equal(persistedStatus, 'PAUSED_FOR_APPROVAL');
+});
+
+test('approved action consumption is single-use under replay', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  let consumes = 0;
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a' }));
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({
+    id: 'approval-a', decision: 'APPROVED', decidedBy: 'reviewer', decidedAt: new Date(), consumedAt: null,
+  }));
+  stubMethod(t, prisma.workflowApproval, 'updateMany', async () => ({ count: ++consumes === 1 ? 1 : 0 }));
+  const params = {
+    workflowId: 'workflow-test', stepName: 'select', action: { candidateId: 'candidate-a' },
+    context: createTenantContext('company-a', 'worker', Role.EMPLOYER),
+  };
+  await WorkflowEngine.consumeApprovedAction(params);
+  await assert.rejects(WorkflowEngine.consumeApprovedAction(params), /already been consumed/);
+});
