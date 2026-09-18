@@ -108,6 +108,21 @@ export class WorkflowEngine {
     }
   }
 
+  static async getApprovalDetails(params: { approvalId: string; context: TenantContext }) {
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    const approval = await prisma.workflowApproval.findUnique({
+      where: { id: params.approvalId },
+      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, requestedBy: true, decidedBy: true, decidedByRole: true, decisionNotes: true, requestedAt: true, decidedAt: true, consumedAt: true,
+        workflowInstance: { select: { workflowType: true, status: true, currentStep: true, correlationId: true, jobId: true, candidateId: true, applicationId: true } } },
+    });
+    if (!approval) throw new Error('Approval not found');
+    validateTenantAccess(params.context, approval.companyId);
+    const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
+    if (!requiredRoles) throw new Error(`Unknown consequential approval action type: ${approval.actionType}`);
+    RbacGuard.assertRole(params.context, requiredRoles);
+    return approval;
+  }
+
   static async listPendingApprovals(params: { context: TenantContext; limit?: number }) {
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
