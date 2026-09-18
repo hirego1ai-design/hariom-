@@ -26,7 +26,15 @@ const roomActionSchema = z.object({
 
 async function findAuthorizedInterview(session: { id: string; role: string }, roomId: string) {
   const interview = await prisma.interview.findFirst({
-    where: { OR: [{ id: roomId }, { roomUrl: `/employer/active-video-interview-interviewer-view?roomId=${roomId}` }] },
+    where: {
+      OR: [
+        { id: roomId },
+        { aiFeedback: { contains: `"roomId":"${roomId}"` } },
+        // Backward compatibility for interviews scheduled before room IDs were
+        // persisted in metadata.
+        { roomUrl: `/employer/active-video-interview-interviewer-view?roomId=${roomId}` },
+      ],
+    },
     include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
   });
   if (!interview) return null;
