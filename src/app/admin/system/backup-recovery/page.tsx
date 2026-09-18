@@ -1,54 +1,21 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
 export default function AdminBackupRecoveryPage() {
-  const [backingUp, setBackingUp] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const runBackup = () => {
-    setBackingUp(true);
-    setTimeout(() => {
-      setBackingUp(false);
-      setToast("Encrypted DB Backup created & pushed to GCS Bucket!");
-      setTimeout(() => setToast(null), 3000);
-    }, 1500);
-  };
-
-  return (
-    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
-      <AdminSidebar />
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0">
-        <AdminHeader title="Backup & Disaster Recovery (LM07)" />
-        <main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1600px] w-full mx-auto overflow-y-auto">
-          {toast && (
-            <div className="fixed bottom-6 right-6 z-50 bg-primary text-white px-5 py-3 rounded-xl shadow-2xl font-bold text-xs">
-              {toast}
-            </div>
-          )}
-
-          <div>
-            <h1 className="font-display-lg text-display-lg text-white">System Backup & Disaster Recovery (LM07)</h1>
-            <p className="text-text-muted text-sm">Automated daily snapshot backups, point-in-time recovery (PITR), and multi-region failover.</p>
-          </div>
-
-          <div className="glass-card p-6 rounded-2xl border border-white/10 space-y-4 max-w-xl">
-            <div className="space-y-1 text-xs text-text-muted">
-              <p>Last Snapshot: <span className="text-white font-bold">Today, 03:00 AM UTC</span></p>
-              <p>Storage Bucket: <span className="text-primary font-bold">gs://hirego-db-backups-prod</span></p>
-              <p>Encryption: <span className="text-green font-bold">AES-256 GCM</span></p>
-            </div>
-            <button
-              onClick={runBackup}
-              disabled={backingUp}
-              className="px-6 py-2.5 rounded-full bg-primary hover:bg-primary-light text-white font-bold text-xs shadow-lg transition-all"
-            >
-              {backingUp ? "Generating Backup Snapshot..." : "Trigger Manual Instant Backup"}
-            </button>
-          </div>
-        </main>
-      </div>
+  return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+    <AdminSidebar />
+    <div className="flex-1 md:ml-[116px] flex flex-col min-w-0">
+      <AdminHeader title="Backup & Disaster Recovery" />
+      <main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1200px] w-full mx-auto">
+        <div><h1 className="font-display-lg text-display-lg text-white">Backup & Disaster Recovery</h1><p className="text-text-muted text-sm">Deployment backup evidence and restore controls must come from the configured database/storage provider.</p></div>
+        <div className="glass-card p-6 rounded-2xl border border-amber-400/20 space-y-4 max-w-2xl">
+          <div className="text-xs font-bold text-amber-300">EXTERNAL EVIDENCE REQUIRED</div>
+          <p className="text-sm text-text-muted">HireGo does not currently expose a verified backup-provider API through this Admin screen. Snapshot time, bucket, encryption, PITR and multi-region recovery status are therefore not claimed here.</p>
+          <p className="text-xs text-text-muted">Use the production database and object-storage provider consoles for backup/restore operations until an authenticated provider integration and immutable restore audit trail are implemented.</p>
+        </div>
+      </main>
     </div>
-  );
+  </div>;
 }
