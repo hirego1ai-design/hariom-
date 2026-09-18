@@ -56,7 +56,7 @@ export class ToolRegistry {
     if (isConsequential) {
       if (!context.workflowId || !context.workflowStep) throw new PermissionDeniedError(`Consequential tool '${toolName}' requires workflow-bound human approval.`);
       try {
-        await WorkflowEngine.assertApprovedAction({
+        await WorkflowEngine.consumeApprovedAction({
           workflowId: context.workflowId,
           stepName: context.workflowStep,
           action: { toolName, params: parsedInputResult.data },
