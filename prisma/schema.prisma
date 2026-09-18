@@ -165,6 +165,7 @@ model CandidateProfile {
 
   videoResumes          VideoResume[]
   applications          Application[]
+  sourcingRelationships CandidateSourcingRelationship[]
   mcqAttempts           McqAttempt[]
   typingAssessments     TypingAssessment[]
   mockInterviewSessions MockInterviewSession[]
@@ -269,6 +270,7 @@ model JobListing {
   updatedAt          DateTime  @updatedAt
 
   applications   Application[]
+  sourcingRelationships CandidateSourcingRelationship[]
   savedBy        SavedJob[]
   mcqAssessments McqAssessment[]
   recordedAssessmentConfig RecordedAssessmentConfig?
@@ -346,6 +348,38 @@ model OtpVerification {
   createdAt   DateTime  @default(now())
 
   @@index([email, type])
+}
+
+
+enum CandidateSourcingStatus {
+  SOURCED
+  SHORTLISTED
+  INVITED
+  ACCEPTED
+  DECLINED
+}
+
+model CandidateSourcingRelationship {
+  id                 String                  @id @default(uuid())
+  jobId              String
+  job                JobListing              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateProfileId String
+  candidateProfile   CandidateProfile        @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  companyId          String
+  company            Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status             CandidateSourcingStatus @default(SOURCED)
+  sourcedById        String
+  sourcedBy          User                    @relation("CandidateSourcedBy", fields: [sourcedById], references: [id], onDelete: Restrict)
+  shortlistedAt      DateTime?
+  invitedAt          DateTime?
+  acceptedAt         DateTime?
+  declinedAt         DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@unique([jobId, candidateProfileId])
+  @@index([companyId, status])
+  @@index([candidateProfileId, status])
 }
 
 model Application {
@@ -902,6 +936,7 @@ model SubscriptionPlan {
   updatedAt                    DateTime @updatedAt
 
   subscriptions CompanySubscription[]
+  sourcingRelationships CandidateSourcingRelationship[]
 }
 
 model CompanySubscription {
