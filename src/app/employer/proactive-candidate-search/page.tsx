@@ -19,7 +19,7 @@ type Density = "compact" | "comfortable" | "detailed";
 type PanelTab = "profile" | "ai" | "notes" | "timeline";
 
 interface Tag { label: string; color: string }
-interface Note { text: string; by: string; at: string }
+interface Note { id: string; text: string; by: string; at: string }
 interface SavedSearch { name: string; query: string; filters: Record<string, string> }
 interface Collection { id: string; name: string; icon: string; candidateIds: string[] }
 
@@ -112,7 +112,6 @@ export default function CandidateMarketplace() {
       const pf = localStorage.getItem("hg_pinned"); if (pf) setPinnedFilters(JSON.parse(pf));
       const ss = localStorage.getItem("hg_saved"); if (ss) setSavedSearches(JSON.parse(ss));
       const tags = localStorage.getItem("hg_tags"); if (tags) setCandidateTags(JSON.parse(tags));
-      const notes = localStorage.getItem("hg_notes"); if (notes) setCandidateNotes(JSON.parse(notes));
       const cols = localStorage.getItem("hg_collections"); if (cols) setCollections(JSON.parse(cols));
     } catch {}
   }, []);
@@ -123,7 +122,6 @@ export default function CandidateMarketplace() {
   useEffect(() => { localStorage.setItem("hg_pinned", JSON.stringify(pinnedFilters)); }, [pinnedFilters]);
   useEffect(() => { localStorage.setItem("hg_saved", JSON.stringify(savedSearches)); }, [savedSearches]);
   useEffect(() => { localStorage.setItem("hg_tags", JSON.stringify(candidateTags)); }, [candidateTags]);
-  useEffect(() => { localStorage.setItem("hg_notes", JSON.stringify(candidateNotes)); }, [candidateNotes]);
   useEffect(() => { localStorage.setItem("hg_collections", JSON.stringify(collections)); }, [collections]);
 
   // ─── Filtering & Sorting ───
@@ -217,7 +215,12 @@ export default function CandidateMarketplace() {
   const toggleSort = (col: string) => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("desc"); } };
   const addTag = (cId: string, tag: Tag) => { setCandidateTags(prev => ({ ...prev, [cId]: [...(prev[cId] || []).filter(t => t.label !== tag.label), tag] })); setTagDropdownId(null); triggerToast(`Tag "${tag.label}" added`); };
   const removeTag = (cId: string, label: string) => { setCandidateTags(prev => ({ ...prev, [cId]: (prev[cId] || []).filter(t => t.label !== label) })); };
-  const addNote = (cId: string) => { if (!newNoteTxt.trim()) return; setCandidateNotes(prev => ({ ...prev, [cId]: [{ text: newNoteTxt, by: "Current recruiter", at: new Date().toISOString() }, ...(prev[cId] || [])] })); setNewNoteTxt(""); setNoteInputId(null); triggerToast("Note saved on this device only"); };
+  const loadNotes = async (candidateId: string) => {
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate?.applicationId) return;
+    try { const res = await fetch(`/api/employer/candidates/${candidate.applicationId}/notes`); const data = await res.json(); if (res.ok && data.success) setCandidateNotes(prev => ({ ...prev, [candidateId]: data.notes.map((n: any) => ({ id: n.id, text: n.text, by: n.author?.name || "Team member", at: new Date(n.createdAt).toLocaleString() })) })); } catch { triggerToast("Could not load notes."); }
+  };
+  const addNote = async (cId: string) => { if (!newNoteTxt.trim()) return; const candidate = candidates.find(c => c.id === cId); if (!candidate?.applicationId) return; try { const res = await fetch(`/api/employer/candidates/${candidate.applicationId}/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: newNoteTxt }) }); const data = await res.json(); if (!res.ok) throw new Error(data.error || "Failed to save note"); const n=data.note; setCandidateNotes(prev => ({ ...prev, [cId]: [{ id:n.id, text:n.text, by:n.author?.name || "Team member", at:new Date(n.createdAt).toLocaleString() }, ...(prev[cId] || [])] })); setNewNoteTxt(""); setNoteInputId(null); triggerToast("Note saved for your company."); } catch(e:any) { triggerToast(e.message || "Could not save note."); } };
   const saveSearch = () => { if (!saveSearchName.trim()) return; setSavedSearches(prev => [...prev, { name: saveSearchName, query: searchQuery, filters: { ...activeFilters } }]); setSaveSearchName(""); setSaveSearchOpen(false); triggerToast(`Search "${saveSearchName}" saved`); };
   const loadSearch = (s: SavedSearch) => { setSearchQuery(s.query); setActiveFilters(s.filters); triggerToast(`Loaded "${s.name}"`); };
   const togglePinFilter = (key: string) => { setPinnedFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); };
@@ -783,7 +786,7 @@ export default function CandidateMarketplace() {
                     <button onClick={() => addNote(previewId!)} className="px-3 py-2 rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: T.blue }}>Add</button>
                   </div>
                   {(candidateNotes[previewId!] || []).map((n, i) => (
-                    <div key={i} className="p-2.5 rounded-lg" style={{ backgroundColor: T.cardAlt }}>
+                    <div key={n.id || i} className="p-2.5 rounded-lg" style={{ backgroundColor: T.cardAlt }}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-bold text-slate-300">{n.by}</span>
                         <span className="text-[9px] text-slate-500">{n.at}</span>
