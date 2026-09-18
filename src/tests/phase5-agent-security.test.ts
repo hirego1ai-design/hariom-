@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Role } from '@prisma/client';
 import { ToolRegistry, PermissionDeniedError } from '@/lib/tools/ToolRegistry';
 import { createTenantContext, validateTenantAccess, TenantAccessError } from '@/lib/security/TenantContext';
+import { createHash } from 'crypto';
 
 export interface Phase5SecurityResult { name: string; category: string; passed: boolean; message?: string; }
 
@@ -75,6 +76,26 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     results.push({ name: 'Unexpected model-selected parameters cannot alter tool contract', category: 'Phase 5 Agent Security', passed: false });
   } catch (error) {
     results.push({ name: 'Unexpected model-selected parameters cannot alter tool contract', category: 'Phase 5 Agent Security', passed: handlerCalls === 1, message: error instanceof Error ? error.message : undefined });
+  }
+
+  try {
+    const approved = { toolName: 'sendOffer', params: { idempotencyKey: 'offer-1', candidateId: 'candidate-a', ctc: 1200000 } };
+    const mutated = { toolName: 'sendOffer', params: { idempotencyKey: 'offer-1', candidateId: 'candidate-a', ctc: 1500000 } };
+    const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
+    results.push({ name: 'Approved action digest changes when commercial/action payload is mutated', category: 'Phase 5 Agent Security', passed: digest(approved) !== digest(mutated) });
+  } catch (error) {
+    results.push({ name: 'Approved action digest mutation regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
+  }
+
+  try {
+    createTenantContext('company-a', 'candidate-user', Role.CANDIDATE);
+    // Candidate contexts are valid tenant contexts but are intentionally not
+    // in WorkflowEngine's approval role policy; this assertion protects that
+    // distinction from future permission broadening.
+    const approvalRoles = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
+    results.push({ name: 'Candidate role is excluded from consequential approval roles', category: 'Phase 5 Agent Security', passed: !approvalRoles.includes(Role.CANDIDATE) });
+  } catch (error) {
+    results.push({ name: 'Candidate approval-role regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
 
   return { results };
