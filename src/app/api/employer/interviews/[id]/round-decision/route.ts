@@ -46,10 +46,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await tx.$queryRaw`SELECT id FROM "InterviewRoundProgress" WHERE id = ${interview.roundProgress!.id} FOR UPDATE`;
       const lockedProgress = await tx.interviewRoundProgress.findUnique({
         where: { id: interview.roundProgress!.id },
-        select: { status: true },
+        select: { status: true, roundId: true },
       });
       if (lockedProgress?.status !== "ROUND_COMPLETE") {
         throw new ApiError("This interview round decision was already processed.", 409);
+      }
+      const lockedRequiredFeedbackMissing = await tx.interviewRoundInterviewer.count({
+        where: {
+          roundId: lockedProgress.roundId,
+          required: true,
+          user: { interviewFeedbacks: { none: { interviewId: id, finalizedAt: { not: null } } } },
+        },
+      });
+      if (lockedRequiredFeedbackMissing > 0) {
+        throw new ApiError("Required panel feedback is incomplete.", 409);
       }
       if (body.action === "REJECT") {
         const claimed = await tx.interviewRoundProgress.updateMany({
