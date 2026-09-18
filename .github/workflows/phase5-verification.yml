@@ -5,6 +5,8 @@ on:
     branches: [phase5-release-operations-hardening]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
 
 permissions:
   contents: read
