@@ -17,7 +17,7 @@ export default function RegisterPage() {
     email: "",
     phone: "",
     dob: "",
-    country: "United States",
+    country: "",
     city: "",
     password: "",
   });
@@ -58,7 +58,6 @@ export default function RegisterPage() {
           name: formData.fullName,
           email: formData.email,
           password: formData.password,
-          role: "CANDIDATE",
           referralCode: referralCode || undefined,
         }),
       });
@@ -92,10 +91,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[840px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[840px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
               HireGo AI
@@ -175,10 +174,10 @@ export default function RegisterPage() {
         <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6">
           <div className="w-full max-w-[480px]">
             <div className="mb-4">
-              <h1 className="font-display-xl text-[26px] leading-tight font-bold text-primary mb-1">
+              <h1 className="font-headline-md font-bold text-primary mb-1">
                 Create Account
               </h1>
-              <p className="font-body-lg text-xs text-text-secondary">
+              <p className="font-body-md text-sm text-text-secondary">
                 Start building your AI verified vector profile.
               </p>
             </div>
