@@ -1,16 +1,31 @@
 "use client";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useTheme } from "@/context/ThemeContext";
+import { useApp } from "@/context/AppContext";
 
 export default function CandidateDashboardPage() {
-  const [proctorStatus, setProctorStatus] = useState(true);
+  const router = useRouter();
+  const { user, setUser } = useApp();
   const { theme, setTheme } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("Candidate");
   const [appliedCount, setAppliedCount] = useState(0);
+  const displayName = candidateName || user.name || "Candidate";
+  const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    } finally {
+      setUser({ name: "", email: "", role: "", isLoggedIn: false });
+      router.replace("/login");
+      router.refresh();
+    }
+  };
 
   React.useEffect(() => {
     fetch("/api/candidate/profile")
@@ -70,7 +85,7 @@ export default function CandidateDashboardPage() {
                 className="text-headline-md font-bold tracking-tight"
                 style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}
               >
-                Welcome back, <span style={{ color: "var(--primary)" }}>{candidateName}</span>
+                Welcome back, <span style={{ color: "var(--primary)" }}>{displayName}</span>
               </h1>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 You have {appliedCount} active application{appliedCount === 1 ? "" : "s"} tracked on HireGo AI.
@@ -156,7 +171,7 @@ export default function CandidateDashboardPage() {
                 >
                   <button
                     onClick={() => selectTheme("light")}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">light_mode</span>
@@ -164,7 +179,7 @@ export default function CandidateDashboardPage() {
                   </button>
                   <button
                     onClick={() => selectTheme("dark")}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">dark_mode</span>
@@ -172,7 +187,7 @@ export default function CandidateDashboardPage() {
                   </button>
                   <button
                     onClick={() => selectTheme("system")}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">desktop_windows</span>
@@ -208,17 +223,15 @@ export default function CandidateDashboardPage() {
                 className="flex items-center gap-3 pl-1 cursor-pointer focus:outline-none select-none"
               >
                 <div className="text-right hidden md:block">
-                  <p className="text-xs font-bold leading-none" style={{ color: "var(--text-primary)" }}>Rahul Verma</p>
-                  <p className="text-[10px] uppercase tracking-wider font-semibold mt-0.5" style={{ color: "var(--primary)" }}>
-                    Senior UX Engineer
-                  </p>
+                  <p className="text-sm font-bold leading-none" style={{ color: "var(--text-primary)" }}>{displayName}</p>
+                  <p className="text-xs font-semibold mt-1" style={{ color: "var(--primary)" }}>Candidate</p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-secondary p-0.5">
                   <div
                     className="w-full h-full rounded-full flex items-center justify-center font-bold text-xs"
                     style={{ backgroundColor: "var(--bg-card)", color: "var(--primary)" }}
                   >
-                    RV
+                    {initials}
                   </div>
                 </div>
               </button>
@@ -232,15 +245,15 @@ export default function CandidateDashboardPage() {
                   }}
                 >
                   <div className="px-2.5 py-2">
-                    <p className="text-xs font-bold leading-none" style={{ color: "var(--text-primary)" }}>Rahul Verma</p>
-                    <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>rahul.verma@hirego.ai</p>
+                    <p className="text-sm font-bold leading-none" style={{ color: "var(--text-primary)" }}>{displayName}</p>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{user.email || "Signed-in candidate"}</p>
                   </div>
                   <div className="h-[1px] my-2" style={{ backgroundColor: "var(--outline)" }} />
                   
                   <Link
                     href="/profile"
                     onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">account_circle</span>
@@ -250,7 +263,7 @@ export default function CandidateDashboardPage() {
                   <Link
                     href="/settings"
                     onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">settings</span>
@@ -262,7 +275,7 @@ export default function CandidateDashboardPage() {
                       setProfileOpen(false);
                       setThemeOpen(true);
                     }}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">palette</span>
@@ -271,7 +284,7 @@ export default function CandidateDashboardPage() {
                   
                   <button
                     onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">notifications</span>
@@ -280,7 +293,7 @@ export default function CandidateDashboardPage() {
 
                   <button
                     onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">keyboard</span>
@@ -289,7 +302,7 @@ export default function CandidateDashboardPage() {
 
                   <button
                     onClick={() => setProfileOpen(false)}
-                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-white/5 flex items-center gap-2"
+                    className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container flex items-center gap-2"
                     style={{ color: "var(--text-primary)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">help</span>
@@ -298,15 +311,15 @@ export default function CandidateDashboardPage() {
                   
                   <div className="h-[1px] my-2" style={{ backgroundColor: "var(--outline)" }} />
                   
-                  <Link
-                    href="/login"
-                    onClick={() => setProfileOpen(false)}
+                  <button
+                    type="button"
+                    onClick={() => { setProfileOpen(false); void handleLogout(); }}
                     className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold hover:bg-red-500/10 flex items-center gap-2"
                     style={{ color: "var(--color-red)" }}
                   >
                     <span className="material-symbols-outlined text-[16px]">logout</span>
                     Logout
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>
