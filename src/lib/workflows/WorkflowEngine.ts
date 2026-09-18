@@ -133,6 +133,11 @@ export class WorkflowEngine {
     }
   }
 
+  static async assertNoUnresolvedConsequentialActions(workflowId: string): Promise<void> {
+    const unresolved = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflowId, OR: [{ decision: 'PENDING' }, { decision: 'APPROVED', consumedAt: null }] } });
+    if (unresolved > 0) throw new Error('Workflow has unresolved consequential actions');
+  }
+
   static async resumeApprovedWorkflow(params: { workflowId: string; context: TenantContext }): Promise<WorkflowInstance> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
