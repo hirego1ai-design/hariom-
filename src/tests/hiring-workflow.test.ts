@@ -2,8 +2,10 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { TestResult } from "./suite.test";
 import { PATCH as stagePatchHandler } from "@/app/api/employer/candidates/[id]/stage/route";
+import { PATCH as applicationPatchHandler } from "@/app/api/applications/route";
 import { PUT as jobPutHandler, DELETE as jobDeleteHandler } from "@/app/api/employer/jobs/[id]/route";
 import { PATCH as interviewPatchHandler } from "@/app/api/employer/interviews/[id]/route";
+import { GET as roomGetHandler, POST as roomPostHandler } from "@/app/api/interviews/room/route";
 import { NextRequest } from "next/server";
 import { createSessionToken } from "@/lib/auth";
 
@@ -62,6 +64,17 @@ export async function runHiringWorkflowTests(): Promise<{
       return { status: res.status, json };
     };
 
+    const callApplicationPatch = async (sessionToken: string, applicationId: string) => {
+      const req = new NextRequest("http://localhost/api/applications", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ applicationId }),
+      });
+      const res = await applicationPatchHandler(req);
+      const json = await res.json();
+      return { status: res.status, json };
+    };
+
     const callJobPut = async (sessionToken: string, jobId: string, body: any) => {
       const req = new NextRequest(`http://localhost/api/employer/jobs/${jobId}`, {
         method: "PUT",
@@ -113,6 +126,23 @@ export async function runHiringWorkflowTests(): Promise<{
     let applicationA: any = null;
     let applicationB: any = null;
     let interviewA: any = null;
+    const callRoomPost = async (sessionToken: string, roomId: string, action: "COMPLETE") => {
+      const req = new NextRequest("http://localhost/api/interviews/room", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ roomId, action }),
+      });
+      const res = await roomPostHandler(req);
+      return { status: res.status, json: await res.json() };
+    };
+
+    const callRoomGet = async (sessionToken: string, roomId: string) => {
+      const req = new NextRequest(`http://localhost/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, {
+        headers: { authorization: `Bearer ${sessionToken}` },
+      });
+      const res = await roomGetHandler(req);
+      return { status: res.status, json: await res.json() };
+    };
 
     try {
       // 1. Setup entities
@@ -193,6 +223,7 @@ export async function runHiringWorkflowTests(): Promise<{
       });
 
       const tokenA = await createSessionToken({ id: employerA.id, role: "EMPLOYER", email: employerA.email, name: employerA.name });
+      const candidateToken = await createSessionToken({ id: candidateUser.id, role: "CANDIDATE", email: candidateUser.email, name: candidateUser.name });
       const tokenB = await createSessionToken({ id: employerB.id, role: "EMPLOYER", email: employerB.email, name: employerB.name });
 
       // 2. Candidate Stage Update Verification
@@ -209,6 +240,73 @@ export async function runHiringWorkflowTests(): Promise<{
         resStageCross.status === 403,
         "Update returned status 403 Forbidden"
       );
+
+      const resDirectHire = await callStagePatch(tokenA, applicationA.id, "HIRED");
+      assert(
+        "Generic pipeline cannot bypass joining workflow by setting HIRED",
+        resDirectHire.status === 400,
+        "HIRED is rejected by stage validation and must use the controlled joining workflow"
+      );
+
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "HIRED" } });
+      const resEditHired = await callStagePatch(tokenA, applicationA.id, "REJECTED");
+      assert(
+        "Hired application is protected from generic pipeline edits",
+        resEditHired.status === 409,
+        "Terminal HIRED state requires placement reconciliation"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+
+      const withdrawalProcess = await prisma.jobInterviewProcess.create({ data: { jobId: jobListingA.id, companyId: companyA.id, isActive: true } });
+      const withdrawalRound = await prisma.interviewRound.create({
+        data: { processId: withdrawalProcess.id, sequence: 1, name: "Withdrawal regression round", interviewType: "VIDEO", durationMins: 45 },
+      });
+      const withdrawalProgress = await prisma.interviewRoundProgress.create({
+        data: { applicationId: applicationA.id, roundId: withdrawalRound.id, interviewId: interviewA.id, status: "SCHEDULED" },
+      });
+      const resWithdraw = await callApplicationPatch(candidateToken, applicationA.id);
+      const withdrawnApplication = await prisma.application.findUnique({ where: { id: applicationA.id } });
+      const cancelledByWithdrawal = await prisma.interview.findUnique({ where: { id: interviewA.id } });
+      const cancelledProgress = await prisma.interviewRoundProgress.findUnique({ where: { id: withdrawalProgress.id } });
+      assert(
+        "Candidate withdrawal is transactional and cancels active interviews",
+        resWithdraw.status === 200 && withdrawnApplication?.status === "WITHDRAWN" && cancelledByWithdrawal?.status === "CANCELLED" && cancelledProgress?.status === "CANCELLED",
+        "Owned application became WITHDRAWN and both interview and round progress were cancelled"
+      );
+      const resWithdrawReplay = await callApplicationPatch(candidateToken, applicationA.id);
+      assert(
+        "Candidate withdrawal replay is idempotent",
+        resWithdrawReplay.status === 200 && resWithdrawReplay.json.duplicate === true,
+        "Repeated withdrawal returns the existing terminal state"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "SCHEDULED" } });
+      await prisma.interviewRoundProgress.update({ where: { id: withdrawalProgress.id }, data: { status: "LIVE" } });
+      const resWithdrawLive = await callApplicationPatch(candidateToken, applicationA.id);
+      const applicationAfterLiveAttempt = await prisma.application.findUnique({ where: { id: applicationA.id } });
+      assert(
+        "Candidate cannot withdraw while an interview round is live",
+        resWithdrawLive.status === 409 && applicationAfterLiveAttempt?.status === "ASSESSMENT",
+        "Live interview blocks withdrawal without mutating application state"
+      );
+      await prisma.interviewRoundProgress.delete({ where: { id: withdrawalProgress.id } });
+      await prisma.jobInterviewProcess.delete({ where: { id: withdrawalProcess.id } });
+
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "REJECTED" } });
+      const resReopenRejected = await callStagePatch(tokenA, applicationA.id, "SCREENING");
+      assert(
+        "Rejected application cannot be resurrected through generic pipeline edits",
+        resReopenRejected.status === 409,
+        "REJECTED is terminal and requires an explicit reconciliation workflow"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "WITHDRAWN" } });
+      const resReopenWithdrawn = await callStagePatch(tokenA, applicationA.id, "ASSESSMENT");
+      assert(
+        "Withdrawn application cannot be resurrected through generic pipeline edits",
+        resReopenWithdrawn.status === 409,
+        "WITHDRAWN is terminal and cannot be changed by an employer stage edit"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
 
       // 3. Job Status Update Verification
       const resJobPutA = await callJobPut(tokenA, jobListingA.id, { status: "PAUSED" });
@@ -250,6 +348,66 @@ export async function runHiringWorkflowTests(): Promise<{
         "Interview update rejected for unauthorized company employer",
         resInterviewCross.status === 404,
         "Update returned status 404 Not Found"
+      );
+
+      const resCancelReplay = await callInterviewPatch(tokenA, interviewA.id, "CANCEL");
+      assert(
+        "Interview cancellation replay is idempotent",
+        resCancelReplay.status === 200 && resCancelReplay.json.idempotent === true,
+        "Repeated cancellation preserves the cancelled terminal state"
+      );
+
+      const resRescheduleCancelled = await callInterviewPatch(tokenA, interviewA.id, "RESCHEDULE", new Date(Date.now() + 259200000).toISOString());
+      assert(
+        "Cancelled interview cannot be resurrected by generic reschedule",
+        resRescheduleCancelled.status === 409,
+        "Cancelled interview requires a new scheduling workflow"
+      );
+
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "COMPLETED" } });
+      const resEditCompleted = await callInterviewPatch(tokenA, interviewA.id, "RESCHEDULE", new Date(Date.now() + 345600000).toISOString());
+      assert(
+        "Completed interview is immutable to generic schedule edits",
+        resEditCompleted.status === 409,
+        "Completed interview cannot be cancelled or rescheduled"
+      );
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "CANCELLED" } });
+
+      // Room authorization intentionally requires assignment to a configured round.
+      // Recreate that production invariant here after the withdrawal regression
+      // process above was removed, so these tests exercise terminal-room behavior
+      // rather than failing earlier at participant authorization.
+      const roomProcess = await prisma.jobInterviewProcess.create({
+        data: { jobId: jobListingA.id, companyId: companyA.id, isActive: true },
+      });
+      const roomRound = await prisma.interviewRound.create({
+        data: { processId: roomProcess.id, sequence: 1, name: "Closed room regression round", interviewType: "VIDEO", durationMins: 45 },
+      });
+      await prisma.interviewRoundInterviewer.create({
+        data: { roundId: roomRound.id, userId: employerA.id, required: true },
+      });
+      await prisma.interviewRoundProgress.create({
+        data: { applicationId: applicationA.id, roundId: roomRound.id, interviewId: interviewA.id, status: "CANCELLED" },
+      });
+
+      const closedRoom = await callRoomGet(tokenA, interviewA.id);
+      assert(
+        "Cancelled interview room does not expose signaling or ICE credentials",
+        closedRoom.status === 200 &&
+          closedRoom.json.room?.status === "CLOSED" &&
+          closedRoom.json.room?.iceServers?.length === 0 &&
+          closedRoom.json.room?.signaling?.offers?.length === 0 &&
+          closedRoom.json.room?.signaling?.answers?.length === 0 &&
+          closedRoom.json.room?.signaling?.candidates?.length === 0,
+        "Closed room returns no signaling data or ICE credentials"
+      );
+
+      const completeCancelled = await callRoomPost(tokenA, interviewA.id, "COMPLETE");
+      const cancelledAfterComplete = await prisma.interview.findUnique({ where: { id: interviewA.id } });
+      assert(
+        "Cancelled interview cannot be resurrected by stale room completion",
+        completeCancelled.status === 409 && cancelledAfterComplete?.status === "CANCELLED",
+        "Stale COMPLETE is rejected and terminal CANCELLED state is preserved"
       );
 
       // 5. Job Deletion Verification

@@ -63,6 +63,21 @@ export async function GET(req: NextRequest) {
     const interview = await findAuthorizedInterview(session, roomId);
     if (!interview) return jsonError("Forbidden: You are not an authorized participant for this interview.", 403);
 
+    if (!["SCHEDULED", "RESCHEDULED", "LIVE"].includes(interview.status)) {
+      return NextResponse.json({
+        success: true,
+        room: {
+          roomId,
+          interviewId: interview.id,
+          status: ["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status) ? "COMPLETED" : "CLOSED",
+          participantCount: 0,
+          isHost: session.role !== "CANDIDATE",
+          iceServers: [],
+          signaling: { offers: [], answers: [], candidates: [] },
+        },
+      });
+    }
+
     const now = new Date();
     await prisma.interviewSignal.deleteMany({ where: { interviewId: interview.id, expiresAt: { lte: now } } });
     const signals = await prisma.interviewSignal.findMany({
@@ -107,18 +122,47 @@ export async function POST(req: NextRequest) {
       });
       if (blocking > 0) throw new ApiError("Complete your pending mandatory interview feedback before joining another interview.", 409);
     }
-    if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
+    if (["COMPLETED", "FEEDBACK_SUBMITTED", "CANCELLED"].includes(interview.status)) {
+      if (body.action === "COMPLETE" && session.role !== "CANDIDATE" && ["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status)) {
+        return NextResponse.json({ success: true, roomId: body.roomId, status: "COMPLETED", idempotent: true });
+      }
+      throw new ApiError("Interview room is closed", 409);
+    }
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
-      await prisma.$transaction(async (tx) => {
-        await tx.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
-        if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
+      const completed = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.interview.updateMany({
+          where: { id: interview.id, status: { in: ["SCHEDULED", "RESCHEDULED", "LIVE"] } },
+          data: { status: "COMPLETED" },
+        });
+        if (claimed.count !== 1) return false;
+        if (interview.roundProgress) {
+          await tx.interviewRoundProgress.updateMany({
+            where: { id: interview.roundProgress.id, status: { in: ["SCHEDULED", "LIVE"] } },
+            data: {
+              status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE",
+              completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date(),
+            },
+          });
+        }
+        return true;
       });
+      if (!completed) return NextResponse.json({ success: true, roomId: body.roomId, status: "COMPLETED", idempotent: true });
     } else {
       const payload = body.action === "ICE_CANDIDATE" ? { candidate: body.candidate } : { sdp: body.sdp };
-      await prisma.interviewSignal.create({
-        data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
+      await prisma.$transaction(async (tx) => {
+        // Fence signaling against a concurrent cancel/complete. The initial
+        // authorization read is not authoritative once another request mutates
+        // the interview lifecycle.
+        await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${interview.id} FOR UPDATE`;
+        const current = await tx.interview.findUnique({ where: { id: interview.id }, select: { status: true } });
+        if (!current || !["SCHEDULED", "RESCHEDULED", "LIVE"].includes(current.status)) {
+          throw new ApiError("Interview room is closed", 409);
+        }
+        await tx.interviewSignal.create({
+          data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
+        });
       });
     }
     return NextResponse.json({ success: true, roomId: body.roomId, status: body.action === "COMPLETE" ? "COMPLETED" : "ACTIVE" });

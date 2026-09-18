@@ -18,7 +18,7 @@ const roundSchema = z.object({
   previousFeedbackVisibility: z.enum(["FULL", "SUMMARY_ONLY", "HIDDEN_UNTIL_OWN_FEEDBACK", "HIDDEN"]).default("HIDDEN_UNTIL_OWN_FEEDBACK"),
   interviewerUserIds: z.array(z.string().min(1)).max(10).default([]),
 });
-const bodySchema = z.object({ rounds: z.array(roundSchema).min(1).max(4) });
+const bodySchema = z.object({ rounds: z.array(roundSchema).min(1).max(12) });
 
 async function context(req: NextRequest, jobId: string) {
   const session = await getCurrentSession(req.headers);
@@ -63,12 +63,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const { session, job } = await context(req, id);
     const body = await readValidatedJson(req, bodySchema);
-    const requestedUsers = [...new Set(body.rounds.flatMap((r) => r.interviewerUserIds))];
+    const requestedUsers = [...new Set(body.rounds.flatMap((r) => r.interviewerUserIds ?? []))];
     if (requestedUsers.length) {
       const count = await prisma.employerProfile.count({ where: { companyId: job.companyId, userId: { in: requestedUsers } } });
       if (count !== requestedUsers.length) throw new ApiError("One or more interviewers are not active members of this company.", 400);
     }
     const process = await prisma.$transaction(async (tx) => {
+      // Serialize process publication per job. Without this lock, two first-time
+      // PUTs can both observe no process and race on the unique jobId constraint.
+      await tx.$queryRaw`SELECT id FROM "JobListing" WHERE id = ${job.id} FOR UPDATE`;
+      // Membership can change after the preflight check. Revalidate under the
+      // publication lock so a removed company member cannot be persisted as an
+      // interviewer by a stale concurrent request.
+      if (requestedUsers.length) {
+        const lockedMemberCount = await tx.employerProfile.count({
+          where: { companyId: job.companyId, userId: { in: requestedUsers } },
+        });
+        if (lockedMemberCount !== requestedUsers.length) {
+          throw new ApiError("One or more interviewers are not active members of this company.", 400);
+        }
+      }
       const existing = await tx.jobInterviewProcess.findUnique({ where: { jobId: job.id }, include: { rounds: { select: { id: true } } } });
       if (existing?.rounds.length) {
         const inUse = await tx.interviewRoundProgress.count({ where: { roundId: { in: existing.rounds.map((r) => r.id) } } });
@@ -83,7 +97,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             interviewType: round.interviewType, durationMins: round.durationMins, mandatory: round.mandatory,
             mandatoryFeedback: round.mandatoryFeedback, candidateFeedbackPolicy: round.candidateFeedbackPolicy,
             previousFeedbackVisibility: round.previousFeedbackVisibility,
-            interviewers: { create: round.interviewerUserIds.map((userId) => ({ userId, required: true })) },
+            interviewers: { create: (round.interviewerUserIds ?? []).map((userId) => ({ userId, required: true })) },
           })) },
         },
         include: { rounds: { orderBy: { sequence: "asc" }, include: { interviewers: true } } },

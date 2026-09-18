@@ -24,6 +24,7 @@ enum ApplicationStatus {
   SHORTLISTED
   HIRED
   REJECTED
+  WITHDRAWN
 }
 
 enum JobStatus {

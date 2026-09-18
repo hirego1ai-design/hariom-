@@ -31,6 +31,12 @@ export async function POST(request: NextRequest) {
     }
     const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: true }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
+    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
+      return NextResponse.json({ success: false, error: "Interviews cannot be scheduled for an application in a terminal state." }, { status: 409 });
+    }
+    if (new Date(body.scheduledAt).getTime() <= Date.now()) {
+      return NextResponse.json({ success: false, error: "Interview date and time must be in the future." }, { status: 400 });
+    }
     if (session.role !== "ADMIN") {
       const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
       if (!profile || profile.companyId !== application.job.companyId) return NextResponse.json({ success: false, error: "You cannot schedule this candidate." }, { status: 403 });
@@ -60,6 +66,36 @@ export async function POST(request: NextRequest) {
     const roomUrl = mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
     const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
+      // Serialize scheduling for this application. The preflight read above is
+      // only for a friendly error; this lock + re-read is the authoritative
+      // duplicate-scheduling guard across concurrent requests/replicas.
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${application.id} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({ where: { id: application.id }, select: { status: true } });
+      if (!lockedApplication || ["HIRED", "REJECTED", "WITHDRAWN"].includes(lockedApplication.status)) {
+        throw new Error("APPLICATION_NOT_SCHEDULABLE");
+      }
+      const progress = await tx.interviewRoundProgress.findUnique({
+        where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
+        select: { interviewId: true, status: true },
+      });
+      if (round.sequence > 1) {
+        const previous = await tx.interviewRound.findUnique({
+          where: { processId_sequence: { processId: round.processId, sequence: round.sequence - 1 } },
+          select: { id: true },
+        });
+        if (previous) {
+          const priorProgress = await tx.interviewRoundProgress.findUnique({
+            where: { applicationId_roundId: { applicationId: application.id, roundId: previous.id } },
+            select: { status: true },
+          });
+          if (!priorProgress || !["ROUND_COMPLETE", "TRANSFERRED"].includes(priorProgress.status)) {
+            throw new Error("PREVIOUS_INTERVIEW_ROUND_INCOMPLETE");
+          }
+        }
+      }
+      if (progress?.interviewId) {
+        throw new Error("INTERVIEW_ROUND_ALREADY_SCHEDULED");
+      }
       const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
       await tx.interviewRoundProgress.upsert({
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
@@ -75,6 +111,9 @@ export async function POST(request: NextRequest) {
     const whatsapp = body.notifyWhatsapp && application.candidateProfile.user?.phoneNumber ? await sendWhatsAppMessage(application.candidateProfile.user.phoneNumber, `HireGo AI ${round.name} interview scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`) : { sent: false, reason: body.notifyWhatsapp ? "Candidate phone number is missing." : "Not selected." };
     return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
+    if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
+    if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
   }

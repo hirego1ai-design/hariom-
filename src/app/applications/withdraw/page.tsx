@@ -1,20 +1,107 @@
 "use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
 
-const rawHtml = "\n<!-- Persistent Background Assets -->\n<div className=\"fixed inset-0 grid-bg pointer-events-none\"></div>\n<div className=\"fixed -bottom-1/4 -left-1/4 w-1/2 h-1/2 glow-red blur-3xl pointer-events-none\"></div>\n<div className=\"fixed -top-1/4 -right-1/4 w-1/2 h-1/2 glow-blue blur-3xl pointer-events-none\"></div>\n<!-- Main Content Background (Mocking the page behind the modal) -->\n<main className=\"container-max mx-auto px-margin-desktop opacity-20 transition-opacity duration-700 blur-sm\">\n<div className=\"flex flex-col gap-stack-lg\">\n<header className=\"flex justify-between items-center py-6\">\n<div className=\"font-display-lg text-primary font-bold tracking-tight\">HireGo AI</div>\n</header>\n<div className=\"grid grid-cols-12 gap-gutter\">\n<div className=\"col-span-8 bg-surface-container rounded-lg h-96\"></div>\n<div className=\"col-span-4 bg-surface-container rounded-lg h-96\"></div>\n</div>\n</div>\n</main>\n<!-- Overlay Backrop -->\n<div className=\"fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[60]\"></div>\n<!-- C33: WITHDRAW CONFIRMATION MODAL -->\n<div className=\"relative z-[70] w-full max-w-[480px] mx-margin-mobile\">\n<div className=\"glass-panel p-stack-lg rounded-lg shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in duration-300\">\n<!-- Warning Icon Section -->\n<div className=\"w-20 h-20 rounded-full bg-yellow/10 flex items-center justify-center mb-stack-lg border border-yellow/20\">\n<span className=\"material-symbols-outlined text-[48px] text-yellow\" style=\"font-variation-settings: 'FILL' 0;\">warning</span>\n</div>\n<!-- Typography Content -->\n<h2 className=\"font-headline-md text-headline-md text-on-background mb-stack-sm tracking-tight\">Withdraw Application?</h2>\n<p className=\"font-body-md text-on-surface-variant mb-stack-lg px-4 leading-relaxed\">\n                You are about to withdraw your application for <span className=\"text-primary font-bold\">Senior Product Designer</span> at <span className=\"text-on-background font-bold\">Lumina Tech</span>. This action cannot be undone and you will lose all progress.\n            </p>\n<!-- Metadata Box -->\n<div className=\"w-full bg-surface-container-highest/40 rounded-lg p-stack-md border border-white/5 mb-stack-lg text-left flex items-center gap-stack-md\">\n<div className=\"w-12 h-12 rounded-full overflow-hidden bg-surface-variant flex-shrink-0\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional corporate logo for a technology company named Lumina Tech. The logo features a minimalist geometric icon with clean sans-serif typography. The style is modern, high-tech, and high-trust, utilizing a sophisticated dark-mode aesthetic with subtle red and blue accents to maintain brand consistency with HireGo AI.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuBuKfV_02jATLWKR9hzVNsfuTlrrooEb_SS3zAMBS3wlnoqRR7wnolBwWPVaYCS2rC0iFHmC2fpq0j9QC_71fpwiBslZQukwIG6yFqmIpZUDPa-Xs5zF7y4KuHrNxRRTK0BMM644F8J2wgJTR98jGDhDQaEgG8JNnply2fQptn7Xg_PBaf_dS7DRh0XjaPHbERCMB9wcPEFGKHqWnZZZwUUwqDKmB2sfxjnY7sGNH8cmYHIkzCKgejlml6DSTzI6E9XUr1avP14mgk\">\n</div>\n<div>\n<div className=\"font-label-md text-on-background\">Lumina Tech</div>\n<div className=\"font-body-md text-on-surface-variant text-sm\">Applied on Oct 24, 2023</div>\n</div>\n</div>\n<!-- Action Buttons -->\n<div className=\"w-full flex flex-col gap-stack-md\">\n<button className=\"btn-primary-red w-full h-[50px] rounded-full text-on-background font-bold font-body-md tracking-wide transition-all active:scale-95 flex items-center justify-center\">\n                    Yes Withdraw\n                </button>\n<button className=\"btn-ghost w-full h-[50px] rounded-full text-on-surface font-body-md tracking-wide transition-all hover:bg-white/5 active:scale-95\">\n                    Keep Application\n                </button>\n</div>\n</div>\n<!-- Decorative Glow beneath Modal -->\n<div className=\"absolute -bottom-10 left-1/2 -translate-x-1/2 w-[80%] h-20 bg-primary/20 blur-[80px] -z-10 rounded-full\"></div>\n</div>\n<!-- UI Micro-interactions -->\n\n<div className=\"fixed bg-white rounded-full opacity-10 pointer-events-none\" style=\"width: 2.53668px; height: 2.53668px; left: 3.95964vw; top: 74.6993vh;\"></div>";
+type Application = {
+  id: string;
+  status: string;
+  job: { title: string; company: { name: string } };
+};
 
-export default function C43Page() {
+function WithdrawApplicationContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const applicationId = searchParams.get("applicationId");
+  const [application, setApplication] = useState<Application | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/applications", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "Unable to load application.");
+        const found = (data.applications || []).find((item: Application) => item.id === applicationId);
+        if (!found) throw new Error("Application not found or no longer accessible.");
+        setApplication(found);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load application."))
+      .finally(() => setLoading(false));
+  }, [applicationId]);
+
+  async function withdraw() {
+    if (!applicationId || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Unable to withdraw application.");
+      router.replace("/applications");
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to withdraw application.");
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+      <main className="flex-1 flex items-center justify-center p-6">
+        <section className="w-full max-w-[520px] rounded-2xl border border-white/10 bg-white/[0.04] p-7 shadow-2xl">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-yellow/20 bg-yellow/10">
+            <span className="material-symbols-outlined text-4xl text-yellow">warning</span>
+          </div>
+          <h1 className="text-center text-2xl font-bold text-white">Withdraw application?</h1>
+
+          {loading ? (
+            <p className="mt-5 text-center text-sm text-text-secondary">Loading application...</p>
+          ) : error && !application ? (
+            <div className="mt-5">
+              <p className="rounded-lg bg-red-400/10 p-3 text-sm text-red-300">{error}</p>
+              <button onClick={() => router.back()} className="mt-4 w-full rounded-full border border-white/10 p-3 text-sm text-white">Go back</button>
+            </div>
+          ) : application ? (
+            <>
+              <p className="mt-4 text-center text-sm leading-6 text-text-secondary">
+                You are about to withdraw your application for <strong className="text-white">{application.job.title}</strong> at{" "}
+                <strong className="text-white">{application.job.company.name}</strong>. This action cannot be undone.
+              </p>
+              <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="font-semibold text-white">{application.job.company.name}</p>
+                <p className="mt-1 text-sm text-text-secondary">{application.job.title}</p>
+                <p className="mt-2 text-xs uppercase tracking-wide text-text-muted">Current status: {application.status}</p>
+              </div>
+              {error && <p className="mt-4 rounded-lg bg-red-400/10 p-3 text-sm text-red-300">{error}</p>}
+              <div className="mt-6 space-y-3">
+                <button disabled={submitting} onClick={withdraw} className="w-full rounded-full bg-red-600 p-3 font-bold text-white disabled:opacity-50">
+                  {submitting ? "Withdrawing..." : "Yes, withdraw application"}
+                </button>
+                <button disabled={submitting} onClick={() => router.back()} className="w-full rounded-full border border-white/10 p-3 text-white disabled:opacity-50">
+                  Keep application
+                </button>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </main>
     </div>
-    </div>
-);
+  );
+}
+
+
+export default function WithdrawApplicationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0E0E0E] flex text-text-primary"><CandidateSidebar /><main className="flex-1 flex items-center justify-center p-6"><p className="text-sm text-text-secondary">Loading application...</p></main></div>}>
+      <WithdrawApplicationContent />
+    </Suspense>
+  );
 }
