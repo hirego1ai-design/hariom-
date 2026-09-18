@@ -5,6 +5,7 @@ import { registerProductionConsumers } from '../events/ProductionConsumers';
 import { PphBillingWorker } from '../pph-billing';
 import { WhatsAppQueueRecovery, type WhatsAppRecoveryReport } from '../whatsapp-queue';
 import { SecurityAuditDeliveryWorker, type SecurityAuditDeliveryReport } from '../securityAuditDelivery';
+import { recoverStaleVideoAnalysisJobs } from '../videoAnalysisQueue';
 
 export interface RecoveryReport {
   pphBilling?: { invoiced: number; held: number };
@@ -14,6 +15,7 @@ export interface RecoveryReport {
   outbox: OutboxPollReport;
   whatsapp?: WhatsAppRecoveryReport;
   securityAudit?: SecurityAuditDeliveryReport;
+  videoAnalysis?: { scanned: number; retried: number; exhausted: number };
   timeBudgetExhausted: boolean;
 }
 
@@ -38,6 +40,10 @@ export class FailureRecoveryRunner {
     const securityAudit = Date.now() < stopAt
       ? await SecurityAuditDeliveryWorker.run(4)
       : { configured: Boolean(process.env.SIEM_WEBHOOK_URL && process.env.SIEM_WEBHOOK_TOKEN), pending: 0, delivered: 0, retried: 0, failed: 0, unclaimed: 0 };
+
+    const videoAnalysis = Date.now() < stopAt
+      ? await recoverStaleVideoAnalysisJobs(10)
+      : { scanned: 0, retried: 0, exhausted: 0 };
 
     // 2. Expire stale held budget reservations
     const expiredReservations = Date.now() < stopAt ? await BudgetManager.expireStaleReservations(20, stopAt) : 0;
@@ -82,6 +88,7 @@ export class FailureRecoveryRunner {
       outbox,
       whatsapp,
       securityAudit,
+      videoAnalysis,
       timeBudgetExhausted: Date.now() >= stopAt,
     };
   }
