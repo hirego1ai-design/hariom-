@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { formatMoney, loadRevenueTransactions, revenueUnavailable } from "../_shared";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_revenue_summary", 60, 60_000);
     const transactions = await loadRevenueTransactions();
     const successful = transactions.filter((transaction) => transaction.status === "Success");
     const pending = transactions.filter((transaction) => transaction.status === "Pending");
