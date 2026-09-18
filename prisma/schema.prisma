@@ -151,6 +151,8 @@ model CandidateProfile {
   creditWallet          CandidateCreditWallet?
   creditLedgerEntries   CandidateCreditLedger[]
   serviceUsages         CandidateServiceUsage[]
+
+  @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
 
 model Company {
