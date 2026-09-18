@@ -1858,6 +1858,7 @@ model RecordedAssessmentAttempt {
   mediaType          RecordedAssessmentMediaType
   status             RecordedAssessmentAttemptStatus @default(CREATED)
   questionSetVersion Int                             @default(1)
+  configSnapshot     Json?
   startedAt          DateTime?
   completedAt        DateTime?
   terminatedAt       DateTime?
@@ -1883,6 +1884,10 @@ model RecordedAssessmentAttemptQuestion {
   orderIndex            Int
   readingTimeSeconds    Int                       @default(10)
   answerDurationSeconds Int
+  sourceVersion         Int
+  difficulty            String
+  industry              String?
+  department            String?
   createdAt             DateTime                  @default(now())
 
   response RecordedAssessmentResponse?

@@ -79,6 +79,8 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
         jobListingId: jobId,
         mediaType: config.mediaType,
         status: "CREATED",
+        questionSetVersion: Math.max(...selected.map((q) => q.version)),
+        configSnapshot: { mediaType: config.mediaType, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS, defaultAnswerSeconds: config.defaultAnswerSeconds, questionCount: config.questionCount, proctoringEnabled: config.proctoringEnabled },
         questions: {
           create: selected.map((q, index) => ({
             sourceQuestionId: q.id,
@@ -88,6 +90,10 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
             orderIndex: index,
             readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
             answerDurationSeconds: q.answerDurationSeconds,
+            sourceVersion: q.version,
+            difficulty: q.difficulty,
+            industry: q.industry,
+            department: q.department,
           })),
         },
       },

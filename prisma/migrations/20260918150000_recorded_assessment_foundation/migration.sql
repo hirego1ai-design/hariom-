@@ -20,14 +20,14 @@ CREATE TABLE "RecordedAssessmentConfig" (
 CREATE TABLE "RecordedAssessmentAttempt" (
   "id" TEXT NOT NULL, "candidateProfileId" TEXT NOT NULL, "jobListingId" TEXT NOT NULL,
   "mediaType" "RecordedAssessmentMediaType" NOT NULL, "status" "RecordedAssessmentAttemptStatus" NOT NULL DEFAULT 'CREATED',
-  "questionSetVersion" INTEGER NOT NULL DEFAULT 1, "startedAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3), "terminatedAt" TIMESTAMP(3),
+  "questionSetVersion" INTEGER NOT NULL DEFAULT 1, "configSnapshot" JSONB, "startedAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3), "terminatedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "RecordedAssessmentAttempt_pkey" PRIMARY KEY ("id")
 );
 CREATE TABLE "RecordedAssessmentAttemptQuestion" (
   "id" TEXT NOT NULL, "attemptId" TEXT NOT NULL, "sourceQuestionId" TEXT, "questionText" TEXT NOT NULL, "roleTitle" TEXT NOT NULL,
   "skillTags" TEXT[] DEFAULT ARRAY[]::TEXT[], "orderIndex" INTEGER NOT NULL, "readingTimeSeconds" INTEGER NOT NULL DEFAULT 10,
-  "answerDurationSeconds" INTEGER NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "answerDurationSeconds" INTEGER NOT NULL, "sourceVersion" INTEGER NOT NULL, "difficulty" TEXT NOT NULL, "industry" TEXT, "department" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "RecordedAssessmentAttemptQuestion_pkey" PRIMARY KEY ("id")
 );
 CREATE TABLE "RecordedAssessmentResponse" (
@@ -86,3 +86,5 @@ CREATE UNIQUE INDEX "RecordedAssessmentAnalysisJob_idempotencyKey_key" ON "Recor
 CREATE INDEX "RecordedAssessmentAnalysisJob_responseId_idx" ON "RecordedAssessmentAnalysisJob"("responseId");
 CREATE INDEX "RecordedAssessmentAnalysisJob_status_idx" ON "RecordedAssessmentAnalysisJob"("status");
 ALTER TABLE "RecordedAssessmentAnalysisJob" ADD CONSTRAINT "RecordedAssessmentAnalysisJob_responseId_fkey" FOREIGN KEY ("responseId") REFERENCES "RecordedAssessmentResponse"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+CREATE UNIQUE INDEX "RecordedAssessmentAttempt_active_candidate_job_key" ON "RecordedAssessmentAttempt"("candidateProfileId","jobListingId") WHERE "status" IN ('CREATED','IN_PROGRESS');
