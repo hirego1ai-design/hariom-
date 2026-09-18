@@ -14,6 +14,8 @@ export default function CandidateDashboardPage() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("Candidate");
   const [appliedCount, setAppliedCount] = useState(0);
+  const [availability, setAvailability] = useState("RECONFIRMATION_REQUIRED");
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const displayName = candidateName || user.name || "Candidate";
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
 
@@ -40,6 +42,11 @@ export default function CandidateDashboardPage() {
       })
       .catch(() => {});
 
+    fetch("/api/candidate/availability")
+      .then((res) => res.json())
+      .then((data) => { if (data.success && data.availability?.status) setAvailability(data.availability.status); })
+      .catch(() => {});
+
     fetch("/api/applications")
       .then((res) => res.json())
       .then((data) => {
@@ -49,6 +56,15 @@ export default function CandidateDashboardPage() {
       })
       .catch(() => {});
   }, []);
+
+  const updateAvailability = async (status: "ACTIVE_CONFIRMED"|"NOT_LOOKING"|"TEMPORARILY_UNAVAILABLE") => {
+    setAvailabilitySaving(true);
+    try {
+      const res = await fetch("/api/candidate/availability", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ status }) });
+      const data = await res.json();
+      if (res.ok && data.success) setAvailability(data.availability.availabilityStatus);
+    } finally { setAvailabilitySaving(false); }
+  };
 
   const selectTheme = (mode: "light" | "dark" | "system") => {
     if (mode === "system") {
@@ -286,6 +302,13 @@ export default function CandidateDashboardPage() {
         {/* Dashboard Main Canvas */}
         <main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1600px] w-full mx-auto overflow-y-auto">
           
+          <section className="rounded-2xl p-5 sm:p-6" style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--outline)", boxShadow: "var(--shadow-card)" }}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--primary)" }}>Job search availability</p><h2 className="mt-1 text-lg font-bold" style={{ color: "var(--text-primary)" }}>{availability === "ACTIVE_CONFIRMED" ? "Available for opportunities" : availability === "NOT_LOOKING" ? "Not looking right now" : availability === "TEMPORARILY_UNAVAILABLE" ? "Temporarily unavailable" : "Please confirm your availability"}</h2><p className="mt-1 max-w-2xl text-xs" style={{ color: "var(--text-muted)" }}>Employers only see you as actively available after you confirm it. HireGo does not infer availability from an old profile.</p></div>
+              <div className="flex flex-wrap gap-2"><button disabled={availabilitySaving} onClick={()=>void updateAvailability("ACTIVE_CONFIRMED")} className="min-h-11 rounded-full px-5 text-xs font-bold text-white disabled:opacity-50" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))" }}>I’m available</button><button disabled={availabilitySaving} onClick={()=>void updateAvailability("TEMPORARILY_UNAVAILABLE")} className="min-h-11 rounded-full border px-5 text-xs font-bold disabled:opacity-50" style={{ borderColor: "var(--outline)", color: "var(--text-primary)" }}>Pause</button><button disabled={availabilitySaving} onClick={()=>void updateAvailability("NOT_LOOKING")} className="min-h-11 rounded-full border px-5 text-xs font-bold disabled:opacity-50" style={{ borderColor: "var(--outline)", color: "var(--text-muted)" }}>Not looking</button></div>
+            </div>
+          </section>
+
           {/* Quick Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter">
             <div
