@@ -60,6 +60,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
       if (!nextRound) {
+        const selected = await tx.application.updateMany({
+          where: { id: interview.applicationId, status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] } },
+          data: { status: "SHORTLISTED" },
+        });
+        if (selected.count !== 1) {
+          throw new ApiError("Application is already in a terminal state and cannot be selected.", 409);
+        }
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
       await tx.interviewRoundProgress.upsert({
