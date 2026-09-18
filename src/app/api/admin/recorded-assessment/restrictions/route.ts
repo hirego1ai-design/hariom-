@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { RecordedAssessmentRestrictionStatus } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
@@ -16,10 +17,11 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required.", 403);
-    const status = request.nextUrl.searchParams.get("status") || "PENDING_REVIEW";
-    if (!["PENDING_REVIEW","ACTIVE","REJECTED","EXPIRED","REVOKED"].includes(status)) throw new ApiError("Invalid restriction status.", 400);
+    const statusParam = request.nextUrl.searchParams.get("status") || "PENDING_REVIEW";
+    if (!Object.values(RecordedAssessmentRestrictionStatus).includes(statusParam as RecordedAssessmentRestrictionStatus)) throw new ApiError("Invalid restriction status.", 400);
+    const status = statusParam as RecordedAssessmentRestrictionStatus;
     const restrictions = await prisma.recordedAssessmentRestriction.findMany({
-      where: { status: status as any },
+      where: { status },
       orderBy: { createdAt: "asc" },
       take: 100,
       include: { user: { select: { id: true, name: true, email: true } } },
