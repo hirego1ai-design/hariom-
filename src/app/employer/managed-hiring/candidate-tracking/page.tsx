@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 import { fetchEmployerCandidates } from "@/lib/employerCandidates";
 
 const stages = ["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"];
+const editableStages = ["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "REJECTED"];
 const labels: Record<string, string> = {
   SCREENING: "Screening",
   ASSESSMENT: "Assessment",
@@ -77,14 +78,16 @@ export default function ManagedHiringCandidateTrackingPage() {
                           aria-label={`Move ${candidate.name}`}
                           value={normalizeStage(candidate.stage)}
                           onChange={(event) => move(candidate.applicationId, event.target.value)}
-                          disabled={!candidate.applicationId}
+                          disabled={!candidate.applicationId || normalizeStage(candidate.stage) === "HIRED"}
                           className="mt-2 w-full rounded bg-black/30 border border-white/10 p-1 text-[10px] text-white"
                         >
-                          {stages.map((option) => <option key={option} value={option}>{labels[option]}</option>)}
+                          {normalizeStage(candidate.stage) === "HIRED"
+                            ? <option value="HIRED">{labels.HIRED}</option>
+                            : editableStages.map((option) => <option key={option} value={option}>{labels[option]}</option>)}
                         </select>
                         {candidate.applicationId && <>
                           <Link href={`/employer/interview-scheduler?applicationId=${encodeURIComponent(candidate.applicationId)}`} className="mt-2 block text-center rounded bg-primary/20 text-primary p-1.5 text-[10px] font-bold">Schedule interview</Link>
-                          <Link href={`/employer/managed-hiring/join?applicationId=${encodeURIComponent(candidate.applicationId)}&candidateName=${encodeURIComponent(candidate.name || "Candidate")}&jobTitle=${encodeURIComponent(candidate.appliedJob || "Role")}`} className="mt-2 block text-center rounded bg-emerald-400/15 text-emerald-300 p-1.5 text-[10px] font-bold">Mark joined & generate invoice</Link>
+                          {normalizeStage(candidate.stage) === "SHORTLISTED" && <Link href={`/employer/managed-hiring/join?applicationId=${encodeURIComponent(candidate.applicationId)}&candidateName=${encodeURIComponent(candidate.name || "Candidate")}&jobTitle=${encodeURIComponent(candidate.appliedJob || "Role")}`} className="mt-2 block text-center rounded bg-emerald-400/15 text-emerald-300 p-1.5 text-[10px] font-bold">Mark joined & schedule invoice</Link>}
                         </>}
                       </div>
                     ))}
