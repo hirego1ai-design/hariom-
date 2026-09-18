@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { getAuditLogs, logAuditEvent } from "@/lib/auditLogger";
 
@@ -329,18 +330,34 @@ export async function GET(req: Request) {
   }
 }
 
+const managedHiringUpdateSchema = z.object({
+  updatedConfig: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  auditEntry: z.object({
+    category: z.enum(["Pricing", "Invoice Milestone", "Replacement", "Credit Policy", "Contract Profile", "Approval Workflow"]).optional(),
+    action: z.string().trim().min(1).max(200).optional(),
+    oldValue: z.string().trim().max(500).optional(),
+    newValue: z.string().trim().max(500).optional(),
+    reason: z.string().trim().min(3).max(1000).optional(),
+  }).strict().optional(),
+  reason: z.string().trim().min(3).max(1000).optional(),
+}).strict().superRefine((v, ctx) => {
+  if (!v.updatedConfig && !v.config) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Managed hiring configuration is required." });
+  if (v.updatedConfig && v.config) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Provide only one configuration field." });
+});
+
+const ALLOWED_CONFIG_KEYS = new Set(Object.keys(managedHiringGlobalConfig).filter((key) => key !== "lastUpdated"));
+
 export async function POST(req: Request) {
   try {
     const session = await requireAdminSession(req);
     await enforceRateLimit(req, "admin_managed_hiring_config_write", 10, 60_000);
-    const body = await req.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("Invalid configuration payload", 400);
-    const keys = Object.keys(body);
-    if (keys.some((key) => !["updatedConfig", "config", "auditEntry", "reason"].includes(key))) throw new ApiError("Unknown configuration field", 400);
-    const { updatedConfig, config, auditEntry, reason } = body as Record<string, any>;
+    const { updatedConfig, config, auditEntry, reason } = await readValidatedJson(req, managedHiringUpdateSchema);
 
     const payloadConfig = updatedConfig || config;
     if (!payloadConfig || typeof payloadConfig !== "object" || Array.isArray(payloadConfig)) throw new ApiError("Managed hiring configuration is required", 400);
+    const configKeys = Object.keys(payloadConfig);
+    if (configKeys.some((key) => !ALLOWED_CONFIG_KEYS.has(key) || ["__proto__", "prototype", "constructor", "lastUpdated"].includes(key))) throw new ApiError("Unknown or protected managed hiring configuration section", 400);
     const encoded = JSON.stringify(payloadConfig);
     if (encoded.length > 100_000) throw new ApiError("Managed hiring configuration payload is too large", 413);
 
