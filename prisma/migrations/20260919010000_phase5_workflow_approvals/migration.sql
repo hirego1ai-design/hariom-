@@ -15,6 +15,7 @@ CREATE TABLE "WorkflowApproval" (
     "decisionNotes" TEXT,
     "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "decidedAt" TIMESTAMP(3),
+    "consumedAt" TIMESTAMP(3),
 
     CONSTRAINT "WorkflowApproval_pkey" PRIMARY KEY ("id")
 );
