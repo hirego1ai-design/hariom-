@@ -1,314 +1,179 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+
+type ResponseRecord = { id: string } | null;
+type AttemptQuestion = {
+  id: string; questionText: string; roleTitle: string; skillTags: string[];
+  orderIndex: number; readingTimeSeconds: number; answerDurationSeconds: number; response: ResponseRecord;
+};
+type Attempt = {
+  id: string; mediaType: "AUDIO" | "VIDEO"; status: string; questions: AttemptQuestion[];
+};
+type Phase = "READY" | "PREPARE" | "COUNTDOWN" | "RECORDING" | "SAVING" | "COMPLETE" | "ERROR";
+
+async function jsonRequest(url: string, init?: RequestInit) {
+  const response = await fetch(url, init);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || body.message || "Request failed.");
+  return body;
+}
 
 export default function VideoAssessmentActivePage() {
-  const router = useRouter();
-  const [isRecording, setIsRecording] = useState(false);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [timerSeconds, setTimerSeconds] = useState(120);
-  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
+  const searchParams = useSearchParams();
+  const jobId = searchParams.get("jobId") || "";
+  const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState<Phase>("READY");
+  const [seconds, setSeconds] = useState(0);
   const [mediaReady, setMediaReady] = useState(false);
-  const [mediaError, setMediaError] = useState("");
-
+  const [message, setMessage] = useState("");
+  const [booting, setBooting] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const recordingStartedAtRef = useRef<number | null>(null);
+  const startedAtRef = useRef(0);
+  const busyRef = useRef(false);
 
-  const questions = [
-    {
-      id: 1,
-      title: "Architecture & System Scalability",
-      text: "Describe a scenario where you had to design or refactor a high-throughput microservices architecture to handle sudden 10x traffic spikes.",
-      timeLimit: 120,
-    },
-    {
-      id: 2,
-      title: "Conflict Resolution & Technical Leadership",
-      text: "How do you align cross-functional engineering stakeholders when there is a deadlock regarding technical stack choices or schema design?",
-      timeLimit: 120,
-    },
-    {
-      id: 3,
-      title: "AI Integration & Performance Optimization",
-      text: "Explain your methodology for streaming LLM responses to a client with low latency while managing edge authentication and rate limits.",
-      timeLimit: 120,
-    },
-  ];
+  const question = attempt?.questions[index];
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    navigator.mediaDevices
-      ?.getUserMedia({ video: true, audio: true })
-      .then((s) => {
-        stream = s;
-        mediaStreamRef.current = s;
-        if (videoRef.current) videoRef.current.srcObject = s;
-        setMediaReady(true);
-        setMediaError("");
-      })
-      .catch((err) => {
-        console.warn("Camera/mic access unavailable:", err);
-        setMediaReady(false);
-        setMediaError("Camera and microphone access is required before starting this assessment.");
-      });
-
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, []);
+    let cancelled = false;
+    if (!jobId) { setMessage("This assessment link is missing its job ID."); setPhase("ERROR"); setBooting(false); return; }
+    jsonRequest("/api/candidate/recorded-assessment/attempts", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId }),
+    }).then(({ attempt: value }) => {
+      if (cancelled) return;
+      setAttempt(value);
+      const firstUnanswered = value.questions.findIndex((q: AttemptQuestion) => !q.response);
+      if (firstUnanswered === -1) setPhase("COMPLETE"); else setIndex(firstUnanswered);
+    }).catch((error) => { if (!cancelled) { setMessage(error.message); setPhase("ERROR"); } })
+      .finally(() => { if (!cancelled) setBooting(false); });
+    return () => { cancelled = true; };
+  }, [jobId]);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (isRecording && timerSeconds > 0) {
-      interval = setInterval(() => setTimerSeconds((prev) => prev - 1), 1000);
-    } else if (timerSeconds === 0 && isRecording) {
-      handleNextQuestion();
-    }
-    return () => clearInterval(interval);
-  }, [isRecording, timerSeconds]);
+    if (!attempt || phase === "COMPLETE" || phase === "ERROR") return;
+    let local: MediaStream | null = null;
+    const constraints: MediaStreamConstraints = attempt.mediaType === "VIDEO"
+      ? { video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 15 } }, audio: true }
+      : { video: true, audio: true }; // Camera stays active for proctoring in AUDIO mode.
+    navigator.mediaDevices?.getUserMedia(constraints).then((stream) => {
+      local = stream; streamRef.current = stream; setMediaReady(true); setMessage("");
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    }).catch(() => { setMediaReady(false); setMessage("Camera and microphone permission is required for this proctored assessment."); });
+    return () => { local?.getTracks().forEach((track) => track.stop()); streamRef.current = null; };
+  }, [attempt?.id, attempt?.mediaType, phase === "COMPLETE"]);
 
-  const handleStartRecording = () => {
-    const media = mediaStreamRef.current;
-    if (!mediaReady || !media || typeof MediaRecorder === "undefined") {
-      setMediaError("Video recording is not supported by this browser.");
-      return;
-    }
-    const preferredType = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
-    const recorder = preferredType ? new MediaRecorder(media, { mimeType: preferredType }) : new MediaRecorder(media);
-    chunksRef.current = [];
-    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
-    recorderRef.current = recorder;
-    recordingStartedAtRef.current = Date.now();
-    recorder.start(1000);
-    setMediaError("");
-    setIsRecording(true);
-    setTimerSeconds(questions[currentQuestionIndex].timeLimit);
-  };
+  const completeAttempt = useCallback(async () => {
+    if (!attempt) return;
+    await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/complete`, { method: "POST" });
+    setPhase("COMPLETE"); setMessage("Assessment completed. All answers were saved.");
+  }, [attempt]);
 
-  async function handleNextQuestion() {
-    if (isAnalyzing) return;
-    setIsRecording(false);
-    setIsAnalyzing(true);
-
+  const saveRecording = useCallback(async () => {
+    if (!attempt || !question || busyRef.current) return;
+    busyRef.current = true; setPhase("SAVING"); setMessage("Answer saved locally. Uploading securely…");
     try {
       const recorder = recorderRef.current;
-      if (!recorder || recorder.state === "inactive") throw new Error("No recorded answer is available.");
-      const stopped = new Promise<void>((resolve) => recorder.addEventListener("stop", () => resolve(), { once: true }));
-      recorder.stop();
-      await stopped;
-
-      const durationSeconds = Math.max(1, Math.min(120, Math.ceil((Date.now() - (recordingStartedAtRef.current || Date.now())) / 1000)));
-      const mimeType = recorder.mimeType.includes("webm") ? "video/webm" : "video/mp4";
-      const extension = mimeType === "video/webm" ? "webm" : "mp4";
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      if (!blob.size) throw new Error("The recorded answer is empty.");
-
-      const form = new FormData();
-      form.append("file", new File([blob], `assessment-answer-${currentQuestionIndex + 1}.${extension}`, { type: mimeType }));
-      form.append("category", "video-resumes");
-      const upload = await fetch("/api/upload", { method: "POST", body: form });
-      const uploaded = await upload.json();
-      if (!upload.ok || !uploaded.file?.url) throw new Error(uploaded.error || "Unable to upload the recorded answer.");
-
-      const save = await fetch("/api/candidate/video-resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl: uploaded.file.url, durationSeconds }),
-      });
-      const saved = await save.json();
-      if (!save.ok) throw new Error(saved.error || "Unable to submit the recorded answer.");
-
-      setAiFeedback(saved.analysisStatus === "BLOCKED_INFRA"
-        ? "Your recorded answer was saved. Automated analysis is temporarily unavailable."
-        : "Your recorded answer was saved and queued for transcription and analysis.");
-      chunksRef.current = [];
-      recorderRef.current = null;
-      recordingStartedAtRef.current = null;
-
-      if (currentQuestionIndex + 1 < questions.length) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-        setTimerSeconds(questions[currentQuestionIndex + 1].timeLimit);
-      } else {
-        setIsCompleted(true);
+      if (!recorder) throw new Error("Recorder is unavailable.");
+      if (recorder.state !== "inactive") {
+        await new Promise<void>((resolve) => { recorder.addEventListener("stop", () => resolve(), { once: true }); recorder.stop(); });
       }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unable to submit the recorded answer.";
-      setAiFeedback(`Submission failed: ${message}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }
+      const mime = recorder.mimeType.split(";")[0] || (attempt.mediaType === "VIDEO" ? "video/webm" : "audio/webm");
+      const blob = new Blob(chunksRef.current, { type: mime });
+      if (!blob.size) throw new Error("No media was captured. Check your camera and microphone.");
+      const durationSeconds = Math.max(1, Math.min(question.answerDurationSeconds, Math.ceil((Date.now() - startedAtRef.current) / 1000)));
+      const form = new FormData();
+      form.append("file", new File([blob], `assessment-${question.id}.webm`, { type: mime }));
+      form.append("category", "assessment-media");
+      const uploaded = await jsonRequest("/api/upload", { method: "POST", body: form });
+      await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/responses`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attemptQuestionId: question.id, storedFileId: uploaded.file.id, durationSeconds }),
+      });
+      const updated = { ...attempt, questions: attempt.questions.map((q) => q.id === question.id ? { ...q, response: { id: uploaded.file.id } } : q) };
+      setAttempt(updated); chunksRef.current = []; recorderRef.current = null;
+      if (index + 1 >= updated.questions.length) await completeAttempt();
+      else { setMessage("Answer saved — preparing next question."); setTimeout(() => { setIndex((v) => v + 1); setSeconds(updated.questions[index + 1].readingTimeSeconds); setPhase("PREPARE"); busyRef.current = false; }, 2500); return; }
+    } catch (error) {
+      setMessage(error instanceof Error ? `Upload failed: ${error.message} Your answer was not discarded; retry is required.` : "Upload failed.");
+      setPhase("ERROR");
+    } finally { busyRef.current = false; }
+  }, [attempt, question, index, completeAttempt]);
 
-  const formatTimer = (secs: number) => {
-    const mins = Math.floor(secs / 60);
-    const remainder = secs % 60;
-    return `${mins}:${remainder < 10 ? "0" : ""}${remainder}`;
+  const beginRecording = useCallback(() => {
+    if (!attempt || !question || !streamRef.current || typeof MediaRecorder === "undefined") { setMessage("Recording is unavailable in this browser."); setPhase("ERROR"); return; }
+    const source = attempt.mediaType === "AUDIO"
+      ? new MediaStream(streamRef.current.getAudioTracks())
+      : streamRef.current;
+    const types = attempt.mediaType === "VIDEO" ? ["video/webm;codecs=vp8,opus", "video/webm"] : ["audio/webm;codecs=opus", "audio/webm"];
+    const mimeType = types.find((value) => MediaRecorder.isTypeSupported(value));
+    const options: MediaRecorderOptions = attempt.mediaType === "VIDEO"
+      ? { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 500_000, audioBitsPerSecond: 64_000 }
+      : { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 64_000 };
+    const recorder = new MediaRecorder(source, options);
+    chunksRef.current = []; recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+    recorderRef.current = recorder; startedAtRef.current = Date.now(); recorder.start(1000);
+    setSeconds(question.answerDurationSeconds); setPhase("RECORDING"); setMessage("");
+  }, [attempt, question]);
+
+  useEffect(() => {
+    if (!["PREPARE", "COUNTDOWN", "RECORDING"].includes(phase)) return;
+    if (seconds <= 0) {
+      if (phase === "PREPARE") { setPhase("COUNTDOWN"); setSeconds(3); }
+      else if (phase === "COUNTDOWN") beginRecording();
+      else void saveRecording();
+      return;
+    }
+    const timer = window.setTimeout(() => setSeconds((v) => v - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [phase, seconds, beginRecording, saveRecording]);
+
+  const startAssessment = () => {
+    if (!mediaReady || !question) { setMessage("Camera and microphone must be ready before starting."); return; }
+    setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); setMessage("");
   };
 
-  return (
-    <div className="min-h-screen bg-bg-page text-text-primary flex">
-      <CandidateSidebar />
+  if (booting) return <div className="min-h-screen bg-bg-page text-text-primary grid place-items-center"><p>Preparing your assessment…</p></div>;
 
-      <div className="flex-1 ml-0 md:ml-[116px] min-h-screen flex flex-col">
-        <header className="h-16 px-8 flex items-center justify-between border-b border-outline bg-bg-page backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-bold text-white tracking-wide uppercase">
-              AI Video Assessment Session
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 text-[10px] font-bold">
-              Proctored
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-xs font-mono font-bold text-gray-300">
-                {formatTimer(timerSeconds)}
-              </span>
-            </div>
-            <span className="text-xs text-gray-400 font-mono">
-              Question {currentQuestionIndex + 1} / {questions.length}
-            </span>
-          </div>
-        </header>
-
-        <main className="flex-1 p-6 lg:p-10 max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Video Feed (7 Cols) */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="relative aspect-video rounded-3xl overflow-hidden bg-black/60 border border-outline shadow-2xl flex items-center justify-center">
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
-
-              {/* Status overlay */}
-              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-outline text-xs">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isRecording ? "bg-red-500 animate-pulse" : "bg-yellow-400"
-                  }`}
-                />
-                <span className="text-[11px] font-bold">
-                  {isRecording ? "RECORDING" : "STANDBY"}
-                </span>
-              </div>
-
-              {isAnalyzing && (
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-6 text-center">
-                  <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                  <p className="text-xs font-bold text-primary">
-                    Evaluating your submitted response...
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {mediaError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{mediaError}</div>}
-
-            {/* Video Controls */}
-            <div className="flex items-center justify-between p-4 glass-card rounded-2xl border border-outline bg-white/5">
-              {!isRecording ? (
-                <button
-                  onClick={handleStartRecording}
-                  disabled={!mediaReady || isAnalyzing || isCompleted}
-                  className="btn-3d-red px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-[16px]">radio_button_checked</span>
-                  <span>{mediaReady ? "Start Answer" : "Camera & microphone required"}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleNextQuestion}
-                  className="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white flex items-center gap-2 transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">stop</span>
-                  <span>Submit & Next Question</span>
-                </button>
-              )}
-
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span className="material-symbols-outlined text-green-400 text-sm">mic</span>
-                <span>{mediaReady ? "Camera & microphone ready" : "Media not ready"}</span>
-              </div>
+  return <div className="min-h-screen bg-bg-page text-text-primary flex">
+    <CandidateSidebar />
+    <div className="flex-1 md:ml-[116px] min-h-screen">
+      <header className="min-h-16 px-4 md:px-8 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-outline bg-bg-page">
+        <div><h1 className="font-bold">Recorded Assessment</h1><p className="text-xs text-text-secondary">{attempt?.mediaType === "AUDIO" ? "Audio answers · camera proctoring active" : "Video answers · proctored"}</p></div>
+        {attempt && phase !== "COMPLETE" && <span className="text-xs font-mono">Question {Math.min(index + 1, attempt.questions.length)} / {attempt.questions.length}</span>}
+      </header>
+      <main className="max-w-6xl mx-auto p-4 md:p-8 grid lg:grid-cols-12 gap-6">
+        <section className="lg:col-span-7 space-y-4">
+          <div className="relative aspect-video rounded-3xl overflow-hidden bg-black border border-outline">
+            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            <div className="absolute top-4 left-4 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold">
+              {phase === "RECORDING" ? "● RECORDING" : mediaReady ? "● PROCTORING READY" : "MEDIA REQUIRED"}
             </div>
           </div>
-
-          {/* Question & Feedback (5 Cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="glass-card p-6 rounded-3xl border border-outline space-y-4 bg-white/5">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
-                  {questions[currentQuestionIndex].title}
-                </span>
-                <span className="text-xs text-gray-400 font-mono">
-                  {questions[currentQuestionIndex].timeLimit}s Max
-                </span>
-              </div>
-
-              <h2 className="text-base font-bold text-white leading-snug">
-                {questions[currentQuestionIndex].text}
-              </h2>
-
-              <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-gray-400 block">
-                  AI Evaluation Tips
-                </span>
-                <ul className="text-xs text-gray-300 space-y-1.5 list-disc list-inside">
-                  <li>Structure using the STAR framework (Situation, Task, Action, Result).</li>
-                  <li>Focus on architectural trade-offs and performance metrics.</li>
-                  <li>Maintain steady eye contact with the lens.</li>
-                </ul>
-              </div>
-            </div>
-
-            {aiFeedback && (
-              <div className="p-5 rounded-3xl border border-primary/30 bg-primary/10 space-y-2 animate-fadeIn">
-                <div className="flex items-center gap-2 text-primary font-bold text-xs">
-                  <span className="material-symbols-outlined text-[18px]">psychology</span>
-                  <span>Response evaluation</span>
-                </div>
-                <p className="text-xs text-gray-200">{aiFeedback}</p>
-              </div>
-            )}
-
-            {isCompleted && (
-              <div className="glass-card p-6 rounded-3xl border border-green-500/30 bg-green-500/10 space-y-4 text-center">
-                <span className="material-symbols-outlined text-4xl text-green-400">
-                  check_circle
-                </span>
-                <div>
-                  <h3 className="font-bold text-base text-white">
-                    Video Assessment Completed!
-                  </h3>
-                  <p className="text-xs text-gray-300 mt-1">
-                    This session is complete. Review availability depends on the configured assessment workflow.
-                  </p>
-                </div>
-                <Link
-                  href="/applications/timeline"
-                  className="inline-block btn-3d-red px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg"
-                >
-                  View Application Timeline
-                </Link>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+          {message && <div role="status" className="rounded-2xl border border-outline bg-bg-card p-4 text-sm">{message}</div>}
+          {phase === "READY" && <button onClick={startAssessment} disabled={!mediaReady || !question} className="min-h-11 px-6 rounded-full btn-3d-red font-bold disabled:opacity-50">Start Assessment</button>}
+          {phase === "ERROR" && question && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
+        </section>
+        <section className="lg:col-span-5">
+          {phase === "COMPLETE" ? <div className="rounded-3xl border border-outline bg-bg-card p-6 text-center space-y-4"><h2 className="text-xl font-bold">Assessment complete</h2><p className="text-sm text-text-secondary">Your recorded responses have been securely saved.</p><Link href="/applications/timeline" className="inline-flex min-h-11 items-center px-6 rounded-full btn-3d-red font-bold">Application timeline</Link></div>
+          : question ? <div className="rounded-3xl border border-outline bg-bg-card p-6 space-y-5">
+            <div className="flex justify-between gap-3 text-xs text-text-secondary"><span>{question.roleTitle}</span><span>{question.answerDurationSeconds}s answer</span></div>
+            <h2 className="text-lg font-bold leading-relaxed">{question.questionText}</h2>
+            {question.skillTags.length > 0 && <p className="text-xs text-text-secondary">Focus: {question.skillTags.join(" · ")}</p>}
+            {phase === "PREPARE" && <div className="rounded-2xl bg-bg-elevated p-5"><p className="text-xs uppercase font-bold">Read & Prepare</p><p className="text-4xl font-mono font-bold mt-2">00:{String(seconds).padStart(2,"0")}</p></div>}
+            {phase === "COUNTDOWN" && <div className="rounded-2xl bg-bg-elevated p-5 text-center"><p className="text-sm font-bold">Recording starts in</p><p className="text-6xl font-bold mt-2">{seconds}</p></div>}
+            {phase === "RECORDING" && <div className="rounded-2xl bg-bg-elevated p-5"><p className="text-xs uppercase font-bold">Recording</p><p className="text-4xl font-mono font-bold mt-2">00:{String(seconds).padStart(2,"0")}</p>{seconds <= 10 && <p className="text-sm mt-2">10 seconds or less remaining.</p>}</div>}
+            {phase === "SAVING" && <div className="rounded-2xl bg-bg-elevated p-5"><p className="font-bold">Saving answer…</p><p className="text-sm text-text-secondary mt-1">Do not close this page.</p></div>}
+            <p className="text-xs text-text-secondary">After you start, each question runs automatically: 10 seconds to read, a 3-2-1 countdown, then the configured 30 or 60 second recording. There is no Next or Submit button.</p>
+          </div> : null}
+        </section>
+      </main>
     </div>
-  );
+  </div>;
 }
