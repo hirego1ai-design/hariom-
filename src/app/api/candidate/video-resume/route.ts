@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrl } from "@/lib/storage";
 import crypto from "crypto";
+import { claimVideoAnalysisJob } from "@/lib/videoAnalysisQueue";
 
 const videoResumeSubmissionSchema = z.object({
   videoUrl: z.string().regex(/^\/api\/files\/[0-9a-f-]{36}$/i, "Video must be an uploaded HireGo file."),
@@ -139,6 +140,8 @@ async function dispatchWorkerJob(params: {
   token: string;
 }) {
   try {
+    const claim = await claimVideoAnalysisJob(params.jobId);
+    if (!claim) return;
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/internal/video-analysis/callback`;
     const res = await fetch(`${params.workerUrl.replace(/\/$/, "")}/analyze`, {
       method: "POST",
@@ -170,18 +173,10 @@ async function dispatchWorkerJob(params: {
       ]);
       return;
     }
-    // A very fast callback may already have completed the job. The conditional
-    // update cannot regress that terminal result back to PROCESSING.
-    await prisma.$transaction([
-      prisma.videoAnalysisJob.updateMany({
-        where: { id: params.jobId, status: "PENDING" },
-        data: { status: "PROCESSING", startedAt: new Date(), attempts: { increment: 1 } },
-      }),
-      prisma.videoResume.updateMany({
-        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-        data: { analysisStatus: "PROCESSING", startedAt: new Date() },
-      }),
-    ]);
+    await prisma.videoResume.updateMany({
+      where: { id: params.videoResumeId, analysisStatus: "PENDING" },
+      data: { analysisStatus: "PROCESSING", startedAt: new Date(), analysisError: null },
+    });
   } catch (e) {
     console.error("Failed to reach video-analysis-worker.");
     await prisma.$transaction([
