@@ -3,6 +3,7 @@ import { WorkflowInstance, Prisma, Role } from '@prisma/client';
 import { createHash } from 'crypto';
 import { TenantContext, validateTenantAccess } from '@/lib/security/TenantContext';
 import { RbacGuard } from '@/lib/security/RbacGuard';
+import { writeAgentApprovalAudit } from '@/lib/security/AgentApprovalAudit';
 
 const APPROVER_ROLES: Role[] = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
 
@@ -55,6 +56,7 @@ export class WorkflowEngine {
         create: { workflowInstanceId: params.workflowId, companyId: workflow.companyId, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, requestedBy: params.context.userId },
       });
       await tx.workflowInstance.update({ where: { id: params.workflowId }, data: { status: 'PAUSED_FOR_APPROVAL', currentStep: params.stepName } });
+      if (record.decision === 'PENDING') await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_REQUESTED', workflowId: params.workflowId, approvalId: record.id, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, role: params.context.userRole });
       return record;
     });
     return approval.id;
@@ -71,6 +73,7 @@ export class WorkflowEngine {
         data: { decision: params.decision, decidedBy: params.context.userId, decidedByRole: params.context.userRole, decisionNotes: params.notes?.slice(0, 2000), decidedAt: new Date() },
       });
       if (updated.count !== 1) throw new Error('Approval was already decided');
+      await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: approval.companyId, action: params.decision === 'APPROVED' ? 'AGENT_APPROVAL_APPROVED' : 'AGENT_APPROVAL_REJECTED', workflowId: approval.workflowInstanceId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
       return tx.workflowInstance.update({
         where: { id: approval.workflowInstanceId, status: 'PAUSED_FOR_APPROVAL' },
         data: { status: params.decision === 'APPROVED' ? 'RUNNING' : 'CANCELLED', updatedAt: new Date() },
