@@ -69,11 +69,11 @@ export default function CandidateDashboardPage() {
       <CandidateSidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
         
         {/* Candidate Header */}
         <header
-          className="fixed top-0 left-[116px] right-0 z-40 backdrop-blur-xl flex justify-between items-center px-gutter h-20 shadow-sm"
+          className="fixed top-0 left-0 md:left-[116px] right-0 z-40 backdrop-blur-xl flex justify-between items-center px-gutter h-20 shadow-sm"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
