@@ -126,6 +126,8 @@ model User {
   referralLedgerEntries ReferralLedgerEntry[]
   customSkillRequests   CustomSkillRequest[]
   whatsAppContact       WhatsAppContact?
+  assessmentRestrictions RecordedAssessmentRestriction[] @relation("RestrictedAssessmentUser")
+  assessmentRestrictionReviews RecordedAssessmentRestriction[] @relation("AssessmentRestrictionReviewer")
 
   @@index([phoneNumber])
   candidateNotesAuthored EmployerCandidateNote[]
@@ -1973,6 +1975,38 @@ model RecordedAssessmentAnalysisJob {
 
   @@index([responseId])
   @@index([status])
+}
+
+enum RecordedAssessmentRestrictionStatus {
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  EXPIRED
+  REVOKED
+}
+
+model RecordedAssessmentRestriction {
+  id              String                              @id @default(uuid())
+  userId          String
+  user            User                                @relation("RestrictedAssessmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  attemptId       String?
+  status          RecordedAssessmentRestrictionStatus @default(PENDING_REVIEW)
+  proposedMonths  Int
+  suspendedUntil  DateTime?
+  reason          String
+  evidence        Json?
+  reviewedById    String?
+  reviewedBy      User?                               @relation("AssessmentRestrictionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  reviewNote      String?
+  appealNote      String?
+  appealedAt      DateTime?
+  createdAt       DateTime                            @default(now())
+  updatedAt       DateTime                            @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@index([suspendedUntil])
 }
 
 model RecordedAssessmentProctoringEvent {
