@@ -3,6 +3,7 @@ import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createDevDocumentVerification, getDevDocumentVerifications } from "@/lib/document-verification-store";
 import { z } from "zod";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 // Document types that require admin verification
 const DOCUMENT_TYPES = [
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Authentication required", 401);
     if (session.role !== "ADMIN") return jsonError("Administrator access required", 403);
+    await enforceRateLimit(req, "admin_document_verification_read", 60, 60_000);
 
     const { searchParams } = new URL(req.url);
     const rawStatus = searchParams.get("status");
