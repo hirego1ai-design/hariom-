@@ -6,18 +6,12 @@ import {
   CreateOrderResult,
   VerifyWebhookParams,
   VerifyWebhookResult,
+  AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
 import { RazorpayGateway } from "./RazorpayGateway";
 import { PayUGateway } from "./PayUGateway";
 import { PhonePeGateway } from "./PhonePeGateway";
 import { StripeGateway } from "./StripeGateway";
-
-export class AmbiguousPaymentOrderError extends Error {
-  constructor(message: string, public readonly provider: GatewayName) {
-    super(message);
-    this.name = "AmbiguousPaymentOrderError";
-  }
-}
 
 export interface GatewayConfigState {
   mode: "AUTO" | "MANUAL";
