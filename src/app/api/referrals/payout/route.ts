@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const payout = await referralDb.requestPayout({
       referrerId: session.id,
       amount: body.amount,
-      payoutMethod: body.payoutMethod,
+      payoutMethod: body.payoutMethod ?? "UPI",
       payoutAddress,
     });
 
