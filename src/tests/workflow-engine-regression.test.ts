@@ -150,3 +150,34 @@ test('rejected consequential approval prevents workflow resume', async (t) => {
     context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
   }), /rejected consequential action/);
 });
+
+
+test('workflow completion blocks approved but unconsumed consequential actions', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
+  stubMethod(t, prisma.workflowStepLog, 'count', async () => 0);
+  stubMethod(t, prisma.workflowApproval, 'count', async ({ where }: any) =>
+    where.OR ? 1 : 0
+  );
+  await assert.rejects(WorkflowEngine.completeWorkflow({
+    workflowId: 'workflow-test',
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  }), /unresolved consequential actions/);
+});
+
+test('duplicate decided approval request cannot re-pause workflow', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  let workflowWrites = 0;
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
+  stubMethod(t, prisma.workflowApproval, 'upsert', async () => ({ id: 'approval-a', decision: 'APPROVED' }));
+  stubMethod(t, prisma.workflowInstance, 'update', async () => { workflowWrites++; throw new Error('must not write'); });
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
+  await assert.rejects(WorkflowEngine.requestConsequentialAction({
+    workflowId: 'workflow-test', stepName: 'select', actionType: 'CANDIDATE_SELECTION',
+    action: { candidateId: 'candidate-a' },
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  }), /already decided/);
+  assert.equal(workflowWrites, 0);
+});
