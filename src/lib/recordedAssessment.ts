@@ -112,7 +112,7 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
         mediaType: config.mediaType,
         status: "CREATED",
         questionSetVersion: Math.max(...selected.map((q) => q.version)),
-        configSnapshot: { mediaType: config.mediaType, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS, defaultAnswerSeconds: config.defaultAnswerSeconds, questionCount: config.questionCount, proctoringEnabled: config.proctoringEnabled },
+        configSnapshot: { mediaType: config.mediaType, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS, defaultAnswerSeconds: config.defaultAnswerSeconds, questionCount: config.questionCount, proctoringEnabled: config.proctoringEnabled, answerDurationsSeconds: selected.map((q) => q.answerDurationSeconds) },
         questions: {
           create: selected.map((q, index) => ({
             sourceQuestionId: q.id,
@@ -121,7 +121,7 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
             skillTags: q.skillTags,
             orderIndex: index,
             readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
-            answerDurationSeconds: config.defaultAnswerSeconds,
+            answerDurationSeconds: q.answerDurationSeconds,
             sourceVersion: q.version,
             difficulty: q.difficulty,
             industry: q.industry,
