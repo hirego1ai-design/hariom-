@@ -116,11 +116,21 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     ));
 
     const { POST: submitVideo } = await import("@/app/api/candidate/video-resume/route");
+    const videoFile = await prisma.storedFile.create({
+      data: {
+        ownerId: user.id,
+        category: "video-resumes",
+        objectKey: `test/video-resumes/${suffix}.mp4`,
+        fileName: "test.mp4",
+        mimeType: "video/mp4",
+        sizeBytes: 1024,
+      },
+    });
     const videoResponse = await submitVideo(new Request("https://hirego.test/api/candidate/video-resume", {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
-        videoUrl: "https://storage.hirego.test/videos/test.mp4",
+        videoUrl: `/api/files/${videoFile.id}`,
         durationSeconds: 45,
         analysis: { communicationScore: 100, clarityScore: 100, confidenceScore: 100, professionalismScore: 100 },
       }),
@@ -129,7 +139,7 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     const video = videoJson.video;
     results.push(result(
       "Candidate-controlled video scores are never persisted",
-      videoResponse.status === 201 &&
+      videoResponse.status === 202 &&
         video?.communicationScore === null &&
         video?.clarityScore === null &&
         video?.confidenceScore === null &&
@@ -138,6 +148,9 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
   } catch (error) {
     results.push(result("Concurrent application submission creates exactly one row", false, error instanceof Error ? error.message : String(error)));
   } finally {
+    await prisma.videoAnalysisJob.deleteMany({ where: { videoResume: { candidateProfileId: candidate.id } } }).catch(() => undefined);
+    await prisma.videoResume.deleteMany({ where: { candidateProfileId: candidate.id } }).catch(() => undefined);
+    await prisma.storedFile.deleteMany({ where: { ownerId: user.id, category: "video-resumes" } }).catch(() => undefined);
     await prisma.jobListing.delete({ where: { id: job.id } }).catch(() => undefined);
     await prisma.candidateProfile.delete({ where: { id: candidate.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
@@ -181,12 +194,12 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     promoId = promo.id;
     const { POST: checkout } = await import("@/app/api/payments/checkout/route");
     const employerToken = createSessionToken({ id: employer.id, email: employer.email, name: employer.name, role: "EMPLOYER", sessionVersion: employer.sessionVersion });
-    const checkoutRequest = () => new Request("https://hirego.test/api/payments/checkout", {
+    const checkoutRequest = (key: string) => new Request("https://hirego.test/api/payments/checkout", {
       method: "POST",
-      headers: { authorization: `Bearer ${employerToken}`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${employerToken}`, "content-type": "application/json", "idempotency-key": key },
       body: JSON.stringify({ planId: plan.id, paymentMethod: "RAZORPAY", promoCode: promo.code }),
     });
-    const checkoutResponses = await Promise.all([checkout(checkoutRequest() as any), checkout(checkoutRequest() as any)]);
+    const checkoutResponses = await Promise.all([\n      checkout(checkoutRequest(`promo-a-${promoSuffix}`) as any),\n      checkout(checkoutRequest(`promo-b-${promoSuffix}`) as any),\n    ]);
     const updatedPromo = await prisma.promoCode.findUnique({ where: { id: promo.id } });
     results.push(result(
       "Promo checkout reserves exactly one remaining capacity slot",
