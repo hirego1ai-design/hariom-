@@ -9,10 +9,7 @@ const changeSchema = z.object({ action: z.enum(["CANCEL", "RESCHEDULE"]), schedu
 async function authorizedInterview(id: string, session: { id: string; role: string }) {
   const interview = await prisma.interview.findFirst({
     where: {
-      OR: [
-        { id },
-        { roomUrl: { contains: id } }
-      ]
+      id
     },
     include: {
       application: {
@@ -77,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.action === "RESCHEDULE" && !body.scheduledAt) return NextResponse.json({ success: false, error: "New date and time are required." }, { status: 400 });
     const currentMeta = (() => { try { return interview.aiFeedback ? JSON.parse(interview.aiFeedback) : {}; } catch { return {}; } })();
     const nextStatus = body.action === "CANCEL" ? "CANCELLED" : "RESCHEDULED";
-    const updated = await prisma.interview.update({ where: { id }, data: { status: nextStatus, scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : interview.scheduledAt, aiFeedback: JSON.stringify({ ...currentMeta, changeReason: body.reason || null, changedAt: new Date().toISOString() }) } });
+    const updated = await prisma.interview.update({ where: { id: interview.id }, data: { status: nextStatus, scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : interview.scheduledAt, aiFeedback: JSON.stringify({ ...currentMeta, changeReason: body.reason || null, changedAt: new Date().toISOString() }) } });
     const candidateEmail = interview.application.candidateProfile.user?.email;
     if (candidateEmail) await sendEmail({ to: candidateEmail, subject: `HireGo AI interview ${body.action.toLowerCase()}`, html: `<p>Your interview has been <strong>${body.action.toLowerCase()}</strong>.</p>${body.scheduledAt ? `<p>New time: ${new Date(body.scheduledAt).toLocaleString()}</p>` : ""}${body.reason ? `<p>Reason: ${body.reason}</p>` : ""}` }).catch(() => undefined);
     return NextResponse.json({ success: true, interview: { id: updated.id, status: updated.status, scheduledAt: updated.scheduledAt }, message: `Interview ${body.action.toLowerCase()}d successfully.` });
