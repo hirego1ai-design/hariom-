@@ -126,7 +126,7 @@ export class PhonePeGateway implements PaymentGateway {
 
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const gatewayTxId = jsonPayload?.data?.transactionId || "";
-    const status = jsonPayload?.code === "PAYMENT_SUCCESS" ? "SUCCESS" : "FAILED";
+    const status: VerifyWebhookResult["status"] = jsonPayload?.code === "PAYMENT_SUCCESS" ? "SUCCESS" : jsonPayload?.code === "PAYMENT_ERROR" || jsonPayload?.code === "PAYMENT_DECLINED" ? "FAILED" : "PENDING";
     const gatewayOrderId = jsonPayload?.data?.merchantTransactionId;
 
     return {
@@ -141,7 +141,7 @@ export class PhonePeGateway implements PaymentGateway {
     };
   }
 
-  async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+  async getPaymentStatus(_gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
+    return { status: "PENDING" };
   }
 }
