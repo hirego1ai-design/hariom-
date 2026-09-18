@@ -8,10 +8,11 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 function EmployerLiveInterviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const interviewId = searchParams.get("interviewId") || "managed-hiring-final-round";
+  const interviewId = searchParams.get("interviewId") || "";
 
   const [loading, setLoading] = useState(true);
   const [interviewDetails, setInterviewDetails] = useState<any>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!searchParams.get("interviewId")) {
@@ -29,9 +30,7 @@ function EmployerLiveInterviewContent() {
           setInterviewDetails(data.interview);
         }
       })
-      .catch((err) => {
-        console.error(err);
-      })
+.catch((err) => setError(err instanceof Error ? err.message : "Unable to load interview."))
       .finally(() => setLoading(false));
   }, [searchParams]);
 
@@ -45,10 +44,12 @@ function EmployerLiveInterviewContent() {
     );
   }
 
-  const roomId = interviewDetails?.id || interviewId;
-  const roundTitle = interviewDetails?.round || "Final technical interview";
-  const candidateName = interviewDetails?.candidateName || "Candidate";
-  const jobTitle = interviewDetails?.jobTitle || "Round 3";
+  if (!interviewId || error || !interviewDetails) return <PageContainer><div className="mx-auto max-w-xl px-4 py-16 text-center"><h1 className="text-2xl font-bold text-text-primary">Interview unavailable</h1><p className="mt-3 text-sm text-text-secondary">{error || "Open the room from a scheduled interview. No demo interview is used in production."}</p></div></PageContainer>;
+
+  const roomId = interviewDetails.id;
+  const roundTitle = interviewDetails.round;
+  const candidateName = interviewDetails.candidateName;
+  const jobTitle = interviewDetails.jobTitle;
 
   return (
     <PageContainer>
@@ -56,7 +57,7 @@ function EmployerLiveInterviewContent() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-primary text-[10px] font-bold uppercase tracking-[0.2em]">
-              HireGo Managed Hiring · Interview Portal
+              HireGo · Interview Portal
             </p>
             <h1 className="text-xl font-bold text-white">{roundTitle}</h1>
           </div>
@@ -69,7 +70,7 @@ function EmployerLiveInterviewContent() {
             roomId={roomId}
             roundTitle={roundTitle}
             candidateName={candidateName}
-            interviewerName="HireGo AI Panel"
+            interviewerName="Interviewer"
             onComplete={(id) =>
               router.push(`/employer/final-round-feedback${id ? `?interviewId=${encodeURIComponent(id)}` : ""}`)
             }
