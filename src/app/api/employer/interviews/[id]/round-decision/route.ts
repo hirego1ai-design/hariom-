@@ -41,6 +41,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
+      // Serialize mutually exclusive round decisions. The preflight status read
+      // is advisory; this lock + re-read is authoritative across replicas.
+      await tx.$queryRaw`SELECT id FROM "InterviewRoundProgress" WHERE id = ${interview.roundProgress!.id} FOR UPDATE`;
+      const lockedProgress = await tx.interviewRoundProgress.findUnique({
+        where: { id: interview.roundProgress!.id },
+        select: { status: true },
+      });
+      if (lockedProgress?.status !== "ROUND_COMPLETE") {
+        throw new ApiError("This interview round decision was already processed.", 409);
+      }
       if (body.action === "REJECT") {
         const claimed = await tx.interviewRoundProgress.updateMany({
           where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
