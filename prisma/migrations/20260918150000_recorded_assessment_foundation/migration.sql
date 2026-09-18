@@ -74,3 +74,15 @@ ALTER TABLE "RecordedAssessmentAttemptQuestion" ADD CONSTRAINT "RecordedAssessme
 ALTER TABLE "RecordedAssessmentAttemptQuestion" ADD CONSTRAINT "RecordedAssessmentAttemptQuestion_answerDurationSeconds_check" CHECK ("answerDurationSeconds" IN (30, 60));
 ALTER TABLE "RecordedAssessmentResponse" ADD CONSTRAINT "RecordedAssessmentResponse_durationSeconds_check" CHECK ("durationSeconds" BETWEEN 0 AND 60);
 ALTER TABLE "RecordedAssessmentProctoringEvent" ADD CONSTRAINT "RecordedAssessmentProctoringEvent_warningNumber_check" CHECK ("warningNumber" IS NULL OR "warningNumber" BETWEEN 1 AND 3);
+
+CREATE TABLE "RecordedAssessmentAnalysisJob" (
+  "id" TEXT NOT NULL, "responseId" TEXT NOT NULL, "status" "RecordedAssessmentAnalysisStatus" NOT NULL DEFAULT 'PENDING',
+  "idempotencyKey" TEXT NOT NULL, "attempts" INTEGER NOT NULL DEFAULT 0, "maxAttempts" INTEGER NOT NULL DEFAULT 3,
+  "error" TEXT, "payload" JSONB, "result" JSONB, "startedAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "RecordedAssessmentAnalysisJob_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "RecordedAssessmentAnalysisJob_idempotencyKey_key" ON "RecordedAssessmentAnalysisJob"("idempotencyKey");
+CREATE INDEX "RecordedAssessmentAnalysisJob_responseId_idx" ON "RecordedAssessmentAnalysisJob"("responseId");
+CREATE INDEX "RecordedAssessmentAnalysisJob_status_idx" ON "RecordedAssessmentAnalysisJob"("status");
+ALTER TABLE "RecordedAssessmentAnalysisJob" ADD CONSTRAINT "RecordedAssessmentAnalysisJob_responseId_fkey" FOREIGN KEY ("responseId") REFERENCES "RecordedAssessmentResponse"("id") ON DELETE CASCADE ON UPDATE CASCADE;

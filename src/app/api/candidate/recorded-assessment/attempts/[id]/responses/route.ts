@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { dispatchRecordedAssessmentAnalysis } from "@/lib/recordedAssessmentAnalysis";
 
 const schema = z.object({
   attemptQuestionId: z.string().uuid(),
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         create: { attemptQuestionId: question.id, storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType },
       });
     });
+    await dispatchRecordedAssessmentAnalysis(response.id);
     return NextResponse.json({ success: true, response });
   } catch (error) { return handleApiError(error); }
 }

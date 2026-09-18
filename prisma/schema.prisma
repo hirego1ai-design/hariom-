@@ -1902,11 +1902,33 @@ model RecordedAssessmentResponse {
   transcript        String?
   analysisStatus    RecordedAssessmentAnalysisStatus @default(PENDING)
   analysisResult    Json?
+  analysisJobs      RecordedAssessmentAnalysisJob[]
   createdAt         DateTime                         @default(now())
   updatedAt         DateTime                         @updatedAt
 
   @@index([storedFileId])
   @@index([analysisStatus])
+}
+
+
+model RecordedAssessmentAnalysisJob {
+  id             String                     @id @default(uuid())
+  responseId     String
+  response       RecordedAssessmentResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  status         RecordedAssessmentAnalysisStatus @default(PENDING)
+  idempotencyKey String                     @unique
+  attempts       Int                        @default(0)
+  maxAttempts    Int                        @default(3)
+  error          String?
+  payload        Json?
+  result         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@index([responseId])
+  @@index([status])
 }
 
 model RecordedAssessmentProctoringEvent {
