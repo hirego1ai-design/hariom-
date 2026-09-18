@@ -10,10 +10,13 @@ const schema = z.object({
   reviewNote: z.string().trim().min(3).max(1000),
 }).strict();
 
-function addMonths(from: Date, months: number) {
-  const result = new Date(from);
-  result.setUTCMonth(result.getUTCMonth() + months);
-  return result;
+function addCalendarMonths(from: Date, months: number) {
+  // Clamp to the last valid day in the target month (Jan 31 + 1 month => Feb 28/29).
+  const targetMonth = from.getUTCMonth() + months;
+  const targetYear = from.getUTCFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(targetYear, normalizedMonth, Math.min(from.getUTCDate(), lastDay), from.getUTCHours(), from.getUTCMinutes(), from.getUTCSeconds(), from.getUTCMilliseconds()));
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,16 +37,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const status = body.decision === "APPROVE" ? "ACTIVE" : body.decision === "REJECT" ? "REJECTED" : "REVOKED";
-    const updated = await prisma.recordedAssessmentRestriction.update({
-      where: { id },
+    const expectedStatus = body.decision === "REVOKE" ? "ACTIVE" : "PENDING_REVIEW";
+    const changed = await prisma.recordedAssessmentRestriction.updateMany({
+      where: { id, status: expectedStatus },
       data: {
         status,
         reviewedById: session.id,
         reviewedAt: now,
         reviewNote: body.reviewNote,
-        suspendedUntil: status === "ACTIVE" ? addMonths(now, restriction.proposedMonths) : restriction.suspendedUntil,
+        suspendedUntil: status === "ACTIVE" ? addCalendarMonths(now, restriction.proposedMonths) : restriction.suspendedUntil,
       },
     });
+    if (changed.count !== 1) throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
+    const updated = await prisma.recordedAssessmentRestriction.findUnique({ where: { id } });
+    if (!updated) throw new ApiError("Restriction review not found.", 404);
     await logAuditEvent({
       userId: session.id,
       action: `ASSESSMENT_RESTRICTION_${status}`,
