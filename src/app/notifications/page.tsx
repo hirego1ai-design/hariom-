@@ -63,11 +63,11 @@ export default function NotificationsCenterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+    <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
-        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
+        <header className="sticky top-0 z-40 bg-bg-page backdrop-blur-xl border-b border-outline flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
           <div>
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
               Notifications & Alerts
@@ -78,7 +78,8 @@ export default function NotificationsCenterPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={markAllRead}
-              className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10"
+              disabled={loading || items.length === 0 || items.every((item) => item.isRead)}
+              className="min-h-11 px-4 py-2 rounded-full bg-surface-container-high hover:opacity-90 text-text-primary text-xs font-bold transition-all border border-outline disabled:opacity-50"
             >
               Mark All Read
             </button>
@@ -129,7 +130,7 @@ export default function NotificationsCenterPage() {
                   </div>
                 </div>
                 <span className="text-[11px] text-text-muted font-mono flex-shrink-0 ml-4">
-                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Today"}
+                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Date unavailable"}
                 </span>
               </div>
             ))
