@@ -13,6 +13,8 @@ export default function VideoAssessmentActivePage() {
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false);
+  const [mediaError, setMediaError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -43,12 +45,14 @@ export default function VideoAssessmentActivePage() {
       ?.getUserMedia({ video: true, audio: true })
       .then((s) => {
         stream = s;
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-        }
+        if (videoRef.current) videoRef.current.srcObject = s;
+        setMediaReady(true);
+        setMediaError("");
       })
       .catch((err) => {
         console.warn("Camera/mic access unavailable:", err);
+        setMediaReady(false);
+        setMediaError("Camera and microphone access is required before starting this assessment.");
       });
 
     return () => {
@@ -69,6 +73,7 @@ export default function VideoAssessmentActivePage() {
   }, [isRecording, timerSeconds]);
 
   const handleStartRecording = () => {
+    if (!mediaReady) return;
     setIsRecording(true);
     setTimerSeconds(questions[currentQuestionIndex].timeLimit);
   };
@@ -116,11 +121,11 @@ export default function VideoAssessmentActivePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] text-white flex">
+    <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] min-h-screen flex flex-col">
-        <header className="h-16 px-8 flex items-center justify-between border-b border-white/10 bg-[#0A0A0C]/90 backdrop-blur-xl">
+      <div className="flex-1 ml-0 md:ml-[116px] min-h-screen flex flex-col">
+        <header className="h-16 px-8 flex items-center justify-between border-b border-outline bg-bg-page backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-bold text-white tracking-wide uppercase">
               AI Video Assessment Session
@@ -146,7 +151,7 @@ export default function VideoAssessmentActivePage() {
         <main className="flex-1 p-6 lg:p-10 max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Video Feed (7 Cols) */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="relative aspect-video rounded-3xl overflow-hidden bg-black/60 border border-white/10 shadow-2xl flex items-center justify-center">
+            <div className="relative aspect-video rounded-3xl overflow-hidden bg-black/60 border border-outline shadow-2xl flex items-center justify-center">
               <video
                 ref={videoRef}
                 autoPlay
@@ -156,7 +161,7 @@ export default function VideoAssessmentActivePage() {
               />
 
               {/* Status overlay */}
-              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs">
+              <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-outline text-xs">
                 <span
                   className={`w-2 h-2 rounded-full ${
                     isRecording ? "bg-red-500 animate-pulse" : "bg-yellow-400"
@@ -171,21 +176,24 @@ export default function VideoAssessmentActivePage() {
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 p-6 text-center">
                   <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                   <p className="text-xs font-bold text-primary">
-                    AI Neural Engine analyzing acoustic & semantic coherence...
+                    Evaluating your submitted response...
                   </p>
                 </div>
               )}
             </div>
 
+            {mediaError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{mediaError}</div>}
+
             {/* Video Controls */}
-            <div className="flex items-center justify-between p-4 glass-card rounded-2xl border border-white/10 bg-white/5">
+            <div className="flex items-center justify-between p-4 glass-card rounded-2xl border border-outline bg-white/5">
               {!isRecording ? (
                 <button
                   onClick={handleStartRecording}
+                  disabled={!mediaReady || isAnalyzing || isCompleted}
                   className="btn-3d-red px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined text-[16px]">radio_button_checked</span>
-                  <span>Start Recording Answer</span>
+                  <span>{mediaReady ? "Start Answer" : "Camera & microphone required"}</span>
                 </button>
               ) : (
                 <button
@@ -199,14 +207,14 @@ export default function VideoAssessmentActivePage() {
 
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <span className="material-symbols-outlined text-green-400 text-sm">mic</span>
-                <span>Audio Stream HD</span>
+                <span>{mediaReady ? "Camera & microphone ready" : "Media not ready"}</span>
               </div>
             </div>
           </div>
 
           {/* Question & Feedback (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
-            <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-4 bg-white/5">
+            <div className="glass-card p-6 rounded-3xl border border-outline space-y-4 bg-white/5">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
                   {questions[currentQuestionIndex].title}
@@ -236,7 +244,7 @@ export default function VideoAssessmentActivePage() {
               <div className="p-5 rounded-3xl border border-primary/30 bg-primary/10 space-y-2 animate-fadeIn">
                 <div className="flex items-center gap-2 text-primary font-bold text-xs">
                   <span className="material-symbols-outlined text-[18px]">psychology</span>
-                  <span>AI Real-time Sentiment Score</span>
+                  <span>Response evaluation</span>
                 </div>
                 <p className="text-xs text-gray-200">{aiFeedback}</p>
               </div>
@@ -252,7 +260,7 @@ export default function VideoAssessmentActivePage() {
                     Video Assessment Completed!
                   </h3>
                   <p className="text-xs text-gray-300 mt-1">
-                    Your assessment has been submitted for AI scoring and recruiter review.
+                    This session is complete. Review availability depends on the configured assessment workflow.
                   </p>
                 </div>
                 <Link
