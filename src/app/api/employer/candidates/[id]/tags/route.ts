@@ -1,0 +1,10 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { getCurrentSession, ApiError, handleApiError, readValidatedJson } from "@/lib";
+import { getSessionCompany } from "@/lib/routeAuthorization";
+const schema=z.object({label:z.string().trim().min(1).max(60)}).strict();
+async function ctx(req:NextRequest,id:string){const s=await getCurrentSession(req.headers);if(!s||!["EMPLOYER","RECRUITER","ADMIN"].includes(s.role))throw new ApiError("Employer access required.",403);const a=await prisma.application.findUnique({where:{id},select:{job:{select:{companyId:true}}}});if(!a)throw new ApiError("Application not found.",404);if(s.role!=="ADMIN"){const co=await getSessionCompany(s);if(co.id!==a.job.companyId)throw new ApiError("Application access denied.",403);}return{s,companyId:a.job.companyId};}
+export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}){try{const{id}=await params;await ctx(req,id);const tags=await prisma.employerCandidateTag.findMany({where:{applicationId:id},select:{id:true,label:true},orderBy:{createdAt:"asc"}});return NextResponse.json({success:true,tags});}catch(e){return handleApiError(e);}}
+export async function POST(req:NextRequest,{params}:{params:Promise<{id:string}>}){try{const{id}=await params;const{s,companyId}=await ctx(req,id);const{label}=await readValidatedJson(req,schema);const tag=await prisma.employerCandidateTag.upsert({where:{applicationId_label:{applicationId:id,label}},create:{applicationId:id,companyId,createdById:s.id,label},update:{},select:{id:true,label:true}});return NextResponse.json({success:true,tag});}catch(e){return handleApiError(e);}}
+export async function DELETE(req:NextRequest,{params}:{params:Promise<{id:string}>}){try{const{id}=await params;await ctx(req,id);const{label}=await readValidatedJson(req,schema);await prisma.employerCandidateTag.deleteMany({where:{applicationId:id,label}});return NextResponse.json({success:true});}catch(e){return handleApiError(e);}}
