@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
       select: { id: true, senderId: true, type: true, payload: true },
       take: 300,
     });
+    const candidateUserId = interview.application.candidateProfile?.userId;
     const assignedInterviewerIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
     const authorizedParticipantIds = [candidateUserId, ...assignedInterviewerIds].filter((id): id is string => Boolean(id));
     const participantIds = new Set([session.id, ...signals.map((signal) => signal.senderId)]);
