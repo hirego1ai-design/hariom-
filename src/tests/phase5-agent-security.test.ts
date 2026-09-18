@@ -100,3 +100,22 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
 
   return { results };
 }
+
+
+// Phase 5 approval-boundary regression invariants.
+describe('Phase 5 consequential approval boundaries', () => {
+  it('keeps consequential tools outside direct AI permissions', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/tools/ToolRegistry'), 'utf8'));
+    for (const tool of ['sendOffer', 'sendExternalMessage', 'createInvoice', 'changeCommercialTerms', 'deleteProtectedData']) {
+      expect(source).toContain(tool);
+    }
+    expect(source).toContain('consumeApprovedAction');
+  });
+
+  it('requires workflow identity for approved consequential execution', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/tools/ToolRegistry'), 'utf8'));
+    expect(source).toContain('workflowId');
+    expect(source).toContain('workflowStep');
+    expect(source).toContain('idempotencyKey');
+  });
+});
