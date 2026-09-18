@@ -6,6 +6,8 @@ import { RbacGuard } from '@/lib/security/RbacGuard';
 import { writeAgentApprovalAudit } from '@/lib/security/AgentApprovalAudit';
 
 const APPROVER_ROLES: Role[] = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
+const MANAGED_HIRING_WORKFLOW_TYPES = new Set(['JOB_REQUIREMENT', 'CANDIDATE_SCREENING', 'SHORTLISTING', 'INTERVIEW_SCHEDULING', 'VIRTUAL_INTERVIEW', 'EMPLOYER_FEEDBACK', 'SELECTION_REJECTION', 'JOINING_ONBOARDING', 'BILLING_HANDOFF', 'NOTIFICATION_HANDOFF']);
+
 const APPROVAL_ROLE_POLICY: Record<string, Role[]> = {
   CANDIDATE_SELECTION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
   CANDIDATE_REJECTION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
@@ -39,6 +41,9 @@ export class WorkflowEngine {
     checkpointState: Record<string, unknown>; context: TenantContext;
   }): Promise<WorkflowInstance> {
     const { initialStep, checkpointState, context, ...data } = params;
+    if (!MANAGED_HIRING_WORKFLOW_TYPES.has(data.workflowType)) throw new Error(`Unsupported managed-hiring workflow type: ${data.workflowType}`);
+    if (!data.correlationId || data.correlationId.length > 200) throw new Error('A bounded correlation ID is required');
+    if (!initialStep || initialStep.length > 120) throw new Error('A bounded initial workflow step is required');
     if (data.initiatedBy !== context.userId) throw new Error('Workflow initiator must be derived from the authenticated server context');
     if ((data.companyId ?? null) !== context.companyId && context.userRole !== Role.ADMIN) throw new Error('Workflow company must match the authenticated tenant context');
     validateTenantAccess(context, data.companyId ?? null);
