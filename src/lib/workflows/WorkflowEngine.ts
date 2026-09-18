@@ -6,6 +6,16 @@ import { RbacGuard } from '@/lib/security/RbacGuard';
 import { writeAgentApprovalAudit } from '@/lib/security/AgentApprovalAudit';
 
 const APPROVER_ROLES: Role[] = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
+const APPROVAL_ROLE_POLICY: Record<string, Role[]> = {
+  CANDIDATE_SELECTION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
+  CANDIDATE_REJECTION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
+  EXTERNAL_COMMUNICATION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
+  INTERVIEW_SCHEDULING: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
+  OFFER: [Role.EMPLOYER, Role.ADMIN],
+  FINANCIAL: [Role.ADMIN],
+  COMMERCIAL_TERMS: [Role.ADMIN],
+  DESTRUCTIVE: [Role.ADMIN],
+};
 
 function actionDigest(action: unknown): string {
   return createHash('sha256').update(JSON.stringify(action ?? null)).digest('hex');
@@ -48,6 +58,7 @@ export class WorkflowEngine {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
+    if (!APPROVAL_ROLE_POLICY[params.actionType]) throw new Error(`Unknown consequential approval action type: ${params.actionType}`);
     const digest = actionDigest(params.action);
     const approval = await prisma.$transaction(async (tx) => {
       const record = await tx.workflowApproval.upsert({
@@ -68,6 +79,9 @@ export class WorkflowEngine {
       const approval = await tx.workflowApproval.findUnique({ where: { id: params.approvalId }, include: { workflowInstance: true } });
       if (!approval || approval.decision !== 'PENDING') throw new Error('Pending approval not found');
       validateTenantAccess(params.context, approval.companyId);
+      const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
+      if (!requiredRoles) throw new Error(`Unknown consequential approval action type: ${approval.actionType}`);
+      RbacGuard.assertRole(params.context, requiredRoles);
       const updated = await tx.workflowApproval.updateMany({
         where: { id: approval.id, decision: 'PENDING' },
         data: { decision: params.decision, decidedBy: params.context.userId, decidedByRole: params.context.userRole, decisionNotes: params.notes?.slice(0, 2000), decidedAt: new Date() },
