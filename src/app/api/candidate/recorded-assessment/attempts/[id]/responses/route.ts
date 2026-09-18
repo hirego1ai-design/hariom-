@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
@@ -41,10 +42,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (existing.storedFileId !== file.id) throw new ApiError("This question already has a saved response.", 409);
       return NextResponse.json({ success: true, response: { id: existing.id, durationSeconds: existing.durationSeconds, mediaType: existing.mediaType, analysisStatus: existing.analysisStatus }, idempotent: true });
     }
-    const response = await prisma.recordedAssessmentResponse.create({
-      data: { attemptQuestionId: question.id, storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType },
+    let response;
+    try {
+      response = await prisma.recordedAssessmentResponse.create({
+        data: { attemptQuestionId: question.id, storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType },
+      });
+    } catch (error) {
+      // Two retries may pass the read above concurrently. The DB uniqueness rule is
+      // authoritative: return the winner only when it persisted the same media.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      const winner = await prisma.recordedAssessmentResponse.findUnique({ where: { attemptQuestionId: question.id } });
+      if (!winner || winner.storedFileId !== file.id) throw new ApiError("This question already has a saved response.", 409);
+      return NextResponse.json({ success: true, response: { id: winner.id, durationSeconds: winner.durationSeconds, mediaType: winner.mediaType, analysisStatus: winner.analysisStatus }, idempotent: true });
+    }
+    // Media persistence is the candidate-facing success boundary. Analysis is
+    // asynchronous enrichment; worker/config failure must never make a saved
+    // answer look lost and trigger a duplicate recording attempt.
+    void dispatchRecordedAssessmentAnalysis(response.id).catch((error) => {
+      console.error("Recorded assessment analysis dispatch failed after response persistence", { responseId: response.id, error });
     });
-    await dispatchRecordedAssessmentAnalysis(response.id);
     return NextResponse.json({ success: true, response: { id: response.id, durationSeconds: response.durationSeconds, mediaType: response.mediaType, analysisStatus: response.analysisStatus } });
   } catch (error) { return handleApiError(error); }
 }
