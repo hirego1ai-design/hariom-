@@ -50,6 +50,27 @@ enum AssessmentScope {
   PLATFORM_READINESS
 }
 
+enum RecordedAssessmentMediaType {
+  AUDIO
+  VIDEO
+}
+
+enum RecordedAssessmentAttemptStatus {
+  CREATED
+  IN_PROGRESS
+  COMPLETED
+  TERMINATED_PROCTORING
+  ABANDONED
+}
+
+enum RecordedAssessmentAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  BLOCKED_INFRA
+  FAILED
+}
+
 enum CandidateReadinessStatus {
   NOT_STARTED
   DEVELOPING
@@ -147,6 +168,7 @@ model CandidateProfile {
   mcqAttempts           McqAttempt[]
   typingAssessments     TypingAssessment[]
   mockInterviewSessions MockInterviewSession[]
+  recordedAssessmentAttempts RecordedAssessmentAttempt[]
   readinessRecords      CandidateReadiness[]
   creditWallet          CandidateCreditWallet?
   creditLedgerEntries   CandidateCreditLedger[]
@@ -249,6 +271,8 @@ model JobListing {
   applications   Application[]
   savedBy        SavedJob[]
   mcqAssessments McqAssessment[]
+  recordedAssessmentConfig RecordedAssessmentConfig?
+  recordedAssessmentAttempts RecordedAssessmentAttempt[]
   interviewProcess JobInterviewProcess?
 }
 
@@ -576,6 +600,8 @@ model StoredFile {
   createdAt    DateTime  @default(now())
 
   @@index([ownerId, createdAt])
+  assessmentResponses RecordedAssessmentResponse[]
+
   @@index([companyId, createdAt])
 }
 
@@ -1783,6 +1809,118 @@ model PaymentOrder {
   @@index([companyId])
   @@index([gatewayOrderId])
   @@index([gatewayTxId])
+}
+
+// ── Assessment Engine: Recorded Audio/Video Screening ─────────────────────────
+// Question-bank items are curated/versioned. Candidate attempts snapshot the
+// selected question text and timings so an in-progress assessment never changes.
+model RecordedAssessmentQuestionBank {
+  id                    String   @id @default(uuid())
+  roleTitle             String
+  industry              String?
+  department            String?
+  skillTags             String[] @default([])
+  questionText          String
+  difficulty            String   @default("BASIC")
+  readingTimeSeconds    Int      @default(10)
+  answerDurationSeconds Int      @default(30)
+  version               Int      @default(1)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  attemptQuestions RecordedAssessmentAttemptQuestion[]
+
+  @@index([roleTitle, industry, department, isActive])
+  @@index([isActive, updatedAt])
+}
+
+model RecordedAssessmentConfig {
+  id                       String                      @id @default(uuid())
+  jobListingId             String                      @unique
+  jobListing               JobListing                  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  mediaType                RecordedAssessmentMediaType @default(VIDEO)
+  defaultReadingTimeSeconds Int                        @default(10)
+  defaultAnswerSeconds     Int                         @default(30)
+  questionCount            Int                         @default(6)
+  proctoringEnabled        Boolean                     @default(true)
+  isActive                 Boolean                     @default(true)
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+}
+
+model RecordedAssessmentAttempt {
+  id                 String                          @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile                @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  jobListingId       String
+  jobListing         JobListing                      @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  mediaType          RecordedAssessmentMediaType
+  status             RecordedAssessmentAttemptStatus @default(CREATED)
+  questionSetVersion Int                             @default(1)
+  startedAt          DateTime?
+  completedAt        DateTime?
+  terminatedAt       DateTime?
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+
+  questions       RecordedAssessmentAttemptQuestion[]
+  proctoringEvents RecordedAssessmentProctoringEvent[]
+
+  @@index([candidateProfileId, createdAt])
+  @@index([jobListingId, status])
+}
+
+model RecordedAssessmentAttemptQuestion {
+  id                    String                    @id @default(uuid())
+  attemptId             String
+  attempt               RecordedAssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  sourceQuestionId      String?
+  sourceQuestion        RecordedAssessmentQuestionBank? @relation(fields: [sourceQuestionId], references: [id], onDelete: SetNull)
+  questionText          String
+  roleTitle             String
+  skillTags             String[]                  @default([])
+  orderIndex            Int
+  readingTimeSeconds    Int                       @default(10)
+  answerDurationSeconds Int
+  createdAt             DateTime                  @default(now())
+
+  response RecordedAssessmentResponse?
+
+  @@unique([attemptId, orderIndex])
+  @@index([sourceQuestionId])
+}
+
+model RecordedAssessmentResponse {
+  id                String                           @id @default(uuid())
+  attemptQuestionId String                           @unique
+  attemptQuestion   RecordedAssessmentAttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+  storedFileId      String?
+  storedFile        StoredFile?                      @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
+  mediaType         RecordedAssessmentMediaType
+  durationSeconds   Int
+  transcript        String?
+  analysisStatus    RecordedAssessmentAnalysisStatus @default(PENDING)
+  analysisResult    Json?
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
+
+  @@index([storedFileId])
+  @@index([analysisStatus])
+}
+
+model RecordedAssessmentProctoringEvent {
+  id            String                    @id @default(uuid())
+  attemptId     String
+  attempt       RecordedAssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  eventType     String
+  severity      String
+  evidence      Json?
+  warningNumber Int?
+  createdAt     DateTime                  @default(now())
+
+  @@index([attemptId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 // ── Assessment Engine: Dynamic MCQ Assessments ────────────────────────────────
