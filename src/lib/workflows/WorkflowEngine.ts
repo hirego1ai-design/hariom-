@@ -68,6 +68,10 @@ export class WorkflowEngine {
       validateTenantAccess(context, job.companyId);
       if (data.companyId && job.companyId !== data.companyId) throw new Error('Workflow job does not belong to the workflow company');
     }
+    if (data.candidateId && !data.applicationId) {
+      const candidate = await prisma.candidateProfile.findUnique({ where: { id: data.candidateId }, select: { id: true } });
+      if (!candidate) throw new Error('Candidate profile not found');
+    }
     if (data.applicationId) {
       const application = await prisma.application.findUnique({ where: { id: data.applicationId }, select: { candidateProfileId: true, jobId: true, job: { select: { companyId: true } } } });
       if (!application) throw new Error('Application not found');
@@ -127,6 +131,19 @@ export class WorkflowEngine {
       });
       throw error;
     }
+  }
+
+  static async cancelWorkflow(params: { workflowId: string; context: TenantContext; reason: string }): Promise<WorkflowInstance> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    const reason = params.reason.trim();
+    if (!reason || reason.length > 1000) throw new Error('A bounded cancellation reason is required');
+    if (!['RUNNING', 'PAUSED_FOR_APPROVAL', 'FAILED'].includes(workflow.status)) throw new Error(`Workflow cannot be cancelled from ${workflow.status}`);
+    const runningSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'RUNNING' } });
+    if (runningSteps > 0) throw new Error('Recover or finish RUNNING steps before cancellation');
+    return prisma.workflowInstance.update({ where: { id: workflow.id, status: workflow.status }, data: { status: 'CANCELLED', checkpointState: { ...(workflow.checkpointState as Record<string, unknown>), cancellationReason: reason, cancelledBy: params.context.userId, cancelledAt: new Date().toISOString() } as Prisma.InputJsonValue, updatedAt: new Date() } });
   }
 
   static async getApprovalDetails(params: { approvalId: string; context: TenantContext }) {
