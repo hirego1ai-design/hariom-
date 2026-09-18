@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
 
@@ -28,6 +28,7 @@ const MIME_TO_EXT_MAP: Record<string, string[]> = {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "private_upload", 20, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
 
     if (!file) {
       return jsonError("No file uploaded", 400);
+    }
+
+    if (file.size <= 0) {
+      return jsonError("Uploaded file is empty", 400);
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -85,6 +90,9 @@ export async function POST(req: NextRequest) {
     const profile = (session.role === "EMPLOYER" || session.role === "RECRUITER")
       ? await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } })
       : null;
+    if ((session.role === "EMPLOYER" || session.role === "RECRUITER") && !profile?.companyId) {
+      throw new ApiError("Employer company membership is required for this upload.", 403);
+    }
     const storedFile = await createStoredFile({
       ownerId: session.id,
       companyId: profile?.companyId,
