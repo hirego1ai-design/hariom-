@@ -133,6 +133,21 @@ export class WorkflowEngine {
     }
   }
 
+  static async failWorkflow(params: { workflowId: string; context: TenantContext; errorType: string; errorMessage: string }): Promise<WorkflowInstance> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (!['RUNNING', 'PAUSED_FOR_APPROVAL'].includes(workflow.status)) throw new Error(`Workflow cannot fail from ${workflow.status}`);
+    const errorType = params.errorType.trim().slice(0, 120);
+    const errorMessage = params.errorMessage.trim().slice(0, 2000);
+    if (!errorType || !errorMessage) throw new Error('Bounded workflow failure details are required');
+    return prisma.$transaction(async (tx) => {
+      await tx.deadLetterJob.upsert({ where: { sourceType_sourceId: { sourceType: 'WORKFLOW', sourceId: workflow.id } }, create: { sourceType: 'WORKFLOW', sourceId: workflow.id, correlationId: workflow.correlationId, errorType, errorMessage, payload: { workflowId: workflow.id, currentStep: workflow.currentStep } as Prisma.InputJsonValue, status: 'PENDING' }, update: { correlationId: workflow.correlationId, errorType, errorMessage, payload: { workflowId: workflow.id, currentStep: workflow.currentStep } as Prisma.InputJsonValue, status: 'PENDING' } });
+      return tx.workflowInstance.update({ where: { id: workflow.id, status: workflow.status }, data: { status: 'FAILED', failureCount: { increment: 1 }, updatedAt: new Date() } });
+    });
+  }
+
   static async requestConsequentialAction(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<{ approvalId: string; status: 'PENDING_APPROVAL' }> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
