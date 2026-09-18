@@ -41,6 +41,43 @@ export class PaymentGatewayController {
   private static cachedConfig: { value: GatewayConfigState; expiresAt: number } | null = null;
   private static readonly CONFIG_CACHE_TTL_MS = 30_000;
 
+  private static normalizeConfig(raw: Partial<GatewayConfigState>): GatewayConfigState {
+    const providerNames = Object.keys(this.providers) as GatewayName[];
+    const isGateway = (value: unknown): value is GatewayName =>
+      typeof value === "string" && providerNames.includes(value as GatewayName);
+    const rawStatus = raw.gatewaysStatus && typeof raw.gatewaysStatus === "object"
+      ? raw.gatewaysStatus as Partial<Record<GatewayName, unknown>>
+      : {};
+    const gatewaysStatus = Object.fromEntries(providerNames.map((gw) => [
+      gw,
+      ["HEALTHY", "DEGRADED", "DISABLED"].includes(String(rawStatus[gw]))
+        ? rawStatus[gw]
+        : "DISABLED",
+    ])) as GatewayConfigState["gatewaysStatus"];
+
+    if (process.env.NODE_ENV === "production") {
+      for (const gw of PRODUCTION_BLOCKED_GATEWAYS) gatewaysStatus[gw] = "DISABLED";
+    }
+
+    const suppliedPriorities = Array.isArray(raw.priorities) ? raw.priorities.filter(isGateway) : [];
+    const priorities = [...new Set(suppliedPriorities), ...providerNames.filter((gw) => !suppliedPriorities.includes(gw))];
+    const active = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
+    if (active.length === 0) gatewaysStatus.RAZORPAY = "HEALTHY";
+
+    const activeAfterFallback = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
+    let primaryGateway = isGateway(raw.primaryGateway) ? raw.primaryGateway : "RAZORPAY";
+    if (gatewaysStatus[primaryGateway] === "DISABLED") primaryGateway = activeAfterFallback[0];
+
+    return {
+      mode: raw.mode === "MANUAL" ? "MANUAL" : "AUTO",
+      primaryGateway,
+      autoFailover: raw.autoFailover !== false,
+      allowEmployerSelection: raw.allowEmployerSelection === true,
+      gatewaysStatus,
+      priorities,
+    };
+  }
+
   /**
    * Fetch current admin gateway configuration (or initialize default)
    */
@@ -55,19 +92,14 @@ export class PaymentGatewayController {
       });
 
       if (configRecord) {
-        const configured: GatewayConfigState = {
-          mode: configRecord.mode as any,
-          primaryGateway: configRecord.primaryGateway as any,
+        const configured = this.normalizeConfig({
+          mode: configRecord.mode as GatewayConfigState["mode"],
+          primaryGateway: configRecord.primaryGateway as GatewayName,
           autoFailover: configRecord.autoFailover,
           allowEmployerSelection: configRecord.allowEmployerSelection,
-          gatewaysStatus: configRecord.gatewaysStatus as any,
-          priorities: configRecord.priorities as any,
-        };
-        if (process.env.NODE_ENV === "production") {
-          for (const gw of PRODUCTION_BLOCKED_GATEWAYS) {
-            configured.gatewaysStatus[gw] = "DISABLED";
-          }
-        }
+          gatewaysStatus: configRecord.gatewaysStatus as GatewayConfigState["gatewaysStatus"],
+          priorities: configRecord.priorities as GatewayName[],
+        });
         this.cachedConfig = { value: configured, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
         return configured;
       }
