@@ -28,7 +28,9 @@ export class SessionValidationError extends Error {
     this.name = "SessionValidationError";
   }
 }
+let _jwtSecretCache: string | undefined;
 const getJwtSecret = (): string => {
+  if (_jwtSecretCache) return _jwtSecretCache;
   const secret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === "production") {
@@ -36,10 +38,9 @@ const getJwtSecret = (): string => {
     }
     return "hirego_dev_only_jwt_secret_key_2026";
   }
+  _jwtSecretCache = secret;
   return secret;
 };
-
-const JWT_SECRET = getJwtSecret();
 
 export function validatePasswordStrength(password: string): { valid: boolean; message?: string } {
   if (!password || password.length < 8) {
@@ -74,11 +75,11 @@ export function createSessionToken(payload: UserSession): string {
     throw new Error("Session tokens require an explicit user ID, email, name, and role.");
   }
 
-  return jwt.sign({ ...payload, sessionVersion: payload.sessionVersion ?? 0 }, JWT_SECRET, { expiresIn: "12h", jwtid: crypto.randomUUID() });
+  return jwt.sign({ ...payload, sessionVersion: payload.sessionVersion ?? 0 }, getJwtSecret(), { expiresIn: "12h", jwtid: crypto.randomUUID() });
 }
 
 export async function revokeSessionToken(token: string): Promise<void> {
-  const decoded = jwt.verify(token, JWT_SECRET) as { jti?: string; exp?: number };
+  const decoded = jwt.verify(token, getJwtSecret()) as { jti?: string; exp?: number };
   if (!decoded?.jti) throw new SessionValidationError("Session token has no revocation identifier.");
   const ttlSeconds = decoded.exp ? Math.max(1, decoded.exp - Math.floor(Date.now() / 1_000)) : 12 * 60 * 60;
   try {
@@ -94,7 +95,7 @@ export async function revokeAllUserSessions(userId: string, sessionVersion: numb
 
 export function verifySessionToken(token: string): UserSession | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as UserSession;
+    return jwt.verify(token, getJwtSecret()) as UserSession;
   } catch {
     return null;
   }
