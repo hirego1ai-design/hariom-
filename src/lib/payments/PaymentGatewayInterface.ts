@@ -1,5 +1,12 @@
 export type GatewayName = "RAZORPAY" | "PAYU" | "PHONEPE" | "STRIPE";
 
+export class AmbiguousPaymentOrderError extends Error {
+  constructor(message: string, public readonly provider: GatewayName) {
+    super(message);
+    this.name = "AmbiguousPaymentOrderError";
+  }
+}
+
 export interface CreateOrderParams {
   orderId: string;
   amount: number;
