@@ -8,8 +8,7 @@ function EmployerInterviewSchedulerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [applicationId, setApplicationId] = useState("");
-  const [mode, setMode] = useState<"ONLINE" | "OFFLINE">("ONLINE");
-  const [round, setRound] = useState("TECHNICAL");
+  const [roundId, setRoundId] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [address, setAddress] = useState("");
@@ -22,17 +21,17 @@ function EmployerInterviewSchedulerContent() {
 
   useEffect(() => {
     const appVal = searchParams.get("applicationId") || searchParams.get("id") || "";
-    if (appVal) {
-      setApplicationId(appVal);
-    }
+    const roundVal = searchParams.get("roundId") || "";
+    if (appVal) setApplicationId(appVal);
+    if (roundVal) setRoundId(roundVal);
   }, [searchParams]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSuccess(null);
-    if (!applicationId || !date || !time) {
-      setError("Application ID, date, and time are required.");
+    if (!applicationId || !roundId || !date || !time) {
+      setError("Application ID, configured round, date, and time are required.");
       return;
     }
     setSaving(true);
@@ -43,11 +42,9 @@ function EmployerInterviewSchedulerContent() {
         body: JSON.stringify({
           applicationId,
           scheduledAt: new Date(`${date}T${time}`).toISOString(),
-          durationMins: 60,
-          mode,
-          round,
-          address: mode === "OFFLINE" ? address : undefined,
-          contactNumber: mode === "OFFLINE" ? contactNumber : undefined,
+          roundId,
+          address: address || undefined,
+          contactNumber: contactNumber || undefined,
           notifyEmail: email,
           notifyWhatsapp: whatsapp,
         }),
@@ -109,14 +106,14 @@ function EmployerInterviewSchedulerContent() {
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
             </label>
           </div>
-          {mode === "OFFLINE" && (
+          {roundId && (
             <div className="grid md:grid-cols-2 gap-4">
               <label className="block text-sm text-text-secondary">
-                Meeting address
+                Meeting address (required for configured in-person rounds)
                 <input value={address} onChange={(e) => setAddress(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
               </label>
               <label className="block text-sm text-text-secondary">
-                HireGo contact number
+                HireGo contact number (required for configured in-person rounds)
                 <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
               </label>
             </div>
