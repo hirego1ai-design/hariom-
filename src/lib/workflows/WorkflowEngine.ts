@@ -59,6 +59,10 @@ export class WorkflowEngine {
   }
 
   static async executeStep<T>(workflowId: string, stepName: string, attemptNumber: number, inputPayload: unknown, stepFn: () => Promise<T>): Promise<T> {
+    if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 3) throw new Error('Workflow step attempt must be between 1 and 3');
+    const workflowState = await prisma.workflowInstance.findUnique({ where: { id: workflowId }, select: { status: true } });
+    if (!workflowState) throw new Error('Workflow not found');
+    if (workflowState.status !== 'RUNNING') throw new Error(`Workflow is not executable while status is ${workflowState.status}`);
     const executionKey = `${workflowId}:${stepName}:${attemptNumber}`;
     const previous = await prisma.workflowStepLog.findUnique({ where: { executionKey } });
     if (previous?.status === 'COMPLETED' && previous.sideEffectDone) return previous.outputPayload as T;
