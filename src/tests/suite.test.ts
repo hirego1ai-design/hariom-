@@ -230,6 +230,29 @@ async function runIsolatedTests() {
     results.push({ name: "Phase 5 agent security suite", category: "Phase 5 Agent Security", passed: false, message: e.message });
   }
 
+  // 19. Workflow engine behavioral regressions run through Node's test runner
+  // in CI via verify:phase5. Keep the main suite aware of the contract file so
+  // accidental removal from the repository is reported immediately.
+  try {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const regressionPath = path.resolve("src/tests/workflow-engine-regression.test.ts");
+    const source = fs.readFileSync(regressionPath, "utf8");
+    const required = [
+      "workflow completion blocks approved but unconsumed consequential actions",
+      "duplicate decided approval request cannot re-pause workflow",
+      "approving one action keeps workflow paused while another approval is pending",
+      "approved action consumption is single-use under replay",
+    ];
+    results.push({
+      name: "Workflow approval behavioral regressions remain registered",
+      category: "Phase 5 Workflow Reliability",
+      passed: required.every((name) => source.includes(name)),
+    });
+  } catch (e: any) {
+    results.push({ name: "Workflow approval behavioral regressions", category: "Phase 5 Workflow Reliability", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const failedCount = results.length - passedCount - skippedCount;
