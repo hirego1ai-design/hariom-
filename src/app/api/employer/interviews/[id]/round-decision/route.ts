@@ -42,6 +42,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
       if (body.action === "REJECT") {
+        const claimed = await tx.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
+        });
+        if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
         await tx.application.update({ where: { id: interview.applicationId }, data: { status: "REJECTED" } });
         return { action: "REJECT" as const, nextRound: null };
       }
@@ -49,7 +54,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         where: { processId_sequence: { processId: interview.roundProgress!.round.processId, sequence: interview.roundProgress!.round.sequence + 1 } },
         include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } },
       });
-      await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now } });
+      const claimed = await tx.interviewRoundProgress.updateMany({
+        where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+        data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
+      });
+      if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
       if (!nextRound) {
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
