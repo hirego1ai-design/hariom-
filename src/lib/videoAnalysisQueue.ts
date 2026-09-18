@@ -55,3 +55,32 @@ export async function recoverStaleVideoAnalysisJobs(limit = 10) {
   }
   return { scanned: stale.length, retried, exhausted };
 }
+
+export async function releaseVideoAnalysisClaimForRetry(params: {
+  jobId: string; claimToken: string; reason: string;
+}) {
+  const job = await prisma.videoAnalysisJob.findUnique({ where: { id: params.jobId } });
+  if (!job || job.status !== "PROCESSING" || job.claimToken !== params.claimToken) return { released: false, exhausted: false };
+  const now = new Date();
+  if (job.attempts >= job.maxAttempts) {
+    const terminal = await prisma.videoAnalysisJob.updateMany({
+      where: { id: job.id, status: "PROCESSING", claimToken: params.claimToken },
+      data: { status: "BLOCKED_INFRA", error: params.reason, completedAt: now, claimToken: null, claimedAt: null, leaseExpiresAt: null },
+    });
+    if (terminal.count) await prisma.videoResume.updateMany({
+      where: { id: job.videoResumeId, analysisStatus: "PROCESSING" },
+      data: { analysisStatus: "BLOCKED_INFRA", analysisError: params.reason },
+    });
+    return { released: false, exhausted: terminal.count === 1 };
+  }
+  const delay = RETRY_BASE_MS * Math.pow(2, Math.max(0, job.attempts - 1));
+  const released = await prisma.videoAnalysisJob.updateMany({
+    where: { id: job.id, status: "PROCESSING", claimToken: params.claimToken },
+    data: { status: "PENDING", error: params.reason, nextAttemptAt: new Date(now.getTime() + delay), claimToken: null, claimedAt: null, leaseExpiresAt: null },
+  });
+  if (released.count) await prisma.videoResume.updateMany({
+    where: { id: job.videoResumeId, analysisStatus: "PROCESSING" },
+    data: { analysisStatus: "PENDING", analysisError: null },
+  });
+  return { released: released.count === 1, exhausted: false };
+}
