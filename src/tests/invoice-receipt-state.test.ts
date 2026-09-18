@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { receiptContentMatchesMime, receiptDownloadUrl, receiptNotes, rejectionStatus } from "../lib/invoiceReceiptState";
+import { scanUpload } from "../lib/uploadSecurity";
 
 test("receipt metadata exposes only authenticated file routes", () => {
   const notes = JSON.stringify({ storedFileId: "file-id", bankTransferRef: "UTR-12345" });
@@ -26,4 +27,18 @@ test("receipt content must match the declared PNG, JPEG, or PDF MIME", () => {
   assert.equal(receiptContentMatchesMime(pdf, "application/pdf"), true);
   assert.equal(receiptContentMatchesMime(Buffer.from("<script>"), "image/png"), false);
   assert.equal(receiptContentMatchesMime(png, "application/pdf"), false);
+});
+
+test("production upload scanning fails closed when scanner configuration is missing", async () => {
+  const env = process.env as Record<string, string | undefined>;
+  const previous = { NODE_ENV: env.NODE_ENV, MALWARE_SCANNER_URL: env.MALWARE_SCANNER_URL, MALWARE_SCANNER_TOKEN: env.MALWARE_SCANNER_TOKEN };
+  try {
+    env.NODE_ENV = "production";
+    delete env.MALWARE_SCANNER_URL;
+    delete env.MALWARE_SCANNER_TOKEN;
+    const result = await scanUpload("00000000-0000-0000-0000-000000000000", Buffer.from("%PDF-1.7"));
+    assert.equal(result.status, "ERROR");
+  } finally {
+    for (const [key, value] of Object.entries(previous)) value === undefined ? delete env[key] : env[key] = value;
+  }
 });
