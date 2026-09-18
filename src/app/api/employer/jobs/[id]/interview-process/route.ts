@@ -63,7 +63,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const { session, job } = await context(req, id);
     const body = await readValidatedJson(req, bodySchema);
-    const requestedUsers = [...new Set(body.rounds.flatMap((r) => r.interviewerUserIds))];
+    const requestedUsers = [...new Set(body.rounds.flatMap((r) => r.interviewerUserIds ?? []))];
     if (requestedUsers.length) {
       const count = await prisma.employerProfile.count({ where: { companyId: job.companyId, userId: { in: requestedUsers } } });
       if (count !== requestedUsers.length) throw new ApiError("One or more interviewers are not active members of this company.", 400);
@@ -97,7 +97,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             interviewType: round.interviewType, durationMins: round.durationMins, mandatory: round.mandatory,
             mandatoryFeedback: round.mandatoryFeedback, candidateFeedbackPolicy: round.candidateFeedbackPolicy,
             previousFeedbackVisibility: round.previousFeedbackVisibility,
-            interviewers: { create: round.interviewerUserIds.map((userId) => ({ userId, required: true })) },
+            interviewers: { create: (round.interviewerUserIds ?? []).map((userId) => ({ userId, required: true })) },
           })) },
         },
         include: { rounds: { orderBy: { sequence: "asc" }, include: { interviewers: true } } },
