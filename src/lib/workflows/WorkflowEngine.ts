@@ -133,6 +133,21 @@ export class WorkflowEngine {
     }
   }
 
+  static async resumeApprovedWorkflow(params: { workflowId: string; context: TenantContext }): Promise<WorkflowInstance> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (workflow.status !== 'PAUSED_FOR_APPROVAL') throw new Error(`Workflow is not pending approval: ${workflow.status}`);
+    const [pending, rejected] = await Promise.all([
+      prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'PENDING' } }),
+      prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'REJECTED' } }),
+    ]);
+    if (rejected > 0) throw new Error('Workflow has a rejected consequential action');
+    if (pending > 0) throw new Error('Workflow still has pending consequential approvals');
+    return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
+  }
+
   static async failWorkflow(params: { workflowId: string; context: TenantContext; errorType: string; errorMessage: string }): Promise<WorkflowInstance> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
