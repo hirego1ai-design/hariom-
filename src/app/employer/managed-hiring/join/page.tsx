@@ -1,11 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
 type Placement = { id: string; applicationId: string; status: string; invoiceEligibleAt: string; totalAmount: string; holdReason?: string; invoice?: { invoiceNumber: string } | null };
 type Agreement = { id: string; agreementNumber: string; status: string; invoiceRule: string; feeType: string; feeValue: number; taxRatePct: number; creditDays: number };
-export default function ManagedHiringJoinPage() {
+function ManagedHiringJoinContent() {
   const params = useSearchParams();
   const [form, setForm] = useState({ applicationId: "", agreementId: "", annualCtc: "", joinedAt: "" });
   const [accepted, setAccepted] = useState(false);
@@ -79,4 +80,13 @@ export default function ManagedHiringJoinPage() {
         <button disabled={saving} onClick={() => changeStatus(p, "CANCEL")}>Cancel billing</button></div>}
     </div>)}
   </div></PageContainer>;
+}
+
+
+export default function ManagedHiringJoinPage() {
+  return (
+    <Suspense fallback={<PageContainer><div className="max-w-3xl mx-auto py-8 px-4 text-text-secondary">Loading joining workflow...</div></PageContainer>}>
+      <ManagedHiringJoinContent />
+    </Suspense>
+  );
 }
