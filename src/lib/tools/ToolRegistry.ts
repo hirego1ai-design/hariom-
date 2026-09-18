@@ -1,14 +1,17 @@
 import { z, ZodSchema } from 'zod';
 import { TenantContext } from '@/lib/security/TenantContext';
+import { WorkflowEngine } from '@/lib/workflows/WorkflowEngine';
 
-export interface ToolExecutionContext { tenantContext: TenantContext; correlationId: string; executionId: string; agentId: string; }
+export interface ToolExecutionContext {
+  tenantContext: TenantContext; correlationId: string; executionId: string; agentId: string;
+  workflowId?: string; workflowStep?: string;
+}
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> { name: string; description: string; hasSideEffect: boolean; inputSchema: ZodSchema<TInput>; outputSchema: ZodSchema<TOutput>; handler: (params: TInput, context: ToolExecutionContext) => Promise<TOutput>; }
 export class ToolNotFoundError extends Error { constructor(message: string) { super(message); this.name = 'ToolNotFoundError'; } }
 export class PermissionDeniedError extends Error { constructor(message: string) { super(message); this.name = 'PermissionDeniedError'; } }
 export class ToolValidationError extends Error { constructor(message: string) { super(message); this.name = 'ToolValidationError'; } }
 export interface AgentPermissions { agentId: string; allowedTools: string[]; deniedTools: string[]; maxCostPerTask: number; maxToolCalls: number; }
 
-/** AI output is never authorization for these consequential actions. */
 export const CONSEQUENTIAL_AGENT_TOOLS = new Set([
   'sendEmailNotification', 'sendWhatsAppNotification', 'scheduleInterviewSession',
   'generateCommercialInvoice', 'sendOffer', 'updateApplicationStatus',
@@ -37,12 +40,12 @@ export class ToolRegistry {
 
     const permissions = AGENT_PERMISSIONS[agentId];
     if (!permissions) throw new PermissionDeniedError(`Agent '${agentId}' is not configured in permissions.`);
-    if (CONSEQUENTIAL_AGENT_TOOLS.has(toolName)) throw new PermissionDeniedError(`Consequential tool '${toolName}' requires persisted human authorization and cannot be executed directly by an AI agent.`);
+
+    const isConsequential = CONSEQUENTIAL_AGENT_TOOLS.has(toolName);
+    // Consequential tools stay denied to agents unless the policy explicitly
+    // grants the tool AND the exact workflow action has durable human approval.
     if (permissions.deniedTools.includes(toolName)) throw new PermissionDeniedError(`Agent '${agentId}' is explicitly denied from using tool '${toolName}'.`);
     if (!permissions.allowedTools.includes(toolName)) throw new PermissionDeniedError(`Agent '${agentId}' is not allowed to use tool '${toolName}'.`);
-
-    const currentCount = this.executionToolCounts.get(context.executionId) || 0;
-    if (currentCount >= permissions.maxToolCalls) throw new PermissionDeniedError(`Execution '${context.executionId}' has exceeded the maximum allowed tool calls (${permissions.maxToolCalls}).`);
 
     const parsedInputResult = tool.inputSchema.safeParse(params);
     if (!parsedInputResult.success) throw new ToolValidationError(`Invalid input for tool '${toolName}': ${parsedInputResult.error.message}`);
@@ -50,9 +53,24 @@ export class ToolRegistry {
       throw new ToolValidationError(`Tool '${toolName}' has side effects and requires a non-empty 'idempotencyKey' parameter.`);
     }
 
-    // Count only validated, authorized calls; rejected prompt/tool-injection
-    // attempts cannot consume the execution's legitimate tool-call allowance.
+    if (isConsequential) {
+      if (!context.workflowId || !context.workflowStep) throw new PermissionDeniedError(`Consequential tool '${toolName}' requires workflow-bound human approval.`);
+      try {
+        await WorkflowEngine.assertApprovedAction({
+          workflowId: context.workflowId,
+          stepName: context.workflowStep,
+          action: { toolName, params: parsedInputResult.data },
+          context: context.tenantContext,
+        });
+      } catch (error) {
+        throw new PermissionDeniedError(`Consequential tool '${toolName}' approval denied: ${error instanceof Error ? error.message : 'approval unavailable'}`);
+      }
+    }
+
+    const currentCount = this.executionToolCounts.get(context.executionId) || 0;
+    if (currentCount >= permissions.maxToolCalls) throw new PermissionDeniedError(`Execution '${context.executionId}' has exceeded the maximum allowed tool calls (${permissions.maxToolCalls}).`);
     this.executionToolCounts.set(context.executionId, currentCount + 1);
+
     const result = await tool.handler(parsedInputResult.data, context);
     const parsedOutputResult = tool.outputSchema.safeParse(result);
     if (!parsedOutputResult.success) throw new ToolValidationError(`Invalid output from tool '${toolName}': ${parsedOutputResult.error.message}`);
