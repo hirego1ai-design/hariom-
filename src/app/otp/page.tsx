@@ -8,7 +8,7 @@ import { ArrowRight, Loader2, Edit3 } from "lucide-react";
 export default function OTPPage() {
   const router = useRouter();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [targetEmail, setTargetEmail] = useState("candidate@hirego.ai");
+  const [targetEmail, setTargetEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [resendStatus, setResendStatus] = useState("");
