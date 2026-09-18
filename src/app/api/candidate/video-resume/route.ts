@@ -139,7 +139,16 @@ async function dispatchWorkerJob(params: {
   token: string;
 }) {
   try {
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/internal/video-analysis/callback`;
+    const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
+      || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
+      || "http://localhost:3000";
+    if (process.env.NODE_ENV === "production") {
+      const parsedOrigin = new URL(appOrigin);
+      if (parsedOrigin.protocol !== "https:" || parsedOrigin.username || parsedOrigin.password) {
+        throw new Error("VIDEO_ANALYSIS_CALLBACK_ORIGIN (or NEXT_PUBLIC_APP_URL) must be a credential-free HTTPS origin in production.");
+      }
+    }
+    const callbackUrl = `${appOrigin}/api/internal/video-analysis/callback`;
     const res = await fetch(`${params.workerUrl.replace(/\/$/, "")}/analyze`, {
       method: "POST",
       headers: {
