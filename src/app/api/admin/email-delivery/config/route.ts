@@ -40,7 +40,8 @@ async function requireAdmin(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
+    await enforceRateLimit(request, `admin_email_delivery_config_get:${admin.id}`, 30, 60_000);
     return NextResponse.json({ success: true, config: await getEmailDeliverySettings() });
   } catch (error) {
     return handleApiError(error);
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     await enforceRateLimit(request, `admin_email_delivery_config:${admin.id}`, 10, 60_000);
     const body = await readValidatedJson(request, updateSchema);
     const config = await saveEmailDeliverySettings(body);
-    logAuditEvent({
+    await logAuditEvent({
       userId: admin.id,
       action: "EMAIL_DELIVERY_CONFIG_UPDATED",
       resource: "Email delivery configuration",
