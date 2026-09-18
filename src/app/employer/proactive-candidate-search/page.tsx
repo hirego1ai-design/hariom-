@@ -849,6 +849,7 @@ export default function CandidateMarketplace() {
                 { label: "Reject", icon: "close", color: T.red },
                 { label: "Email", icon: "mail", color: T.sky },
                 { label: "Compare", icon: "compare_arrows", color: T.purple, action: () => setCompareOpen(true), disabled: selected.size < 2 },
+                ...(activeCollection !== "all" ? [{ label: "Add to collection", icon: "folder", color: T.purple, action: () => void addToCollection(activeCollection, [...selected]) }] : []),
                 { label: "Tags", icon: "sell", color: T.yellow },
                 { label: "Export", icon: "download", color: T.slate },
               ].map(a => (
