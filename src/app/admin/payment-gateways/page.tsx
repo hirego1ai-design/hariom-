@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 
 type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
 type GatewayStatus = "HEALTHY" | "DEGRADED" | "DISABLED";
@@ -25,16 +24,17 @@ export default function AdminPaymentGatewaysPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchConfig() {
+    setError(null);
     try {
       const res = await fetch("/api/admin/payment-gateway/config");
       const data = await res.json();
-      if (data.success && data.config) {
-        setConfig(data.config);
-      }
+      if (!res.ok || !data.success || !data.config) throw new Error(data.error || "Unable to load gateway configuration.");
+      setConfig(data.config);
     } catch (err) {
-      console.error("Failed to load gateway config", err);
+      setError(err instanceof Error ? err.message : "Unable to load gateway configuration.");
     } finally {
       setLoading(false);
     }
@@ -46,6 +46,7 @@ export default function AdminPaymentGatewaysPage() {
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/payment-gateway/config", {
         method: "POST",
@@ -57,10 +58,10 @@ export default function AdminPaymentGatewaysPage() {
         setToast("Multi-gateway payment configuration saved!");
         setTimeout(() => setToast(null), 3000);
       } else {
-        alert("Failed to save: " + data.error);
+        setError(data.error || "Unable to save gateway configuration.");
       }
-    } catch (err: any) {
-      alert("Error: " + err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to save gateway configuration.");
     } finally {
       setSaving(false);
     }
@@ -69,13 +70,11 @@ export default function AdminPaymentGatewaysPage() {
   const toggleGatewayStatus = (gw: GatewayName) => {
     const current = config.gatewaysStatus[gw] || "HEALTHY";
     const next = current === "HEALTHY" ? "DEGRADED" : current === "DEGRADED" ? "DISABLED" : "HEALTHY";
-    setConfig({
-      ...config,
-      gatewaysStatus: {
-        ...config.gatewaysStatus,
-        [gw]: next,
-      },
-    });
+    const gatewaysStatus = { ...config.gatewaysStatus, [gw]: next };
+    const enabled = GATEWAYS.filter((name) => gatewaysStatus[name] !== "DISABLED");
+    if (enabled.length === 0) return setError("At least one payment gateway must remain enabled.");
+    setError(null);
+    setConfig({ ...config, gatewaysStatus, primaryGateway: gatewaysStatus[config.primaryGateway] === "DISABLED" ? enabled[0] : config.primaryGateway });
   };
 
   return (
@@ -86,6 +85,8 @@ export default function AdminPaymentGatewaysPage() {
           {toast}
         </div>
       )}
+
+      {error && <div role="alert" className="max-w-6xl mx-auto mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
 
       {/* Header */}
       <div className="max-w-6xl mx-auto space-y-8">
@@ -225,7 +226,7 @@ export default function AdminPaymentGatewaysPage() {
                         )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1 font-mono">
-                        Priority Rank: #{config.priorities.indexOf(gw) + 1} • Webhook HMAC Verified
+                        Priority Rank: #{config.priorities.indexOf(gw) + 1} • Routing status controlled by administrator
                       </p>
                     </div>
 
