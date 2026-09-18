@@ -29,6 +29,9 @@ export class RazorpayGateway implements PaymentGateway {
             Authorization: `Basic ${auth}`,
             "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(10_000),
+          redirect: "error",
+          cache: "no-store",
           body: JSON.stringify({
             amount: Math.round(params.amount * 100), // amount in paise
             currency: params.currency || "INR",
@@ -154,7 +157,33 @@ export class RazorpayGateway implements PaymentGateway {
   }
 
   async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      if (process.env.NODE_ENV === "production") throw new Error("Razorpay credentials missing in production environment.");
+      return { status: "PENDING" };
+    }
+    if (!/^pay_[A-Za-z0-9]+$/.test(gatewayTxId)) throw new Error("Invalid Razorpay payment id.");
+
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(gatewayTxId)}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      cache: "no-store",
+    });
+    const data: unknown = await res.json();
+    if (!res.ok || !isRazorpayPayment(data)) {
+      throw new Error(`Razorpay payment status lookup failed (${res.status}).`);
+    }
+
+    const status = data.status === "captured"
+      ? "SUCCESS"
+      : data.status === "failed" || data.status === "refunded"
+        ? "FAILED"
+        : "PENDING";
+    return { status, rawResponse: data };
   }
 }
 
@@ -168,4 +197,10 @@ function getRazorpayErrorDetail(data: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const description = (error as { description?: unknown }).description;
   return typeof description === "string" ? description : undefined;
+}
+
+function isRazorpayPayment(data: unknown): data is { id: string; status: string } & Record<string, unknown> {
+  if (typeof data !== "object" || data === null) return false;
+  const payment = data as { id?: unknown; status?: unknown };
+  return typeof payment.id === "string" && typeof payment.status === "string";
 }
