@@ -1853,6 +1853,7 @@ model PaymentOrder {
 model RecordedAssessmentQuestionBank {
   id                    String   @id @default(uuid())
   roleTitle             String
+  questionKey           String
   industry              String?
   department            String?
   skillTags             String[] @default([])
@@ -1867,6 +1868,8 @@ model RecordedAssessmentQuestionBank {
 
   attemptQuestions RecordedAssessmentAttemptQuestion[]
 
+  @@unique([questionKey, version])
+  @@index([questionKey, isActive])
   @@index([roleTitle, industry, department, isActive])
   @@index([isActive, updatedAt])
 }

@@ -7,6 +7,7 @@ import { RECORDED_ASSESSMENT_READING_SECONDS } from "@/lib/recordedAssessment";
 
 const schema = z.object({
   roleTitle: z.string().trim().min(2).max(120),
+  questionKey: z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   industry: z.string().trim().min(2).max(120).nullable().optional(),
   department: z.string().trim().min(2).max(120).nullable().optional(),
   skillTags: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
@@ -39,23 +40,24 @@ export async function POST(request: NextRequest) {
     const body = await readValidatedJson(request, schema);
     const normalizedText = body.questionText.replace(/\s+/g, " ").trim();
     const normalizedRole = body.roleTitle.replace(/\s+/g, " ").trim();
-    const duplicate = await prisma.recordedAssessmentQuestionBank.findFirst({
-      where: {
-        roleTitle: { equals: normalizedRole, mode: "insensitive" },
-        questionText: { equals: normalizedText, mode: "insensitive" },
-        industry: body.industry ?? null,
-        department: body.department ?? null,
-        isActive: true,
-      },
-      select: { id: true, version: true },
-    });
-    if (duplicate) throw new ApiError(`An active copy of this curated question already exists (v${duplicate.version}). Create a new version by retiring the old question first.`, 409);
-    const latest = await prisma.recordedAssessmentQuestionBank.findFirst({
-      where: { roleTitle: { equals: normalizedRole, mode: "insensitive" }, questionText: { equals: normalizedText, mode: "insensitive" } },
-      orderBy: { version: "desc" }, select: { version: true },
-    });
-    const question = await prisma.recordedAssessmentQuestionBank.create({
-      data: { ...body, roleTitle: normalizedRole, questionText: normalizedText, version: (latest?.version ?? 0) + 1, readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS },
+    const question = await prisma.$transaction(async (tx) => {
+      const family = await tx.recordedAssessmentQuestionBank.findMany({
+        where: { questionKey: body.questionKey },
+        select: { id: true, version: true, isActive: true },
+        orderBy: { version: "desc" },
+      });
+      if (family.some((item) => item.isActive)) {
+        throw new ApiError("Retire the active version before publishing a replacement.", 409);
+      }
+      return tx.recordedAssessmentQuestionBank.create({
+        data: {
+          ...body,
+          roleTitle: normalizedRole,
+          questionText: normalizedText,
+          version: (family[0]?.version ?? 0) + 1,
+          readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
+        },
+      });
     });
     return NextResponse.json({ success: true, question }, { status: 201 });
   } catch (error) { return handleApiError(error); }
