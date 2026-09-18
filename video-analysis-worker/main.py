@@ -389,7 +389,7 @@ def process_job(req: AnalyzeRequest):
 
     except Exception as e:
         print(f"Job processing exception: {e}", file=sys.stderr)
-        send_callback(req.callbackUrl, req.jobId, req.videoResumeId, "FAILED", str(e))
+        send_callback(req.callbackUrl, req.jobId, req.videoResumeId, "FAILED", str(e), claim_token=req.claimToken)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
