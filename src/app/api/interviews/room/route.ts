@@ -107,13 +107,18 @@ export async function POST(req: NextRequest) {
       });
       if (blocking > 0) throw new ApiError("Complete your pending mandatory interview feedback before joining another interview.", 409);
     }
-    if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
+    if (["COMPLETED", "FEEDBACK_SUBMITTED", "CANCELLED"].includes(interview.status)) {
+      if (body.action === "COMPLETE" && session.role !== "CANDIDATE" && ["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status)) {
+        return NextResponse.json({ success: true, roomId: body.roomId, status: "COMPLETED", idempotent: true });
+      }
+      throw new ApiError("Interview room is closed", 409);
+    }
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
       const completed = await prisma.$transaction(async (tx) => {
         const claimed = await tx.interview.updateMany({
-          where: { id: interview.id, status: { notIn: ["COMPLETED", "FEEDBACK_SUBMITTED"] } },
+          where: { id: interview.id, status: { in: ["SCHEDULED", "RESCHEDULED", "LIVE"] } },
           data: { status: "COMPLETED" },
         });
         if (claimed.count !== 1) return false;
