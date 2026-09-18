@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_system_health", 30, 60_000);
     const memoryUsage = process.memoryUsage();
     
     // DB health check
