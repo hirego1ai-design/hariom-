@@ -31,6 +31,12 @@ export async function POST(request: NextRequest) {
     }
     const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: true }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
+    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
+      return NextResponse.json({ success: false, error: "Interviews cannot be scheduled for an application in a terminal state." }, { status: 409 });
+    }
+    if (new Date(body.scheduledAt).getTime() <= Date.now()) {
+      return NextResponse.json({ success: false, error: "Interview date and time must be in the future." }, { status: 400 });
+    }
     if (session.role !== "ADMIN") {
       const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
       if (!profile || profile.companyId !== application.job.companyId) return NextResponse.json({ success: false, error: "You cannot schedule this candidate." }, { status: 403 });
@@ -64,6 +70,10 @@ export async function POST(request: NextRequest) {
       // only for a friendly error; this lock + re-read is the authoritative
       // duplicate-scheduling guard across concurrent requests/replicas.
       await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${application.id} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({ where: { id: application.id }, select: { status: true } });
+      if (!lockedApplication || ["HIRED", "REJECTED", "WITHDRAWN"].includes(lockedApplication.status)) {
+        throw new Error("APPLICATION_NOT_SCHEDULABLE");
+      }
       const progress = await tx.interviewRoundProgress.findUnique({
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
         select: { interviewId: true, status: true },
@@ -87,6 +97,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
+    if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
   }
