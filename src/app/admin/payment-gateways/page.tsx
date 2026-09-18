@@ -3,8 +3,13 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 
+type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
+type GatewayStatus = "HEALTHY" | "DEGRADED" | "DISABLED";
+type GatewayConfig = { mode: "AUTO" | "MANUAL"; primaryGateway: GatewayName; autoFailover: boolean; allowEmployerSelection: boolean; gatewaysStatus: Record<GatewayName, GatewayStatus>; priorities: GatewayName[] };
+const GATEWAYS: GatewayName[] = ["RAZORPAY", "PAYU", "STRIPE"];
+
 export default function AdminPaymentGatewaysPage() {
-  const [config, setConfig] = useState<any>({
+  const [config, setConfig] = useState<GatewayConfig>({
     mode: "AUTO",
     primaryGateway: "RAZORPAY",
     autoFailover: true,
@@ -12,9 +17,9 @@ export default function AdminPaymentGatewaysPage() {
     gatewaysStatus: {
       RAZORPAY: "HEALTHY",
       PAYU: "HEALTHY",
-      PHONEPE: "HEALTHY",
+      STRIPE: "HEALTHY",
     },
-    priorities: ["RAZORPAY", "PAYU", "PHONEPE"],
+    priorities: ["RAZORPAY", "PAYU", "STRIPE"],
   });
 
   const [loading, setLoading] = useState(true);
@@ -61,7 +66,7 @@ export default function AdminPaymentGatewaysPage() {
     }
   };
 
-  const toggleGatewayStatus = (gw: string) => {
+  const toggleGatewayStatus = (gw: GatewayName) => {
     const current = config.gatewaysStatus[gw] || "HEALTHY";
     const next = current === "HEALTHY" ? "DEGRADED" : current === "DEGRADED" ? "DISABLED" : "HEALTHY";
     setConfig({
@@ -93,7 +98,7 @@ export default function AdminPaymentGatewaysPage() {
               </h1>
             </div>
             <p className="text-sm text-slate-400">
-              Admin Controller for Razorpay, PayU, and PhonePe with Safe Failover and Health Monitoring
+              Admin Controller for Razorpay, PayU, and Stripe with Safe Failover and Health Monitoring
             </p>
           </div>
 
@@ -155,12 +160,10 @@ export default function AdminPaymentGatewaysPage() {
                 </label>
                 <select
                   value={config.primaryGateway}
-                  onChange={(e) => setConfig({ ...config, primaryGateway: e.target.value })}
+                  onChange={(e) => setConfig({ ...config, primaryGateway: e.target.value as GatewayName })}
                   className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-xs text-white font-bold"
                 >
-                  <option value="RAZORPAY">Razorpay (Default)</option>
-                  <option value="PAYU">PayU Money</option>
-                  <option value="PHONEPE">PhonePe PG</option>
+                  {GATEWAYS.filter((gw) => config.gatewaysStatus[gw] !== "DISABLED").map((gw) => <option key={gw} value={gw}>{gw}</option>)}
                 </select>
               </div>
 
@@ -205,7 +208,7 @@ export default function AdminPaymentGatewaysPage() {
                 Provider Health &amp; Priority Stack
               </h2>
 
-              {["RAZORPAY", "PAYU", "PHONEPE"].map((gw) => {
+              {GATEWAYS.map((gw) => {
                 const status = config.gatewaysStatus[gw] || "HEALTHY";
                 return (
                   <div
