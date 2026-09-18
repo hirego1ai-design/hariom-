@@ -69,10 +69,12 @@ export class WorkflowEngine {
       if (data.companyId && job.companyId !== data.companyId) throw new Error('Workflow job does not belong to the workflow company');
     }
     if (data.applicationId) {
-      const application = await prisma.application.findUnique({ where: { id: data.applicationId }, select: { job: { select: { companyId: true } } } });
+      const application = await prisma.application.findUnique({ where: { id: data.applicationId }, select: { candidateProfileId: true, jobId: true, job: { select: { companyId: true } } } });
       if (!application) throw new Error('Application not found');
       validateTenantAccess(context, application.job.companyId);
       if (data.companyId && application.job.companyId !== data.companyId) throw new Error('Workflow application does not belong to the workflow company');
+      if (data.jobId && application.jobId !== data.jobId) throw new Error('Workflow application does not belong to the referenced job');
+      if (data.candidateId && application.candidateProfileId !== data.candidateId) throw new Error('Workflow candidate does not match the application candidate');
     }
     return prisma.workflowInstance.create({ data: { ...data, currentStep: initialStep, checkpointState: checkpointState as Prisma.InputJsonValue, status: 'RUNNING' } });
   }
