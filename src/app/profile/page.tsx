@@ -92,24 +92,18 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] flex text-white font-sans">
+    <div className="min-h-screen bg-bg-page flex text-text-primary font-sans">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] min-h-screen relative overflow-hidden flex flex-col">
+      <div className="flex-1 ml-0 md:ml-[116px] min-h-screen relative overflow-hidden flex flex-col">
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <header className="sticky top-0 z-40 h-[64px] backdrop-blur-xl border-b border-white/10 px-8 flex items-center justify-between bg-[#0A0A0C]/80">
+        <header className="sticky top-0 z-40 min-h-16 backdrop-blur-xl border-b border-outline px-4 sm:px-8 flex items-center justify-between bg-bg-page">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold tracking-tight text-white">HireGo AI</h1>
             <span className="text-xs text-white/40">/</span>
             <span className="text-xs text-white/60">Candidate Profile</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-mono font-bold">
-              AI Verified
-            </span>
           </div>
         </header>
 
@@ -150,13 +144,13 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs text-gray-400 justify-center md:justify-start">
                 <span className="text-primary font-semibold">
-                  {profile?.headline || "Software Engineer"}
+                  {profile?.headline || "Add a professional headline"}
                 </span>
                 <div className="flex items-center gap-1 justify-center md:justify-start">
                   <span className="material-symbols-outlined text-sm text-[#FF5252]">
                     location_on
                   </span>
-                  <span>{profile?.location || "Remote / India"}</span>
+                  <span>{profile?.location || "Add your location"}</span>
                 </div>
                 <span>•</span>
                 <span>{profile?.email}</span>
@@ -168,13 +162,13 @@ export default function ProfilePage() {
               <div className="flex justify-between items-center text-xs">
                 <span className="text-gray-400">HireGo Score™</span>
                 <span className="text-green-400 font-bold text-sm">
-                  {profile?.hireGoScore || 92} / 100
+                  {typeof profile?.hireGoScore === "number" ? `${profile.hireGoScore} / 100` : "Not calculated"}
                 </span>
               </div>
               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-primary to-green-400 transition-all duration-300"
-                  style={{ width: `${profile?.hireGoScore || 92}%` }}
+                  style={{ width: `${typeof profile?.hireGoScore === "number" ? profile.hireGoScore : 0}%` }}
                 />
               </div>
             </div>
@@ -273,8 +267,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Professional Summary</h3>
                   <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
-                    {profile?.bio ||
-                      "Passionate tech professional specializing in scalable cloud applications, distributed architectures, and AI model orchestration."}
+                    {profile?.bio || "Add a professional summary to help employers understand your experience."}
                   </p>
                 </div>
               )}
@@ -283,25 +276,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-6">
                   <h3 className="text-base font-bold text-white">Work Experience</h3>
                   <div className="space-y-4">
-                    {(profile?.experience && profile.experience.length > 0
-                      ? profile.experience
-                      : [
-                          {
-                            company: "TechNova Solutions",
-                            role: "Senior Frontend Engineer",
-                            startDate: "2022",
-                            endDate: "Present",
-                            description: "Led development of core Next.js workflows and AI components.",
-                          },
-                          {
-                            company: "Apex Systems",
-                            role: "Software Engineer",
-                            startDate: "2020",
-                            endDate: "2022",
-                            description: "Built microservices and scalable web applications.",
-                          },
-                        ]
-                    ).map((exp, idx) => (
+                    {(profile?.experience || []).map((exp, idx) => (
                       <div
                         key={idx}
                         className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-1.5"
@@ -326,17 +301,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Education & Degrees</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(profile?.education && profile.education.length > 0
-                      ? profile.education
-                      : [
-                          {
-                            degree: "B.Tech Computer Science",
-                            university: "Indian Institute of Technology",
-                            year: "2020",
-                            gpa: "8.9 / 10",
-                          },
-                        ]
-                    ).map((edu, idx) => (
+                    {(profile?.education || []).map((edu, idx) => (
                       <div
                         key={idx}
                         className="bg-white/5 p-4 rounded-2xl border border-white/5 space-y-1"
@@ -357,10 +322,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Verified Skills</h3>
                   <div className="flex flex-wrap gap-2">
-                    {(profile?.skills && profile.skills.length > 0
-                      ? profile.skills
-                      : ["React", "TypeScript", "Next.js", "Node.js", "PostgreSQL", "Tailwind CSS"]
-                    ).map((skill) => (
+                    {(profile?.skills || []).map((skill) => (
                       <span
                         key={skill}
                         className="px-3.5 py-1.5 bg-primary/10 rounded-full border border-primary/20 text-xs text-primary font-semibold"
@@ -381,7 +343,7 @@ export default function ProfilePage() {
                         Desired Category
                       </span>
                       <span className="text-white font-semibold">
-                        {profile?.preferences?.desiredCategory || "Software Engineering"}
+                        {profile?.preferences?.desiredCategory || "Not set"}
                       </span>
                     </div>
                     <div className="p-3 bg-white/5 rounded-xl border border-white/5">
@@ -389,7 +351,7 @@ export default function ProfilePage() {
                         Salary Expectation
                       </span>
                       <span className="text-primary font-semibold">
-                        {profile?.preferences?.salaryExpectation || "₹28L - ₹42L"}
+                        {profile?.preferences?.salaryExpectation || "Not set"}
                       </span>
                     </div>
                   </div>
@@ -404,7 +366,7 @@ export default function ProfilePage() {
                   AI Resume Score
                 </h3>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-extrabold text-white">92</span>
+                  <span className="text-4xl font-extrabold text-text-primary">{typeof profile?.hireGoScore === "number" ? profile.hireGoScore : "—"}</span>
                   <span className="text-xs text-gray-400">/ 100</span>
                 </div>
                 <p className="text-[11px] text-gray-400">
