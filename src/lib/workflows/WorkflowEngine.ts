@@ -246,8 +246,7 @@ export class WorkflowEngine {
     if (activeSteps > 0) throw new Error('Workflow cannot complete while steps are still RUNNING');
     const failedSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'FAILED' } });
     if (failedSteps > 0) throw new Error('Workflow cannot complete with failed steps');
-    const pendingApprovals = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'PENDING' } });
-    if (pendingApprovals > 0) throw new Error('Workflow cannot complete with pending approvals');
+    await WorkflowEngine.assertNoUnresolvedConsequentialActions(workflow.id);
     return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'RUNNING' }, data: { status: 'COMPLETED', updatedAt: new Date() } });
   }
 
@@ -255,6 +254,8 @@ export class WorkflowEngine {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (workflow.status !== 'RUNNING' && workflow.status !== 'PAUSED_FOR_APPROVAL') throw new Error(`Workflow cannot request approval from status ${workflow.status}`);
     if (!APPROVAL_ROLE_POLICY[params.actionType]) throw new Error(`Unknown consequential approval action type: ${params.actionType}`);
     const digest = actionDigest(params.action);
     const approval = await prisma.$transaction(async (tx) => {
@@ -263,6 +264,7 @@ export class WorkflowEngine {
         update: {},
         create: { workflowInstanceId: params.workflowId, companyId: workflow.companyId, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, requestedBy: params.context.userId },
       });
+      if (record.decision !== 'PENDING') throw new Error('This exact consequential action was already decided');
       await tx.workflowInstance.update({ where: { id: params.workflowId }, data: { status: 'PAUSED_FOR_APPROVAL', currentStep: params.stepName } });
       if (record.decision === 'PENDING') await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_REQUESTED', workflowId: params.workflowId, approvalId: record.id, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, role: params.context.userRole });
       return record;
