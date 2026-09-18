@@ -25,8 +25,8 @@ async function authorized(req: NextRequest, id: string) {
   if (session.role !== "ADMIN") {
     const company = await getSessionCompany(session);
     if (company.id !== interview.application.job.companyId) throw new ApiError("Interview access denied.", 403);
-    if (interview.roundProgress?.round.interviewers.length && !interview.roundProgress.round.interviewers.some((i) => i.userId === session.id)) throw new ApiError("Only an assigned interviewer can submit feedback for this round.", 403);
   }
+  if (!interview.roundProgress?.round.interviewers.some((i) => i.userId === session.id)) throw new ApiError("Only an assigned interviewer can access feedback for this round.", 403);
   return { session, interview };
 }
 
