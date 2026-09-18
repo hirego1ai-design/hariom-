@@ -1050,6 +1050,7 @@ model WorkflowApproval {
   decisionNotes      String?
   requestedAt        DateTime                 @default(now())
   decidedAt          DateTime?
+  consumedAt         DateTime?
 
   @@unique([workflowInstanceId, stepName, actionDigest])
   @@index([companyId, decision, requestedAt])
