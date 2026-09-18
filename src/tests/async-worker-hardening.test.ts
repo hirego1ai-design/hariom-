@@ -9,6 +9,7 @@ import {
 import { sendWhatsAppTextMessage } from "../lib/whatsapp";
 import { processSecurityAuditDeliveryBatch } from "../lib/securityAuditDelivery";
 import { getVideoAnalysisConfig } from "../lib/env";
+import { claimVideoAnalysisJob, recoverStaleVideoAnalysisJobs, releaseVideoAnalysisClaimForRetry } from "../lib/videoAnalysisQueue";
 
 function stubMethod(t: TestContext, target: any, name: string, implementation: (...args: any[]) => unknown) {
   const previous = target[name];
@@ -130,4 +131,75 @@ test("unconfigured SIEM is visible with its pending durable backlog", async (t) 
     failed: 0,
     unclaimed: 0,
   });
+});
+
+
+test("video analysis claim is atomic and fenced against concurrent ownership", async (t) => {
+  const updatedAt = new Date("2026-09-18T00:00:00.000Z");
+  stubMethod(t, prisma.videoAnalysisJob, "findUnique", async () => ({
+    id: "job-1", status: "PENDING", attempts: 0, maxAttempts: 3,
+    nextAttemptAt: null, updatedAt,
+  }));
+  let claims = 0;
+  stubMethod(t, prisma.videoAnalysisJob, "updateMany", async ({ where, data }: any) => {
+    assert.equal(where.id, "job-1");
+    assert.equal(where.status, "PENDING");
+    assert.equal(where.attempts, 0);
+    assert.equal(where.updatedAt, updatedAt);
+    assert.equal(data.status, "PROCESSING");
+    claims++;
+    return { count: claims === 1 ? 1 : 0 };
+  });
+  const [first, second] = await Promise.all([
+    claimVideoAnalysisJob("job-1"), claimVideoAnalysisJob("job-1"),
+  ]);
+  assert.equal([first, second].filter(Boolean).length, 1);
+});
+
+test("stale video lease is requeued with bounded backoff", async (t) => {
+  const claimToken = "stale-owner";
+  stubMethod(t, prisma.videoAnalysisJob, "findMany", async () => [{
+    id: "job-2", videoResumeId: "video-2", status: "PROCESSING",
+    attempts: 1, maxAttempts: 3, claimToken, leaseExpiresAt: new Date(0),
+  }]);
+  stubMethod(t, prisma.videoAnalysisJob, "updateMany", async ({ where, data }: any) => {
+    assert.equal(where.claimToken, claimToken);
+    assert.equal(data.status, "PENDING");
+    assert.ok(data.nextAttemptAt instanceof Date);
+    return { count: 1 };
+  });
+  stubMethod(t, prisma.videoResume, "updateMany", async () => ({ count: 1 }));
+  assert.deepEqual(await recoverStaleVideoAnalysisJobs(10), { scanned: 1, retried: 1, exhausted: 0 });
+});
+
+test("video retry release rejects stale claim owner", async (t) => {
+  stubMethod(t, prisma.videoAnalysisJob, "findUnique", async () => ({
+    id: "job-3", videoResumeId: "video-3", status: "PROCESSING",
+    attempts: 1, maxAttempts: 3, claimToken: "new-owner",
+  }));
+  let writes = 0;
+  stubMethod(t, prisma.videoAnalysisJob, "updateMany", async () => { writes++; return { count: 1 }; });
+  const result = await releaseVideoAnalysisClaimForRetry({
+    jobId: "job-3", claimToken: "old-owner", reason: "network failure",
+  });
+  assert.deepEqual(result, { released: false, exhausted: false });
+  assert.equal(writes, 0);
+});
+
+test("video retry exhaustion becomes terminal only at max attempts", async (t) => {
+  stubMethod(t, prisma.videoAnalysisJob, "findUnique", async () => ({
+    id: "job-4", videoResumeId: "video-4", status: "PROCESSING",
+    attempts: 3, maxAttempts: 3, claimToken: "owner-4",
+  }));
+  stubMethod(t, prisma.videoAnalysisJob, "updateMany", async ({ data }: any) => {
+    assert.equal(data.status, "BLOCKED_INFRA");
+    return { count: 1 };
+  });
+  stubMethod(t, prisma.videoResume, "updateMany", async ({ data }: any) => {
+    assert.equal(data.analysisStatus, "BLOCKED_INFRA");
+    return { count: 1 };
+  });
+  assert.deepEqual(await releaseVideoAnalysisClaimForRetry({
+    jobId: "job-4", claimToken: "owner-4", reason: "worker unavailable",
+  }), { released: false, exhausted: true });
 });
