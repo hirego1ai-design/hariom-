@@ -5,6 +5,7 @@ import { PATCH as stagePatchHandler } from "@/app/api/employer/candidates/[id]/s
 import { PATCH as applicationPatchHandler } from "@/app/api/applications/route";
 import { PUT as jobPutHandler, DELETE as jobDeleteHandler } from "@/app/api/employer/jobs/[id]/route";
 import { PATCH as interviewPatchHandler } from "@/app/api/employer/interviews/[id]/route";
+import { GET as roomGetHandler, POST as roomPostHandler } from "@/app/api/interviews/room/route";
 import { NextRequest } from "next/server";
 import { createSessionToken } from "@/lib/auth";
 
@@ -125,6 +126,23 @@ export async function runHiringWorkflowTests(): Promise<{
     let applicationA: any = null;
     let applicationB: any = null;
     let interviewA: any = null;
+    const callRoomPost = async (sessionToken: string, roomId: string, action: "COMPLETE") => {
+      const req = new NextRequest("http://localhost/api/interviews/room", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ roomId, action }),
+      });
+      const res = await roomPostHandler(req);
+      return { status: res.status, json: await res.json() };
+    };
+
+    const callRoomGet = async (sessionToken: string, roomId: string) => {
+      const req = new NextRequest(`http://localhost/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, {
+        headers: { authorization: `Bearer ${sessionToken}` },
+      });
+      const res = await roomGetHandler(req);
+      return { status: res.status, json: await res.json() };
+    };
 
     try {
       // 1. Setup entities
@@ -354,6 +372,26 @@ export async function runHiringWorkflowTests(): Promise<{
         "Completed interview cannot be cancelled or rescheduled"
       );
       await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "CANCELLED" } });
+
+      const closedRoom = await callRoomGet(tokenA, interviewA.id);
+      assert(
+        "Cancelled interview room does not expose signaling or ICE credentials",
+        closedRoom.status === 200 &&
+          closedRoom.json.room?.status === "CLOSED" &&
+          closedRoom.json.room?.iceServers?.length === 0 &&
+          closedRoom.json.room?.signaling?.offers?.length === 0 &&
+          closedRoom.json.room?.signaling?.answers?.length === 0 &&
+          closedRoom.json.room?.signaling?.candidates?.length === 0,
+        "Closed room returns no signaling data or ICE credentials"
+      );
+
+      const completeCancelled = await callRoomPost(tokenA, interviewA.id, "COMPLETE");
+      const cancelledAfterComplete = await prisma.interview.findUnique({ where: { id: interviewA.id } });
+      assert(
+        "Cancelled interview cannot be resurrected by stale room completion",
+        completeCancelled.status === 409 && cancelledAfterComplete?.status === "CANCELLED",
+        "Stale COMPLETE is rejected and terminal CANCELLED state is preserved"
+      );
 
       // 5. Job Deletion Verification
       const resJobDelCross = await callJobDelete(tokenA, jobListingB.id);
