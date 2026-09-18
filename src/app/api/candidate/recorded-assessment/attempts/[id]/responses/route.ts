@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await readValidatedJson(request, schema);
 
     const attempt = await prisma.recordedAssessmentAttempt.findFirst({
-      where: { id, candidateProfile: { userId: session.id }, status: { in: ["CREATED", "IN_PROGRESS"] } },
+      where: { id, candidateProfile: { userId: session.id }, status: "IN_PROGRESS" },
       include: { questions: { select: { id: true, answerDurationSeconds: true } } },
     });
     if (!attempt) throw new ApiError("Active assessment attempt not found.", 404);
@@ -36,18 +36,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const expectedPrefix = attempt.mediaType === "VIDEO" ? "video/" : "audio/";
     if (!file.mimeType.startsWith(expectedPrefix)) throw new ApiError("Uploaded media does not match this assessment mode.", 415);
 
-    const response = await prisma.$transaction(async (tx) => {
-      await tx.recordedAssessmentAttempt.updateMany({
-        where: { id: attempt.id, status: "CREATED" },
-        data: { status: "IN_PROGRESS", startedAt: new Date() },
-      });
-      return tx.recordedAssessmentResponse.upsert({
-        where: { attemptQuestionId: question.id },
-        update: { storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType, analysisStatus: "PENDING" },
-        create: { attemptQuestionId: question.id, storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType },
-      });
+    const existing = await prisma.recordedAssessmentResponse.findUnique({ where: { attemptQuestionId: question.id } });
+    if (existing) {
+      if (existing.storedFileId !== file.id) throw new ApiError("This question already has a saved response.", 409);
+      return NextResponse.json({ success: true, response: { id: existing.id, durationSeconds: existing.durationSeconds, mediaType: existing.mediaType, analysisStatus: existing.analysisStatus }, idempotent: true });
+    }
+    const response = await prisma.recordedAssessmentResponse.create({
+      data: { attemptQuestionId: question.id, storedFileId: file.id, durationSeconds: body.durationSeconds, mediaType: attempt.mediaType },
     });
     await dispatchRecordedAssessmentAnalysis(response.id);
-    return NextResponse.json({ success: true, response });
+    return NextResponse.json({ success: true, response: { id: response.id, durationSeconds: response.durationSeconds, mediaType: response.mediaType, analysisStatus: response.analysisStatus } });
   } catch (error) { return handleApiError(error); }
 }

@@ -163,10 +163,14 @@ export default function VideoAssessmentActivePage() {
     return () => window.clearTimeout(timer);
   }, [phase, seconds, beginRecording, saveRecording]);
 
-  const startAssessment = () => {
+  const startAssessment = async () => {
     if (!mediaReady || !question) { setMessage("Camera and microphone must be ready before starting."); return; }
-    void document.documentElement.requestFullscreen?.().catch(() => undefined);
-    setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); setMessage("");
+    try {
+      await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt!.id}/start`, { method: "POST" });
+      setAttempt((current) => current ? { ...current, status: "IN_PROGRESS" } : current);
+      void document.documentElement.requestFullscreen?.().catch(() => undefined);
+      setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); setMessage("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to start assessment."); }
   };
 
   if (booting) return <div className="min-h-screen bg-bg-page text-text-primary grid place-items-center"><p>Preparing your assessment…</p></div>;
@@ -187,7 +191,7 @@ export default function VideoAssessmentActivePage() {
             </div>
           </div>
           {message && <div role="status" className="rounded-2xl border border-outline bg-bg-card p-4 text-sm">{message}</div>}
-          {phase === "READY" && <button onClick={startAssessment} disabled={!mediaReady || !question} className="min-h-11 px-6 rounded-full btn-3d-red font-bold disabled:opacity-50">Start Assessment</button>}
+          {phase === "READY" && <button onClick={startAssessment} disabled={!mediaReady || !question} className="min-h-11 px-6 rounded-full btn-3d-red font-bold disabled:opacity-50">{attempt?.status === "IN_PROGRESS" ? "Resume Assessment" : "Start Assessment"}</button>}
           {phase === "ERROR" && question && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
         </section>
         <section className="lg:col-span-5">
