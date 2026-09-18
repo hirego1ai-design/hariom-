@@ -108,6 +108,18 @@ export class WorkflowEngine {
     }
   }
 
+  static async listPendingApprovals(params: { context: TenantContext; limit?: number }) {
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
+    const where = params.context.userRole === Role.ADMIN ? { decision: 'PENDING' as const } : { decision: 'PENDING' as const, companyId: params.context.companyId };
+    return prisma.workflowApproval.findMany({
+      where,
+      orderBy: { requestedAt: 'asc' },
+      take: limit,
+      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, decision: true, requestedBy: true, requestedAt: true, workflowInstance: { select: { workflowType: true, status: true, currentStep: true, correlationId: true } } },
+    });
+  }
+
   static async getWorkflowStatus(params: { workflowId: string; context: TenantContext }) {
     const workflow = await prisma.workflowInstance.findUnique({
       where: { id: params.workflowId },
