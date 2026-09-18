@@ -59,6 +59,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (existing?.finalizedAt) throw new ApiError("Finalized feedback cannot be edited. Use an audited amendment workflow for corrections.", 409);
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
+      // Serialize finalization for this interview so concurrent submissions by
+      // the same interviewer cannot both pass the preflight immutability check.
+      await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${id} FOR UPDATE`;
+      const lockedExisting = await tx.interviewFeedback.findUnique({
+        where: { interviewId_authorId: { interviewId: id, authorId: session.id } },
+        select: { finalizedAt: true },
+      });
+      if (lockedExisting?.finalizedAt) {
+        throw new ApiError("Finalized feedback cannot be edited. Use an audited amendment workflow for corrections.", 409);
+      }
       const feedback = await tx.interviewFeedback.upsert({
         where: { interviewId_authorId: { interviewId: id, authorId: session.id } },
         update: { recommendation: body.recommendation, internalFeedback: { strengths: body.strengths, concerns: body.concerns, notes: body.notes }, candidateFeedback: policy === "NOT_SHARED" ? null : body.candidateFeedback || null, candidateVisible: false, finalizedAt: now },
