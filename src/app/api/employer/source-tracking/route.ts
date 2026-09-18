@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     // attribution per candidate and label the rest as direct; do not claim ROI
     // because acquisition cost is not stored by this model.
     const byUser = new Map<string, string>();
-    for (const item of attributions) if (!byUser.has(item.referredUserId)) byUser.set(item.referredUserId, item.attributionSource);
+    for (const item of attributions) {\n      if (item.referredUserId && item.attributionSource && !byUser.has(item.referredUserId)) byUser.set(item.referredUserId, item.attributionSource);\n    }
     const counts = new Map<string, number>();
     for (const app of applications) {
       const source = byUser.get(app.candidateProfile.userId);
