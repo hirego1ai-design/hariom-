@@ -432,7 +432,7 @@ export default function CandidateMarketplace() {
 
                 {/* Table Rows */}
                 {paginatedCandidates.map(c => {
-                  const avail = AVAILABILITY_CONFIG[c.noticePeriod] || AVAILABILITY_CONFIG[c.availability] || { color: T.slate, bg: `${T.slate}15` };
+                  const avail = c.availability === "ACTIVE_CONFIRMED" ? { color: T.green, bg: `${T.green}15` } : { color: T.slate, bg: `${T.slate}15` };
                   const action = getRecommendedAction(c);
                   const activity = getActivityBadge(c.lastActivity);
                   const tags = candidateTags[c.id] || [];
@@ -481,7 +481,7 @@ export default function CandidateMarketplace() {
                         )}
                         {/* Availability (Req #10) */}
                         <div className="w-20">
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.noticePeriod}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.availability === "ACTIVE_CONFIRMED" ? "Confirmed available" : c.availability === "RECONFIRMATION_REQUIRED" ? "Needs reconfirmation" : c.availability === "NOT_LOOKING" ? "Not looking" : c.availability === "JOINED" ? "Joined" : c.availability === "TEMPORARILY_UNAVAILABLE" ? "Paused" : "Not confirmed"}</span>
                         </div>
                         {/* Recommendation (Req #12) */}
                         {density === "detailed" && (
@@ -567,7 +567,7 @@ export default function CandidateMarketplace() {
             {viewMode === "grid" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {paginatedCandidates.map(c => {
-                  const avail = AVAILABILITY_CONFIG[c.noticePeriod] || { color: T.slate, bg: `${T.slate}15` };
+                  const avail = c.availability === "ACTIVE_CONFIRMED" ? { color: T.green, bg: `${T.green}15` } : { color: T.slate, bg: `${T.slate}15` };
                   const action = getRecommendedAction(c);
                   return (
                     <div key={c.id} className="rounded-xl border overflow-hidden hover:-translate-y-0.5 transition-all cursor-pointer group"
@@ -591,7 +591,7 @@ export default function CandidateMarketplace() {
                           <span className="text-sm font-extrabold" style={{ color: c.matchScore >= 90 ? T.green : T.yellow }}>{c.matchScore}%</span>
                           <span className="text-[9px] text-slate-500">Recorded match</span>
                           <div className="ml-auto">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.noticePeriod}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.availability === "ACTIVE_CONFIRMED" ? "Confirmed available" : c.availability === "RECONFIRMATION_REQUIRED" ? "Needs reconfirmation" : c.availability === "NOT_LOOKING" ? "Not looking" : c.availability === "JOINED" ? "Joined" : c.availability === "TEMPORARILY_UNAVAILABLE" ? "Paused" : "Not confirmed"}</span>
                           </div>
                         </div>
 
@@ -620,7 +620,7 @@ export default function CandidateMarketplace() {
             {viewMode === "list" && (
               <div className="space-y-2">
                 {paginatedCandidates.map(c => {
-                  const avail = AVAILABILITY_CONFIG[c.noticePeriod] || { color: T.slate, bg: `${T.slate}15` };
+                  const avail = c.availability === "ACTIVE_CONFIRMED" ? { color: T.green, bg: `${T.green}15` } : { color: T.slate, bg: `${T.slate}15` };
                   const action = getRecommendedAction(c);
                   return (
                     <div key={c.id} className="flex items-center gap-4 px-4 py-3 rounded-xl border hover:bg-white/[0.02] transition-all cursor-pointer"
@@ -638,7 +638,7 @@ export default function CandidateMarketplace() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] font-bold" style={{ color: c.matchScore >= 90 ? T.green : T.yellow }}>{c.matchScore}% Match</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.noticePeriod}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ backgroundColor: avail.bg, color: avail.color }}>{c.availability === "ACTIVE_CONFIRMED" ? "Confirmed available" : c.availability === "RECONFIRMATION_REQUIRED" ? "Needs reconfirmation" : c.availability === "NOT_LOOKING" ? "Not looking" : c.availability === "JOINED" ? "Joined" : c.availability === "TEMPORARILY_UNAVAILABLE" ? "Paused" : "Not confirmed"}</span>
                           <span className="text-[9px] text-slate-500">📍 {c.currentLocation}</span>
                           {(candidateTags[c.id] || []).slice(0, 2).map(t => (
                             <span key={t.label} className="text-[8px] px-1.5 py-0.5 rounded" style={{ backgroundColor: `${t.color}20`, color: t.color }}>{t.label}</span>
@@ -703,7 +703,7 @@ export default function CandidateMarketplace() {
                       ["Experience", previewCandidate.experience],
                       ["Salary", previewCandidate.expectedSalary],
                       ["Location", previewCandidate.currentLocation],
-                      ["Notice", previewCandidate.noticePeriod],
+                      ["Availability", previewCandidate.availability === "ACTIVE_CONFIRMED" ? "Confirmed available" : previewCandidate.availability === "RECONFIRMATION_REQUIRED" ? "Needs reconfirmation" : previewCandidate.availability || "Not confirmed"],
                       ["Education", previewCandidate.education],
                       ["Source", previewCandidate.source],
                     ].map(([label, val]) => (
@@ -893,7 +893,7 @@ export default function CandidateMarketplace() {
                       { label: "Experience", key: "experience" },
                       { label: "Location", key: "currentLocation" },
                       { label: "Salary", key: "expectedSalary" },
-                      { label: "Notice", key: "noticePeriod" },
+                      { label: "Availability", key: "availability" },
                       { label: "Education", key: "education" },
                       { label: "Assessment", key: "assessmentScore", fmt: formatRecordedScore },
                       { label: "AI Interview", key: "aiInterviewScore", fmt: formatRecordedScore },
