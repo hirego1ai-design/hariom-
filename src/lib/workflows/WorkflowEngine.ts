@@ -58,6 +58,18 @@ export class WorkflowEngine {
     return prisma.workflowInstance.create({ data: { ...data, currentStep: initialStep, checkpointState: checkpointState as Prisma.InputJsonValue, status: 'RUNNING' } });
   }
 
+  static async retryWorkflow(params: { workflowId: string; context: TenantContext }): Promise<WorkflowInstance> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (workflow.status !== 'FAILED') throw new Error(`Only FAILED workflows can be retried; current status is ${workflow.status}`);
+    if (workflow.failureCount < 1 || workflow.failureCount >= 3) throw new Error('Workflow retry budget is exhausted or invalid');
+    const unresolved = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'RUNNING' } });
+    if (unresolved > 0) throw new Error('Interrupted RUNNING steps must be recovered before retry');
+    return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'FAILED', failureCount: workflow.failureCount }, data: { status: 'RUNNING', updatedAt: new Date() } });
+  }
+
   static async executeStep<T>(workflowId: string, stepName: string, attemptNumber: number, inputPayload: unknown, stepFn: () => Promise<T>): Promise<T> {
     if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 3) throw new Error('Workflow step attempt must be between 1 and 3');
     const workflowState = await prisma.workflowInstance.findUnique({ where: { id: workflowId }, select: { status: true, failureCount: true } });
