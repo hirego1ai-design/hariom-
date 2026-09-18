@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
@@ -10,7 +10,7 @@ type Application = {
   job: { title: string; company: { name: string } };
 };
 
-export default function WithdrawApplicationPage() {
+function WithdrawApplicationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get("applicationId");
@@ -94,5 +94,14 @@ export default function WithdrawApplicationPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+
+export default function WithdrawApplicationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0E0E0E] flex text-text-primary"><CandidateSidebar /><main className="flex-1 flex items-center justify-center p-6"><p className="text-sm text-text-secondary">Loading application...</p></main></div>}>
+      <WithdrawApplicationContent />
+    </Suspense>
   );
 }
