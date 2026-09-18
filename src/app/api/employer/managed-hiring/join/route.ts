@@ -54,6 +54,12 @@ export async function PATCH(request: Request) {
         status: body.action === "RESUME" ? "SCHEDULED" : body.action === "CANCEL" ? "CANCELLED" : "HOLD",
         holdReason: body.action === "RESUME" ? null : body.reason,
       } });
+      if (body.action === "CANCEL") {
+        await tx.application.updateMany({
+          where: { id: row.applicationId, status: "HIRED" },
+          data: { status: "SHORTLISTED" },
+        });
+      }
       await tx.agreementEvent.create({ data: { agreementId: row.agreementId, performedBy: actor.id,
         eventType: `PPH_${body.action}`, notes: `Placement ${row.id}: ${body.reason}` } });
       return updated;
