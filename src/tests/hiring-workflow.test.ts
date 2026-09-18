@@ -298,6 +298,29 @@ export async function runHiringWorkflowTests(): Promise<{
         "Update returned status 404 Not Found"
       );
 
+      const resCancelReplay = await callInterviewPatch(tokenA, interviewA.id, "CANCEL");
+      assert(
+        "Interview cancellation replay is idempotent",
+        resCancelReplay.status === 200 && resCancelReplay.json.idempotent === true,
+        "Repeated cancellation preserves the cancelled terminal state"
+      );
+
+      const resRescheduleCancelled = await callInterviewPatch(tokenA, interviewA.id, "RESCHEDULE", new Date(Date.now() + 259200000).toISOString());
+      assert(
+        "Cancelled interview cannot be resurrected by generic reschedule",
+        resRescheduleCancelled.status === 409,
+        "Cancelled interview requires a new scheduling workflow"
+      );
+
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "COMPLETED" } });
+      const resEditCompleted = await callInterviewPatch(tokenA, interviewA.id, "RESCHEDULE", new Date(Date.now() + 345600000).toISOString());
+      assert(
+        "Completed interview is immutable to generic schedule edits",
+        resEditCompleted.status === 409,
+        "Completed interview cannot be cancelled or rescheduled"
+      );
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "CANCELLED" } });
+
       // 5. Job Deletion Verification
       const resJobDelCross = await callJobDelete(tokenA, jobListingB.id);
       assert(
