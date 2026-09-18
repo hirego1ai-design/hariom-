@@ -147,7 +147,13 @@ export class RazorpayGateway implements PaymentGateway {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const entity = jsonPayload?.payload?.payment?.entity || jsonPayload;
     const gatewayTxId = entity?.id || "";
-    const status = entity?.status === "captured" || jsonPayload?.event === "payment.captured" ? "SUCCESS" : "FAILED";
+    const event = typeof jsonPayload?.event === "string" ? jsonPayload.event : "";
+    const nativeStatus = typeof entity?.status === "string" ? entity.status : "";
+    const status: VerifyWebhookResult["status"] = nativeStatus === "captured" || event === "payment.captured"
+      ? "SUCCESS"
+      : nativeStatus === "failed" || event === "payment.failed"
+        ? "FAILED"
+        : "PENDING";
     const gatewayOrderId = entity?.order_id || jsonPayload?.order_id || jsonPayload?.payload?.payment?.entity?.order_id;
 
     return {
