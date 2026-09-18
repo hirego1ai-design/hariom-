@@ -113,11 +113,11 @@ export class PaymentGatewayController {
     const updated: GatewayConfigState = {
       ...current,
       ...newConfig,
-      gatewaysStatus: {
-        ...current.gatewaysStatus,
-        ...(newConfig.gatewaysStatus || {})
-      }
+      gatewaysStatus: { ...current.gatewaysStatus, ...(newConfig.gatewaysStatus || {}) },
     };
+    const providerNames = Object.keys(this.providers) as GatewayName[];
+    if (!providerNames.includes(updated.primaryGateway)) throw new Error("Unknown primary payment gateway.");
+    if (updated.priorities.length !== providerNames.length || new Set(updated.priorities).size !== providerNames.length || updated.priorities.some((gw) => !providerNames.includes(gw))) throw new Error("Gateway priority list must contain every configured provider exactly once.");
 
     // Enforce production safety invariant
     if (process.env.NODE_ENV === "production") {
@@ -125,6 +125,10 @@ export class PaymentGatewayController {
         updated.gatewaysStatus[gw] = "DISABLED";
       }
     }
+    const active = providerNames.filter((gw) => updated.gatewaysStatus[gw] !== "DISABLED");
+    if (active.length === 0) throw new Error("At least one payment gateway must remain enabled.");
+    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED") updated.primaryGateway = active[0];
+    if (updated.mode === "AUTO" && !updated.priorities.some((gw) => updated.gatewaysStatus[gw] !== "DISABLED")) throw new Error("AUTO mode requires an enabled gateway in the priority list.");
     
     try {
       await prisma.paymentGatewayConfig.upsert({
