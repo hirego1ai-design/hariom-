@@ -18,6 +18,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ success: false, error: "Candidate is not in your company pipeline." }, { status: 403 });
       }
     }
+    if (stage === "SHORTLISTED") {
+      const process = await prisma.jobInterviewProcess.findUnique({
+        where: { jobId: application.jobId },
+        select: { id: true, isActive: true },
+      });
+      if (process?.isActive) {
+        const finalRound = await prisma.interviewRound.findFirst({
+          where: { processId: process.id },
+          orderBy: { sequence: "desc" },
+          select: { id: true },
+        });
+        if (finalRound) {
+          const finalProgress = await prisma.interviewRoundProgress.findUnique({
+            where: { applicationId_roundId: { applicationId: application.id, roundId: finalRound.id } },
+            select: { status: true },
+          });
+          if (!finalProgress || !["ROUND_COMPLETE", "TRANSFERRED"].includes(finalProgress.status)) {
+            return NextResponse.json({ success: false, error: "Complete the configured final interview round before selecting this candidate." }, { status: 409 });
+          }
+        }
+      }
+    }
     if (application.status === "HIRED") {
       return NextResponse.json({ success: false, error: "A hired application is final. Use the placement reconciliation workflow for changes." }, { status: 409 });
     }
