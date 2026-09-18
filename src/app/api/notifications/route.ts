@@ -16,7 +16,8 @@ export async function GET(request:NextRequest){
   if(!Number.isInteger(limit)||limit<1||limit>MAX_PAGE_SIZE)throw new ApiError(`limit must be between 1 and ${MAX_PAGE_SIZE}.`,400);
   const notifications=await prisma.notification.findMany({where:{userId:session.id},orderBy:{createdAt:"desc"},take:limit+1});
   const unreadCount=await prisma.notification.count({where:{userId:session.id,isRead:false}});
-  const hasMore=notifications.length>limit;\n  return NextResponse.json({success:true,notifications:notifications.slice(0,limit),unreadCount,hasMore});
+  const hasMore=notifications.length>limit;
+  return NextResponse.json({success:true,notifications:notifications.slice(0,limit),unreadCount,hasMore});
  }catch(error){return handleApiError(error);}
 }
 export async function PUT(request:NextRequest){
