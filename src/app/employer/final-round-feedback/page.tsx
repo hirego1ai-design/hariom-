@@ -1,13 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
 type Policy = { roundName: string; mandatoryFeedback: boolean; candidateFeedbackPolicy: "REQUIRED" | "OPTIONAL" | "NOT_SHARED" } | null;
 
-export default function InterviewFeedbackPage() {
+function InterviewFeedbackContent() {
   const params = useSearchParams();
   const interviewId = params.get("interviewId") || "";
   const [policy, setPolicy] = useState<Policy>(null);
@@ -79,4 +79,7 @@ export default function InterviewFeedbackPage() {
       <div className="flex flex-wrap gap-3"><button disabled={saving||finalized} className="btn-3d-red h-12 rounded-full px-7 font-bold text-white disabled:opacity-50">{saving?"Finalizing…":"Finalize my feedback"}</button><Link href="/employer/upcoming-interviews-list" className="flex h-12 items-center rounded-full border border-outline px-7 text-sm font-bold text-text-secondary">Back to interviews</Link></div>
     </form>}
   </main></PageContainer>;
+}
+export default function InterviewFeedbackPage() {
+  return <Suspense fallback={<PageContainer><main className="mx-auto max-w-4xl px-4 py-8 text-text-secondary">Loading feedback…</main></PageContainer>}><InterviewFeedbackContent /></Suspense>;
 }
