@@ -43,14 +43,26 @@ export async function persistScanResult(fileId: string, result: UploadScanResult
 
 export async function rescanQuarantinedUploads(limit = 25) {
   const take = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const staleClaimBefore = new Date(Date.now() - 10 * 60_000);
   const files = await prisma.storedFile.findMany({
-    where: { deletedAt: null, scanStatus: { in: ["PENDING", "ERROR", "LEGACY_UNSCANNED"] } },
+    where: { deletedAt: null, OR: [
+      { scanStatus: { in: ["PENDING", "ERROR", "LEGACY_UNSCANNED"] } },
+      { scanStatus: "SCANNING", scanCheckedAt: { lt: staleClaimBefore } },
+    ] },
     orderBy: { createdAt: "asc" },
     take,
     select: { id: true, objectKey: true },
   });
   const results: Array<{ id: string; status: UploadScanResult["status"] }> = [];
   for (const file of files) {
+    const claimed = await prisma.storedFile.updateMany({
+      where: { id: file.id, deletedAt: null, OR: [
+        { scanStatus: { in: ["PENDING", "ERROR", "LEGACY_UNSCANNED"] } },
+        { scanStatus: "SCANNING", scanCheckedAt: { lt: staleClaimBefore } },
+      ] },
+      data: { scanStatus: "SCANNING", scanCheckedAt: new Date(), scanDetail: "Security scan in progress." },
+    });
+    if (claimed.count !== 1) continue;
     let result: UploadScanResult;
     try {
       const data = await readPrivateObjectForSecurityScan(file.objectKey);
