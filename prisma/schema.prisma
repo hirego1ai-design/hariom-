@@ -109,6 +109,14 @@ model User {
   @@index([phoneNumber])
 }
 
+enum CandidateAvailabilityStatus {
+  ACTIVE_CONFIRMED
+  RECONFIRMATION_REQUIRED
+  NOT_LOOKING
+  JOINED
+  TEMPORARILY_UNAVAILABLE
+}
+
 model CandidateProfile {
   id              String   @id @default(uuid())
   userId          String   @unique
@@ -124,6 +132,10 @@ model CandidateProfile {
   hireGoScore     Int      @default(0)
   resumeUrl       String?
   isVerified      Boolean  @default(false)
+  availabilityStatus CandidateAvailabilityStatus @default(RECONFIRMATION_REQUIRED)
+  lastAvailabilityConfirmedAt DateTime?
+  availabilitySource String?
+  availabilityNote String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
