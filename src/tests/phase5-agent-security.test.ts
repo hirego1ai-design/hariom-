@@ -116,6 +116,16 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     results.push({ name: 'Managed-hiring lifecycle invariant regression', category: 'Phase 5 Managed Hiring', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
 
+  try {
+    const fs = await import('fs');
+    const registrySource = fs.readFileSync(require.resolve('../lib/tools/ToolRegistry'), 'utf8');
+    const safe = registrySource.includes('requires the durable approved-action executor')
+      && !registrySource.includes('await WorkflowEngine.consumeApprovedAction({');
+    results.push({ name: 'Generic registry never consumes approval before a consequential handler', category: 'Phase 5 Agent Security', passed: safe });
+  } catch (error) {
+    results.push({ name: 'Consequential approval/provider failure boundary regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
+  }
+
   return { results };
 }
 
