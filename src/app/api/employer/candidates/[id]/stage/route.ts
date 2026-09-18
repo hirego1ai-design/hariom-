@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 
-const schema = z.object({ stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"]) });
+const schema = z.object({ stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "REJECTED"]) });
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getCurrentSession(req.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -17,6 +17,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!profile || profile.companyId !== application.job.companyId) {
         return NextResponse.json({ success: false, error: "Candidate is not in your company pipeline." }, { status: 403 });
       }
+    }
+    if (application.status === "HIRED") {
+      return NextResponse.json({ success: false, error: "A hired application is final. Use the placement reconciliation workflow for changes." }, { status: 409 });
     }
     await prisma.application.update({ where: { id }, data: { status: stage as any } });
     return NextResponse.json({ success: true, applicationId: id, stage });
