@@ -165,11 +165,30 @@ export class StripeGateway implements PaymentGateway {
       if (process.env.NODE_ENV === "production") throw new Error("Stripe reconciliation credentials are not configured.");
       return { status: "PENDING" };
     }
-    if (!/^pi_[A-Za-z0-9_]+$/.test(gatewayTxId)) throw new Error("Invalid Stripe payment intent id.");
-    const response = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(gatewayTxId)}`, { headers: { Authorization: `Bearer ${secretKey}` }, signal: AbortSignal.timeout(10_000), redirect: "error", cache: "no-store" });
+    const isPaymentIntent = /^pi_[A-Za-z0-9_]+$/.test(gatewayTxId);
+    const isCheckoutSession = /^cs_(?:test_|live_)?[A-Za-z0-9_]+$/.test(gatewayTxId);
+    if (!isPaymentIntent && !isCheckoutSession) throw new Error("Invalid Stripe payment reference.");
+
+    const resource = isPaymentIntent ? "payment_intents" : "checkout/sessions";
+    const response = await fetch(`https://api.stripe.com/v1/${resource}/${encodeURIComponent(gatewayTxId)}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      cache: "no-store",
+    });
     if (!response.ok) throw new Error(`Stripe reconciliation failed with HTTP ${response.status}.`);
     const payload = await response.json();
-    const status = payload?.status === "succeeded" ? "SUCCESS" : payload?.status === "canceled" ? "FAILED" : "PENDING";
+
+    let status: "SUCCESS" | "FAILED" | "PENDING";
+    if (isPaymentIntent) {
+      status = payload?.status === "succeeded" ? "SUCCESS" : payload?.status === "canceled" ? "FAILED" : "PENDING";
+    } else {
+      status = payload?.payment_status === "paid"
+        ? "SUCCESS"
+        : payload?.status === "expired"
+          ? "FAILED"
+          : "PENDING";
+    }
     return { status, rawResponse: payload };
   }
 }
