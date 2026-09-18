@@ -35,7 +35,17 @@ export class WorkflowEngine {
     const executionKey = `${workflowId}:${stepName}:${attemptNumber}`;
     const previous = await prisma.workflowStepLog.findUnique({ where: { executionKey } });
     if (previous?.status === 'COMPLETED' && previous.sideEffectDone) return previous.outputPayload as T;
-    await prisma.workflowStepLog.create({ data: { executionKey, workflowInstanceId: workflowId, stepName, attemptNumber, status: 'RUNNING', inputPayload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue } });
+    if (previous) throw new Error(`Workflow step execution already claimed: ${executionKey}`);
+    try {
+      await prisma.workflowStepLog.create({ data: { executionKey, workflowInstanceId: workflowId, stepName, attemptNumber, status: 'RUNNING', inputPayload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await prisma.workflowStepLog.findUnique({ where: { executionKey } });
+        if (raced?.status === 'COMPLETED' && raced.sideEffectDone) return raced.outputPayload as T;
+        throw new Error(`Workflow step execution already claimed: ${executionKey}`);
+      }
+      throw error;
+    }
     try {
       const result = await stepFn();
       await prisma.$transaction(async (tx) => {
@@ -48,7 +58,7 @@ export class WorkflowEngine {
         const errorMessage = error instanceof Error ? error.message : 'Step execution failed';
         await tx.workflowStepLog.update({ where: { executionKey }, data: { status: 'FAILED', errorMessage } });
         const workflow = await tx.workflowInstance.update({ where: { id: workflowId }, data: { status: 'FAILED', updatedAt: new Date() } });
-        if (attemptNumber >= 3) await tx.deadLetterJob.create({ data: { sourceType: 'WorkflowStep', sourceId: executionKey, correlationId: workflow.correlationId, errorType: 'StepFailed', errorMessage, payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue, status: 'OPEN' } });
+        if (attemptNumber >= 3) await tx.deadLetterJob.upsert({ where: { sourceType_sourceId: { sourceType: 'WorkflowStep', sourceId: executionKey } }, update: { errorType: 'StepFailed', errorMessage, payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue, status: 'OPEN' }, create: { sourceType: 'WorkflowStep', sourceId: executionKey, correlationId: workflow.correlationId, errorType: 'StepFailed', errorMessage, payload: inputPayload == null ? Prisma.JsonNull : inputPayload as Prisma.InputJsonValue, status: 'OPEN' } });
       });
       throw error;
     }
