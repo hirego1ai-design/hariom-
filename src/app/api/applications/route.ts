@@ -138,12 +138,23 @@ export async function PATCH(req: NextRequest) {
       });
       if (!application || application.candidateProfileId !== candidate.id) throw new ApiError("Application not found", 404);
       if (application.status === "WITHDRAWN") return { duplicate: true };
+      const liveRound = await tx.interviewRoundProgress.findFirst({
+        where: { applicationId, status: "LIVE" },
+        select: { id: true },
+      });
+      if (liveRound) {
+        throw new ApiError("An interview is currently live. End the active interview before withdrawing this application.", 409);
+      }
       if (application.status === "HIRED" || application.pphPlacement) {
         throw new ApiError("This application has entered the joining or placement workflow and cannot be withdrawn here. Contact HireGo support for reconciliation.", 409);
       }
       await tx.application.update({ where: { id: applicationId }, data: { status: "WITHDRAWN" } });
       await tx.interview.updateMany({
         where: { applicationId, status: { in: ["SCHEDULED", "RESCHEDULED"] } },
+        data: { status: "CANCELLED" },
+      });
+      await tx.interviewRoundProgress.updateMany({
+        where: { applicationId, status: "SCHEDULED" },
         data: { status: "CANCELLED" },
       });
       return { duplicate: false };
