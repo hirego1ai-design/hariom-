@@ -121,7 +121,7 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
         ownerId: user.id,
         category: "video-resumes",
         objectKey: `test/video-resumes/${suffix}.mp4`,
-        fileName: "test.mp4",
+        originalName: "test.mp4",
         mimeType: "video/mp4",
         sizeBytes: 1024,
       },
