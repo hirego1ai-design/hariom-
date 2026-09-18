@@ -98,6 +98,24 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     results.push({ name: 'Candidate approval-role regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
 
+  try {
+    const fs = await import('fs');
+    const workflowSource = fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8');
+    const required = ['recoverInterruptedSteps', 'InterruptedExecution', 'P2002', 'retryWorkflow', 'requestConsequentialAction', 'PAUSED_FOR_APPROVAL'];
+    results.push({ name: 'Workflow replay, recovery, concurrency and approval guards remain wired', category: 'Phase 5 Reliability', passed: required.every((token) => workflowSource.includes(token)) });
+  } catch (error) {
+    results.push({ name: 'Workflow reliability invariant regression', category: 'Phase 5 Reliability', passed: false, message: error instanceof Error ? error.message : String(error) });
+  }
+
+  try {
+    const fs = await import('fs');
+    const workflowSource = fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8');
+    const lifecycle = ['JOB_REQUIREMENT','CANDIDATE_SCREENING','SHORTLISTING','INTERVIEW_SCHEDULING','VIRTUAL_INTERVIEW','EMPLOYER_FEEDBACK','SELECTION_REJECTION','JOINING_ONBOARDING','BILLING_HANDOFF','NOTIFICATION_HANDOFF'];
+    results.push({ name: 'Managed-hiring lifecycle remains explicitly allowlisted', category: 'Phase 5 Managed Hiring', passed: lifecycle.every((token) => workflowSource.includes(token)) });
+  } catch (error) {
+    results.push({ name: 'Managed-hiring lifecycle invariant regression', category: 'Phase 5 Managed Hiring', passed: false, message: error instanceof Error ? error.message : String(error) });
+  }
+
   return { results };
 }
 
