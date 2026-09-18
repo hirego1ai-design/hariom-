@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
@@ -15,7 +15,7 @@ type Round = {
 };
 const blankRound = (): Round => ({ name: "", purpose: "", department: "", interviewType: "VIDEO", durationMins: 30, mandatory: true, mandatoryFeedback: true, candidateFeedbackPolicy: "OPTIONAL", previousFeedbackVisibility: "HIDDEN_UNTIL_OWN_FEEDBACK", interviewerUserIds: [] });
 
-export default function InterviewRoundBuilderPage() {
+function InterviewRoundBuilderContent() {
   const params = useSearchParams();
   const jobId = params.get("jobId") || "";
   const [jobTitle, setJobTitle] = useState("");
@@ -102,4 +102,8 @@ export default function InterviewRoundBuilderPage() {
       {jobId && !loading && <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-outline bg-bg-card/95 p-4 backdrop-blur md:left-[240px]"><div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-text-secondary">{rounds.length} round{rounds.length === 1 ? "" : "s"} · {totalMinutes} minutes total</p><button type="button" onClick={save} disabled={saving || rounds.length === 0} className="btn-3d-red h-11 rounded-full px-8 font-bold text-white disabled:opacity-50">{saving ? "Publishing…" : "Publish process"}</button></div></div>}
     </main>
   </PageContainer>;
+}
+
+export default function InterviewRoundBuilderPage() {
+  return <Suspense fallback={<PageContainer><main className="mx-auto max-w-5xl px-4 py-8 text-text-secondary">Loading interview process…</main></PageContainer>}><InterviewRoundBuilderContent /></Suspense>;
 }
