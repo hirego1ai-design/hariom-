@@ -136,8 +136,18 @@ export async function POST(req: NextRequest) {
       if (!completed) return NextResponse.json({ success: true, roomId: body.roomId, status: "COMPLETED", idempotent: true });
     } else {
       const payload = body.action === "ICE_CANDIDATE" ? { candidate: body.candidate } : { sdp: body.sdp };
-      await prisma.interviewSignal.create({
-        data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
+      await prisma.$transaction(async (tx) => {
+        // Fence signaling against a concurrent cancel/complete. The initial
+        // authorization read is not authoritative once another request mutates
+        // the interview lifecycle.
+        await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${interview.id} FOR UPDATE`;
+        const current = await tx.interview.findUnique({ where: { id: interview.id }, select: { status: true } });
+        if (!current || !["SCHEDULED", "RESCHEDULED", "LIVE"].includes(current.status)) {
+          throw new ApiError("Interview room is closed", 409);
+        }
+        await tx.interviewSignal.create({
+          data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
+        });
       });
     }
     return NextResponse.json({ success: true, roomId: body.roomId, status: body.action === "COMPLETE" ? "COMPLETED" : "ACTIVE" });
