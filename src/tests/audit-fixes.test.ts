@@ -217,13 +217,13 @@ export async function runAuditFixesTests(): Promise<{
 
       globalThis.fetch = (async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (!url.endsWith("/v1/payments/pay_status_test")) throw new Error("Unexpected Razorpay status URL");
-        return new Response(JSON.stringify({ id: "pay_status_test", status: "authorized" }), {
+        if (!url.endsWith("/v1/payments/pay_statustest")) throw new Error("Unexpected Razorpay status URL");
+        return new Response(JSON.stringify({ id: "pay_statustest", status: "authorized" }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
       }) as typeof fetch;
-      const pendingStatus = await rzp.getPaymentStatus("pay_status_test");
+      const pendingStatus = await rzp.getPaymentStatus("pay_statustest");
 
       const passed = productionOrderRejected && !rejectedApiSecret.isValid && pendingStatus.status === "PENDING";
       results.push({
