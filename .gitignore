@@ -53,3 +53,4 @@ scratch/
 skills-lock.json
 
 __pycache__/
+.env*.local

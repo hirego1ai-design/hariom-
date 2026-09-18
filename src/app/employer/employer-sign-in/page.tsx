@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 
 function EmployerSignInContent() {
   const router = useRouter();
@@ -70,10 +71,10 @@ function EmployerSignInContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-4 py-8">
-      <div className="w-full max-w-[960px] mx-auto grid grid-cols-1 lg:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Employer Features */}
-        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-8 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
           {/* Brand Logo */}
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-amber-400 tracking-tight font-bold">
@@ -143,8 +144,8 @@ function EmployerSignInContent() {
         </section>
 
         {/* Right Side: Compact Sign In Form */}
-        <section className="col-span-1 md:col-span-7 flex items-center justify-center p-6 lg:p-8">
-          <div className="w-full max-w-[360px] mx-auto">
+        <section className="col-span-1 md:col-span-7 flex items-center justify-center p-5 sm:p-6">
+          <div className="w-full max-w-[340px] mx-auto">
             
             {/* Segmented Control Pill Toggle */}
             <div className="flex justify-center mb-4">
@@ -254,9 +255,11 @@ function EmployerSignInContent() {
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
                   >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {showPassword ? "visibility_off" : "visibility"}
-                    </span>
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -283,17 +286,13 @@ function EmployerSignInContent() {
                 >
                   {isSubmitting ? (
                     <>
-                      <span className="material-symbols-outlined text-[16px] animate-spin">
-                        progress_activity
-                      </span>
+                      <Loader2 className="w-4 h-4 animate-spin text-black" />
                       <span>Signing In...</span>
                     </>
                   ) : (
                     <>
                       <span>Sign In to Workspace</span>
-                      <span className="material-symbols-outlined text-[16px] group-hover:translate-x-1 transition-transform">
-                        arrow_forward
-                      </span>
+                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                     </>
                   )}
                 </button>

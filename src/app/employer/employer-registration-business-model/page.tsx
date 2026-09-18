@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 
 export default function EmployerRegistrationBusinessModelPage() {
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function EmployerRegistrationBusinessModelPage() {
             </div>
             <button onClick={() => router.push("/employer/employer-registration-document-verification?model=managed")} className="btn-3d-red h-12 w-full rounded-2xl font-headline-md text-xs text-white flex items-center justify-center gap-2">
               <span>Activate Managed Hiring™</span>
-              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+              <ArrowRight className="w-4 h-4 ml-1" />
             </button>
           </div>
 

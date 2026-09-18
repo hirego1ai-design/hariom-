@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -143,7 +144,7 @@ export default function AdminLoginPage() {
                   ) : (
                     <>
                       <span>Sign In to Admin Console</span>
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                      <ArrowRight className="w-4 h-4 ml-1" />
                     </>
                   )}
                 </button>
