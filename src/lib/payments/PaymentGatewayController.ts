@@ -12,6 +12,13 @@ import { PayUGateway } from "./PayUGateway";
 import { PhonePeGateway } from "./PhonePeGateway";
 import { StripeGateway } from "./StripeGateway";
 
+export class AmbiguousPaymentOrderError extends Error {
+  constructor(message: string, public readonly provider: GatewayName) {
+    super(message);
+    this.name = "AmbiguousPaymentOrderError";
+  }
+}
+
 export interface GatewayConfigState {
   mode: "AUTO" | "MANUAL";
   primaryGateway: GatewayName;
@@ -213,7 +220,12 @@ export class PaymentGatewayController {
         return result;
       } catch (err: any) {
         console.error(`Gateway ${gwName} order creation failed:`, err.message);
-        lastError = err;
+        lastError = err instanceof Error ? err : new Error("Payment gateway order creation failed.");
+        if (err instanceof AmbiguousPaymentOrderError) {
+          // The provider may have accepted the order before the connection failed.
+          // Never create a second provider order until the first outcome is reconciled.
+          throw err;
+        }
 
         // SAFE FAILOVER GUARD: Only failover to next gateway if autoFailover is ON and no order was created
         if (!config.autoFailover || i === candidateSequence.length - 1) {
