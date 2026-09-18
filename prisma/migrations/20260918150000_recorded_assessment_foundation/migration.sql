@@ -63,3 +63,14 @@ ALTER TABLE "RecordedAssessmentAttemptQuestion" ADD CONSTRAINT "RecordedAssessme
 ALTER TABLE "RecordedAssessmentResponse" ADD CONSTRAINT "RecordedAssessmentResponse_attemptQuestionId_fkey" FOREIGN KEY ("attemptQuestionId") REFERENCES "RecordedAssessmentAttemptQuestion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "RecordedAssessmentResponse" ADD CONSTRAINT "RecordedAssessmentResponse_storedFileId_fkey" FOREIGN KEY ("storedFileId") REFERENCES "StoredFile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "RecordedAssessmentProctoringEvent" ADD CONSTRAINT "RecordedAssessmentProctoringEvent_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "RecordedAssessmentAttempt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "RecordedAssessmentQuestionBank" ADD CONSTRAINT "RecordedAssessmentQuestionBank_readingTimeSeconds_check" CHECK ("readingTimeSeconds" = 10);
+ALTER TABLE "RecordedAssessmentQuestionBank" ADD CONSTRAINT "RecordedAssessmentQuestionBank_answerDurationSeconds_check" CHECK ("answerDurationSeconds" IN (30, 60));
+ALTER TABLE "RecordedAssessmentQuestionBank" ADD CONSTRAINT "RecordedAssessmentQuestionBank_version_check" CHECK ("version" > 0);
+ALTER TABLE "RecordedAssessmentConfig" ADD CONSTRAINT "RecordedAssessmentConfig_defaultReadingTimeSeconds_check" CHECK ("defaultReadingTimeSeconds" = 10);
+ALTER TABLE "RecordedAssessmentConfig" ADD CONSTRAINT "RecordedAssessmentConfig_defaultAnswerSeconds_check" CHECK ("defaultAnswerSeconds" IN (30, 60));
+ALTER TABLE "RecordedAssessmentConfig" ADD CONSTRAINT "RecordedAssessmentConfig_questionCount_check" CHECK ("questionCount" BETWEEN 1 AND 20);
+ALTER TABLE "RecordedAssessmentAttemptQuestion" ADD CONSTRAINT "RecordedAssessmentAttemptQuestion_readingTimeSeconds_check" CHECK ("readingTimeSeconds" = 10);
+ALTER TABLE "RecordedAssessmentAttemptQuestion" ADD CONSTRAINT "RecordedAssessmentAttemptQuestion_answerDurationSeconds_check" CHECK ("answerDurationSeconds" IN (30, 60));
+ALTER TABLE "RecordedAssessmentResponse" ADD CONSTRAINT "RecordedAssessmentResponse_durationSeconds_check" CHECK ("durationSeconds" BETWEEN 0 AND 60);
+ALTER TABLE "RecordedAssessmentProctoringEvent" ADD CONSTRAINT "RecordedAssessmentProctoringEvent_warningNumber_check" CHECK ("warningNumber" IS NULL OR "warningNumber" BETWEEN 1 AND 3);
