@@ -199,7 +199,10 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       headers: { authorization: `Bearer ${employerToken}`, "content-type": "application/json", "idempotency-key": key },
       body: JSON.stringify({ planId: plan.id, paymentMethod: "RAZORPAY", promoCode: promo.code }),
     });
-    const checkoutResponses = await Promise.all([\n      checkout(checkoutRequest(`promo-a-${promoSuffix}`) as any),\n      checkout(checkoutRequest(`promo-b-${promoSuffix}`) as any),\n    ]);
+    const checkoutResponses = await Promise.all([
+      checkout(checkoutRequest(`promo-a-${promoSuffix}`) as any),
+      checkout(checkoutRequest(`promo-b-${promoSuffix}`) as any),
+    ]);
     const updatedPromo = await prisma.promoCode.findUnique({ where: { id: promo.id } });
     results.push(result(
       "Promo checkout reserves exactly one remaining capacity slot",
