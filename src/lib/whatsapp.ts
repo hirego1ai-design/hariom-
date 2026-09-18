@@ -104,10 +104,16 @@ export async function fetchWithRetry(
 
   let attempt = 0;
   let delay = initialDelayMs;
+  const requestTimeoutMs = 10_000;
 
   while (true) {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, {
+        ...options,
+        redirect: "error",
+        cache: "no-store",
+        signal: options.signal ?? AbortSignal.timeout(requestTimeoutMs),
+      });
 
       // Do not retry successful responses or non-retryable client errors (400, 401, 403, 404, 422)
       const status = response.status;
