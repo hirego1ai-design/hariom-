@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { assertEmployerOwnsJob, RECORDED_ASSESSMENT_READING_SECONDS } from "@/lib/recordedAssessment";
+import { assertEmployerOwnsJob, RECORDED_ASSESSMENT_READING_SECONDS, selectEligibleRecordedAssessmentQuestions } from "@/lib/recordedAssessment";
 
 const schema = z.object({
   mediaType: z.enum(["AUDIO", "VIDEO"]),
@@ -33,19 +33,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const job = await assertEmployerOwnsJob(session.id, session.role, id);
     const body = await readValidatedJson(request, schema);
     if (body.isActive) {
-      const roleWords = job.title.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
-      const pool = await prisma.recordedAssessmentQuestionBank.findMany({
-        where: { isActive: true, OR: roleWords.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" } })) },
-        select: { industry: true, department: true },
-        take: 250,
-      });
-      const industry = job.company.industry?.toLowerCase() || null;
-      const department = job.department?.toLowerCase() || null;
-      const available = pool.filter((question) =>
-        (!question.industry || (!!industry && question.industry.toLowerCase() === industry)) &&
-        (!question.department || (!!department && question.department.toLowerCase() === department))
-      ).length;
-      if (available < body.questionCount) throw new ApiError(`Question bank readiness failed: ${available} role-related questions found, but ${body.questionCount} are required. Add curated questions before activating this assessment.`, 409);
+      const selected = await selectEligibleRecordedAssessmentQuestions(job, body.questionCount);
+      if (selected.length < body.questionCount) throw new ApiError(`Question bank readiness failed: ${selected.length} eligible questions found, but ${body.questionCount} are required. Add curated questions before activating this assessment.`, 409);
     }
     const config = await prisma.recordedAssessmentConfig.upsert({
       where: { jobListingId: id },

@@ -14,6 +14,28 @@ function roleAffinity(jobRole: string, bankRole: string) {
   return overlap / Math.max(job.size, bank.size);
 }
 
+type AssessmentJobContext = { title: string; department: string | null; requirements: string[]; company: { industry: string | null } };
+
+export async function selectEligibleRecordedAssessmentQuestions(job: AssessmentJobContext, questionCount: number) {
+  const roleTitle = job.title.trim();
+  const industry = job.company.industry?.trim() || null;
+  const department = job.department?.trim() || null;
+  const requirements = job.requirements.map((value) => value.toLowerCase());
+  const words = roleTokens(roleTitle);
+  const pool = await prisma.recordedAssessmentQuestionBank.findMany({
+    where: { isActive: true, ...(words.length ? { OR: words.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" as const } })) } : { roleTitle: { equals: roleTitle, mode: "insensitive" as const } }) },
+    orderBy: [{ version: "desc" }, { updatedAt: "desc" }],
+    take: Math.max(questionCount * 12, 100),
+  });
+  const eligible = pool.filter((question) => roleAffinity(roleTitle, question.roleTitle) >= 0.5
+    && (!question.industry || (!!industry && question.industry.toLowerCase() === industry.toLowerCase()))
+    && (!question.department || (!!department && question.department.toLowerCase() === department.toLowerCase())));
+  const score = (question: typeof eligible[number]) => roleAffinity(roleTitle, question.roleTitle) * 10
+    + question.skillTags.reduce((total, tag) => total + (requirements.some((requirement) => requirement.includes(tag.toLowerCase())) ? 2 : 0), 0)
+    + (question.industry ? 2 : 0) + (question.department ? 1 : 0);
+  return eligible.sort((a, b) => score(b) - score(a) || b.version - a.version || a.id.localeCompare(b.id)).slice(0, questionCount);
+}
+
 export async function resolveEmployerCompanyId(userId: string) {
   const profile = await prisma.employerProfile.findUnique({ where: { userId }, select: { companyId: true } });
   if (!profile?.companyId) throw new ApiError("Employer profile not found.", 403);
@@ -53,38 +75,7 @@ export async function createOrResumeRecordedAssessmentAttempt(userId: string, jo
   if (existing) return existing;
 
   const roleTitle = application.job.title.trim();
-  const industry = application.job.company.industry?.trim() || null;
-  const department = application.job.department?.trim() || null;
-  const requirements = application.job.requirements.map((v) => v.toLowerCase());
-
-  // Retrieve a bounded role-family pool, then rank deterministically. Exact
-  // title equality is too brittle for real job titles such as "Sr React
-  // Developer" vs "React Developer", while unrestricted fuzzy matching risks
-  // serving unrelated questions.
-  const roleWords = roleTokens(roleTitle);
-  const candidates = await prisma.recordedAssessmentQuestionBank.findMany({
-    where: {
-      isActive: true,
-      ...(roleWords.length ? { OR: roleWords.map((word) => ({ roleTitle: { contains: word, mode: "insensitive" as const } })) } : { roleTitle: { equals: roleTitle, mode: "insensitive" as const } }),
-    },
-    orderBy: [{ version: "desc" }, { updatedAt: "desc" }],
-    take: Math.max(config.questionCount * 12, 100),
-  });
-  const eligible = candidates.filter((q) => {
-    const roleScore = roleAffinity(roleTitle, q.roleTitle);
-    const industryMatch = !q.industry || (!!industry && q.industry.toLowerCase() === industry.toLowerCase());
-    const departmentMatch = !q.department || (!!department && q.department.toLowerCase() === department.toLowerCase());
-    return roleScore >= 0.5 && industryMatch && departmentMatch;
-  });
-  const ranked = [...eligible].sort((a, b) => {
-    const score = (q: typeof a) => {
-      const skillScore = q.skillTags.reduce((n, tag) => n + (requirements.some((r) => r.includes(tag.toLowerCase())) ? 1 : 0), 0);
-      const contextScore = (q.industry ? 2 : 0) + (q.department ? 1 : 0);
-      return roleAffinity(roleTitle, q.roleTitle) * 10 + skillScore * 2 + contextScore;
-    };
-    return score(b) - score(a) || b.version - a.version || a.id.localeCompare(b.id);
-  });
-  const selected = ranked.slice(0, config.questionCount);
+  const selected = await selectEligibleRecordedAssessmentQuestions(application.job, config.questionCount);
   if (selected.length < config.questionCount) {
     throw new ApiError(`Question bank has only ${selected.length} eligible questions for ${roleTitle}; ${config.questionCount} are required.`, 409);
   }
