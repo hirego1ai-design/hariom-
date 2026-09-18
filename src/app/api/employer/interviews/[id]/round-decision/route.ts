@@ -24,13 +24,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const company = await getSessionCompany(session);
       if (company.id !== interview.application.job.companyId) throw new ApiError("Interview access denied.", 403);
     }
+    if (interview.roundProgress.status === "TRANSFERRED" && body.action === "PROCEED") {
+      const nextRound = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: interview.roundProgress.round.processId, sequence: interview.roundProgress.round.sequence + 1 } }, include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } } });
+      return NextResponse.json({ success: true, action: nextRound ? "PROCEED" : "FINAL_ROUND_COMPLETE", nextRound: nextRound ? { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } : null, applicationId: interview.applicationId, idempotent: true });
+    }
     if (interview.roundProgress.status !== "ROUND_COMPLETE") throw new ApiError("All required interviewer feedback must be finalized before a round decision.", 409);
     const requiredFeedbackMissing = await prisma.interviewRoundInterviewer.count({
       where: { roundId: interview.roundProgress.roundId, required: true, user: { interviewFeedbacks: { none: { interviewId: id, finalizedAt: { not: null } } } } },
     });
     if (requiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
 
-    if (body.action === "HOLD") return NextResponse.json({ success: true, action: "HOLD", message: "Candidate remains on hold after this round." });
+    if (body.action === "HOLD") {
+      await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD" });
+      return NextResponse.json({ success: true, action: "HOLD", message: "Candidate remains on hold after this round." });
+    }
 
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
@@ -44,7 +51,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now } });
       if (!nextRound) {
-        await tx.application.update({ where: { id: interview.applicationId }, data: { status: "SHORTLISTED" } });
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
       await tx.interviewRoundProgress.upsert({
