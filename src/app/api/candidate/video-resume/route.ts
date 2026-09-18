@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrl } from "@/lib/storage";
 import crypto from "crypto";
-import { claimVideoAnalysisJob } from "@/lib/videoAnalysisQueue";
+import { claimVideoAnalysisJob, releaseVideoAnalysisClaimForRetry } from "@/lib/videoAnalysisQueue";
 
 const videoResumeSubmissionSchema = z.object({
   videoUrl: z.string().regex(/^\/api\/files\/[0-9a-f-]{36}$/i, "Video must be an uploaded HireGo file."),
@@ -161,16 +161,11 @@ async function dispatchWorkerJob(params: {
     });
     if (!res.ok) {
       console.error(`Video analysis worker rejected dispatch with HTTP ${res.status}.`);
-      await prisma.$transaction([
-        prisma.videoAnalysisJob.updateMany({
-          where: { id: params.jobId, status: "PENDING" },
-          data: { status: "BLOCKED_INFRA", error: `Worker rejected dispatch with HTTP ${res.status}.`, completedAt: new Date() },
-        }),
-        prisma.videoResume.updateMany({
-          where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-          data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service returned error" },
-        }),
-      ]);
+      await releaseVideoAnalysisClaimForRetry({
+        jobId: params.jobId,
+        claimToken: claim.claimToken,
+        reason: `Worker rejected dispatch with HTTP ${res.status}.`,
+      });
       return;
     }
     await prisma.videoResume.updateMany({
@@ -179,15 +174,13 @@ async function dispatchWorkerJob(params: {
     });
   } catch (e) {
     console.error("Failed to reach video-analysis-worker.");
-    await prisma.$transaction([
-      prisma.videoAnalysisJob.updateMany({
-        where: { id: params.jobId, status: "PENDING" },
-        data: { status: "BLOCKED_INFRA", error: "Worker connection failed", completedAt: new Date() },
-      }),
-      prisma.videoResume.updateMany({
-        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-        data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service unavailable" },
-      }),
-    ]);
+    // The claim may have been persisted before the network failure. Release it
+    // only when this dispatcher still owns the durable claim.
+    const current = await prisma.videoAnalysisJob.findUnique({ where: { id: params.jobId }, select: { claimToken: true } });
+    if (current?.claimToken) await releaseVideoAnalysisClaimForRetry({
+      jobId: params.jobId,
+      claimToken: current.claimToken,
+      reason: "Worker connection failed",
+    });
   }
 }
