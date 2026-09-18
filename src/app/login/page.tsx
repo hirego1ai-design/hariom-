@@ -69,10 +69,10 @@ function CandidateLoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
+      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Feature Highlights */}
-        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 sm:p-6 justify-between relative">
+        <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
           <div className="relative z-10">
             <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
               HireGo AI
@@ -139,7 +139,7 @@ function CandidateLoginContent() {
           <div className="w-full max-w-[330px] mx-auto">
             {/* Clean Segmented Control Pill Toggle (Candidate | Employer) */}
             <div className="flex justify-center mb-4">
-              <div className="p-1 rounded-full flex items-center border border-white/10 bg-white/5 backdrop-blur-md">
+              <div className="p-1 rounded-full flex items-center border border-outline bg-surface-container backdrop-blur-md">
                 <button
                   type="button"
                   className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-primary shadow-md transition-all"
@@ -157,10 +157,10 @@ function CandidateLoginContent() {
             </div>
 
             <div className="mb-4 text-center">
-              <h1 className="font-display-xl text-xl font-bold text-primary mb-1">
+              <h1 className="font-headline-md font-bold text-primary mb-1">
                 Candidate Sign In
               </h1>
-              <p className="font-body-lg text-xs text-text-secondary">
+              <p className="font-body-md text-sm text-text-secondary">
                 Access your AI verified vector profile
               </p>
             </div>
@@ -179,7 +179,7 @@ function CandidateLoginContent() {
                 </label>
                 <input
                   name="email"
-                  className="input-pill w-full h-9.5 text-xs text-text-primary px-3.5"
+                  className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5"
                   placeholder="name@company.com"
                   type="email"
                   required
@@ -201,7 +201,7 @@ function CandidateLoginContent() {
                 <div className="relative">
                   <input
                     name="password"
-                    className="input-pill w-full h-9.5 text-xs text-text-primary px-3.5 pr-9"
+                    className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5 pr-9"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
                     required
@@ -234,7 +234,7 @@ function CandidateLoginContent() {
 
               <div className="pt-1">
                 <button
-                  className="btn-3d-red w-full h-10 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md disabled:opacity-50"
+                  className="btn-3d-red w-full h-11 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md disabled:opacity-50"
                   type="submit"
                   disabled={isSubmitting}
                 >
@@ -268,7 +268,7 @@ function CandidateLoginContent() {
 
 export default function CandidateLoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0E0E0E]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-bg-page" />}>
       <CandidateLoginContent />
     </Suspense>
   );
