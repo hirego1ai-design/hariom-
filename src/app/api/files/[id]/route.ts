@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getPrivateDownloadUrl, getPrivateObject } from "@/lib/storage";
 
@@ -16,10 +16,12 @@ async function canAccessFile(userId: string, role: string, file: { ownerId: stri
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await enforceRateLimit(req, "private_file_download", 120, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
 
     const { id } = await params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return jsonError("File not found", 404);
     const file = await prisma.storedFile.findFirst({ where: { id, deletedAt: null } });
     if (!file) return jsonError("File not found", 404);
     if (file.category === "PAYMENT_RECEIPT" && session.role !== "ADMIN" && session.role !== "EMPLOYER") {
