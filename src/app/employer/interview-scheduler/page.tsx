@@ -16,7 +16,7 @@ function EmployerInterviewSchedulerContent() {
   const [email, setEmail] = useState(true);
   const [whatsapp, setWhatsapp] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<any>(null);
+  const [success, setSuccess] = useState<{ interviewId: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ function EmployerInterviewSchedulerContent() {
       <div className="max-w-3xl mx-auto py-8 px-4">
         <div className="mb-7">
           <p className="text-primary text-xs font-bold uppercase tracking-[0.2em] mb-2">Interview operations</p>
-          <h1 className="text-3xl font-bold text-white">Schedule interview</h1>
+          <h1 className="text-3xl font-bold text-text-primary">Schedule interview</h1>
           <p className="text-sm text-text-secondary mt-2">
             Create a real interview record, send notifications, and provide online or offline joining details.
           </p>
@@ -75,33 +75,33 @@ function EmployerInterviewSchedulerContent() {
             <input
               value={applicationId}
               onChange={(e) => setApplicationId(e.target.value)}
-              className="mt-2 w-full input-pill h-11 px-4 text-white"
+              className="mt-2 w-full input-pill h-11 px-4 text-text-primary"
               placeholder="Select from candidate tracker"
             />
           </label>
           <label className="block text-sm text-text-secondary">
             Configured round ID
-            <input value={roundId} onChange={(e) => setRoundId(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" placeholder="Round ID from the job interview process" />
+            <input value={roundId} onChange={(e) => setRoundId(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" placeholder="Round ID from the job interview process" />
           </label>
           <div className="grid md:grid-cols-2 gap-4">
             <label className="block text-sm text-text-secondary">
               Date
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
             </label>
             <label className="block text-sm text-text-secondary">
               Time
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
             </label>
           </div>
           {roundId && (
             <div className="grid md:grid-cols-2 gap-4">
               <label className="block text-sm text-text-secondary">
                 Meeting address (required for configured in-person rounds)
-                <input value={address} onChange={(e) => setAddress(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
+                <input value={address} onChange={(e) => setAddress(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
               </label>
               <label className="block text-sm text-text-secondary">
                 HireGo contact number (required for configured in-person rounds)
-                <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-white" />
+                <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
               </label>
             </div>
           )}
@@ -115,7 +115,7 @@ function EmployerInterviewSchedulerContent() {
           </div>
           {error && <p className="text-sm text-red-300">{error}</p>}
           {success && (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-200">
+            <div className="rounded-xl border border-success/30 bg-success/10 p-4 text-sm text-text-primary">
               Interview scheduled. ID: {success.interviewId}.{" "}
               <button
                 type="button"
@@ -130,7 +130,7 @@ function EmployerInterviewSchedulerContent() {
             <button disabled={saving} className="btn-primary-red h-12 px-7 rounded-full text-white font-bold">
               {saving ? "Scheduling..." : "Schedule interview"}
             </button>
-            <button type="button" onClick={() => router.back()} className="h-12 px-7 rounded-full border border-white/10 text-text-secondary">
+            <button type="button" onClick={() => router.back()} className="h-12 px-7 rounded-full border border-outline text-text-secondary">
               Cancel
             </button>
           </div>
