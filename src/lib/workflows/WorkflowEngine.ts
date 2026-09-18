@@ -133,6 +133,16 @@ export class WorkflowEngine {
     }
   }
 
+  static async requestConsequentialAction(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<{ approvalId: string; status: 'PENDING_APPROVAL' }> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (workflow.status !== 'RUNNING') throw new Error(`Consequential action cannot be requested while workflow is ${workflow.status}`);
+    const approvalId = await this.pauseForApproval(params);
+    return { approvalId, status: 'PENDING_APPROVAL' };
+  }
+
   static async cancelWorkflow(params: { workflowId: string; context: TenantContext; reason: string }): Promise<WorkflowInstance> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
