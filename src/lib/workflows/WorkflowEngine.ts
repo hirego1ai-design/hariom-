@@ -7,6 +7,18 @@ import { writeAgentApprovalAudit } from '@/lib/security/AgentApprovalAudit';
 
 const APPROVER_ROLES: Role[] = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
 const MANAGED_HIRING_WORKFLOW_TYPES = new Set(['JOB_REQUIREMENT', 'CANDIDATE_SCREENING', 'SHORTLISTING', 'INTERVIEW_SCHEDULING', 'VIRTUAL_INTERVIEW', 'EMPLOYER_FEEDBACK', 'SELECTION_REJECTION', 'JOINING_ONBOARDING', 'BILLING_HANDOFF', 'NOTIFICATION_HANDOFF']);
+const WORKFLOW_REQUIRED_RESOURCES: Record<string, Array<'jobId' | 'applicationId' | 'candidateId'>> = {
+  JOB_REQUIREMENT: ['jobId'],
+  CANDIDATE_SCREENING: ['jobId', 'applicationId'],
+  SHORTLISTING: ['jobId', 'applicationId'],
+  INTERVIEW_SCHEDULING: ['jobId', 'applicationId'],
+  VIRTUAL_INTERVIEW: ['jobId', 'applicationId'],
+  EMPLOYER_FEEDBACK: ['jobId', 'applicationId'],
+  SELECTION_REJECTION: ['jobId', 'applicationId'],
+  JOINING_ONBOARDING: ['jobId', 'applicationId'],
+  BILLING_HANDOFF: ['jobId', 'applicationId'],
+  NOTIFICATION_HANDOFF: ['jobId', 'applicationId'],
+};
 
 const APPROVAL_ROLE_POLICY: Record<string, Role[]> = {
   CANDIDATE_SELECTION: [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN],
@@ -42,6 +54,8 @@ export class WorkflowEngine {
   }): Promise<WorkflowInstance> {
     const { initialStep, checkpointState, context, ...data } = params;
     if (!MANAGED_HIRING_WORKFLOW_TYPES.has(data.workflowType)) throw new Error(`Unsupported managed-hiring workflow type: ${data.workflowType}`);
+    const requiredResources = WORKFLOW_REQUIRED_RESOURCES[data.workflowType] ?? [];
+    for (const resource of requiredResources) if (!data[resource]) throw new Error(`${resource} is required for ${data.workflowType}`);
     if (!data.correlationId || data.correlationId.length > 200) throw new Error('A bounded correlation ID is required');
     if (!initialStep || initialStep.length > 120) throw new Error('A bounded initial workflow step is required');
     if (data.initiatedBy !== context.userId) throw new Error('Workflow initiator must be derived from the authenticated server context');
