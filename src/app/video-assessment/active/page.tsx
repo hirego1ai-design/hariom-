@@ -17,6 +17,10 @@ export default function VideoAssessmentActivePage() {
   const [mediaError, setMediaError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
 
   const questions = [
     {
@@ -45,6 +49,7 @@ export default function VideoAssessmentActivePage() {
       ?.getUserMedia({ video: true, audio: true })
       .then((s) => {
         stream = s;
+        mediaStreamRef.current = s;
         if (videoRef.current) videoRef.current.srcObject = s;
         setMediaReady(true);
         setMediaError("");
@@ -73,44 +78,74 @@ export default function VideoAssessmentActivePage() {
   }, [isRecording, timerSeconds]);
 
   const handleStartRecording = () => {
-    if (!mediaReady) return;
+    const media = mediaStreamRef.current;
+    if (!mediaReady || !media || typeof MediaRecorder === "undefined") {
+      setMediaError("Video recording is not supported by this browser.");
+      return;
+    }
+    const preferredType = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+    const recorder = preferredType ? new MediaRecorder(media, { mimeType: preferredType }) : new MediaRecorder(media);
+    chunksRef.current = [];
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
+    recorderRef.current = recorder;
+    recordingStartedAtRef.current = Date.now();
+    recorder.start(1000);
+    setMediaError("");
     setIsRecording(true);
     setTimerSeconds(questions[currentQuestionIndex].timeLimit);
   };
 
   async function handleNextQuestion() {
+    if (isAnalyzing) return;
     setIsRecording(false);
     setIsAnalyzing(true);
 
     try {
-      const res = await fetch("/api/agents/dispatch", {
+      const recorder = recorderRef.current;
+      if (!recorder || recorder.state === "inactive") throw new Error("No recorded answer is available.");
+      const stopped = new Promise<void>((resolve) => recorder.addEventListener("stop", () => resolve(), { once: true }));
+      recorder.stop();
+      await stopped;
+
+      const durationSeconds = Math.max(1, Math.min(120, Math.ceil((Date.now() - (recordingStartedAtRef.current || Date.now())) / 1000)));
+      const mimeType = recorder.mimeType.includes("webm") ? "video/webm" : "video/mp4";
+      const extension = mimeType === "video/webm" ? "webm" : "mp4";
+      const blob = new Blob(chunksRef.current, { type: mimeType });
+      if (!blob.size) throw new Error("The recorded answer is empty.");
+
+      const form = new FormData();
+      form.append("file", new File([blob], `assessment-answer-${currentQuestionIndex + 1}.${extension}`, { type: mimeType }));
+      form.append("category", "video-resumes");
+      const upload = await fetch("/api/upload", { method: "POST", body: form });
+      const uploaded = await upload.json();
+      if (!upload.ok || !uploaded.file?.url) throw new Error(uploaded.error || "Unable to upload the recorded answer.");
+
+      const save = await fetch("/api/candidate/video-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task: "VIDEO_INTERVIEW_EVALUATION",
-          prompt: `Evaluate candidate video response for question: ${questions[currentQuestionIndex].title}`,
-        }),
+        body: JSON.stringify({ videoUrl: uploaded.file.url, durationSeconds }),
       });
-      const data = await res.json();
-      if (!res.ok || typeof data.summary !== "string") {
-        throw new Error(data.error || "Evaluation service returned an invalid response.");
+      const saved = await save.json();
+      if (!save.ok) throw new Error(saved.error || "Unable to submit the recorded answer.");
+
+      setAiFeedback(saved.analysisStatus === "BLOCKED_INFRA"
+        ? "Your recorded answer was saved. Automated analysis is temporarily unavailable."
+        : "Your recorded answer was saved and queued for transcription and analysis.");
+      chunksRef.current = [];
+      recorderRef.current = null;
+      recordingStartedAtRef.current = null;
+
+      if (currentQuestionIndex + 1 < questions.length) {
+        setCurrentQuestionIndex((prev) => prev + 1);
+        setTimerSeconds(questions[currentQuestionIndex + 1].timeLimit);
+      } else {
+        setIsCompleted(true);
       }
-      setAiFeedback(data.summary);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Evaluation is temporarily unavailable.";
-      setAiFeedback(`Evaluation unavailable: ${message}`);
+      const message = error instanceof Error ? error.message : "Unable to submit the recorded answer.";
+      setAiFeedback(`Submission failed: ${message}`);
     } finally {
       setIsAnalyzing(false);
-    }
-
-    if (currentQuestionIndex + 1 < questions.length) {
-      setTimeout(() => {
-        setCurrentQuestionIndex((prev) => prev + 1);
-        setAiFeedback(null);
-        setTimerSeconds(questions[currentQuestionIndex + 1].timeLimit);
-      }, 2500);
-    } else {
-      setIsCompleted(true);
     }
   }
 
