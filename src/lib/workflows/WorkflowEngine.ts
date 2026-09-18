@@ -287,9 +287,20 @@ export class WorkflowEngine {
       });
       if (updated.count !== 1) throw new Error('Approval was already decided');
       await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: approval.companyId, action: params.decision === 'APPROVED' ? 'AGENT_APPROVAL_APPROVED' : 'AGENT_APPROVAL_REJECTED', workflowId: approval.workflowInstanceId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
+
+      // A workflow may have more than one consequential action awaiting human
+      // review. Approving one must never resume execution while another is
+      // still pending. Rejection remains terminal for the workflow.
+      let nextStatus: 'RUNNING' | 'PAUSED_FOR_APPROVAL' | 'CANCELLED' = 'CANCELLED';
+      if (params.decision === 'APPROVED') {
+        const remainingPending = await tx.workflowApproval.count({
+          where: { workflowInstanceId: approval.workflowInstanceId, decision: 'PENDING' },
+        });
+        nextStatus = remainingPending > 0 ? 'PAUSED_FOR_APPROVAL' : 'RUNNING';
+      }
       return tx.workflowInstance.update({
         where: { id: approval.workflowInstanceId, status: 'PAUSED_FOR_APPROVAL' },
-        data: { status: params.decision === 'APPROVED' ? 'RUNNING' : 'CANCELLED', updatedAt: new Date() },
+        data: { status: nextStatus, updatedAt: new Date() },
       });
     });
   }
