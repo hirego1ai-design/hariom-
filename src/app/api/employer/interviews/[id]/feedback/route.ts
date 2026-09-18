@@ -34,7 +34,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params; const { session, interview } = await authorized(req, id);
     const own = await prisma.interviewFeedback.findUnique({ where: { interviewId_authorId: { interviewId: id, authorId: session.id } } });
-    return NextResponse.json({ success: true, feedback: own, policy: interview.roundProgress ? {
+    const requiredIds = interview.roundProgress?.round.interviewers.filter((i) => i.required).map((i) => i.userId) || [];
+    const finalizedIds = interview.roundProgress?.feedbacks.filter((f) => f.finalizedAt && requiredIds.includes(f.authorId)).map((f) => f.authorId) || [];
+    const roundComplete = Boolean(interview.roundProgress) && requiredIds.length > 0 && requiredIds.every((uid) => finalizedIds.includes(uid));
+    return NextResponse.json({ success: true, feedback: own, roundComplete, pendingFeedbackCount: Math.max(0, requiredIds.length - new Set(finalizedIds).size), roundStatus: interview.roundProgress?.status || null, policy: interview.roundProgress ? {
       roundName: interview.roundProgress.round.name,
       mandatoryFeedback: interview.roundProgress.round.mandatoryFeedback,
       candidateFeedbackPolicy: interview.roundProgress.round.candidateFeedbackPolicy,
@@ -63,7 +66,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       const requiredIds = interview.roundProgress!.round.interviewers.filter((i) => i.required).map((i) => i.userId);
       const finalized = await tx.interviewFeedback.findMany({ where: { interviewId: id, authorId: { in: requiredIds }, finalizedAt: { not: null } }, select: { authorId: true } });
-      const complete = requiredIds.length === 0 || requiredIds.every((uid) => finalized.some((f) => f.authorId === uid));
+      if (requiredIds.length === 0) throw new ApiError("At least one required interviewer must be assigned before this round can complete.", 409);
+      const complete = requiredIds.every((uid) => finalized.some((f) => f.authorId === uid));
       if (complete) {
         await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "ROUND_COMPLETE", completedAt: now } });
         await tx.interview.update({ where: { id }, data: { status: "FEEDBACK_SUBMITTED" } });
