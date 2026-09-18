@@ -92,4 +92,32 @@ export class WorkflowEngine {
     const consumed = await prisma.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt: new Date() } });
     if (consumed.count !== 1) throw new Error('Approval has already been consumed');
   }
+
+  static async recoverInterruptedSteps(workflowId: string): Promise<number> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    // A RUNNING row does not prove whether an external side effect happened.
+    // Never replay it automatically. Mark it failed for explicit idempotent
+    // recovery and preserve evidence for operators/workers.
+    const interrupted = await prisma.workflowStepLog.findMany({
+      where: { workflowInstanceId: workflowId, status: 'RUNNING', sideEffectDone: false },
+      select: { id: true, executionKey: true },
+    });
+    if (!interrupted.length) return 0;
+    await prisma.$transaction(async (tx) => {
+      await tx.workflowStepLog.updateMany({
+        where: { id: { in: interrupted.map((step) => step.id) }, status: 'RUNNING', sideEffectDone: false },
+        data: { status: 'FAILED', errorMessage: 'Interrupted execution requires idempotent recovery; automatic side-effect replay is blocked.' },
+      });
+      await tx.workflowInstance.update({ where: { id: workflowId }, data: { status: 'FAILED', failureCount: { increment: 1 } } });
+      for (const step of interrupted) {
+        await tx.deadLetterJob.upsert({
+          where: { sourceType_sourceId: { sourceType: 'WorkflowStep', sourceId: step.executionKey } },
+          update: { errorType: 'InterruptedExecution', errorMessage: 'Worker/process interruption detected; verify provider state before retry.', status: 'OPEN' },
+          create: { sourceType: 'WorkflowStep', sourceId: step.executionKey, correlationId: workflow.correlationId, errorType: 'InterruptedExecution', errorMessage: 'Worker/process interruption detected; verify provider state before retry.', status: 'OPEN' },
+        });
+      }
+    });
+    return interrupted.length;
+  }
 }
