@@ -55,7 +55,26 @@ export async function assertEmployerOwnsJob(userId: string, role: string, jobId:
   return job;
 }
 
+async function assertRecordedAssessmentAccess(userId: string) {
+  const now = new Date();
+  // Expiry is evaluated at the access boundary so an expired restriction can
+  // never block a candidate merely because a maintenance job has not run yet.
+  await prisma.recordedAssessmentRestriction.updateMany({
+    where: { userId, status: "ACTIVE", suspendedUntil: { lte: now } },
+    data: { status: "EXPIRED" },
+  });
+  const active = await prisma.recordedAssessmentRestriction.findFirst({
+    where: { userId, status: "ACTIVE", suspendedUntil: { gt: now } },
+    orderBy: { suspendedUntil: "desc" },
+    select: { id: true, suspendedUntil: true },
+  });
+  if (active) {
+    throw new ApiError(`Recorded assessment access is restricted until ${active.suspendedUntil!.toISOString()} following an administrator-reviewed restriction.`, 403);
+  }
+}
+
 export async function createOrResumeRecordedAssessmentAttempt(userId: string, jobId: string) {
+  await assertRecordedAssessmentAccess(userId);
   const candidate = await prisma.candidateProfile.findUnique({ where: { userId }, select: { id: true } });
   if (!candidate) throw new ApiError("Candidate profile not found.", 403);
 
