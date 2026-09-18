@@ -20,7 +20,7 @@ const updateSchema = z.object({
   zeptoMailFromEmail: z.string().email().optional().or(z.literal("")),
   sendgridApiKey: z.string().trim().min(12).max(512).optional().or(z.literal("")),
   zeptoMailApiKey: z.string().trim().min(12).max(512).optional().or(z.literal("")),
-}).superRefine((value, context) => {
+}).strict().superRefine((value, context) => {
   if (value.primaryProvider === value.fallbackProvider && value.autoFailover) {
     context.addIssue({ code: "custom", message: "Primary and fallback providers must be different when failover is enabled." });
   }
