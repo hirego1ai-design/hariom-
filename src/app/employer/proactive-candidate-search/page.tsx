@@ -30,15 +30,6 @@ const TAG_PRESETS: Tag[] = [
   { label: "Weak DSA", color: T.yellow },
 ];
 
-const AVAILABILITY_CONFIG: Record<string, { color: string; bg: string }> = {
-  "Immediate": { color: T.green, bg: `${T.green}20` },
-  "Available next week": { color: T.green, bg: `${T.green}15` },
-  "15 Days": { color: T.blue, bg: `${T.blue}15` },
-  "30 Days": { color: T.yellow, bg: `${T.yellow}15` },
-  "60 Days": { color: T.orange, bg: `${T.orange}15` },
-  "Not Looking": { color: T.red, bg: `${T.red}15` },
-};
-
 const PIPELINE_STAGES = ["Applied", "AI Screening", "Technical Interview", "HR Interview", "Assessment", "Offer", "Hired", "Rejected"];
 
 const DEFAULT_COLLECTIONS: Collection[] = [
@@ -54,7 +45,6 @@ const PINNED_FILTER_PRESETS = [
   { label: "Confirmed available", key: "availability", value: "ACTIVE_CONFIRMED" },
   { label: "Job-Ready", key: "jobReady", value: "true" },
   { label: "Remote", key: "location", value: "Remote" },
-  { label: "Notice < 30 Days", key: "noticePeriod", value: "30" },
 ];
 
 function getRecommendedAction(_candidate: unknown): { text: string; icon: string; color: string } {
@@ -166,10 +156,8 @@ export default function CandidateMarketplace() {
     Object.entries(activeFilters).forEach(([key, val]) => {
       if (!val) return;
       if (key === "matchScore") result = result.filter(c => c.matchScore >= parseInt(val));
-      if (key === "noticePeriod") {
-        if (val === "Immediate") result = result.filter(c => c.noticePeriod === "Immediate");
-        else if (val === "30") result = result.filter(c => c.noticePeriod === "Immediate" || c.noticePeriod?.includes("15") || c.noticePeriod?.includes("2 weeks"));
-      }
+      if (key === "availability") result = result.filter(c => c.availability === val);
+      if (key === "jobReady") result = result.filter(c => Boolean(c.jobReady) === (val === "true"));
       if (key === "location") {
         if (val === "Remote") result = result.filter(c => c.preferredLocation?.toLowerCase().includes("remote") || c.currentLocation?.toLowerCase().includes("remote"));
       }
@@ -206,7 +194,7 @@ export default function CandidateMarketplace() {
       if (e.key === "a" || e.key === "A") { e.preventDefault(); setSelected(new Set(filteredCandidates.map(c => c.id))); }
       if (e.key === "Escape") { setPreviewId(null); setCompareOpen(false); setShortcutsOpen(false); setExportOpen(false); setTagDropdownId(null); }
       if (e.key === "?") { e.preventDefault(); setShortcutsOpen(true); }
-      if (e.key === "i" || e.key === "I") { if (selected.size > 0) { e.preventDefault(); triggerToast(`Invited ${selected.size} candidates`); } }
+      if (e.key === "i" || e.key === "I") { if (selected.size > 0) { e.preventDefault(); triggerToast("Bulk invitation is not connected yet."); } }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -229,7 +217,7 @@ export default function CandidateMarketplace() {
   const toggleSort = (col: string) => { if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("desc"); } };
   const addTag = (cId: string, tag: Tag) => { setCandidateTags(prev => ({ ...prev, [cId]: [...(prev[cId] || []).filter(t => t.label !== tag.label), tag] })); setTagDropdownId(null); triggerToast(`Tag "${tag.label}" added`); };
   const removeTag = (cId: string, label: string) => { setCandidateTags(prev => ({ ...prev, [cId]: (prev[cId] || []).filter(t => t.label !== label) })); };
-  const addNote = (cId: string) => { if (!newNoteTxt.trim()) return; setCandidateNotes(prev => ({ ...prev, [cId]: [{ text: newNoteTxt, by: "Alex Rivera", at: "Just now" }, ...(prev[cId] || [])] })); setNewNoteTxt(""); setNoteInputId(null); triggerToast("Note added"); };
+  const addNote = (cId: string) => { if (!newNoteTxt.trim()) return; setCandidateNotes(prev => ({ ...prev, [cId]: [{ text: newNoteTxt, by: "Current recruiter", at: new Date().toISOString() }, ...(prev[cId] || [])] })); setNewNoteTxt(""); setNoteInputId(null); triggerToast("Note saved on this device only"); };
   const saveSearch = () => { if (!saveSearchName.trim()) return; setSavedSearches(prev => [...prev, { name: saveSearchName, query: searchQuery, filters: { ...activeFilters } }]); setSaveSearchName(""); setSaveSearchOpen(false); triggerToast(`Search "${saveSearchName}" saved`); };
   const loadSearch = (s: SavedSearch) => { setSearchQuery(s.query); setActiveFilters(s.filters); triggerToast(`Loaded "${s.name}"`); };
   const togglePinFilter = (key: string) => { setPinnedFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); };
