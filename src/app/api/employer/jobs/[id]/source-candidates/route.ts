@@ -25,10 +25,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           readinessRecords: { some: { roleTitle: job.jobReadyRoleTitle, seniority: job.jobReadySeniority, status: "JOB_READY", OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] } },
         } : {}),
       },
-      select: { id: true, headline: true, location: true, skills: true, experienceYears: true, lastAvailabilityConfirmedAt: true, user: { select: { name: true } }, readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } } },
+      select: { id: true, headline: true, location: true, skills: true, experienceYears: true, lastAvailabilityConfirmedAt: true, sourcingRelationships: { where: { jobId }, select: { status: true } }, applications: { where: { jobId }, select: { id: true, status: true } }, user: { select: { name: true } }, readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } } },
       orderBy: { lastAvailabilityConfirmedAt: "desc" },
       take: 100,
     });
-    return NextResponse.json({ success: true, job: { id: job.id, title: job.title, requiresJobReady: job.requiresJobReady }, policy: { availabilityWindowDays: ACTIVE_WINDOW_DAYS, requiresExplicitCandidateConfirmation: true, suppresses: ["NOT_LOOKING","JOINED","TEMPORARILY_UNAVAILABLE","STALE_CONFIRMATION"] }, candidates });
+    const results = candidates.map(({ sourcingRelationships, applications, ...candidate }) => ({ ...candidate, sourcingStatus: sourcingRelationships[0]?.status ?? "SOURCED", application: applications[0] ?? null }));
+    return NextResponse.json({ success: true, job: { id: job.id, title: job.title, requiresJobReady: job.requiresJobReady }, policy: { availabilityWindowDays: ACTIVE_WINDOW_DAYS, requiresExplicitCandidateConfirmation: true, suppresses: ["NOT_LOOKING","JOINED","TEMPORARILY_UNAVAILABLE","STALE_CONFIRMATION"] }, candidates: results });
   } catch(e) { return handleApiError(e); }
 }
