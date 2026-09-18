@@ -139,6 +139,13 @@ async function runRazorpayTests() {
 }
 
 async function runPayUTests() {
+  console.log("\n==================================================");
+  console.log(" 3. PAYU ADAPTER SAFETY TESTS");
+  console.log("==================================================");
+  const gateway = new PayUGateway();
+  const order = await gateway.createOrder({ orderId: `ord_payu_${Date.now()}`, amount: 4999, currency: "INR", planName: "Plan A", companyId: "comp-1" });
+  record("PayU", "Sandbox order creation", order.gateway === "PAYU" && Boolean(order.gatewayOrderId), `Gateway: ${order.gateway}`);
+}
 
 async function runControllerRoutingTests() {
   console.log("\n==================================================");
