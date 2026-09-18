@@ -61,7 +61,13 @@ export default function VideoAssessmentActivePage() {
       if (cancelled) return;
       setAttempt(value);
       const firstUnanswered = value.questions.findIndex((q: AttemptQuestion) => !q.response);
-      if (firstUnanswered === -1) setPhase("COMPLETE"); else setIndex(firstUnanswered);
+      if (firstUnanswered === -1) {
+        if (value.status === "IN_PROGRESS") {
+          jsonRequest(`/api/candidate/recorded-assessment/attempts/${value.id}/complete`, { method: "POST" })
+            .then(() => { if (!cancelled) { setAttempt((current) => current ? { ...current, status: "COMPLETED" } : current); setPhase("COMPLETE"); setMessage("Assessment completed. All answers were saved."); } })
+            .catch((error) => { if (!cancelled) { setPhase("ERROR"); setMessage(`All answers are saved, but completion needs to be retried: ${error.message}`); } });
+        } else setPhase("COMPLETE");
+      } else setIndex(firstUnanswered);
     }).catch((error) => { if (!cancelled) { setMessage(error.message); setPhase("ERROR"); } })
       .finally(() => { if (!cancelled) setBooting(false); });
     return () => { cancelled = true; };
