@@ -108,6 +108,21 @@ export class WorkflowEngine {
     }
   }
 
+  static async completeWorkflow(params: { workflowId: string; context: TenantContext }): Promise<WorkflowInstance> {
+    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+    if (!workflow) throw new Error('Workflow not found');
+    validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    if (workflow.status !== 'RUNNING') throw new Error(`Only RUNNING workflows can complete; current status is ${workflow.status}`);
+    const activeSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'RUNNING' } });
+    if (activeSteps > 0) throw new Error('Workflow cannot complete while steps are still RUNNING');
+    const failedSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'FAILED' } });
+    if (failedSteps > 0) throw new Error('Workflow cannot complete with failed steps');
+    const pendingApprovals = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'PENDING' } });
+    if (pendingApprovals > 0) throw new Error('Workflow cannot complete with pending approvals');
+    return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'RUNNING' }, data: { status: 'COMPLETED', updatedAt: new Date() } });
+  }
+
   static async pauseForApproval(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<string> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
