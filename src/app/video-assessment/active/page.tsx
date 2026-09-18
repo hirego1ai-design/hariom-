@@ -39,6 +39,7 @@ export default function VideoAssessmentActivePage() {
   const startedAtRef = useRef(0);
   const busyRef = useRef(false);
   const warningRef = useRef(0);
+  const pendingAnswerRef = useRef<{ questionId: string; blob: Blob; mime: string; durationSeconds: number; storedFileId?: string } | null>(null);
 
   const question = attempt?.questions[index];
 
@@ -104,6 +105,25 @@ export default function VideoAssessmentActivePage() {
     setPhase("COMPLETE"); setMessage("Assessment completed. All answers were saved.");
   }, [attempt]);
 
+  const persistPendingAnswer = useCallback(async () => {
+    if (!attempt) throw new Error("Assessment attempt is unavailable.");
+    const pending = pendingAnswerRef.current;
+    if (!pending) throw new Error("No recorded answer is waiting to be saved.");
+    let storedFileId = pending.storedFileId;
+    if (!storedFileId) {
+      const form = new FormData();
+      form.append("file", new File([pending.blob], `assessment-${pending.questionId}.webm`, { type: pending.mime }));
+      form.append("category", "assessment-media");
+      const uploaded = await jsonRequest("/api/upload", { method: "POST", body: form });
+      storedFileId = uploaded.file.id;
+      pendingAnswerRef.current = { ...pending, storedFileId };
+    }
+    await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/responses`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attemptQuestionId: pending.questionId, storedFileId, durationSeconds: pending.durationSeconds }),
+    });
+  }, [attempt]);
+
   const saveRecording = useCallback(async () => {
     if (!attempt || !question || busyRef.current) return;
     busyRef.current = true; setPhase("SAVING"); setMessage("Answer saved locally. Uploading securely…");
@@ -117,23 +137,17 @@ export default function VideoAssessmentActivePage() {
       const blob = new Blob(chunksRef.current, { type: mime });
       if (!blob.size) throw new Error("No media was captured. Check your camera and microphone.");
       const durationSeconds = Math.max(1, Math.min(question.answerDurationSeconds, Math.ceil((Date.now() - startedAtRef.current) / 1000)));
-      const form = new FormData();
-      form.append("file", new File([blob], `assessment-${question.id}.webm`, { type: mime }));
-      form.append("category", "assessment-media");
-      const uploaded = await jsonRequest("/api/upload", { method: "POST", body: form });
-      await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/responses`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptQuestionId: question.id, storedFileId: uploaded.file.id, durationSeconds }),
-      });
+      pendingAnswerRef.current = { questionId: question.id, blob, mime, durationSeconds };
+      await persistPendingAnswer();
       const updated = { ...attempt, questions: attempt.questions.map((q) => q.id === question.id ? { ...q, response: { id: uploaded.file.id } } : q) };
-      setAttempt(updated); chunksRef.current = []; recorderRef.current = null;
+      setAttempt(updated); pendingAnswerRef.current = null; chunksRef.current = []; recorderRef.current = null;
       if (index + 1 >= updated.questions.length) await completeAttempt();
       else { setMessage("Answer saved — preparing next question."); setTimeout(() => { setIndex((v) => v + 1); setSeconds(updated.questions[index + 1].readingTimeSeconds); setPhase("PREPARE"); busyRef.current = false; }, 2500); return; }
     } catch (error) {
-      setMessage(error instanceof Error ? `Upload failed: ${error.message} Your answer was not discarded; retry is required.` : "Upload failed.");
+      setMessage(error instanceof Error ? `Save failed: ${error.message} Your recorded answer is still held on this page; retry saving without re-recording.` : "Save failed. Your recorded answer is still available for retry.");
       setPhase("ERROR");
     } finally { busyRef.current = false; }
-  }, [attempt, question, index, completeAttempt]);
+  }, [attempt, question, index, completeAttempt, persistPendingAnswer]);
 
   const beginRecording = useCallback(() => {
     if (!attempt || !question || !streamRef.current || typeof MediaRecorder === "undefined") { setMessage("Recording is unavailable in this browser."); setPhase("ERROR"); return; }
@@ -192,7 +206,8 @@ export default function VideoAssessmentActivePage() {
           </div>
           {message && <div role="status" className="rounded-2xl border border-outline bg-bg-card p-4 text-sm">{message}</div>}
           {phase === "READY" && <button onClick={startAssessment} disabled={!mediaReady || !question} className="min-h-11 px-6 rounded-full btn-3d-red font-bold disabled:opacity-50">{attempt?.status === "IN_PROGRESS" ? "Resume Assessment" : "Start Assessment"}</button>}
-          {phase === "ERROR" && question && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
+          {phase === "ERROR" && question && pendingAnswerRef.current?.questionId === question.id && <button onClick={async () => { if (busyRef.current) return; busyRef.current=true; setPhase("SAVING"); setMessage("Retrying secure save…"); try { await persistPendingAnswer(); const updated={...attempt!,questions:attempt!.questions.map(q=>q.id===question.id?{...q,response:{id:pendingAnswerRef.current?.storedFileId||q.id}}:q)}; setAttempt(updated); pendingAnswerRef.current=null; if(index+1>=updated.questions.length) await completeAttempt(); else { setMessage("Answer saved — preparing next question."); setTimeout(()=>{setIndex(v=>v+1);setSeconds(updated.questions[index+1].readingTimeSeconds);setPhase("PREPARE");},2500); } } catch(error){setPhase("ERROR");setMessage(error instanceof Error?error.message:"Save retry failed.");} finally {busyRef.current=false;} }} className="min-h-11 px-6 rounded-full btn-3d-red font-bold">Retry saving answer</button>}
+          {phase === "ERROR" && question && pendingAnswerRef.current?.questionId !== question.id && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
         </section>
         <section className="lg:col-span-5">
           {phase === "COMPLETE" ? <div className="rounded-3xl border border-outline bg-bg-card p-6 text-center space-y-4"><h2 className="text-xl font-bold">Assessment complete</h2><p className="text-sm text-text-secondary">Your recorded responses have been securely saved.</p><Link href="/applications/timeline" className="inline-flex min-h-11 items-center px-6 rounded-full btn-3d-red font-bold">Application timeline</Link></div>
