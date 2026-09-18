@@ -6,13 +6,13 @@ import Link from "next/link";
 
 export default function OnboardingCompletePage() {
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+    <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
-        <header className="fixed top-0 left-[116px] right-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-gutter h-20 shadow-md">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
+        <header className="fixed top-0 left-0 md:left-[116px] right-0 z-40 bg-bg-page/90 backdrop-blur-xl border-b border-outline flex justify-between items-center px-gutter h-20 shadow-md">
           <div>
-            <h1 className="font-display-md text-headline-md text-white font-bold tracking-tight">
+            <h1 className="font-display-md text-headline-md text-text-primary font-bold tracking-tight">
               Onboarding saved
             </h1>
             <p className="text-text-muted text-xs">Your profile information has been saved. Verification, assessment, and job eligibility are separate steps.</p>
@@ -25,15 +25,15 @@ export default function OnboardingCompletePage() {
         </header>
 
         <main className="flex-1 p-gutter pt-24 pb-12 flex items-center justify-center max-w-[1200px] w-full mx-auto overflow-y-auto">
-          <div className="glass-card w-full max-w-[800px] rounded-2xl border border-white/10 p-8 md:p-12 bg-[#141418] space-y-6 shadow-2xl text-center">
+          <div className="glass-card w-full max-w-[800px] rounded-2xl border border-outline p-8 md:p-12 bg-bg-card space-y-6 shadow-2xl text-center">
             <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-green to-yellow p-1 shadow-[0_0_50px_rgba(0,255,150,0.3)] mx-auto flex items-center justify-center">
-              <div className="w-full h-full rounded-full bg-[#0E0E0E] flex items-center justify-center text-green">
+              <div className="w-full h-full rounded-full bg-bg-page flex items-center justify-center text-green">
                 <span className="material-symbols-outlined text-[48px]">check_circle</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-2xl font-bold text-white">Your onboarding details are saved</h1>
+              <h1 className="text-2xl font-bold text-text-primary">Your onboarding details are saved</h1>
               <p className="text-xs text-text-muted max-w-[400px] mx-auto leading-relaxed">
                 Continue to Job-Ready assessments if an administrator has configured one for your role and seniority. Completion does not automatically verify your profile or guarantee a job.
               </p>
@@ -54,7 +54,7 @@ export default function OnboardingCompletePage() {
               </Link>
               <Link
                 href="/jobs"
-                className="w-full sm:w-auto px-8 py-3 rounded-full bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all"
+                className="w-full sm:w-auto px-8 py-3 rounded-full bg-surface-container border border-outline text-text-primary font-bold text-xs hover:bg-white/10 transition-all"
               >
                 Browse opportunities
               </Link>
