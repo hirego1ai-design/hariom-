@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
 const querySchema = z.object({
@@ -12,7 +12,8 @@ const querySchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_users:${admin.id}`, 60, 60_000);
     const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()));
     const where = {
       role: "CANDIDATE" as const,
