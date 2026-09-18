@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { TestResult } from "./suite.test";
 import { PATCH as stagePatchHandler } from "@/app/api/employer/candidates/[id]/stage/route";
+import { PATCH as applicationPatchHandler } from "@/app/api/applications/route";
 import { PUT as jobPutHandler, DELETE as jobDeleteHandler } from "@/app/api/employer/jobs/[id]/route";
 import { PATCH as interviewPatchHandler } from "@/app/api/employer/interviews/[id]/route";
 import { NextRequest } from "next/server";
@@ -58,6 +59,17 @@ export async function runHiringWorkflowTests(): Promise<{
         body: JSON.stringify({ stage }),
       });
       const res = await stagePatchHandler(req, { params: Promise.resolve({ id: applicationId }) });
+      const json = await res.json();
+      return { status: res.status, json };
+    };
+
+    const callApplicationPatch = async (sessionToken: string, applicationId: string) => {
+      const req = new NextRequest("http://localhost/api/applications", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ applicationId }),
+      });
+      const res = await applicationPatchHandler(req);
       const json = await res.json();
       return { status: res.status, json };
     };
@@ -193,6 +205,7 @@ export async function runHiringWorkflowTests(): Promise<{
       });
 
       const tokenA = await createSessionToken({ id: employerA.id, role: "EMPLOYER", email: employerA.email, name: employerA.name });
+      const candidateToken = await createSessionToken({ id: candidateUser.id, role: "CANDIDATE", email: candidateUser.email, name: candidateUser.name });
       const tokenB = await createSessionToken({ id: employerB.id, role: "EMPLOYER", email: employerB.email, name: employerB.name });
 
       // 2. Candidate Stage Update Verification
@@ -225,6 +238,23 @@ export async function runHiringWorkflowTests(): Promise<{
         "Terminal HIRED state requires placement reconciliation"
       );
       await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+
+      const resWithdraw = await callApplicationPatch(candidateToken, applicationA.id);
+      const withdrawnApplication = await prisma.application.findUnique({ where: { id: applicationA.id } });
+      const cancelledByWithdrawal = await prisma.interview.findUnique({ where: { id: interviewA.id } });
+      assert(
+        "Candidate withdrawal is transactional and cancels active interviews",
+        resWithdraw.status === 200 && withdrawnApplication?.status === "WITHDRAWN" && cancelledByWithdrawal?.status === "CANCELLED",
+        "Owned application became WITHDRAWN and scheduled interview was cancelled"
+      );
+      const resWithdrawReplay = await callApplicationPatch(candidateToken, applicationA.id);
+      assert(
+        "Candidate withdrawal replay is idempotent",
+        resWithdrawReplay.status === 200 && resWithdrawReplay.json.duplicate === true,
+        "Repeated withdrawal returns the existing terminal state"
+      );
+      await prisma.application.update({ where: { id: applicationA.id }, data: { status: "ASSESSMENT" } });
+      await prisma.interview.update({ where: { id: interviewA.id }, data: { status: "SCHEDULED" } });
 
       // 3. Job Status Update Verification
       const resJobPutA = await callJobPut(tokenA, jobListingA.id, { status: "PAUSED" });
