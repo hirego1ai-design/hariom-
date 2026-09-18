@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { receiptContentMatchesMime, receiptNotes } from "@/lib/invoiceReceiptState";
 import { createStoredFile, deleteObject, StorageUnavailableError } from "@/lib/storage";
+import { persistScanResult, scanUpload } from "@/lib/uploadSecurity";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const receiptSchema = z.object({
@@ -131,6 +132,12 @@ export async function POST(
         throw new ApiError("Private file storage configuration is missing or unavailable.", 503);
       }
       throw error;
+    }
+
+    const scanResult = await scanUpload(storedFile.id, fileBuffer);
+    await persistScanResult(storedFile.id, scanResult);
+    if (scanResult.status !== "CLEAN") {
+      throw new ApiError(scanResult.status === "INFECTED" ? "Receipt rejected by malware scanning." : "Receipt is quarantined pending a successful malware scan.", 422);
     }
 
     // Update the invoice status and notes atomically
