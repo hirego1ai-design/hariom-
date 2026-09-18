@@ -6,7 +6,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
 
 const gatewayStatusSchema = z.enum(["HEALTHY", "DEGRADED", "DISABLED"]);
-const gatewayNameSchema = z.enum(["RAZORPAY", "PAYU", "PHONEPE", "STRIPE"]);
+const gatewayNameSchema = z.enum(["RAZORPAY", "PAYU", "STRIPE"]);
 const gatewayConfigSchema = z.object({
   mode: z.enum(["AUTO", "MANUAL"]).optional(),
   primaryGateway: gatewayNameSchema.optional(),
@@ -15,10 +15,9 @@ const gatewayConfigSchema = z.object({
   gatewaysStatus: z.object({
     RAZORPAY: gatewayStatusSchema.optional(),
     PAYU: gatewayStatusSchema.optional(),
-    PHONEPE: gatewayStatusSchema.optional(),
     STRIPE: gatewayStatusSchema.optional(),
   }).strict().optional(),
-  priorities: z.array(gatewayNameSchema).min(1).max(4).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
+  priorities: z.array(gatewayNameSchema).min(1).max(3).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
 }).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {
