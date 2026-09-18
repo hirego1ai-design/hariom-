@@ -137,3 +137,21 @@ describe('Phase 5 workflow reliability invariants', () => {
     expect(source).toContain('failureCount');
   });
 });
+
+
+describe('Phase 5 managed-hiring orchestration coverage', () => {
+  it('allowlists the complete managed-hiring workflow lifecycle', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8'));
+    for (const workflow of ['JOB_REQUIREMENT','CANDIDATE_SCREENING','SHORTLISTING','INTERVIEW_SCHEDULING','VIRTUAL_INTERVIEW','EMPLOYER_FEEDBACK','SELECTION_REJECTION','JOINING_ONBOARDING','BILLING_HANDOFF','NOTIFICATION_HANDOFF']) {
+      expect(source).toContain(workflow);
+    }
+  });
+
+  it('requires approval and truthful terminal-state guards', async () => {
+    const source = await import('fs').then(fs => fs.readFileSync(require.resolve('../lib/workflows/WorkflowEngine'), 'utf8'));
+    expect(source).toContain('requestConsequentialAction');
+    expect(source).toContain('PAUSED_FOR_APPROVAL');
+    expect(source).toContain('unresolved consequential actions');
+    expect(source).toContain('rejected consequential actions');
+  });
+});
