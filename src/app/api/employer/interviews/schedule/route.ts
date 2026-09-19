@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { buildPublicAppUrl } from "@/lib/env";
 
 const schema = z.object({
   applicationId: z.string().min(1),
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
       });
       if (blocking > 0) return NextResponse.json({ success: false, error: "Complete your pending mandatory interview feedback before scheduling another interview." }, { status: 409 });
     }
-    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: true }, where: { id: body.applicationId } });
+    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: { include: { company: true } } }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
     if (session.role !== "ADMIN") {
       const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     }
     const roomId = `room-${crypto.randomUUID()}`;
     const roomUrl = mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
+    const candidateInterviewUrl = mode === "ONLINE" ? buildPublicAppUrl(`/candidate/interview?roomId=${encodeURIComponent(roomId)}`) : body.address || "";
     const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
       const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
@@ -72,13 +74,13 @@ export async function POST(request: NextRequest) {
     const scheduled = new Date(body.scheduledAt);
     const communicationVariables = {
       candidate_name: candidate?.name || "Candidate",
-      company_name: "HireGo employer",
+      company_name: application.job.company.name,
       job_title: application.job.title,
-      interview_date: scheduled.toLocaleDateString(),
-      interview_time: scheduled.toLocaleTimeString(),
-      timezone: "local",
+      interview_date: scheduled.toLocaleDateString("en-IN", { timeZone: "UTC" }),
+      interview_time: scheduled.toLocaleTimeString("en-IN", { timeZone: "UTC" }),
+      timezone: "UTC",
       interview_mode: mode,
-      interview_link: mode === "ONLINE" ? roomUrl : body.address || "",
+      interview_link: candidateInterviewUrl,
     };
     let emailDelivery = null;
     if (body.notifyEmail && candidate?.email) {
