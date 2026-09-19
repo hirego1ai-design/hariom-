@@ -33,8 +33,7 @@ export type DispatchCommunicationInput = {
   correlationId?: string;
   recipientRef?: string;
   locale?: string;
-  authorizationProof?: { approvedByUserId: string; approvalId: string };
-  testMode?: boolean;
+  authorizationProof?: ConsequentialAuthorization;
 };
 
 function addressHash(value: string) {
@@ -79,8 +78,13 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
     throw new Error("Communication event does not permit this channel/audience combination.");
   }
   assertVariables(input.eventKey, input.variables);
-  if (definition.consequential && !options.allowConsequentialWithoutProof && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {
-    throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);
+  let consequentialApprovalId: string | null = null;
+  if (definition.consequential && !options.allowConsequentialWithoutProof) {
+    if (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId || !input.authorizationProof?.workflowId) {
+      throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);
+    }
+    await assertPersistedCommunicationAuthorization(input.authorizationProof, input.eventKey);
+    consequentialApprovalId = input.authorizationProof.approvalId;
   }
   if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
 
@@ -104,9 +108,16 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
   if (variableCheck.unknown.length) throw new Error(`Template contains unapproved variables: ${variableCheck.unknown.join(", ")}`);
   if (variableCheck.missing.length) throw new Error(`Template is missing required variables for ${input.eventKey}: ${variableCheck.missing.join(", ")}`);
 
-  if (consequentialApprovalId) {
-    const consumed = await prisma.workflowApproval.updateMany({ where: { id: consequentialApprovalId, decision: "APPROVED", consumedAt: null }, data: { consumedAt: new Date() } });
-    if (consumed.count !== 1) throw new Error("Consequential communication approval was already consumed.");
+  if (consequentialApprovalId && input.authorizationProof) {
+    const proof = input.authorizationProof;
+    await prisma.$transaction(async (tx) => {
+      const approval = await tx.workflowApproval.findUnique({ where: { id: consequentialApprovalId }, select: { workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true } });
+      if (!approval || approval.workflowInstanceId !== proof.workflowId || approval.decision !== "APPROVED" || !approval.decidedAt || approval.decidedBy !== proof.approvedByUserId || approval.consumedAt) throw new Error("Consequential communication approval is no longer valid.");
+      const consumed = await tx.workflowApproval.updateMany({ where: { id: consequentialApprovalId, workflowInstanceId: proof.workflowId, decision: "APPROVED", consumedAt: null }, data: { consumedAt: new Date() } });
+      if (consumed.count !== 1) throw new Error("Consequential communication approval was already consumed.");
+      if (!approval.decidedByRole) throw new Error("Consequential communication approval is missing approver role evidence.");
+      await writeAgentApprovalAudit(tx, { userId: proof.approvedByUserId, companyId: approval.companyId, action: "AGENT_APPROVAL_CONSUMED", workflowId: proof.workflowId, approvalId: consequentialApprovalId, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: approval.decidedByRole });
+    });
   }
 
   const delivery = await prisma.communicationDelivery.create({
