@@ -10,6 +10,7 @@ function stubMethod(t: TestContext, target: any, name: string, implementation: (
 }
 
 function stubWorkflow(t: TestContext, failCompletionWrite = false) {
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', status: 'RUNNING', failureCount: 0 }));
   let step: any = null;
   let workflow: any = { id: 'workflow-test', status: 'RUNNING', currentStep: 'initial', correlationId: 'test-correlation' };
   let claims = 0;
@@ -60,6 +61,7 @@ test('workflow creation failure is propagated without a fake workflow', async (t
 });
 
 test('step claim persistence failure prevents the side effect', async (t) => {
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', status: 'RUNNING', failureCount: 0 }));
   stubMethod(t, prisma.workflowStepLog, 'findUnique', async () => null);
   stubMethod(t, prisma.workflowStepLog, 'create', async () => { throw new Error('claim database offline'); });
   let sideEffects = 0;
