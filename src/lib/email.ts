@@ -7,7 +7,7 @@ export interface EmailMessage {
   text?: string;
 }
 
-export type EmailDeliveryResult = { success: boolean; messageId: string; provider?: EmailProvider };
+export type EmailDeliveryResult = { success: boolean; messageId: string; provider?: EmailProvider; reason?: string };
 
 const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
 
