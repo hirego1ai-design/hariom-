@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fetchEmployerCandidates, pipelineStageLabels, pipelineStageStatus } from "../lib/employerCandidates";
@@ -66,4 +67,23 @@ test("Razorpay uses server issued key, order amount and currency", () => {
 test("Razorpay refuses missing configuration and invalid amounts rather than using a fabricated key", () => {
   assert.throws(() => razorpayCheckoutFields({ gatewayOrderId: "order", finalAmount: 1, currency: "INR" }), /incomplete/);
   assert.throws(() => razorpayCheckoutFields({ keyId: "key", gatewayOrderId: "order", finalAmount: Number.NaN, currency: "INR" }), /incomplete/);
+});
+
+
+test("subscription checkout remains employer-only and rate limited", () => {
+  const source = fs.readFileSync(new URL("../app/api/payments/checkout/route.ts", import.meta.url), "utf8");
+  assert(source.includes('enforceRateLimit(req, "payment_checkout", 10, 60_000)'));
+  assert(source.includes('session.role !== "EMPLOYER"'));
+  assert(!source.includes('["EMPLOYER", "RECRUITER"].includes(session.role)'));
+});
+
+test("interview rejection remains a persisted two-step consequential action", () => {
+  const route = fs.readFileSync(new URL("../app/api/employer/interviews/[id]/round-decision/route.ts", import.meta.url), "utf8");
+  const ui = fs.readFileSync(new URL("../app/employer/final-round-feedback/page.tsx", import.meta.url), "utf8");
+  assert(route.includes("requestConsequentialAction"));
+  assert(route.includes("decideApproval"));
+  assert(route.includes("consumeApprovedAction"));
+  assert(route.includes("requiresConfirmation: true"));
+  assert(ui.includes("Confirm rejection"));
+  assert(ui.includes("confirmApproval: true"));
 });
