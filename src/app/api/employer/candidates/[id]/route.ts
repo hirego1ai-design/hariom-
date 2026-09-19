@@ -24,7 +24,9 @@ export async function GET(
       throw new ApiError("Forbidden. Employer, recruiter, or admin access required.", 403);
     }
 
-    // Fetch candidate profile from database
+    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
+
+    // Fetch only tenant-relevant application relationships for non-admin users.
     const profile = await prisma.candidateProfile.findUnique({
       where: { id: candidateId },
       include: {
@@ -38,6 +40,7 @@ export async function GET(
           },
         },
         applications: {
+          where: scopedCompanyId ? { job: { companyId: scopedCompanyId } } : undefined,
           include: {
             job: {
               include: {
@@ -70,7 +73,6 @@ export async function GET(
     }
 
     // Verify company scope once and reuse it when shaping the response.
-    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
     if (scopedCompanyId) {
       const companyId = scopedCompanyId;
 

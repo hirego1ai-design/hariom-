@@ -3,6 +3,9 @@ import { invoicesDb } from "@/lib/invoices-db";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, handleApiError, readValidatedJson, enforceRateLimit, getClientIp } from "@/lib/apiSecurity";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { buildPublicAppUrl } from "@/lib/env";
 
 const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
 const createSchema = z.object({ action: z.literal("create").optional(), agreementId: z.string().min(1), companyName: z.string().trim().min(1).max(200).optional(), candidateName: z.string().trim().min(1).max(200).optional(), jobTitle: z.string().trim().min(1).max(200).optional(), amount: z.number().finite().positive().max(1000000000), taxAmount: z.number().finite().nonnegative().max(1000000000).optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), dueDate: z.string().date().optional(), status: z.literal("UNPAID").optional() }).strict();
@@ -38,6 +41,9 @@ export async function POST(req: NextRequest) {
       if (!updated) {
         return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
       }
+      const agreement = await prisma.commercialAgreement.findUnique({ where: { id: updated.agreementId }, select: { clientEmail: true, clientPhone: true, companyName: true } });
+      if (agreement?.clientEmail) await dispatchCommunication({ eventKey: "INVOICE_PAYMENT_VERIFIED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, invoice_number: updated.invoiceNumber, amount: updated.totalAmount, currency: updated.currency }, idempotencyKey: `invoice:${updated.id}:paid:employer:email`, correlationId: updated.id }).catch(() => null);
+      if (agreement?.clientPhone) await dispatchCommunication({ eventKey: "INVOICE_PAYMENT_VERIFIED", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: { company_name: agreement.companyName, invoice_number: updated.invoiceNumber, amount: updated.totalAmount, currency: updated.currency }, idempotencyKey: `invoice:${updated.id}:paid:employer:whatsapp`, correlationId: updated.id }).catch(() => null);
       return NextResponse.json({ success: true, message: "Invoice marked as paid", invoice: updated });
     }
 
@@ -68,6 +74,10 @@ export async function POST(req: NextRequest) {
       dueDate: body.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     });
 
+    const agreement = await prisma.commercialAgreement.findUnique({ where: { id: created.agreementId }, select: { clientEmail: true, clientPhone: true, companyName: true } });
+    const invoiceVars = { company_name: agreement?.companyName || created.companyName, invoice_number: created.invoiceNumber, amount: created.totalAmount, currency: created.currency, due_date: created.dueDate, invoice_link: buildPublicAppUrl("/employer/billing/invoices") };
+    if (agreement?.clientEmail) await dispatchCommunication({ eventKey: "INVOICE_GENERATED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:email`, correlationId: created.id }).catch(() => null);
+    if (agreement?.clientPhone) await dispatchCommunication({ eventKey: "INVOICE_GENERATED", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:whatsapp`, correlationId: created.id }).catch(() => null);
     return NextResponse.json({ success: true, message: "Invoice created successfully", invoice: created });
   } catch (error) {
     return handleApiError(error);

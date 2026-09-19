@@ -1,0 +1,4 @@
+ALTER TABLE "WhatsAppContact"
+ADD COLUMN "optInAt" TIMESTAMP(3),
+ADD COLUMN "optOutAt" TIMESTAMP(3),
+ADD COLUMN "consentSource" TEXT;

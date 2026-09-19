@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     await enforceRateLimit(request, "candidate_readiness", 60, 60_000);
     const profile = await candidateProfile(request);
-    const { roleTitle, seniority } = await readValidatedJson(request, selectReadinessSchema);
+    const { roleTitle, seniority } = await readValidatedJson(request, selectReadinessSchema, 4 * 1024);
     const template = await prisma.mcqAssessment.findFirst({
       where: { scope: "PLATFORM_READINESS", isActive: true, roleTitle, seniority },
       select: { id: true },

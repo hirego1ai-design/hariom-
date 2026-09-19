@@ -32,6 +32,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "proctoring", label: "Proctoring Control", href: "/admin/proctoring-control-panel", icon: "security" },
   { id: "payment-gateways", label: "Payment Gateways", href: "/admin/payment-gateways", icon: "account_balance" },
   { id: "roles", label: "Roles & Permissions", href: "/admin/roles", icon: "admin_panel_settings" },
+  { id: "communications", label: "Communications", href: "/admin/communications", icon: "forum" },
   { id: "settings", label: "Admin Settings Hub", href: "/admin/settings/hub", icon: "settings" },
   { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring", badge: "Live", badgeColor: "bg-green text-black" },
 ];

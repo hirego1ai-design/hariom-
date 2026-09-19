@@ -23,6 +23,7 @@ export default function InterviewFeedbackPage() {
   const [success, setSuccess] = useState("");
   const [roundComplete, setRoundComplete] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [pendingRejectionApproval, setPendingRejectionApproval] = useState<{approvalId:string;workflowId:string}|null>(null);
 
   useEffect(() => {
     if (!interviewId) return;
@@ -54,8 +55,26 @@ export default function InterviewFeedbackPage() {
 
   async function decide(action: "PROCEED"|"REJECT"|"HOLD") {
     setError(""); setSuccess(""); setDeciding(true);
-    try { const r=await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}/round-decision`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action})}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||"Unable to apply round decision.");
-      if(d.action==="PROCEED") setSuccess(`Candidate transferred to ${d.nextRound.name}. Schedule that configured round when ready.`); else if(d.action==="FINAL_ROUND_COMPLETE") setSuccess("All configured interview rounds are complete. Candidate is ready for the employer's final hiring decision."); else if(d.action==="REJECT") setSuccess("Candidate marked as not proceeding in this hiring process."); else setSuccess("Candidate remains on hold.");
+    try {
+      const rejectionProof = action === "REJECT" ? pendingRejectionApproval : null;
+      const r=await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}/round-decision`,{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({
+          action,
+          ...(rejectionProof ? { approvalId: rejectionProof.approvalId, workflowId: rejectionProof.workflowId, confirmApproval: true } : {}),
+        }),
+      });
+      const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||"Unable to apply round decision.");
+      if (d.requiresConfirmation && d.approvalId && d.workflowId) {
+        setPendingRejectionApproval({ approvalId: d.approvalId, workflowId: d.workflowId });
+        setSuccess("Rejection approval recorded. Click Confirm rejection to execute this consequential action.");
+        return;
+      }
+      if(d.action==="PROCEED") setSuccess(`Candidate transferred to ${d.nextRound.name}. Schedule that configured round when ready.`);
+      else if(d.action==="FINAL_ROUND_COMPLETE") setSuccess("All configured interview rounds are complete. Candidate is ready for the employer's final hiring decision.");
+      else if(d.action==="REJECT") { setPendingRejectionApproval(null); setSuccess("Candidate marked as not proceeding in this hiring process."); }
+      else setSuccess("Candidate remains on hold.");
       if(action!=="HOLD") setRoundComplete(false);
     } catch(e){setError(e instanceof Error?e.message:"Unable to apply round decision.");} finally{setDeciding(false);}
   }
@@ -75,7 +94,7 @@ export default function InterviewFeedbackPage() {
       </section>
       <label className="block rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Private interviewer notes<textarea disabled={finalized} value={notes} onChange={e=>setNotes(e.target.value)} maxLength={8000} className="mt-3 min-h-28 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /><span className="mt-2 block text-xs">Never shown to the candidate.</span></label>
       {policy?.candidateFeedbackPolicy !== "NOT_SHARED" && <label className="block rounded-2xl border border-outline bg-bg-card p-5 text-sm text-text-secondary">Candidate-facing feedback {policy?.candidateFeedbackPolicy==="REQUIRED"?"(required)":"(optional)"}<textarea disabled={finalized} value={candidateFeedback} onChange={e=>setCandidateFeedback(e.target.value)} maxLength={4000} className="mt-3 min-h-28 w-full rounded-xl border border-outline bg-bg-page p-3 text-text-primary disabled:opacity-60" /><span className="mt-2 block text-xs">Stored separately from private notes. Release to the candidate is controlled independently.</span></label>}
-      {finalized && roundComplete && <section className="rounded-2xl border border-outline bg-bg-card p-5"><h2 className="font-bold text-text-primary">Round decision</h2><p className="mt-1 text-sm text-text-secondary">All required panel feedback is complete. Choose the controlled next step for this candidate.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={deciding} onClick={()=>decide("PROCEED")} className="btn-3d-blue min-h-11 rounded-full px-5 font-bold text-white">Proceed</button><button type="button" disabled={deciding} onClick={()=>decide("HOLD")} className="min-h-11 rounded-full border border-outline px-5 font-bold text-text-primary">Hold</button><button type="button" disabled={deciding} onClick={()=>decide("REJECT")} className="min-h-11 rounded-full border border-error/40 px-5 font-bold text-error">Not proceeding</button></div></section>}
+      {finalized && roundComplete && <section className="rounded-2xl border border-outline bg-bg-card p-5"><h2 className="font-bold text-text-primary">Round decision</h2><p className="mt-1 text-sm text-text-secondary">All required panel feedback is complete. Choose the controlled next step for this candidate.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={deciding} onClick={()=>decide("PROCEED")} className="btn-3d-blue min-h-11 rounded-full px-5 font-bold text-white">Proceed</button><button type="button" disabled={deciding} onClick={()=>decide("HOLD")} className="min-h-11 rounded-full border border-outline px-5 font-bold text-text-primary">Hold</button><button type="button" disabled={deciding} onClick={()=>decide("REJECT")} className="min-h-11 rounded-full border border-error/40 px-5 font-bold text-error">{pendingRejectionApproval ? "Confirm rejection" : "Not proceeding"}</button></div></section>}
       <div className="flex flex-wrap gap-3"><button disabled={saving||finalized} className="btn-3d-red h-12 rounded-full px-7 font-bold text-white disabled:opacity-50">{saving?"Finalizing…":"Finalize my feedback"}</button><Link href="/employer/upcoming-interviews-list" className="flex h-12 items-center rounded-full border border-outline px-7 text-sm font-bold text-text-secondary">Back to interviews</Link></div>
     </form>}
   </main></PageContainer>;

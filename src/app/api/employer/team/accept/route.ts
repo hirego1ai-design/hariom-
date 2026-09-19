@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { hashPassword, validatePasswordStrength, revokeAllUserSessions } from "@/lib/auth";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const acceptInvitationSchema = z.object({
-  token: z.string().min(16, "Invalid invitation token"),
-  password: z.string().optional(),
+  token: z.string().regex(/^[a-f0-9]{64}$/i, "Invalid invitation token"),
+  password: z.string().min(8).max(200).optional(),
   name: z.string().trim().min(2).max(100).optional(),
-});
+}).strict();
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,14 +37,30 @@ export async function POST(req: NextRequest) {
       throw new ApiError("This invitation has expired. Please ask your company administrator to send a new invitation.", 400);
     }
 
-    // 2. Process acceptance inside atomic transaction
-    await prisma.$transaction(async (tx) => {
-      // Find existing user by invitation email
+    // 2. Process acceptance inside one serialized transaction. The invitation
+    // row is locked so concurrent uses of the same single-use token cannot both
+    // create/update membership.
+    const acceptance = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "CompanyInvitation" WHERE id = ${invitation.id} FOR UPDATE`;
+      const currentInvitation = await tx.companyInvitation.findUnique({
+        where: { id: invitation.id },
+        include: { company: true },
+      });
+      if (!currentInvitation || currentInvitation.status !== "PENDING") {
+        throw new ApiError("Invalid, revoked, or already consumed invitation token.", 400);
+      }
+      if (currentInvitation.expiresAt < new Date()) {
+        await tx.companyInvitation.update({ where: { id: currentInvitation.id }, data: { status: "EXPIRED" } });
+        throw new ApiError("This invitation has expired. Please ask your company administrator to send a new invitation.", 400);
+      }
+
       const existingUser = await tx.user.findUnique({
-        where: { email: invitation.email },
+        where: { email: currentInvitation.email },
       });
 
       let userId: string;
+      let roleChanged = false;
+      let newSessionVersion: number | null = null;
 
       if (existingUser) {
         userId = existingUser.id;
@@ -56,7 +72,7 @@ export async function POST(req: NextRequest) {
 
         if (existingEmployer) {
           // Reject cross-company transfer by default to prevent silent moving or hijacking
-          if (existingEmployer.companyId !== invitation.companyId) {
+          if (existingEmployer.companyId !== currentInvitation.companyId) {
             throw new ApiError("This account is already registered to another company. Cross-company transfers are not permitted.", 400);
           }
 
@@ -64,7 +80,7 @@ export async function POST(req: NextRequest) {
           await tx.employerProfile.update({
             where: { userId: existingUser.id },
             data: {
-              designation: invitation.designation || existingEmployer.designation,
+              designation: currentInvitation.designation || existingEmployer.designation,
             },
           });
         } else {
@@ -72,8 +88,8 @@ export async function POST(req: NextRequest) {
           await tx.employerProfile.create({
             data: {
               userId: existingUser.id,
-              companyId: invitation.companyId,
-              designation: invitation.designation,
+              companyId: currentInvitation.companyId,
+              designation: currentInvitation.designation,
             },
           });
         }
@@ -81,21 +97,19 @@ export async function POST(req: NextRequest) {
         // Set user role exactly to the invitation role.
         // This prevents privilege escalation (e.g. keeping EMPLOYER role when invited as RECRUITER)
         // or promotes a CANDIDATE to the appropriate role.
-        const roleChanged = existingUser.role !== invitation.role;
-        const newSessionVersion = existingUser.sessionVersion + 1;
+        roleChanged = existingUser.role !== currentInvitation.role;
+        newSessionVersion = existingUser.sessionVersion + 1;
 
         await tx.user.update({
           where: { id: existingUser.id },
           data: {
-            role: invitation.role,
+            role: currentInvitation.role,
             // Rotate session version to invalidate active sessions if privilege/role changes
             sessionVersion: roleChanged ? newSessionVersion : undefined,
           },
         });
 
-        if (roleChanged) {
-          await revokeAllUserSessions(existingUser.id, newSessionVersion);
-        }
+
       } else {
         // New user creation requires a valid password
         if (!body.password) {
@@ -111,10 +125,10 @@ export async function POST(req: NextRequest) {
 
         const newUser = await tx.user.create({
           data: {
-            email: invitation.email,
-            name: body.name || invitation.name,
+            email: currentInvitation.email,
+            name: body.name || currentInvitation.name,
             passwordHash,
-            role: invitation.role,
+            role: currentInvitation.role,
             emailVerified: true,
             sessionVersion: 0,
           },
@@ -125,35 +139,45 @@ export async function POST(req: NextRequest) {
         await tx.employerProfile.create({
           data: {
             userId: newUser.id,
-            companyId: invitation.companyId,
-            designation: invitation.designation,
+            companyId: currentInvitation.companyId,
+            designation: currentInvitation.designation,
           },
         });
       }
 
-      // Mark invitation as ACCEPTED
-      await tx.companyInvitation.update({
-        where: { id: invitation.id },
+      const consumed = await tx.companyInvitation.updateMany({
+        where: { id: currentInvitation.id, status: "PENDING" },
+        data: { status: "ACCEPTED", acceptedAt: new Date() },
+      });
+      if (consumed.count !== 1) throw new ApiError("Invitation was already consumed.", 409);
+
+      const auditLog = await tx.auditLog.create({
         data: {
-          status: "ACCEPTED",
-          acceptedAt: new Date(),
+          userId,
+          companyId: currentInvitation.companyId,
+          action: "INVITATION_ACCEPTED",
+          resource: `Invitation:${currentInvitation.id}`,
+          details: `Invitation accepted by ${currentInvitation.email} for company ${currentInvitation.company.name} as role ${currentInvitation.role}`,
+          ipAddress: getClientIp(req),
         },
       });
-
-      await logAuditEvent({
-        userId,
-        companyId: invitation.companyId,
-        action: "INVITATION_ACCEPTED",
-        resource: `Invitation:${invitation.id}`,
-        details: `Invitation accepted by ${invitation.email} for company ${invitation.company.name} as role ${invitation.role}`,
-        ipAddress: req.headers.get("x-forwarded-for") || undefined,
-      });
+      await enqueueSecurityAuditEvent(tx, auditLog, userId);
+      return { userId, roleChanged, newSessionVersion, companyName: currentInvitation.company.name };
     });
+
+    if (acceptance.roleChanged && acceptance.newSessionVersion !== null) {
+      // Database sessionVersion is authoritative in production. Refresh Redis
+      // after commit, but never turn a committed invitation into an apparent
+      // failure if cache refresh is temporarily unavailable.
+      await revokeAllUserSessions(acceptance.userId, acceptance.newSessionVersion).catch((error) => {
+        console.error("INVITATION_SESSION_CACHE_REFRESH_FAILED", { userId: acceptance.userId, error });
+      });
+    }
 
     return NextResponse.json({
       success: true,
-      message: `You have successfully joined ${invitation.company.name}. You may now sign in.`,
-      companyName: invitation.company.name,
+      message: `You have successfully joined ${acceptance.companyName}. You may now sign in.`,
+      companyName: acceptance.companyName,
     });
   } catch (error) {
     return handleApiError(error);

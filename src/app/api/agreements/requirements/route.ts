@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
 // Guard: Tenant isolation enforced via authoritative EmployerProfile.companyId → Company FK boundary
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "agreements_requirements_get", 60, 60000);
     const session = await requireEmployerOrAdminSession(req);
     let requirements = await agreementsDb.getRequirements();
-    if (session.role !== "ADMIN") {
+    if (session.role === "ADMIN") {
+      const url = new URL(req.url);
+      const queryCompanyId = url.searchParams.get("companyId");
+      if (queryCompanyId) {
+        requirements = requirements.filter((requirement) => requirement.companyId === queryCompanyId);
+      }
+    } else {
       const company = await getSessionCompany(session);
       requirements = requirements.filter((requirement) => requirement.companyId === company.id);
     }
@@ -21,6 +28,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "agreements_requirements_post", 20, 60000);
     const session = await requireEmployerOrAdminSession(req);
     const body = await req.json();
 

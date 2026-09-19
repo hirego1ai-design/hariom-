@@ -5,25 +5,41 @@ import { createMarketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = createMarketingMetadata("home");
 import MarketingShell from "@/components/marketing/MarketingShell";
+import HeroEarth from "@/components/marketing/HeroEarth";
+import { CalendarDays, FileSearch2, UsersRound, Video } from "lucide-react";
 
 export default function HomePage() {
   return (
-    <MarketingShell>
-      <section className="relative flex min-h-[90vh] flex-col justify-center overflow-hidden px-5 py-28 sm:px-8">
-        <div className="absolute inset-0 z-0 overflow-hidden bg-[#020617]">
-          <Image src="/marketing/images/interactive_world_map_globe.png" alt="" fill sizes="100vw" className="object-cover object-center opacity-65" priority />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-transparent to-[#050510]/80" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/80 via-transparent to-[#050510]/80" />
+    <MarketingShell home>
+      <section className="relative isolate min-h-[820px] overflow-hidden bg-[radial-gradient(ellipse_at_50%_85%,#0b2f59_0%,#071323_43%,#05090f_85%)] px-5 pb-24 pt-32 text-white sm:px-8 lg:min-h-[820px]">
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(1px 1px at 5% 18%,#69c8ff 80%,transparent),radial-gradient(2px 2px at 24% 15%,#89caff 80%,transparent),radial-gradient(1px 1px at 71% 20%,#fff 80%,transparent),radial-gradient(2px 2px at 82% 58%,#59baff 80%,transparent),radial-gradient(1px 1px at 94% 34%,#fff 80%,transparent),radial-gradient(1px 1px at 40% 8%,#5793cb 80%,transparent),radial-gradient(1px 1px at 58% 48%,#5793cb 80%,transparent)", backgroundSize: "100% 100%" }} />
+        <div className="absolute inset-0 z-0" aria-hidden>
+          <div className="absolute -bottom-[83%] left-1/2 h-[110%] w-[190%] -translate-x-1/2 rounded-[50%] border-t-2 border-[#55b8ff] bg-[radial-gradient(ellipse_at_50%_0%,#123c68_0%,#06182e_40%,#020912_75%)] shadow-[0_-8px_30px_#168af388]" />
+          <HeroEarth />
         </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-56 bg-gradient-to-t from-[#050b13] to-transparent" />
         <div className="relative z-10 mx-auto max-w-5xl text-center">
-          <p className="mb-5 text-sm font-bold uppercase tracking-[0.22em] text-cyan-300">Autonomous hiring, made human</p>
-          <h1 className="text-5xl font-black leading-[1.08] tracking-tight text-white drop-shadow-2xl sm:text-7xl">World&apos;s <span className="bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400 bg-clip-text text-transparent">Fastest Hiring</span><br />Platform.</h1>
-          <p className="mx-auto mt-7 max-w-3xl text-lg font-medium leading-8 text-slate-200 drop-shadow-md sm:text-xl">Reducing recruitment time by up to <span className="font-bold text-cyan-300">90%</span>. Screen, assess, and interview candidates automatically with intelligent agents across the globe.</p>
-          <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link href="/register?type=employer" className="btn-primary-blue min-w-[220px] px-7">Get started free <span aria-hidden>→</span></Link>
-            <Link href="/contact" className="btn-ghost min-w-[220px] border-white/30 bg-white/5 px-7 text-white hover:bg-white/10">Talk to our team <span aria-hidden>→</span></Link>
+          <p className="text-[11px] font-semibold uppercase tracking-[.48em] text-slate-200 sm:text-sm">The world&apos;s fastest hiring platform</p>
+          <h1 className="mt-5 text-[clamp(2.55rem,6vw,6rem)] font-black leading-[.98] tracking-[-.055em] text-white">Welcome to the<br />Future of <span className="bg-gradient-to-r from-[#42b9ff] via-[#c079ff] via-[#ff77d8] to-[#ff7767] bg-clip-text text-transparent">Hiring</span></h1>
+          <p className="mt-4 text-xl font-bold text-white sm:text-3xl">We reduce recruitment time by up to 90%.</p>
+          <p className="mt-3 text-sm leading-6 tracking-[.15em] text-slate-200 sm:text-base">Autonomous AI agents working 24/7<br />AI-powered hiring workflows<br />From requirement to joining<br />Job-ready candidates in minutes</p>
+          <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/register?type=employer" className="rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] shadow-[0_0_24px_#4ca4ff88] transition hover:-translate-y-0.5">Start Hiring <span aria-hidden className="ml-2">→</span></Link>
+            <Link href="/contact" className="rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10">Book a Demo</Link>
           </div>
         </div>
+        <div className="pointer-events-none absolute left-[6%] top-[31%] hidden border-l border-white/80 pl-5 text-sm tracking-[.15em] text-white lg:block">Global Talent<br />Anytime<br />Anywhere</div>
+        <div className="pointer-events-none absolute right-[6%] top-[31%] hidden border-l border-white/80 pl-5 text-sm tracking-[.15em] text-white lg:block">Autonomous<br />AI Agents<br />Working<br />24/7</div>
+        <div className="relative z-10 mx-auto mt-24 grid max-w-7xl gap-4 sm:grid-cols-2 lg:mt-24 lg:grid-cols-4">
+          {[
+            { title: "AI Screening", copy: "Instantly screen and rank the best candidates.", Icon: FileSearch2, tone: "text-sky-300 bg-sky-500/20" },
+            { title: "Smart Shortlisting", copy: "Find the right talent faster with AI.", Icon: UsersRound, tone: "text-teal-300 bg-teal-500/20" },
+            { title: "Auto Scheduling", copy: "Seamlessly coordinate interviews automatically.", Icon: CalendarDays, tone: "text-fuchsia-300 bg-fuchsia-500/20" },
+            { title: "Video Interviews", copy: "Built-in intelligent video assessments.", Icon: Video, tone: "text-amber-300 bg-amber-500/20" },
+          ].map(({ title, copy, Icon, tone }) => <article key={title} className="flex min-h-28 items-center gap-5 rounded-2xl border border-blue-200/35 bg-[#12263d]/85 p-5 shadow-lg shadow-black/25 backdrop-blur-md"><div className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl ${tone}`}><Icon size={34} strokeWidth={2.2} /></div><div><h2 className="font-semibold">{title}</h2><p className="mt-1 text-sm leading-5 text-slate-200">{copy}</p></div></article>)}
+        </div>
+        <div className="relative z-10 mt-5 text-center text-[10px] font-semibold tracking-[.35em] text-slate-200">⌄<br />SCROLL TO EXPLORE</div>
+        <div className="pointer-events-none absolute -bottom-20 left-1/2 z-[2] h-28 w-[125%] -translate-x-1/2 rounded-[50%] bg-white" />
       </section>
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50 px-5 py-16 sm:px-8 md:py-24">
         <div className="pointer-events-none absolute inset-0 opacity-50" style={{ backgroundImage: "radial-gradient(#dbe4f0 1px, transparent 1px)", backgroundSize: "16px 16px" }} />

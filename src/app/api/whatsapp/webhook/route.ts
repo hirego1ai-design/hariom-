@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { persistInboundEvent, ensureWhatsAppContact } from "@/lib/whatsapp-identity";
+import { persistInboundEvent, ensureWhatsAppContact, isWhatsAppOptOutCommand, markEventProcessed, setWhatsAppConsent } from "@/lib/whatsapp-identity";
 import { isPlaceholderSecret, validateWhatsAppConfig } from "@/lib/whatsapp";
 import { checkWaRateLimit } from "@/lib/whatsapp-rate-limiter";
 import { deferRateLimitedWhatsAppEvent, enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
@@ -157,6 +157,11 @@ async function ingestWebhookEntries(body: any): Promise<void> {
       if (change?.field !== "messages") continue;
 
       const value = change?.value;
+      const statuses: any[] = value?.statuses ?? [];
+      for (const status of statuses) {
+        await reconcileOutboundStatus(status);
+      }
+
       const messages: any[] = value?.messages ?? [];
 
       for (const message of messages) {
@@ -190,6 +195,14 @@ async function ingestSingleMessage(message: any): Promise<void> {
     textBody = "";
   }
 
+  // Explicit opt-out commands revoke outbound messaging consent immediately.
+  // Receiving any other inbound message never grants opt-in consent.
+  const normalizedCommand = textBody.trim().toLowerCase();
+  if (["stop", "unsubscribe", "opt out", "opt-out"].includes(normalizedCommand)) {
+    await ensureWhatsAppContact(waId);
+    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");
+  }
+
   // 2. Persist before rate limiting so a sender's valid message is never lost.
   const { isDuplicate, eventId } = await persistInboundEvent({
     providerEventId: messageId,
@@ -217,4 +230,46 @@ async function ingestSingleMessage(message: any): Promise<void> {
 
   // 4. Enqueue into background worker queue for asynchronous processing.
   await enqueueWhatsAppInboundJob(eventId);
+}
+
+async function reconcileOutboundStatus(status: any): Promise<void> {
+  const providerMessageId = typeof status?.id === "string" ? status.id : "";
+  const providerStatus = typeof status?.status === "string" ? status.status.toLowerCase() : "";
+  if (!providerMessageId || !["sent", "delivered", "read", "failed"].includes(providerStatus)) return;
+
+  const { prisma } = await import("@/lib/prisma");
+  const existing = await prisma.communicationDelivery.findFirst({
+    where: { providerMessageId },
+    select: { id: true, status: true },
+  });
+  if (!existing) return;
+
+  const rank: Record<string, number> = { PROCESSING: 0, ACCEPTED: 1, DELIVERED: 2, READ: 3 };
+  const currentRank = rank[existing.status] ?? -1;
+  const now = new Date();
+  let data: Record<string, unknown> | null = null;
+
+  if (providerStatus === "read" && currentRank < rank.READ) {
+    data = { status: "READ", readAt: now, deliveredAt: now };
+  } else if (providerStatus === "delivered" && currentRank < rank.DELIVERED) {
+    data = { status: "DELIVERED", deliveredAt: now };
+  } else if (providerStatus === "sent" && currentRank < rank.ACCEPTED) {
+    data = { status: "ACCEPTED", acceptedAt: now };
+  } else if (providerStatus === "failed" && currentRank < rank.DELIVERED) {
+    const rawError = String(status?.errors?.[0]?.title ?? "Meta reported delivery failure.");
+    const safeError = rawError
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+      .replace(/\+?\d[\d\s().-]{7,}\d/g, "[redacted-phone]")
+      .slice(0, 1000);
+    data = {
+      status: "FAILED",
+      failedAt: now,
+      lastErrorCode: String(status?.errors?.[0]?.code ?? "META_DELIVERY_FAILED").slice(0, 100),
+      lastError: safeError,
+    };
+  }
+
+  if (data) {
+    await prisma.communicationDelivery.update({ where: { id: existing.id }, data });
+  }
 }

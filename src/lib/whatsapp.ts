@@ -190,6 +190,57 @@ export async function sendWhatsAppTextMessage(
   }
 }
 
+export interface WhatsAppTemplateComponent {
+  type: "header" | "body" | "button";
+  sub_type?: "quick_reply" | "url";
+  index?: string;
+  parameters?: Array<{ type: "text"; text: string }>;
+}
+
+export async function sendWhatsAppTemplateMessage(
+  phone: string,
+  templateName: string,
+  languageCode: string,
+  components: WhatsAppTemplateComponent[] = []
+): Promise<{ sent: boolean; reason?: string; messageId?: string }> {
+  const cfg = getWaConfig();
+  if (!cfg) return { sent: false, reason: "WhatsApp provider is not configured." };
+
+  const to = phone.replace(/\D/g, "");
+  if (!to) return { sent: false, reason: "Invalid phone number." };
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) return { sent: false, reason: "Invalid WhatsApp template name." };
+  if (!/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(languageCode)) return { sent: false, reason: "Invalid WhatsApp template language." };
+
+  try {
+    const baseUrl = getMetaGraphBaseUrl();
+    const response = await fetchWithRetry(`${baseUrl}/${cfg.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: languageCode },
+          ...(components.length ? { components } : {}),
+        },
+      }),
+    }, { maxRetries: 0 });
+
+    if (!response.ok) {
+      return { sent: false, reason: `WhatsApp API returned ${response.status}` };
+    }
+    const data = await response.json();
+    return { sent: true, messageId: data.messages?.[0]?.id };
+  } catch (err: any) {
+    return { sent: false, reason: err?.message || "Network error sending WhatsApp template." };
+  }
+}
+
 // ─── Interactive list message ─────────────────────────────────────────────────
 
 export interface WhatsAppListSection {

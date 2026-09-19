@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { checkoutSchema } from "@/lib/payments/planContracts";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { CreateOrderResult } from "@/lib/payments/PaymentGatewayInterface";
 import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
@@ -165,10 +165,10 @@ async function releasePromoReservation(orderId: string): Promise<void> {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "payment_checkout", 10, 60_000);
     const session = await getCurrentSession(req.headers);
-    if (!session || !["EMPLOYER", "RECRUITER"].includes(session.role)) {
-      return jsonError("Unauthorized access", 401);
-    }
+    if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "EMPLOYER") return jsonError("Only company employers can create subscription payment orders.", 403);
 
     const profile = await prisma.employerProfile.findUnique({
       where: { userId: session.id },

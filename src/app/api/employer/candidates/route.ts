@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { toEmployerCandidate } from "@/lib/candidateEvidence";
+import { getSessionCompany } from "@/lib/routeAuthorization";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "employer_candidates_get", 60, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
@@ -31,12 +33,12 @@ export async function GET(req: NextRequest) {
     let nextCursor: string | null = null;
 
     try {
-      const employerProfile = await prisma.employerProfile.findUnique({
-        where: { userId: session.id },
-      });
+      const companyId = session.role === "ADMIN"
+        ? searchParams.get("companyId")
+        : (await getSessionCompany(session)).id;
+      if (!companyId) throw new ApiError("companyId query parameter is required for administrators.", 400);
 
-      if (employerProfile) {
-        const companyId = employerProfile.companyId;
+      {
 
         // Cursor pagination prevents a large tenant's pipeline from loading
         // every application and nested profile into one request.

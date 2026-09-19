@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
 import { getSessionCompany, requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
 // Guard: Tenant isolation enforced via authoritative EmployerProfile.companyId → Company FK boundary
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "agreements_contracts_get", 60, 60000);
     const session = await requireEmployerOrAdminSession(req);
     const { searchParams } = new URL(req.url);
     const company = searchParams.get("company");
+    const queryCompanyId = searchParams.get("companyId");
     const status = searchParams.get("status");
 
     let list = await agreementsDb.getAgreements();
@@ -17,6 +19,8 @@ export async function GET(req: NextRequest) {
     if (session.role !== "ADMIN") {
       const company = await getSessionCompany(session);
       list = list.filter((agreement) => agreement.companyId === company.id);
+    } else if (queryCompanyId) {
+      list = list.filter((agreement) => agreement.companyId === queryCompanyId);
     }
 
     if (company) {
@@ -35,6 +39,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "agreements_contracts_post", 20, 60000);
     await requireAdminSession(req);
     const body = await req.json();
 

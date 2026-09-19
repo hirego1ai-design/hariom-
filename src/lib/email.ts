@@ -1,4 +1,5 @@
 import { getConfiguredEmailProvider, getConfiguredEmailProviders, type EmailProvider, type EmailProviderRuntimeConfig } from "@/lib/email-delivery-config";
+import { buildPublicAppUrl } from "@/lib/env";
 
 export interface EmailMessage {
   to: string;
@@ -7,9 +8,13 @@ export interface EmailMessage {
   text?: string;
 }
 
-export type EmailDeliveryResult = { success: boolean; messageId: string; provider?: EmailProvider };
+export type EmailDeliveryResult = { success: boolean; messageId: string; provider?: EmailProvider; reason?: string };
 
 const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
+}
 
 class EmailProviderDispatchError extends Error {
   constructor(message: string, readonly canFailover: boolean) {
@@ -57,6 +62,53 @@ async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: 
   const body = await response.json().catch(() => null);
   const providerMessageId = body?.data?.[0]?.message_id || body?.message_id;
   return { success: true, messageId: providerMessageId || messageId, provider: "ZEPTOMAIL" };
+}
+
+export interface ZeptoMailTemplateMessage {
+  to: string;
+  templateKey?: string;
+  templateAlias?: string;
+  mergeInfo: Record<string, string | number | boolean | null>;
+}
+
+async function sendZeptoMailStoredTemplate(
+  message: ZeptoMailTemplateMessage,
+  apiKey: string,
+  sender: string,
+  messageId: string
+): Promise<EmailDeliveryResult> {
+  if (!message.templateKey && !message.templateAlias) {
+    throw new EmailProviderDispatchError("ZeptoMail template key or alias is required.", false);
+  }
+  const response = await fetch("https://api.zeptomail.com/v1.1/email/template", {
+    method: "POST",
+    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
+    redirect: "error",
+    cache: "no-store",
+    body: JSON.stringify({
+      from: { address: sender },
+      to: [{ email_address: { address: message.to } }],
+      ...(message.templateKey ? { template_key: message.templateKey } : { template_alias: message.templateAlias }),
+      merge_info: message.mergeInfo,
+    }),
+  });
+  if (!response.ok) throw new EmailProviderDispatchError(`ZeptoMail template API returned ${response.status}`, response.status >= 400 && response.status < 500);
+  const body = await response.json().catch(() => null);
+  return { success: true, messageId: body?.data?.[0]?.message_id || body?.message_id || messageId, provider: "ZEPTOMAIL" };
+}
+
+export async function sendZeptoMailTemplate(message: ZeptoMailTemplateMessage): Promise<EmailDeliveryResult> {
+  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const provider = await getConfiguredEmailProvider("ZEPTOMAIL");
+  if (!provider) return { success: false, messageId, provider: "ZEPTOMAIL" };
+  try {
+    return await sendZeptoMailStoredTemplate(message, provider.apiKey, provider.fromEmail, messageId);
+  } catch (error) {
+    console.error("[Email Dispatch] ZeptoMail template delivery failed", error);
+    const reason = error instanceof EmailProviderDispatchError ? error.message : "ZeptoMail template delivery failed with an ambiguous provider error.";
+    return { success: false, messageId, provider: "ZEPTOMAIL", reason };
+  }
 }
 
 export async function sendEmail(
@@ -108,11 +160,11 @@ export function getWelcomeEmailTemplate(name: string): EmailMessage {
     subject: "Welcome to HireGo AI — Your AI-Powered Career Hub",
     html: `
       <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; borderRadius: 16px;">
-        <h1 style="color: #448AFF;">Welcome to HireGo AI, ${name}!</h1>
+        <h1 style="color: #448AFF;">Welcome to HireGo AI, ${escapeHtml(name)}!</h1>
         <p style="color: #9CA3AF; line-height: 1.6;">
           Your account is active. Explore thousands of AI-matched jobs, benchmark your skills, and schedule AI mock interviews to boost your hireability score.
         </p>
-        <a href="https://hirego.ai/candidate/dashboard" style="display: inline-block; background-color: #448AFF; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
+        <a href="${buildPublicAppUrl("/candidate/dashboard")}" style="display: inline-block; background-color: #448AFF; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
           Go to Dashboard
         </a>
       </div>
@@ -127,12 +179,12 @@ export function getInterviewInviteTemplate(candidateName: string, jobTitle: stri
     html: `
       <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; borderRadius: 16px;">
         <h2 style="color: #FF5252;">Interview Scheduled</h2>
-        <p style="color: #9CA3AF;">Hi ${candidateName},</p>
+        <p style="color: #9CA3AF;">Hi ${escapeHtml(candidateName)},</p>
         <p style="color: #9CA3AF;">
-          You have an upcoming AI Proctor & Technical Interview session for the <strong>${jobTitle}</strong> position.
+          You have an upcoming AI Proctor & Technical Interview session for the <strong>${escapeHtml(jobTitle)}</strong> position.
         </p>
-        <p style="color: #ffffff; font-weight: bold;">Time: ${time}</p>
-        <a href="https://hirego.ai/interviews" style="display: inline-block; background-color: #FF5252; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
+        <p style="color: #ffffff; font-weight: bold;">Time: ${escapeHtml(time)}</p>
+        <a href="${buildPublicAppUrl("/interviews")}" style="display: inline-block; background-color: #FF5252; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
           Join Interview Room
         </a>
       </div>

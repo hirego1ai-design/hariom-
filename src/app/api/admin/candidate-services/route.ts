@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const serviceSchema = z.object({
   serviceKey: z.string().trim().min(3).max(80).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only."),
@@ -33,9 +33,13 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
     await enforceRateLimit(request, "admin_candidate_services_write", 20, 60_000);
-    const data = await readValidatedJson(request, serviceSchema);
-    const service = await prisma.candidateServiceCatalog.create({ data });
-    await logAuditEvent({ userId: session.id, action: "CREATE_CANDIDATE_SERVICE", resource: `CandidateServiceCatalog:${service.id}` });
+    const data = await readValidatedJson(request, serviceSchema, 8 * 1024);
+    const service = await prisma.$transaction(async (tx) => {
+      const created = await tx.candidateServiceCatalog.create({ data });
+      const auditLog = await tx.auditLog.create({ data: { userId: session.id, action: "CREATE_CANDIDATE_SERVICE", resource: `CandidateServiceCatalog:${created.id}` } });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+      return created;
+    });
     return NextResponse.json({ success: true, service }, { status: 201 });
   } catch (error) {
     return handleApiError(error);

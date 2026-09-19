@@ -179,7 +179,7 @@ export async function ensureWhatsAppContact(waId: string): Promise<NonNullable<A
       normalizedPhone,
       verificationStatus: "UNVERIFIED",
       linkStatus: "UNLINKED",
-      optInStatus: "OPTED_IN",
+      optInStatus: "UNKNOWN",
       firstSeenAt: new Date(),
       lastSeenAt: new Date(),
     },
@@ -314,5 +314,29 @@ export async function markEventProcessed(eventId: string, error?: string): Promi
       processingError: error ?? null,
       processedAt: new Date(),
     },
+  });
+}
+
+
+export function isWhatsAppMessagingAllowed(status: string | null | undefined): boolean {
+  return status === "OPTED_IN";
+}
+
+export function isWhatsAppOptOutCommand(value: string): boolean {
+  return ["stop", "unsubscribe", "opt out", "opt-out", "end", "quit"].includes(value.trim().toLowerCase());
+}
+
+export async function setWhatsAppConsent(waId: string, status: "OPTED_IN" | "OPTED_OUT", source: string): Promise<void> {
+  const now = new Date();
+  await prisma.whatsAppContact.update({
+    where: { waId },
+    data: status === "OPTED_IN"
+      ? { optInStatus: status, optInAt: now, optOutAt: null, consentSource: source.slice(0, 100) }
+      : { optInStatus: status, optOutAt: now, consentSource: source.slice(0, 100) },
+  });
+  await logAuditEvent({
+    action: status === "OPTED_IN" ? "WHATSAPP_CONSENT_OPTED_IN" : "WHATSAPP_CONSENT_OPTED_OUT",
+    resource: "WhatsAppContact",
+    details: `WhatsApp messaging consent changed via ${source.slice(0, 100)}.`,
   });
 }

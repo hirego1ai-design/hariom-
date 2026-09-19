@@ -14,28 +14,36 @@ const links = [
   { href: "/blog", label: "Blog" },
   { href: "/contact", label: "Contact" },
 ];
+const homeLinks = [
+  { href: "/features", label: "Features" },
+  { href: "/enterprise", label: "Solutions⌄" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/blog", label: "Resources⌄" },
+  { href: "/about", label: "About" },
+];
 
-export default function MarketingNav() {
+export default function MarketingNav({ home = false }: { home?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-          <Image src="/marketing/hirego-logo.png" alt="HireGo AI" width={132} height={36} className="h-9 w-auto object-contain" priority />
+    <header className={home ? "absolute inset-x-0 top-0 z-40 bg-transparent" : "sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-xl"}>
+      <div className="mx-auto flex h-24 max-w-[1450px] items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="flex flex-col items-center" onClick={() => setOpen(false)}>
+          <Image src="/marketing/hirego-logo.png" alt="HireGo AI" width={205} height={80} className={home ? "h-20 w-auto object-contain" : "h-12 w-auto object-contain"} priority />
+          {home && <span className="-mt-1 text-[6px] font-bold tracking-[.16em] text-white">BETTER PEOPLE. BRIGHTER POSSIBILITIES.</span>}
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex" aria-label="Main navigation">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm font-medium text-slate-700 transition hover:text-blue-600">
+          {(home ? homeLinks : links).map((link) => (
+            <Link key={link.href} href={link.href} className={home ? "text-sm font-medium text-white transition hover:text-blue-300" : "text-sm font-medium text-slate-700 transition hover:text-blue-600"}>
               {link.label}
             </Link>
           ))}
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/login" className="rounded-full bg-gradient-to-r from-violet-500 to-purple-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5">Sign in</Link>
-          <Link href="/register" className="rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5">Sign up</Link>
+          <Link href="/login" className={home ? "px-4 py-2 text-sm text-white" : "rounded-full bg-gradient-to-r from-violet-500 to-purple-600 px-5 py-2 text-sm font-bold text-white"}>Sign in</Link>
+          <Link href="/register" className={home ? "rounded-full bg-white px-7 py-3 text-sm font-bold text-[#0c2551] shadow-lg shadow-blue-500/20" : "rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-2 text-sm font-bold text-white"}>Get Started <span aria-hidden>→</span></Link>
         </div>
 
         <button
@@ -52,7 +60,7 @@ export default function MarketingNav() {
       {open && (
           <nav className="border-t border-slate-200 bg-white px-5 py-4 md:hidden" aria-label="Mobile navigation">
           <div className="flex flex-col gap-1">
-            {links.map((link) => (
+            {(home ? homeLinks : links).map((link) => (
               <Link key={link.href} href={link.href} onClick={() => setOpen(false)} className="rounded-lg px-3 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
                 {link.label}
               </Link>

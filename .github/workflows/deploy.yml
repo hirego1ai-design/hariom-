@@ -2,9 +2,10 @@ name: HireGo AI Production CI/CD Pipeline
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, phase6-production-launch-readiness]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, phase5-release-operations-hardening, phase6-production-launch-readiness]
+  workflow_dispatch:
 
 jobs:
   audit-and-build:

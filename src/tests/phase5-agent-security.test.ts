@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import { ToolRegistry, PermissionDeniedError } from '@/lib/tools/ToolRegistry';
 import { createTenantContext, validateTenantAccess, TenantAccessError } from '@/lib/security/TenantContext';
 import { createHash } from 'crypto';
+import { prisma } from '@/lib/prisma';
 
 export interface Phase5SecurityResult { name: string; category: string; passed: boolean; message?: string; }
 
@@ -29,8 +30,9 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     handler: async () => { handlerCalls += 1; return { ok: true }; },
   });
 
+  const securityCompany = await prisma.company.create({ data: { name: `Phase5 Security ${Date.now()}` } });
   const context = {
-    tenantContext: createTenantContext('company-a', 'user-a', Role.EMPLOYER),
+    tenantContext: createTenantContext(securityCompany.id, 'user-a', Role.EMPLOYER),
     correlationId: 'corr-phase5',
     executionId: 'exec-phase5',
     agentId: 'resume-evaluator',
@@ -58,7 +60,7 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
   }
 
   try {
-    validateTenantAccess(createTenantContext('company-b', 'attacker', Role.EMPLOYER), 'company-a');
+    validateTenantAccess(createTenantContext('company-b', 'attacker', Role.EMPLOYER), securityCompany.id);
     results.push({ name: 'Cross-tenant approval/resource access is denied', category: 'Phase 5 Agent Security', passed: false });
   } catch (error) {
     results.push({ name: 'Cross-tenant approval/resource access is denied', category: 'Phase 5 Agent Security', passed: error instanceof TenantAccessError, message: error instanceof Error ? error.message : undefined });
@@ -126,6 +128,20 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     results.push({ name: 'Consequential approval/provider failure boundary regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
 
+  const auditLogs = await prisma.auditLog.findMany({ where: { companyId: securityCompany.id }, select: { id: true } });
+  if (auditLogs.length) await prisma.securityAuditOutboxEvent.deleteMany({ where: { auditLogId: { in: auditLogs.map((row) => row.id) } } });
+  await prisma.auditLog.deleteMany({ where: { companyId: securityCompany.id } });
+  await prisma.company.delete({ where: { id: securityCompany.id } });
   return { results };
 }
 
+import { test } from "node:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as assert from "node:assert/strict";
+
+test("candidate stage route cannot directly hire or reject", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "src/app/api/employer/candidates/[id]/stage/route.ts"), "utf8");
+  assert.match(source, /stage === "HIRED" \|\| stage === "REJECTED"/);
+  assert.match(source, /persisted approval workflow/);
+});

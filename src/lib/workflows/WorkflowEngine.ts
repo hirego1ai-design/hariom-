@@ -308,9 +308,6 @@ export class WorkflowEngine {
       // still pending. Rejection remains terminal for the workflow.
       let nextStatus: 'RUNNING' | 'PAUSED_FOR_APPROVAL' | 'CANCELLED' = 'CANCELLED';
       if (params.decision === 'APPROVED') {
-        const remainingPending = await tx.workflowApproval.count({
-          where: { workflowInstanceId: approval.workflowInstanceId, decision: 'PENDING' },
-        });
         // Approval is authorization, not execution. Keep the workflow paused
         // until the exact approved action has been durably consumed/executed.
         nextStatus = 'PAUSED_FOR_APPROVAL';
