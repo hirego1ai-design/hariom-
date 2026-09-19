@@ -862,6 +862,7 @@ model CommunicationTemplate {
   body              String
   variableSchema    Json     @default("{}")
   buttons           Json?
+  providerParameterOrder Json?
   enabled           Boolean  @default(false)
   version           Int      @default(1)
   createdById       String?
