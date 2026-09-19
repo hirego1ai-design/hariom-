@@ -179,7 +179,7 @@ export async function ensureWhatsAppContact(waId: string): Promise<NonNullable<A
       normalizedPhone,
       verificationStatus: "UNVERIFIED",
       linkStatus: "UNLINKED",
-      optInStatus: "OPTED_IN",
+      optInStatus: "UNKNOWN",
       firstSeenAt: new Date(),
       lastSeenAt: new Date(),
     },
