@@ -63,7 +63,8 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
   if (!template) throw new Error(`No active ${input.channel} template is configured for ${input.eventKey}.`);
 
   const variableCheck = validateTemplateVariables(input.eventKey, template.subject, template.body);
-  if (!variableCheck.valid) throw new Error(`Template contains unapproved variables: ${variableCheck.unknown.join(", ")}`);
+  if (variableCheck.unknown.length) throw new Error(`Template contains unapproved variables: ${variableCheck.unknown.join(", ")}`);
+  if (variableCheck.missing.length) throw new Error(`Template is missing required variables for ${input.eventKey}: ${variableCheck.missing.join(", ")}`);
 
   const delivery = await prisma.communicationDelivery.create({
     data: {
