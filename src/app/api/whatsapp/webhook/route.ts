@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { persistInboundEvent, ensureWhatsAppContact } from "@/lib/whatsapp-identity";
+import { persistInboundEvent, ensureWhatsAppContact, setWhatsAppConsent } from "@/lib/whatsapp-identity";
 import { isPlaceholderSecret, validateWhatsAppConfig } from "@/lib/whatsapp";
 import { checkWaRateLimit } from "@/lib/whatsapp-rate-limiter";
 import { deferRateLimitedWhatsAppEvent, enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
@@ -195,7 +195,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
     textBody = "";
   }
 
-  // 2. Persist before rate limiting so a sender's valid message is never lost.
+  // Explicit opt-out commands revoke outbound messaging consent immediately.\n  // Receiving any other inbound message never grants opt-in consent.\n  const normalizedCommand = textBody.trim().toLowerCase();\n  if (["stop", "unsubscribe", "opt out", "opt-out"].includes(normalizedCommand)) {\n    await ensureWhatsAppContact(waId);\n    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");\n  }\n\n  // 2. Persist before rate limiting so a sender's valid message is never lost.
   const { isDuplicate, eventId } = await persistInboundEvent({
     providerEventId: messageId,
     waId,
