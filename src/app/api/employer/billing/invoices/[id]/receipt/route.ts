@@ -9,6 +9,7 @@ import { receiptContentMatchesMime, receiptNotes } from "@/lib/invoiceReceiptSta
 import { createStoredFile, deleteObject, StorageUnavailableError } from "@/lib/storage";
 import { persistScanResult, scanUpload } from "@/lib/uploadSecurity";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const receiptSchema = z.object({
   bankTransferRef: z.string().trim().min(5, "Bank transfer reference/UTR ID is too short").max(150),
@@ -187,6 +188,21 @@ export async function POST(
         console.error("INVOICE_RECEIPT_CLEANUP_FAILURE", { storedFileId: storedFile.id, cleanupError });
       }
       throw error;
+    }
+
+    const company = companyId ? await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }) : null;
+    const recipient = session.email;
+    if (recipient) {
+      await dispatchCommunication({
+        eventKey: "INVOICE_RECEIPT_SUBMITTED",
+        channel: "EMAIL",
+        audience: "EMPLOYER",
+        recipient,
+        variables: { company_name: company?.name || invoiceRecord.companyName || "Employer", invoice_number: updatedInvoice.invoiceNumber },
+        idempotencyKey: `invoice:${updatedInvoice.id}:receipt:${receiptHash}:employer:email`,
+        correlationId: updatedInvoice.id,
+        recipientRef: session.id,
+      }).catch(() => null);
     }
 
     return NextResponse.json({
