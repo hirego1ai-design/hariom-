@@ -3,14 +3,14 @@ import { z } from "zod";
 import { db, prisma } from "@/lib/prisma";
 import { verifyOtpCode } from "@/lib/otp";
 import { hashPassword, revokeAllUserSessions, validatePasswordStrength } from "@/lib/auth";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logCriticalAuditEvent } from "@/lib/auditLogger";
+import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const resetPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  otp: z.string().min(4, "OTP code is required"),
-  newPassword: z.string().min(6, "Password must be at least 6 characters"),
-});
+  email: z.string().trim().email("Invalid email address").toLowerCase(),
+  otp: z.string().regex(/^\d{6}$/, "OTP code must be 6 digits"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters").max(200),
+}).strict();
 
 export async function POST(request: Request) {
   try {
@@ -43,25 +43,36 @@ export async function POST(request: Request) {
 
     const newHashed = hashPassword(body.newPassword);
 
+    let newSessionVersion: number;
     try {
-      const updatedUser = await prisma.user.update({
-        where: { id: user.id },
-        data: { passwordHash: newHashed, sessionVersion: { increment: 1 } },
-        select: { sessionVersion: true },
+      newSessionVersion = await prisma.$transaction(async (tx) => {
+        const updatedUser = await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash: newHashed, sessionVersion: { increment: 1 } },
+          select: { sessionVersion: true },
+        });
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: user.id,
+            action: "PASSWORD_RESET_SUCCESS",
+            resource: "/api/auth/reset-password",
+            details: `Password reset successfully for ${user.email}`,
+            ipAddress: getClientIp(request),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, user.id);
+        return updatedUser.sessionVersion;
       });
-      await revokeAllUserSessions(user.id, updatedUser.sessionVersion);
     } catch (error) {
       if (process.env.NODE_ENV === "production") {
         throw new Error("Failed to update password. Please try again later.");
       }
       (user as any).passwordHash = newHashed;
+      newSessionVersion = ((user as any).sessionVersion || 0) + 1;
     }
 
-    await logCriticalAuditEvent({
-      userId: user.id,
-      action: "PASSWORD_RESET_SUCCESS",
-      resource: "/api/auth/reset-password",
-      details: `Password reset successfully for ${user.email}`,
+    await revokeAllUserSessions(user.id, newSessionVersion).catch((error) => {
+      console.error("PASSWORD_RESET_SESSION_CACHE_REFRESH_FAILED", { userId: user.id, error });
     });
 
     return NextResponse.json({
