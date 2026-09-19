@@ -14,6 +14,20 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: phase5
+          POSTGRES_PASSWORD: phase5
+          POSTGRES_DB: hirego_test_phase5
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U phase5 -d hirego_test_phase5"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       # Prisma validate/generate require both datasource variables even though
       # Phase 5 offline verification must not connect to a live database.
@@ -32,6 +46,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify:phase5
+      - name: Apply isolated test migrations
+        run: npx prisma migrate deploy
       - run: npm test
       - run: npm run test:audit
       - run: npm run build
