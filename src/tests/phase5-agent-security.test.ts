@@ -93,7 +93,7 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     // in WorkflowEngine's approval role policy; this assertion protects that
     // distinction from future permission broadening.
     const approvalRoles = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
-    results.push({ name: 'Candidate role is excluded from consequential approval roles', category: 'Phase 5 Agent Security', passed: !approvalRoles.includes(Role.CANDIDATE) });
+    results.push({ name: 'Candidate role is excluded from consequential approval roles', category: 'Phase 5 Agent Security', passed: !(approvalRoles as Role[]).includes(Role.CANDIDATE) });
   } catch (error) {
     results.push({ name: 'Candidate approval-role regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
