@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const applicationSchema = z.object({
   jobId: z.string().uuid(),
@@ -97,6 +98,12 @@ export async function POST(req: NextRequest) {
         candidateProfileId: candidate.id,
         companyId: job.companyId,
       });
+
+      const candidateUser = await prisma.user.findUnique({ where: { id: session.id }, select: { id: true, name: true, email: true, phoneNumber: true } });
+      const company = await prisma.company.findUnique({ where: { id: job.companyId }, select: { name: true } });
+      const variables = { candidate_name: candidateUser?.name || "Candidate", company_name: company?.name || "Employer", job_title: job.title };
+      if (candidateUser?.email) await dispatchCommunication({ eventKey: "JOB_APPLICATION_RECEIVED", channel: "EMAIL", audience: "CANDIDATE", recipient: candidateUser.email, variables, idempotencyKey: `application:${submission.application.id}:candidate:email:received`, correlationId: submission.application.id, recipientRef: candidateUser.id }).catch(() => null);
+      if (candidateUser?.phoneNumber) await dispatchCommunication({ eventKey: "JOB_APPLICATION_RECEIVED", channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidateUser.phoneNumber, variables, idempotencyKey: `application:${submission.application.id}:candidate:whatsapp:received`, correlationId: submission.application.id, recipientRef: candidateUser.id }).catch(() => null);
 
       return NextResponse.json({
         success: true,
