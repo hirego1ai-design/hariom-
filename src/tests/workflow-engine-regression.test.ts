@@ -113,6 +113,7 @@ test('checkpoint persistence failure rejects and never reports a durable success
 
 test('third failed attempt records durable failure and a dead letter', async (t) => {
   const state = stubWorkflow(t);
+  stubMethod(t, prisma.workflowStepLog, 'findFirst', async ({ where }: any) => where.attemptNumber === 2 ? ({ status: 'FAILED' }) : null);
   await assert.rejects(WorkflowEngine.executeStep('workflow-test', 'send', 3, {}, async () => { throw new Error('provider unavailable'); }), /provider unavailable/);
   assert.equal(state.step.status, 'FAILED');
   assert.equal(state.workflow.status, 'FAILED');
@@ -136,6 +137,7 @@ test('resume approved workflow rejects pending approvals', async (t) => {
   const { Role } = await import('@prisma/client');
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'PAUSED_FOR_APPROVAL' }));
   stubMethod(t, prisma.workflowApproval, 'count', async ({ where }: any) => where.decision === 'PENDING' ? 1 : 0);
+  stubMethod(t, prisma.workflowApproval, 'findFirst', async () => null);
   await assert.rejects(WorkflowEngine.resumeApprovedWorkflow({
     workflowId: 'workflow-test',
     context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
@@ -159,6 +161,7 @@ test('workflow completion blocks approved but unconsumed consequential actions',
   const { Role } = await import('@prisma/client');
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
   stubMethod(t, prisma.workflowStepLog, 'count', async () => 0);
+  stubMethod(t, prisma.workflowStepLog, 'findMany', async () => []);
   stubMethod(t, prisma.workflowApproval, 'count', async ({ where }: any) =>
     where.OR ? 1 : 0
   );
@@ -173,7 +176,9 @@ test('duplicate decided approval request cannot re-pause workflow', async (t) =>
   const { Role } = await import('@prisma/client');
   let workflowWrites = 0;
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
-  stubMethod(t, prisma.workflowApproval, 'upsert', async () => ({ id: 'approval-a', decision: 'APPROVED' }));
+  stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION' }));
+  stubMethod(t, prisma.workflowApproval, 'upsert', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION' }));
   stubMethod(t, prisma.workflowInstance, 'update', async () => { workflowWrites++; throw new Error('must not write'); });
   stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
   await assert.rejects(WorkflowEngine.requestConsequentialAction({
