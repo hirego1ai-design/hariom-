@@ -62,6 +62,7 @@ export type CommunicationEventDefinition = {
   audiences: CommunicationAudience[];
   channels: CommunicationChannel[];
   variables: string[];
+  optionalVariables?: string[];
   consequential?: boolean;
 };
 
@@ -128,5 +129,8 @@ export function validateTemplateVariables(eventKey: CommunicationEventKey, ...co
   const allowed = new Set(COMMUNICATION_EVENT_REGISTRY[eventKey].variables);
   const used = new Set(content.flatMap((value) => extractTemplateVariables(value || "")));
   const unknown = [...used].filter((variable) => !allowed.has(variable));
-  return { valid: unknown.length === 0, unknown, used: [...used], allowed: [...allowed] };
+  const optional = new Set(COMMUNICATION_EVENT_REGISTRY[eventKey].optionalVariables || []);
+  const required = [...allowed].filter((variable) => !optional.has(variable));
+  const missing = required.filter((variable) => !used.has(variable));
+  return { valid: unknown.length === 0 && missing.length === 0, unknown, missing, required, used: [...used], allowed: [...allowed] };
 }
