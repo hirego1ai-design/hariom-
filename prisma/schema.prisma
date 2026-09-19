@@ -892,6 +892,9 @@ model CommunicationDelivery {
   correlationId     String?
   status            String   @default("PENDING")
   attemptCount      Int      @default(0)
+  nextAttemptAt     DateTime?
+  maxAttempts       Int      @default(3)
+  retryable         Boolean  @default(false)
   lastErrorCode     String?
   lastError         String?
   acceptedAt        DateTime?
@@ -903,6 +906,7 @@ model CommunicationDelivery {
 
   @@index([eventKey, channel, createdAt])
   @@index([status, createdAt])
+  @@index([status, retryable, nextAttemptAt])
   @@index([providerMessageId])
 }
 
