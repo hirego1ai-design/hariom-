@@ -4,7 +4,7 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, handleApiError, readValidatedJson, enforceRateLimit, getClientIp } from "@/lib/apiSecurity";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { dispatchAdminDirectCommunication, dispatchCommunication } from "@/lib/communications/dispatcher";
 import { buildPublicAppUrl } from "@/lib/env";
 
 const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
@@ -76,8 +76,8 @@ export async function POST(req: NextRequest) {
 
     const agreement = await prisma.commercialAgreement.findUnique({ where: { id: created.agreementId }, select: { clientEmail: true, clientPhone: true, companyName: true } });
     const invoiceVars = { company_name: agreement?.companyName || created.companyName, invoice_number: created.invoiceNumber, amount: created.totalAmount, currency: created.currency, due_date: created.dueDate, invoice_link: buildPublicAppUrl("/employer/billing/invoices") };
-    if (agreement?.clientEmail) await dispatchCommunication({ eventKey: "INVOICE_GENERATED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:email`, correlationId: created.id }).catch(() => null);
-    if (agreement?.clientPhone) await dispatchCommunication({ eventKey: "INVOICE_GENERATED", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:whatsapp`, correlationId: created.id }).catch(() => null);
+    if (agreement?.clientEmail) await dispatchAdminDirectCommunication({ eventKey: "INVOICE_GENERATED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:email`, correlationId: created.id }).catch(() => null);
+    if (agreement?.clientPhone) await dispatchAdminDirectCommunication({ eventKey: "INVOICE_GENERATED", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: invoiceVars, idempotencyKey: `invoice:${created.id}:generated:employer:whatsapp`, correlationId: created.id }).catch(() => null);
     return NextResponse.json({ success: true, message: "Invoice created successfully", invoice: created });
   } catch (error) {
     return handleApiError(error);

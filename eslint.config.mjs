@@ -15,11 +15,6 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "scratch/**",
     "hirego-app/**",
-    // One-off local migration helpers are not application source.
-    "fix_duplicates.js",
-    "fix_sections.js",
-    "fix_styles.js",
-    "refactor.js",
   ]),
   {
     files: ["src/**/*.{ts,tsx}"],

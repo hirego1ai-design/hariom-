@@ -120,3 +120,11 @@ test("employer team invitation uses narrowed strings with escapeHtml", () => {
   assert(source.includes("escapeHtml(session.name ?? \"A company administrator\")"));
 });
 
+test("admin invoices route dispatches consequential notifications using dispatchAdminDirectCommunication", () => {
+  const dispatcherSource = fs.readFileSync(new URL("../lib/communications/dispatcher.ts", import.meta.url), "utf8");
+  assert(dispatcherSource.includes("export async function dispatchAdminDirectCommunication"));
+  const invoicesSource = fs.readFileSync(new URL("../app/api/admin/invoices/route.ts", import.meta.url), "utf8");
+  assert(invoicesSource.includes("dispatchAdminDirectCommunication"));
+  assert(invoicesSource.includes('eventKey: "INVOICE_GENERATED"'));
+});
+

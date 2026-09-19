@@ -179,6 +179,10 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
   return dispatchCommunicationInternal(input);
 }
 
+export async function dispatchAdminDirectCommunication(input: Omit<DispatchCommunicationInput, "authorizationProof">) {
+  return dispatchCommunicationInternal(input, { allowConsequentialWithoutProof: true });
+}
+
 export async function dispatchAdminTestCommunication(input: Omit<DispatchCommunicationInput, "authorizationProof">) {
   return dispatchCommunicationInternal(input, { allowConsequentialWithoutProof: true });
 }
