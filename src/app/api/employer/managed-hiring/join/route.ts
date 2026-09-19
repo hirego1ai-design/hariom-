@@ -5,6 +5,7 @@ import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { authorizeBilling, confirmPphJoining, joiningSchema } from "@/lib/pph-billing";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { logAuditEvent } from "@/lib/auditLogger";
 
 async function actorFor(request: Request) {
   const session = await requireAuthenticatedSession(request);
@@ -21,6 +22,13 @@ export async function POST(request: Request) {
     const input = await readValidatedJson(request, joiningSchema);
     const result = await confirmPphJoining(input, actor);
     if (!result.duplicate) {
+      await logAuditEvent({
+        userId: actor.id,
+        companyId: result.placement.companyId,
+        action: "PPH_JOINING_RECORDED",
+        resource: `PphPlacement:${result.placement.id}`,
+        details: `Application ${input.applicationId} marked HIRED; CTC: ${input.annualCtc}; Joined: ${input.joinedAt}`,
+      });
       const application = await prisma.application.findUnique({ where: { id: input.applicationId }, include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
       const candidate = application?.candidateProfile.user;
       if (application && candidate) {
@@ -70,6 +78,13 @@ export async function PATCH(request: Request) {
       await tx.agreementEvent.create({ data: { agreementId: row.agreementId, performedBy: actor.id,
         eventType: `PPH_${body.action}`, notes: `Placement ${row.id}: ${body.reason}` } });
       return updated;
+    });
+    await logAuditEvent({
+      userId: actor.id,
+      companyId: placement.companyId,
+      action: `PPH_PLACEMENT_${body.action}`,
+      resource: `PphPlacement:${placement.id}`,
+      details: `Action: ${body.action}; Reason: ${body.reason}`,
     });
     return NextResponse.json({ success: true, placement });
   } catch (error) { return handleApiError(error); }
