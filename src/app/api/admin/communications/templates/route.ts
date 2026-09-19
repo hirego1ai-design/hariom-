@@ -16,7 +16,7 @@ const createSchema = z.object({
   providerTemplateId: z.string().trim().max(512).optional(),
   providerAlias: z.string().trim().max(512).optional(),
   subject: z.string().trim().max(200).optional(),
-  body: z.string().min(1).max(20000),
+  body: z.string().min(1).max(20000),\n  providerParameterOrder: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   enabled: z.boolean().default(false),
 }).strict();
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const variableCheck = validateTemplateVariables(body.eventKey, body.subject, body.body);
     if (variableCheck.unknown.length) throw new ApiError(`Unapproved variables: ${variableCheck.unknown.join(", ")}`, 422);
     if (variableCheck.missing.length) throw new ApiError(`Missing required variables: ${variableCheck.missing.join(", ")}`, 422);
-    if (body.channel === "WHATSAPP" && body.provider !== "META") throw new ApiError("WhatsApp templates must use META.", 422);
+    if (body.channel === "WHATSAPP" && body.provider !== "META") throw new ApiError("WhatsApp templates must use META.", 422);\n    if (body.channel === "WHATSAPP") {\n      const mapping = body.providerParameterOrder || [];\n      const unknownMappings = mapping.filter((key) => !definition.variables.includes(key));\n      if (unknownMappings.length) throw new ApiError(`Unapproved provider parameter mappings: ${unknownMappings.join(", ")}`, 422);\n      if (!mapping.length) throw new ApiError("WhatsApp templates require explicit provider parameter order.", 422);\n    }
     if (body.channel === "EMAIL" && body.provider !== "ZEPTOMAIL") throw new ApiError("Stored email templates must use ZEPTOMAIL.", 422);
     if (body.enabled && !body.providerAlias && !body.providerTemplateId) throw new ApiError("An enabled template requires a provider template mapping.", 422);
 
