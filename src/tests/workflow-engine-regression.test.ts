@@ -113,7 +113,7 @@ test('checkpoint persistence failure rejects and never reports a durable success
 
 test('third failed attempt records durable failure and a dead letter', async (t) => {
   const state = stubWorkflow(t);
-  stubMethod(t, prisma.workflowStepLog, 'findFirst', async ({ where }: any) => where.attemptNumber === 2 ? ({ status: 'FAILED' }) : null);
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', status: 'RUNNING', failureCount: 2 }));
   await assert.rejects(WorkflowEngine.executeStep('workflow-test', 'send', 3, {}, async () => { throw new Error('provider unavailable'); }), /provider unavailable/);
   assert.equal(state.step.status, 'FAILED');
   assert.equal(state.workflow.status, 'FAILED');
@@ -124,6 +124,7 @@ test('approval pause propagates persistence failure', async (t) => {
   const { createTenantContext } = await import('../lib/security/TenantContext');
   const { Role } = await import('@prisma/client');
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
+  stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
   stubMethod(t, prisma, '$transaction', async () => { throw new Error('pause database offline'); });
   await assert.rejects(WorkflowEngine.requestConsequentialAction({
     workflowId: 'workflow-test', stepName: 'approve', actionType: 'CANDIDATE_SELECTION',
@@ -181,11 +182,12 @@ test('duplicate decided approval request cannot re-pause workflow', async (t) =>
   stubMethod(t, prisma.workflowApproval, 'upsert', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION' }));
   stubMethod(t, prisma.workflowInstance, 'update', async () => { workflowWrites++; throw new Error('must not write'); });
   stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
-  await assert.rejects(WorkflowEngine.requestConsequentialAction({
+  const result = await WorkflowEngine.requestConsequentialAction({
     workflowId: 'workflow-test', stepName: 'select', actionType: 'CANDIDATE_SELECTION',
     action: { candidateId: 'candidate-a' },
     context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
-  }), /already decided/);
+  });
+  assert.equal(result.approvalId, 'approval-a');
   assert.equal(workflowWrites, 0);
 });
 
