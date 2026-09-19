@@ -128,7 +128,8 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     results.push({ name: 'Consequential approval/provider failure boundary regression', category: 'Phase 5 Agent Security', passed: false, message: error instanceof Error ? error.message : String(error) });
   }
 
-  await prisma.securityAuditOutboxEvent.deleteMany({ where: { companyId: securityCompany.id } });
+  const auditLogs = await prisma.auditLog.findMany({ where: { companyId: securityCompany.id }, select: { id: true } });
+  if (auditLogs.length) await prisma.securityAuditOutboxEvent.deleteMany({ where: { auditLogId: { in: auditLogs.map((row) => row.id) } } });
   await prisma.auditLog.deleteMany({ where: { companyId: securityCompany.id } });
   await prisma.company.delete({ where: { id: securityCompany.id } });
   return { results };
