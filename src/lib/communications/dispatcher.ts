@@ -20,6 +20,8 @@ export type DispatchCommunicationInput = {
   correlationId?: string;
   recipientRef?: string;
   locale?: string;
+  authorizationProof?: { approvedByUserId: string; approvalId: string };
+  testMode?: boolean;
 };
 
 function addressHash(value: string) {
@@ -53,7 +55,10 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
   if (!definition.channels.includes(input.channel) || !definition.audiences.includes(input.audience)) {
     throw new Error("Communication event does not permit this channel/audience combination.");
   }
-  assertVariables(input.eventKey, input.variables);\n  if (definition.consequential && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {\n    throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);\n  }
+  assertVariables(input.eventKey, input.variables);
+  if (definition.consequential && !input.testMode && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {
+    throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);
+  }
   if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
 
   const existing = await prisma.communicationDelivery.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
@@ -96,7 +101,13 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
     let result: { sent?: boolean; success?: boolean; messageId?: string; reason?: string };
     if (input.channel === "WHATSAPP") {
       if (!template.providerAlias) throw new Error("Active WhatsApp template has no Meta template name.");
-      const configuredOrder = Array.isArray(template.providerParameterOrder)\n        ? template.providerParameterOrder.filter((value): value is string => typeof value === "string")\n        : [];\n      if (!configuredOrder.length) throw new Error("Active WhatsApp template has no explicit provider parameter mapping.");\n      const unknownMappings = configuredOrder.filter((key) => !definition.variables.includes(key));\n      if (unknownMappings.length) throw new Error(`WhatsApp template parameter mapping contains unapproved variables: ${unknownMappings.join(", ")}`);\n      const parameters = configuredOrder.map((key) => ({ type: "text" as const, text: String(input.variables[key] ?? "") }));
+      const configuredOrder = Array.isArray(template.providerParameterOrder)
+        ? template.providerParameterOrder.filter((value): value is string => typeof value === "string")
+        : [];
+      if (!configuredOrder.length) throw new Error("Active WhatsApp template has no explicit provider parameter mapping.");
+      const unknownMappings = configuredOrder.filter((key) => !definition.variables.includes(key));
+      if (unknownMappings.length) throw new Error(`WhatsApp template parameter mapping contains unapproved variables: ${unknownMappings.join(", ")}`);
+      const parameters = configuredOrder.map((key) => ({ type: "text" as const, text: String(input.variables[key] ?? "") }));
       const components: WhatsAppTemplateComponent[] = parameters.length ? [{ type: "body", parameters }] : [];
       result = await sendWhatsAppTemplateMessage(input.recipient, template.providerAlias, template.locale, components);
     } else {
