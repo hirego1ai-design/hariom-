@@ -10,6 +10,7 @@ import {
 import { sendWhatsAppTemplateMessage, type WhatsAppTemplateComponent } from "@/lib/whatsapp";
 import { sendZeptoMailTemplate } from "@/lib/email";
 import { isWhatsAppMessagingAllowed } from "@/lib/whatsapp-identity";
+import { writeAgentApprovalAudit } from "@/lib/security/AgentApprovalAudit";
 
 type ConsequentialAuthorization = { approvedByUserId: string; approvalId: string; workflowId: string };
 
