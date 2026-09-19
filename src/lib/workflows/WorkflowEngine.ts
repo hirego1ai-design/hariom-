@@ -209,7 +209,10 @@ export class WorkflowEngine {
   static async listPendingApprovals(params: { context: TenantContext; limit?: number }) {
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
-    const where = params.context.userRole === Role.ADMIN ? { decision: 'PENDING' as const } : { decision: 'PENDING' as const, companyId: params.context.companyId };
+    const allowedActionTypes = Object.entries(APPROVAL_ROLE_POLICY).filter(([, roles]) => roles.includes(params.context.userRole)).map(([actionType]) => actionType);
+    const where: Prisma.WorkflowApprovalWhereInput = params.context.userRole === Role.ADMIN
+      ? { decision: 'PENDING' }
+      : { decision: 'PENDING', companyId: params.context.companyId, actionType: { in: allowedActionTypes } };
     return prisma.workflowApproval.findMany({
       where,
       orderBy: { requestedAt: 'asc' },
@@ -244,8 +247,10 @@ export class WorkflowEngine {
     if (workflow.status !== 'RUNNING') throw new Error(`Only RUNNING workflows can complete; current status is ${workflow.status}`);
     const activeSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'RUNNING' } });
     if (activeSteps > 0) throw new Error('Workflow cannot complete while steps are still RUNNING');
-    const failedSteps = await prisma.workflowStepLog.count({ where: { workflowInstanceId: workflow.id, status: 'FAILED' } });
-    if (failedSteps > 0) throw new Error('Workflow cannot complete with failed steps');
+    const stepLogs = await prisma.workflowStepLog.findMany({ where: { workflowInstanceId: workflow.id }, orderBy: [{ stepName: 'asc' }, { attemptNumber: 'desc' }] });
+    const latestByStep = new Map<string, (typeof stepLogs)[number]>();
+    for (const log of stepLogs) if (!latestByStep.has(log.stepName)) latestByStep.set(log.stepName, log);
+    if ([...latestByStep.values()].some((log) => log.status === 'FAILED')) throw new Error('Workflow cannot complete with an unresolved failed step');
     await WorkflowEngine.assertNoUnresolvedConsequentialActions(workflow.id);
     return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'RUNNING' }, data: { status: 'COMPLETED', updatedAt: new Date() } });
   }
@@ -259,6 +264,10 @@ export class WorkflowEngine {
     if (!APPROVAL_ROLE_POLICY[params.actionType]) throw new Error(`Unknown consequential approval action type: ${params.actionType}`);
     const digest = actionDigest(params.action);
     const approval = await prisma.$transaction(async (tx) => {
+      const existing = await tx.workflowApproval.findUnique({ where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } } });
+      if (existing && existing.actionType !== params.actionType) throw new Error('Approval action type does not match the persisted action');
+      if (existing?.decision === 'REJECTED') throw new Error('This exact consequential action was already rejected');
+      if (existing?.decision === 'APPROVED') return existing;
       const record = await tx.workflowApproval.upsert({
         where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } },
         update: {},
