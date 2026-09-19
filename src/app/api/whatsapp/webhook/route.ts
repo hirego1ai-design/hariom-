@@ -157,6 +157,11 @@ async function ingestWebhookEntries(body: any): Promise<void> {
       if (change?.field !== "messages") continue;
 
       const value = change?.value;
+      const statuses: any[] = value?.statuses ?? [];
+      for (const status of statuses) {
+        await reconcileOutboundStatus(status);
+      }
+
       const messages: any[] = value?.messages ?? [];
 
       for (const message of messages) {
@@ -217,4 +222,23 @@ async function ingestSingleMessage(message: any): Promise<void> {
 
   // 4. Enqueue into background worker queue for asynchronous processing.
   await enqueueWhatsAppInboundJob(eventId);
+}
+
+async function reconcileOutboundStatus(status: any): Promise<void> {
+  const providerMessageId = typeof status?.id === "string" ? status.id : "";
+  const providerStatus = typeof status?.status === "string" ? status.status.toLowerCase() : "";
+  if (!providerMessageId || !["sent", "delivered", "read", "failed"].includes(providerStatus)) return;
+
+  const { prisma } = await import("@/lib/prisma");
+  const existing = await prisma.communicationDelivery.findFirst({ where: { providerMessageId }, select: { id: true, status: true } });
+  if (!existing) return;
+
+  const now = new Date();
+  const data =
+    providerStatus === "read" ? { status: "READ", readAt: now, deliveredAt: now } :
+    providerStatus === "delivered" ? { status: "DELIVERED", deliveredAt: now } :
+    providerStatus === "sent" ? { status: existing.status === "PROCESSING" ? "ACCEPTED" : existing.status, acceptedAt: now } :
+    { status: "FAILED", failedAt: now, lastErrorCode: String(status?.errors?.[0]?.code ?? "META_DELIVERY_FAILED"), lastError: String(status?.errors?.[0]?.title ?? "Meta reported delivery failure.").slice(0, 1000) };
+
+  await prisma.communicationDelivery.update({ where: { id: existing.id }, data });
 }
