@@ -59,6 +59,52 @@ async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: 
   return { success: true, messageId: providerMessageId || messageId, provider: "ZEPTOMAIL" };
 }
 
+export interface ZeptoMailTemplateMessage {
+  to: string;
+  templateKey?: string;
+  templateAlias?: string;
+  mergeInfo: Record<string, string | number | boolean | null>;
+}
+
+async function sendZeptoMailStoredTemplate(
+  message: ZeptoMailTemplateMessage,
+  apiKey: string,
+  sender: string,
+  messageId: string
+): Promise<EmailDeliveryResult> {
+  if (!message.templateKey && !message.templateAlias) {
+    throw new EmailProviderDispatchError("ZeptoMail template key or alias is required.", false);
+  }
+  const response = await fetch("https://api.zeptomail.com/v1.1/email/template", {
+    method: "POST",
+    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
+    redirect: "error",
+    cache: "no-store",
+    body: JSON.stringify({
+      from: { address: sender },
+      to: [{ email_address: { address: message.to } }],
+      ...(message.templateKey ? { template_key: message.templateKey } : { template_alias: message.templateAlias }),
+      merge_info: message.mergeInfo,
+    }),
+  });
+  if (!response.ok) throw new EmailProviderDispatchError(`ZeptoMail template API returned ${response.status}`, response.status >= 400 && response.status < 500);
+  const body = await response.json().catch(() => null);
+  return { success: true, messageId: body?.data?.[0]?.message_id || body?.message_id || messageId, provider: "ZEPTOMAIL" };
+}
+
+export async function sendZeptoMailTemplate(message: ZeptoMailTemplateMessage): Promise<EmailDeliveryResult> {
+  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const provider = await getConfiguredEmailProvider("ZEPTOMAIL");
+  if (!provider) return { success: false, messageId, provider: "ZEPTOMAIL" };
+  try {
+    return await sendZeptoMailStoredTemplate(message, provider.apiKey, provider.fromEmail, messageId);
+  } catch (error) {
+    console.error("[Email Dispatch] ZeptoMail template delivery failed", error);
+    return { success: false, messageId, provider: "ZEPTOMAIL" };
+  }
+}
+
 export async function sendEmail(
   message: EmailMessage,
   options?: { provider?: EmailProvider; allowFallback?: boolean }
