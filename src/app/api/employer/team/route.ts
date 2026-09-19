@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentSession, type UserSession } from "@/lib/auth";
+import { getCurrentSession, revokeAllUserSessions, type UserSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { sendEmail } from "@/lib/email";
@@ -310,17 +310,27 @@ export async function DELETE(req: NextRequest) {
         throw new ApiError("Cannot remove the last remaining company team member.", 400);
       }
 
-      await prisma.employerProfile.delete({
-        where: { id: targetId },
+      const newSessionVersion = await prisma.$transaction(async (tx) => {
+        await tx.employerProfile.delete({ where: { id: targetId } });
+        const updatedUser = await tx.user.update({
+          where: { id: member.userId },
+          data: { sessionVersion: { increment: 1 } },
+          select: { sessionVersion: true },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            companyId: member.companyId,
+            action: "TEAM_MEMBER_REMOVED",
+            resource: `EmployerProfile:${targetId}`,
+            details: `Removed team member ${member.user?.email || targetId}`,
+            ipAddress: req.headers.get("x-forwarded-for") || undefined,
+          },
+        });
+        return updatedUser.sessionVersion;
       });
-
-      await logAuditEvent({
-        userId: session.id,
-        companyId: member.companyId,
-        action: "TEAM_MEMBER_REMOVED",
-        resource: `EmployerProfile:${targetId}`,
-        details: `Removed team member ${member.user?.email || targetId}`,
-        ipAddress: req.headers.get("x-forwarded-for") || undefined,
+      await revokeAllUserSessions(member.userId, newSessionVersion).catch((error) => {
+        console.error("TEAM_MEMBER_SESSION_CACHE_REFRESH_FAILED", { userId: member.userId, error });
       });
 
       return NextResponse.json({
