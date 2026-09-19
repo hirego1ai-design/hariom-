@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getOptionalEnv, requireProductionEnv } from "@/lib/env";
 
@@ -56,6 +56,7 @@ function iceServers() {
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "interview_room_poll", 240, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     const roomId = new URL(req.url).searchParams.get("roomId");
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "interview_room_signal", 180, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     const body = await readValidatedJson(req, roomActionSchema, 64 * 1024);
