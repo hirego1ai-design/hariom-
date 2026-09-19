@@ -4,7 +4,7 @@ import { DlqManager } from '@/lib/reliability/DlqManager';
 import { BudgetManager } from '@/lib/governance/BudgetManager';
 import { WorkflowEngine } from '@/lib/workflows/WorkflowEngine';
 import { prisma } from '@/lib/prisma';
-import { DeadLetterJob } from '@prisma/client';
+import { DeadLetterJob, Role } from '@prisma/client';
 
 // In-Memory Stubs for Worker Crash & Outbox Recovery Testing
 const dbOutbox = new Map<string, any>();
