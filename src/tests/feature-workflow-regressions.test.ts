@@ -87,3 +87,19 @@ test("interview rejection remains a persisted two-step consequential action", ()
   assert(ui.includes("Confirm rejection"));
   assert(ui.includes("confirmApproval: true"));
 });
+
+
+test("employer subscription endpoint stays tenant scoped and rate limited", () => {
+  const source = fs.readFileSync(new URL("../app/api/employer/subscribe/route.ts", import.meta.url), "utf8");
+  assert(source.includes('enforceRateLimit(request, "employer_subscription_get", 60, 60_000)'));
+  assert(source.includes('session.role !== "EMPLOYER"'));
+  assert(source.includes("getSessionCompany(session)"));
+  assert(!source.includes('session.role !== "EMPLOYER" && session.role !== "ADMIN"'));
+});
+
+test("managed hiring placement operations stay bounded and rate limited", () => {
+  const source = fs.readFileSync(new URL("../app/api/employer/managed-hiring/join/route.ts", import.meta.url), "utf8");
+  assert(source.includes('enforceRateLimit(request, "employer_managed_hiring_join_get", 60, 60000)'));
+  assert(source.includes('enforceRateLimit(request, "employer_managed_hiring_join_action", 10, 60000)'));
+  assert(source.includes("readValidatedJson(request, actionSchema, 8 * 1024)"));
+});
