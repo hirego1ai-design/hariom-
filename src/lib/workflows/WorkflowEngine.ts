@@ -149,6 +149,8 @@ export class WorkflowEngine {
       prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'REJECTED' } }),
     ]);
     if (rejected > 0) throw new Error('Workflow has a rejected consequential action');
+    const invalidApproval = await prisma.workflowApproval.findFirst({ where: { workflowInstanceId: workflow.id, decision: 'APPROVED', OR: [{ decidedBy: null }, { decidedAt: null }, { decidedByRole: null }] }, select: { id: true } });
+    if (invalidApproval) throw new Error('Workflow contains incomplete approval evidence');
     if (pending > 0) throw new Error('Workflow still has pending consequential approvals');
     const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'APPROVED', consumedAt: null } });
     if (unconsumed > 0) throw new Error('Approved consequential actions must be consumed before workflow resume');
@@ -326,6 +328,8 @@ export class WorkflowEngine {
       where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: actionDigest(params.action) } },
     });
     if (!approval || approval.decision !== 'APPROVED' || !approval.decidedBy || !approval.decidedAt) throw new Error('Persisted human approval is required for this exact action');
+    const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
+    if (!requiredRoles || !approval.decidedByRole || !requiredRoles.includes(approval.decidedByRole)) throw new Error('Persisted approval was not granted by an authorized role');
     const consumed = await prisma.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt: new Date() } });
     if (consumed.count !== 1) throw new Error('Approval has already been consumed');
     const pending = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING' } });
