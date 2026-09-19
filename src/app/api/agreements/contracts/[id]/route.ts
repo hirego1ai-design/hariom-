@@ -3,6 +3,7 @@ import { z } from "zod";
 import { agreementsDb } from "@/lib/agreements-db";
 import { assertCompanyIdAccess, requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const agreementUpdateSchema = z.object({
   companyName: z.string().min(1).max(200).optional(),
@@ -129,6 +130,8 @@ export async function POST(
         return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
       }
 
+      await dispatchCommunication({ eventKey: "AGREEMENT_ACCEPTED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id }, idempotencyKey: `agreement:${agreement.id}:accepted:employer:email`, correlationId: agreement.id, recipientRef: session.id }).catch(() => null);
+
       return NextResponse.json({
         success: true,
         message: "Commercial agreement successfully accepted and activated.",
@@ -172,6 +175,9 @@ export async function POST(
       if (!updated) {
         return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
       }
+
+      await dispatchCommunication({ eventKey: "AGREEMENT_SENT", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id, agreement_link: `/employer/agreements/${agreement.id}` }, idempotencyKey: `agreement:${agreement.id}:sent:employer:email`, correlationId: agreement.id }).catch(() => null);
+      if (agreement.clientPhone) await dispatchCommunication({ eventKey: "AGREEMENT_SENT", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: { company_name: agreement.companyName, agreement_reference: agreement.id, agreement_link: `/employer/agreements/${agreement.id}` }, idempotencyKey: `agreement:${agreement.id}:sent:employer:whatsapp`, correlationId: agreement.id }).catch(() => null);
 
       return NextResponse.json({
         success: true,
