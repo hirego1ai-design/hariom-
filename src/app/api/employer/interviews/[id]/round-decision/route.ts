@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]) });
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await readValidatedJson(req, schema);
     const interview = await prisma.interview.findUnique({
       where: { id },
-      include: { application: { include: { job: true } }, roundProgress: { include: { round: true, feedbacks: true } } },
+      include: { application: { include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } }, roundProgress: { include: { round: true, feedbacks: true } } },
     });
     if (!interview?.roundProgress) throw new ApiError("Configured interview round not found.", 404);
     if (session.role !== "ADMIN") {
@@ -61,6 +62,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return { action: "PROCEED" as const, nextRound: { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } };
     });
     await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
+    const candidate = interview.application.candidateProfile.user;
+    const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
+    const eventKey = result.action === "REJECT" ? "APPLICATION_REJECTED" : result.action === "PROCEED" ? "APPLICATION_SHORTLISTED" : null;
+    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }
