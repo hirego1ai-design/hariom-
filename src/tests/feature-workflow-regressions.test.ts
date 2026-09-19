@@ -135,3 +135,18 @@ test("team removal rotates sessions and emits durable security audit", () => {
   assert(source.includes("revokeAllUserSessions(member.userId"));
   assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
+
+
+test("candidate collaboration endpoints stay bounded and audited", () => {
+  const notes = fs.readFileSync(new URL("../app/api/employer/candidates/[id]/notes/route.ts", import.meta.url), "utf8");
+  const tags = fs.readFileSync(new URL("../app/api/employer/candidates/[id]/tags/route.ts", import.meta.url), "utf8");
+  const collections = fs.readFileSync(new URL("../app/api/employer/candidate-collections/route.ts", import.meta.url), "utf8");
+  assert(notes.includes('enforceRateLimit(req,"employer_candidate_notes_post",30,60_000)'));
+  assert(notes.includes("readValidatedJson(req,noteSchema,8*1024)"));
+  assert(notes.includes("CANDIDATE_NOTE_CREATED"));
+  assert(tags.includes('enforceRateLimit(req,"employer_candidate_tags_delete",30,60_000)'));
+  assert(tags.includes("readValidatedJson(req,schema,4*1024)"));
+  assert(tags.includes("CANDIDATE_TAG_REMOVED"));
+  assert(collections.includes("readValidatedJson(req,updateSchema,64*1024)"));
+  assert(collections.includes("CANDIDATE_COLLECTION_UPDATED"));
+});
