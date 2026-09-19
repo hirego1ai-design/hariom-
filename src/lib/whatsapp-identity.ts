@@ -316,3 +316,19 @@ export async function markEventProcessed(eventId: string, error?: string): Promi
     },
   });
 }
+
+
+export async function setWhatsAppConsent(waId: string, status: "OPTED_IN" | "OPTED_OUT", source: string): Promise<void> {
+  const now = new Date();
+  await prisma.whatsAppContact.update({
+    where: { waId },
+    data: status === "OPTED_IN"
+      ? { optInStatus: status, optInAt: now, optOutAt: null, consentSource: source.slice(0, 100) }
+      : { optInStatus: status, optOutAt: now, consentSource: source.slice(0, 100) },
+  });
+  await logAuditEvent({
+    action: status === "OPTED_IN" ? "WHATSAPP_CONSENT_OPTED_IN" : "WHATSAPP_CONSENT_OPTED_OUT",
+    resource: "WhatsAppContact",
+    details: `WhatsApp messaging consent changed via ${source.slice(0, 100)}.`,
+  });
+}
