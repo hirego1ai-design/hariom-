@@ -2,9 +2,9 @@ name: Security checks
 
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main, master, phase6-production-launch-readiness]
   push:
-    branches: [main, master]
+    branches: [main, master, phase6-production-launch-readiness]
   schedule:
     - cron: "23 3 * * 1"
   workflow_dispatch:

@@ -59,13 +59,17 @@ async function testLiveFlow() {
 
   // 5. Bookmark & Saved Jobs CRUD
   console.log(`\n[5/6] Testing Saved Jobs CRUD...`);
+  const jobsRes = await fetch(`${baseUrl}/api/jobs/search?limit=1`);
+  const jobsJson = await jobsRes.json().catch(() => ({ jobs: [] }));
+  const validJobId = jobsJson.jobs?.[0]?.id || "a0000000-0000-4000-8000-000000000101";
+
   const saveRes = await fetch(`${baseUrl}/api/candidate/saved-jobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ jobId: "job-ai-101" }),
+    body: JSON.stringify({ jobId: validJobId }),
   });
-  const saveJson = await saveRes.json();
-  console.log(`Save Job Status: ${saveRes.status} | Saved: ${saveJson.success}`);
+  const saveJson = await saveRes.json().catch(() => ({}));
+  console.log(`Save Job Status: ${saveRes.status} | Saved: ${saveJson.success ?? false}`);
 
   const getSavedRes = await fetch(`${baseUrl}/api/candidate/saved-jobs`, {
     headers: { Cookie: cookie },
@@ -76,16 +80,19 @@ async function testLiveFlow() {
   // 6. Employer Registration, Login & Company Profile
   const empEmail = `employer.${Date.now()}@hirego.ai`;
   console.log(`\n[6/6] Testing Employer Registration, Login & Company Profile: ${empEmail}...`);
-  await fetch(`${baseUrl}/api/auth/register`, {
+  const empRegRes = await fetch(`${baseUrl}/api/auth/employer-register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      companyName: "Acme Talent Corp",
       email: empEmail,
+      industry: "Technology",
+      companySize: "10-50",
       password: "StrongPassword123!",
-      name: "Acme Talent Recruiter",
-      role: "EMPLOYER",
+      confirmPassword: "StrongPassword123!",
     }),
   });
+  console.log(`Employer Register Status: ${empRegRes.status}`);
 
   const empOtpRes = await fetch(`${baseUrl}/api/auth/verify-otp`, {
     method: "POST",
@@ -103,6 +110,9 @@ async function testLiveFlow() {
   });
   const companyJson = await companyRes.json();
   console.log(`Company Profile Status: ${companyRes.status} | Company: ${companyJson.company?.name || "HireGo AI"}`);
+  if (companyRes.status !== 200) {
+    throw new Error(`Expected company status 200, got ${companyRes.status}`);
+  }
 
 
   console.log("\n==================================================");
