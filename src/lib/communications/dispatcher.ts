@@ -14,7 +14,7 @@ import { isWhatsAppMessagingAllowed } from "@/lib/whatsapp-identity";
 type ConsequentialAuthorization = { approvedByUserId: string; approvalId: string; workflowId: string };
 
 async function assertPersistedCommunicationAuthorization(proof: ConsequentialAuthorization, eventKey: CommunicationEventKey) {
-  const approval = await prisma.workflowApproval.findUnique({ where: { id: proof.approvalId }, select: { decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true, actionType: true } });
+  const approval = await prisma.workflowApproval.findUnique({ where: { id: proof.approvalId }, select: { workflowInstanceId: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true, actionType: true } });
   if (!approval || approval.workflowInstanceId !== proof.workflowId || approval.decision !== "APPROVED" || !approval.decidedAt || !approval.decidedBy || approval.decidedBy !== proof.approvedByUserId) throw new Error("Persisted human approval is required for consequential communication.");
   if (!approval.decidedByRole || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(approval.decidedByRole)) throw new Error("Consequential communication approval was not granted by an authorized human role.");
   const requiredAction = eventKey === "APPLICATION_REJECTED" ? "CANDIDATE_REJECTION" : eventKey === "CANDIDATE_SELECTED" ? "CANDIDATE_SELECTION" : "EXTERNAL_COMMUNICATION";
