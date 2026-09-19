@@ -1773,6 +1773,9 @@ model WhatsAppContact {
 
   optInStatus String @default("UNKNOWN")
   // UNKNOWN | OPTED_IN | OPTED_OUT
+  optInAt     DateTime?
+  optOutAt    DateTime?
+  consentSource String?
 
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @updatedAt
