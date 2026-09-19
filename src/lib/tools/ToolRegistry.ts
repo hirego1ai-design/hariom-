@@ -1,6 +1,7 @@
 import { z, ZodSchema } from 'zod';
 import { TenantContext } from '@/lib/security/TenantContext';
 import { WorkflowEngine } from '@/lib/workflows/WorkflowEngine';
+import { logCriticalAuditEvent } from '@/lib/auditLogger';
 
 export interface ToolExecutionContext {
   tenantContext: TenantContext; correlationId: string; executionId: string; agentId: string;
@@ -34,18 +35,40 @@ export class ToolRegistry {
   public get(name: string): ToolDefinition | undefined { return this.tools.get(name); }
 
   public async execute(agentId: string, toolName: string, params: unknown, context: ToolExecutionContext): Promise<unknown> {
+    const isConsequential = CONSEQUENTIAL_AGENT_TOOLS.has(toolName);
+    const auditDangerousAttempt = async (reason: string) => {
+      if (!isConsequential) return;
+      await logCriticalAuditEvent({
+        userId: context.tenantContext.userId,
+        companyId: context.tenantContext.companyId ?? undefined,
+        action: 'AGENT_CONSEQUENTIAL_TOOL_BLOCKED',
+        resource: `AgentTool:${toolName}`,
+        details: JSON.stringify({ agentId, executionId: context.executionId, correlationId: context.correlationId, reason }),
+      });
+    };
     const tool = this.tools.get(toolName);
-    if (!tool) throw new ToolNotFoundError(`Tool '${toolName}' not found.`);
-    if (context.agentId !== agentId) throw new PermissionDeniedError('Agent execution context mismatch.');
+    if (!tool) {
+      await auditDangerousAttempt('tool-not-registered');
+      throw new ToolNotFoundError(`Tool '${toolName}' not found.`);
+    }
+    if (context.agentId !== agentId) {
+      await auditDangerousAttempt('agent-context-mismatch');
+      throw new PermissionDeniedError('Agent execution context mismatch.');
+    }
 
     const permissions = AGENT_PERMISSIONS[agentId];
     if (!permissions) throw new PermissionDeniedError(`Agent '${agentId}' is not configured in permissions.`);
 
-    const isConsequential = CONSEQUENTIAL_AGENT_TOOLS.has(toolName);
     // Consequential tools stay denied to agents unless the policy explicitly
     // grants the tool AND the exact workflow action has durable human approval.
-    if (permissions.deniedTools.includes(toolName)) throw new PermissionDeniedError(`Agent '${agentId}' is explicitly denied from using tool '${toolName}'.`);
-    if (!permissions.allowedTools.includes(toolName)) throw new PermissionDeniedError(`Agent '${agentId}' is not allowed to use tool '${toolName}'.`);
+    if (permissions.deniedTools.includes(toolName)) {
+      await auditDangerousAttempt('explicitly-denied');
+      throw new PermissionDeniedError(`Agent '${agentId}' is explicitly denied from using tool '${toolName}'.`);
+    }
+    if (!permissions.allowedTools.includes(toolName)) {
+      await auditDangerousAttempt('not-allowlisted');
+      throw new PermissionDeniedError(`Agent '${agentId}' is not allowed to use tool '${toolName}'.`);
+    }
 
     const parsedInputResult = tool.inputSchema.safeParse(params);
     if (!parsedInputResult.success) throw new ToolValidationError(`Invalid input for tool '${toolName}': ${parsedInputResult.error.message}`);
@@ -59,6 +82,7 @@ export class ToolRegistry {
     // approval here before the handler succeeds can strand an approved action
     // after a provider failure.
     if (isConsequential) {
+      await auditDangerousAttempt('requires-approved-action-executor');
       throw new PermissionDeniedError(`Consequential tool '${toolName}' requires the durable approved-action executor and cannot run through generic agent dispatch.`);
     }
 
