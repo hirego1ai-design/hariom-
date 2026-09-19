@@ -17,8 +17,8 @@ jobs:
     env:
       # Prisma validate/generate require both datasource variables even though
       # Phase 5 offline verification must not connect to a live database.
-      DATABASE_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_ci_phase5
-      DIRECT_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_ci_phase5
+      DATABASE_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_test_phase5
+      DIRECT_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_test_phase5
       # Explicitly authorize only this isolated CI test database for the suite guard.
       HIREGO_TEST_DATABASE: '1'
     timeout-minutes: 20
