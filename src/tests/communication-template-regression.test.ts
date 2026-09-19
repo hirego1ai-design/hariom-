@@ -22,15 +22,24 @@ test("template parser extracts unique merge variables", () => {
 });
 
 test("approved event variables pass", () => {
-  const result = validateTemplateVariables("INTERVIEW_SCHEDULED", "Interview with {{company_name}}", "{{candidate_name}} for {{job_title}} at {{interview_time}}");
+  const result = validateTemplateVariables("INTERVIEW_SCHEDULED", "Interview with {{company_name}}", "{{candidate_name}} for {{job_title}} on {{interview_date}} at {{interview_time}} {{timezone}} via {{interview_mode}}: {{interview_link}}");
   assert.equal(result.valid, true);
   assert.deepEqual(result.unknown, []);
 });
 
 test("unknown variables fail closed", () => {
-  const result = validateTemplateVariables("INTERVIEW_SCHEDULED", undefined, "{{candidate_name}} {{secret_token}}");
+  const result = validateTemplateVariables("INTERVIEW_SCHEDULED", undefined, "{{candidate_name}} {{company_name}} {{job_title}} {{interview_date}} {{interview_time}} {{timezone}} {{interview_mode}} {{interview_link}} {{secret_token}}");
   assert.equal(result.valid, false);
   assert.deepEqual(result.unknown, ["secret_token"]);
+});
+
+test("missing required variables fail closed", () => {
+  const result = validateTemplateVariables("JOB_OPPORTUNITY", "Hi {{candidate_name}}", "{{job_title}}");
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.unknown, []);
+  assert(result.missing.includes("company_name"));
+  assert(result.missing.includes("location"));
+  assert(result.missing.includes("job_link"));
 });
 
 test("agreement and invoice actions remain consequential", () => {
