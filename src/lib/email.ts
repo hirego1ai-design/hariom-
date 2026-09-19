@@ -102,7 +102,8 @@ export async function sendZeptoMailTemplate(message: ZeptoMailTemplateMessage): 
     return await sendZeptoMailStoredTemplate(message, provider.apiKey, provider.fromEmail, messageId);
   } catch (error) {
     console.error("[Email Dispatch] ZeptoMail template delivery failed", error);
-    return { success: false, messageId, provider: "ZEPTOMAIL" };
+    const reason = error instanceof EmailProviderDispatchError ? error.message : "ZeptoMail template delivery failed with an ambiguous provider error.";
+    return { success: false, messageId, provider: "ZEPTOMAIL", reason };
   }
 }
 
