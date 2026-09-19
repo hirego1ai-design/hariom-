@@ -4,6 +4,8 @@ import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
 import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { getSessionCompany } from "@/lib/routeAuthorization";
 
 
 async function resolveCompanyId(userId: string) {
