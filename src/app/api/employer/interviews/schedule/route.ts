@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { sendEmail } from "@/lib/email";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const schema = z.object({
   applicationId: z.string().min(1),
@@ -69,11 +68,26 @@ export async function POST(request: NextRequest) {
       return created;
     });
     await prisma.notification.create({ data: { userId: application.candidateProfile.userId, title: `${round.name} interview scheduled`, message: `Your ${mode.toLowerCase()} interview is scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`, type: "INTERVIEW" } }).catch(() => undefined);
-    if (body.notifyEmail && application.candidateProfile.user?.email) {
-      await sendEmail({ to: application.candidateProfile.user.email, subject: "HireGo AI interview scheduled", html: `<p>Your ${round.name} interview is scheduled for <strong>${new Date(body.scheduledAt).toLocaleString()}</strong>.</p><p>Mode: ${mode}</p>${mode === "OFFLINE" ? `<p>Address: ${body.address}<br/>Contact: ${body.contactNumber}</p>` : `<p>Join from your HireGo interview portal.</p>`}` }).catch(() => undefined);
+    const candidate = application.candidateProfile.user;
+    const scheduled = new Date(body.scheduledAt);
+    const communicationVariables = {
+      candidate_name: candidate?.name || "Candidate",
+      company_name: "HireGo employer",
+      job_title: application.job.title,
+      interview_date: scheduled.toLocaleDateString(),
+      interview_time: scheduled.toLocaleTimeString(),
+      timezone: "local",
+      interview_mode: mode,
+      interview_link: mode === "ONLINE" ? roomUrl : body.address || "",
+    };
+    let emailDelivery = null;
+    if (body.notifyEmail && candidate?.email) {
+      emailDelivery = await dispatchCommunication({ eventKey: "INTERVIEW_SCHEDULED", channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: communicationVariables, idempotencyKey: `interview:${interview.id}:candidate:email:scheduled`, correlationId: interview.id, recipientRef: candidate.id }).catch(() => null);
     }
-    const whatsapp = body.notifyWhatsapp && application.candidateProfile.user?.phoneNumber ? await sendWhatsAppMessage(application.candidateProfile.user.phoneNumber, `HireGo AI ${round.name} interview scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`) : { sent: false, reason: body.notifyWhatsapp ? "Candidate phone number is missing." : "Not selected." };
-    return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
+    const whatsapp = body.notifyWhatsapp && candidate?.phoneNumber
+      ? await dispatchCommunication({ eventKey: "INTERVIEW_SCHEDULED", channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: communicationVariables, idempotencyKey: `interview:${interview.id}:candidate:whatsapp:scheduled`, correlationId: interview.id, recipientRef: candidate.id }).catch(() => null)
+      : null;
+    return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: emailDelivery, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
