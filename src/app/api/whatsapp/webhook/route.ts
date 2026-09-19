@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { persistInboundEvent, ensureWhatsAppContact, setWhatsAppConsent } from "@/lib/whatsapp-identity";
+import { persistInboundEvent, ensureWhatsAppContact, isWhatsAppOptOutCommand, setWhatsAppConsent } from "@/lib/whatsapp-identity";
 import { isPlaceholderSecret, validateWhatsAppConfig } from "@/lib/whatsapp";
 import { checkWaRateLimit } from "@/lib/whatsapp-rate-limiter";
 import { deferRateLimitedWhatsAppEvent, enqueueWhatsAppInboundJob } from "@/lib/whatsapp-queue";
