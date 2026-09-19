@@ -52,7 +52,7 @@ export async function PUT(request: NextRequest) {
   try {
     await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
-    const body = await readValidatedJson(request, profileUpdateSchema);
+    const body = await readValidatedJson(request, profileUpdateSchema, 64 * 1024);
     const existing = await prisma.candidateProfile.findUnique({ where: { userId: session.id } });
     const existingPreferences = existing?.preferences && typeof existing.preferences === "object" && !Array.isArray(existing.preferences) ? existing.preferences as Record<string, unknown> : {};
     const preferences = body.preferences !== undefined || body.linkedinUrl ? { ...existingPreferences, ...(body.preferences ?? {}), ...(body.linkedinUrl ? { linkedinUrl: body.linkedinUrl } : {}) } : undefined;
