@@ -847,6 +847,64 @@ model EmailDeliveryConfig {
   updatedAt                DateTime @updatedAt
 }
 
+model CommunicationTemplate {
+  id                String   @id @default(uuid())
+  eventKey          String
+  channel           String
+  audience          String
+  name              String
+  locale            String   @default("en")
+  status            String   @default("DRAFT")
+  provider          String?
+  providerTemplateId String?
+  providerAlias     String?
+  subject           String?
+  body              String
+  variableSchema    Json     @default("{}")
+  buttons           Json?
+  enabled           Boolean  @default(false)
+  version           Int      @default(1)
+  createdById       String?
+  updatedById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  deliveries CommunicationDelivery[]
+
+  @@unique([eventKey, channel, audience, locale, version])
+  @@index([eventKey, channel, enabled])
+  @@index([channel, status, updatedAt])
+}
+
+model CommunicationDelivery {
+  id                String   @id @default(uuid())
+  templateId        String?
+  template          CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  eventKey          String
+  channel           String
+  audience          String
+  recipientRef      String?
+  recipientAddressHash String?
+  provider          String?
+  providerMessageId String?
+  idempotencyKey    String   @unique
+  correlationId     String?
+  status            String   @default("PENDING")
+  attemptCount      Int      @default(0)
+  lastErrorCode     String?
+  lastError         String?
+  acceptedAt        DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([eventKey, channel, createdAt])
+  @@index([status, createdAt])
+  @@index([providerMessageId])
+}
+
 model AiExecutionLog {
   id               String   @id @default(uuid())
   task             String
