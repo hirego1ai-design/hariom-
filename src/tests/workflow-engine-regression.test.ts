@@ -32,6 +32,7 @@ function stubWorkflow(t: TestContext, failCompletionWrite = false) {
     return workflow;
   });
   stubMethod(t, prisma.deadLetterJob, 'create', async ({ data }: any) => { deadLetters.push(data); return data; });
+  stubMethod(t, prisma.deadLetterJob, 'upsert', async ({ create, update }: any) => { const data = { ...(deadLetters[0] as any ?? {}), ...create, ...update }; if (deadLetters.length) deadLetters[0] = data; else deadLetters.push(data); return data; });
   stubMethod(t, prisma, '$transaction', async (run: any) => {
     const oldStep = step ? { ...step } : null;
     const oldWorkflow = { ...workflow };
