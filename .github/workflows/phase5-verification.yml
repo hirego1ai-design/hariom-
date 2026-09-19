@@ -1,6 +1,8 @@
 name: Phase 5 Verification
 
 on:
+  push:
+    branches: [phase5-release-operations-hardening]
   workflow_dispatch:
   pull_request:
     branches: [main]
