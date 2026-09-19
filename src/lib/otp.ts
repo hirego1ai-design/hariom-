@@ -60,15 +60,18 @@ export async function generateAndSendOtp(
       throw new OtpError("Too many verification codes requested. Please try again later.", 429);
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.otpVerification.updateMany({
-        where: { email: normalizedEmail, type, verified: false },
-        data: { verified: true },
-      });
-      await tx.otpVerification.create({
-        data: { email: normalizedEmail, otp, type, expiresAt },
-      });
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.otpVerification.updateMany({
+          where: { email: normalizedEmail, type, verified: false },
+          data: { verified: true },
+        });
+        await tx.otpVerification.create({
+          data: { email: normalizedEmail, otp, type, expiresAt },
+        });
+      },
+      { maxWait: 10_000, timeout: 20_000 }
+    );
   } catch (error) {
     if (error instanceof OtpError || process.env.NODE_ENV === "production") {
       if (error instanceof OtpError) throw error;

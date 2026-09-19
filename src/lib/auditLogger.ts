@@ -50,20 +50,23 @@ export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp
     // The audit row and the provider-neutral SIEM delivery envelope must be
     // committed together. A future forwarder can fail independently without
     // losing the source event, while a failed enqueue rolls this write back.
-    const saved = await prisma.$transaction(async (tx) => {
-      const auditLog = await tx.auditLog.create({
-        data: {
-          userId: isRealUserId ? entry.userId! : null,
-          companyId: entry.companyId || null,
-          action: entry.action,
-          resource: entry.resource,
-          ipAddress: entry.ipAddress || "unknown",
-          details: actorDetail,
-        },
-      });
-      await enqueueSecurityAuditEvent(tx, auditLog, entry.userId);
-      return auditLog;
-    });
+    const saved = await prisma.$transaction(
+      async (tx) => {
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: isRealUserId ? entry.userId! : null,
+            companyId: entry.companyId || null,
+            action: entry.action,
+            resource: entry.resource,
+            ipAddress: entry.ipAddress || "unknown",
+            details: actorDetail,
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, entry.userId);
+        return auditLog;
+      },
+      { maxWait: 10_000, timeout: 20_000 }
+    );
 
     const result: AuditLogEntry = {
       id: saved.id,

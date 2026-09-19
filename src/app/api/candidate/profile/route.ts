@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
         update: { ...(body.headline !== undefined ? { headline: body.headline } : {}), ...(body.bio !== undefined ? { bio: body.bio } : {}), ...(body.location !== undefined ? { location: body.location } : {}), ...(body.skills !== undefined ? { skills: body.skills } : {}), ...(body.experienceYears !== undefined ? { experienceYears: body.experienceYears } : {}), ...(body.resumeUrl !== undefined ? { resumeUrl: body.resumeUrl } : {}), ...(body.education !== undefined ? { education: toNullableJson(body.education) } : {}), ...(body.experience !== undefined ? { experience: toNullableJson(body.experience) } : {}), ...(preferences !== undefined ? { preferences: toNullableJson(preferences) } : {}) },
         create: { userId: session.id, headline: body.headline ?? "", bio: body.bio ?? "", location: body.location ?? "", skills: body.skills ?? [], experienceYears: body.experienceYears ?? 0, resumeUrl: body.resumeUrl ?? null, education: toNullableJson(body.education ?? []), experience: toNullableJson(body.experience ?? []), preferences: toNullableJson(preferences ?? {}) },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
     return NextResponse.json({ success: true, profile });
   } catch (error) { return handleApiError(error); }
 }
