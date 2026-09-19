@@ -53,7 +53,7 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
   if (!definition.channels.includes(input.channel) || !definition.audiences.includes(input.audience)) {
     throw new Error("Communication event does not permit this channel/audience combination.");
   }
-  assertVariables(input.eventKey, input.variables);
+  assertVariables(input.eventKey, input.variables);\n  if (definition.consequential && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {\n    throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);\n  }
   if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
 
   const existing = await prisma.communicationDelivery.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
