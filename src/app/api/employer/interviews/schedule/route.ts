@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
     const roomId = `room-${crypto.randomUUID()}`;
     const roomUrl = mode === "ONLINE" ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}` : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
-    const candidateInterviewUrl = mode === "ONLINE" ? buildPublicAppUrl(`/candidate/interview?roomId=${encodeURIComponent(roomId)}`) : body.address || "";
+    const candidateInterviewUrl = mode === "ONLINE" ? buildPublicAppUrl(`/interviews/room/${encodeURIComponent(roomId)}`) : body.address || "";
     const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
       const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
