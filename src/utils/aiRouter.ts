@@ -53,6 +53,19 @@ const promptResponseCache = new Map<string, { resultText: string; timestamp: num
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache TTL
 
 const executionLogsStore: AiExecutionLog[] = [];
+
+const SECRET_PATTERNS: RegExp[] = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
+  /\bsk-[A-Za-z0-9_-]{20,}\b/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/,
+];
+
+function assertNoSecretMaterial(value: string, boundary: 'prompt' | 'output'): void {
+  if (SECRET_PATTERNS.some((pattern) => pattern.test(value))) {
+    throw new Error(`AI ${boundary} blocked because it contains secret-like credential material`);
+  }
+}
 const allowLocalAiCache = process.env.NODE_ENV !== "production";
 
 let openaiClient: OpenAI | null = null;
@@ -74,6 +87,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
 }> {
   const startTime = Date.now();
   const primaryProvider = request.primaryProvider || "openai";
+  assertNoSecretMaterial(request.prompt, 'prompt');
 
   // Check cache unless explicitly bypassed
   const cacheKey = `${request.task}:${request.prompt.trim().toLowerCase()}`;
@@ -141,6 +155,8 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
         : `AI provider ${primaryProvider} is not configured.`,
     );
   }
+
+  assertNoSecretMaterial(responseText, 'output');
 
   const latencyMs = Date.now() - startTime;
   const totalTokens = actualPromptTokens === null || actualCompletionTokens === null
