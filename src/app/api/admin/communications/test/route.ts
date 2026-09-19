@@ -22,6 +22,12 @@ export async function POST(request: Request) {
     if (!user || user.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
     await enforceRateLimit(request, `admin_communication_test:${user.id}`, 5, 10 * 60_000);
     const body = await readValidatedJson(request, schema);
+    if (process.env.NODE_ENV === "production") {
+      const allowlist = (process.env.COMMUNICATION_TEST_RECIPIENT_ALLOWLIST || "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
+      if (!allowlist.length || !allowlist.includes(body.recipient.trim().toLowerCase())) {
+        throw new ApiError("Production test sends are restricted to the configured recipient allowlist.", 403);
+      }
+    }
     const idempotencyKey = `admin-test:${user.id}:${crypto.randomUUID()}`;
     const delivery = await dispatchCommunication({ ...body, idempotencyKey, correlationId: idempotencyKey, recipientRef: `admin-test:${user.id}` });
     await logCriticalAuditEvent({ userId: user.id, action: "COMMUNICATION_TEMPLATE_TEST_SENT", resource: `CommunicationDelivery:${delivery.id}`, details: `event=${body.eventKey}; channel=${body.channel}; status=${delivery.status}` });
