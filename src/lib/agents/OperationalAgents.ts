@@ -158,7 +158,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
         if (provider !== "openai") throw new Error(`Unsupported AI provider: ${provider}`);
         const aiTask = await dispatchAiTask({
           task: 'INTERVIEW_EVALUATION',
-          prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Candidate profile ID: ${candidateProfileId}. Return strict JSON only: {"nextQuestion": string, "evalScore": integer 0-100 optional, "feedback": string optional}.`,
+          prompt: `Generate an adaptive technical interview question for a Full Stack AI Engineer. Do not request or emit candidate identifiers, credentials, secrets, or contact information. Return strict JSON only: {"nextQuestion": string, "evalScore": integer 0-100 optional, "feedback": string optional}.`,
           primaryProvider: provider,
         });
         actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
