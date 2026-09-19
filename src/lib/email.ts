@@ -12,6 +12,10 @@ export type EmailDeliveryResult = { success: boolean; messageId: string; provide
 
 const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
+}
+
 class EmailProviderDispatchError extends Error {
   constructor(message: string, readonly canFailover: boolean) {
     super(message);
@@ -156,7 +160,7 @@ export function getWelcomeEmailTemplate(name: string): EmailMessage {
     subject: "Welcome to HireGo AI — Your AI-Powered Career Hub",
     html: `
       <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; borderRadius: 16px;">
-        <h1 style="color: #448AFF;">Welcome to HireGo AI, ${name}!</h1>
+        <h1 style="color: #448AFF;">Welcome to HireGo AI, ${escapeHtml(name)}!</h1>
         <p style="color: #9CA3AF; line-height: 1.6;">
           Your account is active. Explore thousands of AI-matched jobs, benchmark your skills, and schedule AI mock interviews to boost your hireability score.
         </p>
@@ -175,11 +179,11 @@ export function getInterviewInviteTemplate(candidateName: string, jobTitle: stri
     html: `
       <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; borderRadius: 16px;">
         <h2 style="color: #FF5252;">Interview Scheduled</h2>
-        <p style="color: #9CA3AF;">Hi ${candidateName},</p>
+        <p style="color: #9CA3AF;">Hi ${escapeHtml(candidateName)},</p>
         <p style="color: #9CA3AF;">
-          You have an upcoming AI Proctor & Technical Interview session for the <strong>${jobTitle}</strong> position.
+          You have an upcoming AI Proctor & Technical Interview session for the <strong>${escapeHtml(jobTitle)}</strong> position.
         </p>
-        <p style="color: #ffffff; font-weight: bold;">Time: ${time}</p>
+        <p style="color: #ffffff; font-weight: bold;">Time: ${escapeHtml(time)}</p>
         <a href="${buildPublicAppUrl("/interviews")}" style="display: inline-block; background-color: #FF5252; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
           Join Interview Room
         </a>
