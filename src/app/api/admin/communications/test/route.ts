@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
-import { COMMUNICATION_AUDIENCES, COMMUNICATION_CHANNELS, COMMUNICATION_EVENTS } from "@/lib/communications/catalog";
+import { COMMUNICATION_AUDIENCES, COMMUNICATION_CHANNELS, COMMUNICATION_EVENTS, communicationEventDefinition } from "@/lib/communications/catalog";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logCriticalAuditEvent } from "@/lib/auditLogger";
 
@@ -22,6 +22,10 @@ export async function POST(request: Request) {
     if (!user || user.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
     await enforceRateLimit(request, `admin_communication_test:${user.id}`, 5, 10 * 60_000);
     const body = await readValidatedJson(request, schema);
+    const definition = communicationEventDefinition(body.eventKey);
+    if (!definition || !definition.channels.includes(body.channel) || !definition.audiences.includes(body.audience)) {
+      throw new ApiError("Event does not permit this audience/channel.", 422);
+    }
     if (process.env.NODE_ENV === "production") {
       const allowlist = (process.env.COMMUNICATION_TEST_RECIPIENT_ALLOWLIST || "").split(",").map(v => v.trim().toLowerCase()).filter(Boolean);
       if (!allowlist.length || !allowlist.includes(body.recipient.trim().toLowerCase())) {
