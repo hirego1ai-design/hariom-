@@ -10,9 +10,9 @@ function test(name: string, fn: () => void) {
   catch (error) { console.error(`FAIL communication: ${name}`); throw error; }
 }
 
-test("interview event is explicitly scoped to candidate email and WhatsApp", () => {
+test("interview event permits intended participants over email and WhatsApp", () => {
   const event = communicationEventDefinition("INTERVIEW_SCHEDULED");
-  assert.deepEqual(event.audiences, ["CANDIDATE"]);
+  assert.deepEqual(event.audiences, ["CANDIDATE", "EMPLOYER", "RECRUITER"]);
   assert(event.channels.includes("EMAIL"));
   assert(event.channels.includes("WHATSAPP"));
 });
