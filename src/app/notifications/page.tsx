@@ -15,6 +15,9 @@ interface NotificationItem {
 export default function NotificationsCenterPage() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [invitations, setInvitations] = useState<Array<{id:string;status:string;invitedAt:string|null;job:{id:string;title:string;location:string|null;company:{name:string}}}>>([]);
+  const [decisionId, setDecisionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
   async function fetchNotifications() {
     try {
@@ -32,7 +35,20 @@ export default function NotificationsCenterPage() {
 
   useEffect(() => {
     fetchNotifications();
+    fetch("/api/candidate/sourcing-invitations", { cache: "no-store" }).then(async (response) => {
+      const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to load invitations."); return body;
+    }).then((body) => setInvitations(body.invitations || [])).catch(() => undefined);
   }, []);
+
+  const decideInvitation = async (id: string, decision: "ACCEPT" | "DECLINE") => {
+    if (decisionId) return; setDecisionId(id); setActionError("");
+    try {
+      const response = await fetch(`/api/candidate/sourcing-invitations/${id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision }) });
+      const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to save your decision.");
+      setInvitations((current) => current.map((item) => item.id === id ? { ...item, status: body.status } : item));
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to save your decision."); }
+    finally { setDecisionId(null); }
+  };
 
   const markAllRead = async () => {
     setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
@@ -94,6 +110,14 @@ export default function NotificationsCenterPage() {
         </header>
 
         <main className="flex-1 p-6 lg:p-10 space-y-4 max-w-4xl w-full mx-auto overflow-y-auto">
+          {invitations.length > 0 && <section aria-labelledby="job-invitations-heading" className="rounded-3xl border border-outline bg-bg-card p-5 space-y-4">
+            <div><h2 id="job-invitations-heading" className="font-bold">Job invitations</h2><p className="text-xs text-text-secondary mt-1">An invitation is not an application until you choose Accept.</p></div>
+            {actionError && <p role="alert" className="text-sm text-text-secondary">{actionError}</p>}
+            {invitations.map((invitation) => <article key={invitation.id} className="rounded-2xl border border-outline bg-bg-elevated p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div><h3 className="font-bold text-sm">{invitation.job.title}</h3><p className="text-xs text-text-secondary mt-1">{invitation.job.company.name}{invitation.job.location ? ` · ${invitation.job.location}` : ""}</p><Link href={`/jobs/${invitation.job.id}`} className="inline-block mt-2 text-xs underline">Review job details</Link></div>
+              {invitation.status === "INVITED" ? <div className="flex gap-2"><button disabled={decisionId === invitation.id} onClick={() => decideInvitation(invitation.id, "DECLINE")} className="min-h-11 px-4 rounded-full border border-outline font-bold text-xs disabled:opacity-50">Decline</button><button disabled={decisionId === invitation.id} onClick={() => decideInvitation(invitation.id, "ACCEPT")} className="min-h-11 px-4 rounded-full btn-3d-red font-bold text-xs disabled:opacity-50">{decisionId === invitation.id ? "Saving…" : "Accept"}</button></div> : <span className="text-xs font-bold">{invitation.status === "ACCEPTED" ? "Accepted · Application created" : "Declined"}</span>}
+            </article>)}
+          </section>}
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (

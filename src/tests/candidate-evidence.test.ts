@@ -6,7 +6,8 @@ const application = {
   id: "application-a", jobId: "job-a", status: "APPLIED", matchScore: 94,
   createdAt: new Date("2026-09-01T12:00:00Z"), updatedAt: new Date("2026-09-05T13:00:00Z"),
   candidateProfile: { id: "candidate-a", headline: "Engineer", bio: "Candidate supplied bio", location: "Delhi",
-    experienceYears: 8.75, user: { name: "Candidate A" }, resumeUrl: "/private/resume.pdf", videoResumes: [] as { id: string }[] },
+    experienceYears: 8.75, user: { name: "Candidate A" }, resumeUrl: "/private/resume.pdf", videoResumes: [] as { id: string }[],
+    availabilityStatus: "ACTIVE_CONFIRMED", lastAvailabilityConfirmedAt: new Date("2026-09-05T12:00:00Z"), readinessRecords: [] as { roleTitle: string; seniority: string; status: string; score: number | null; validUntil: Date | null }[] },
   job: { title: "Engineer" },
 };
 

@@ -13,6 +13,7 @@ const ALLOWED_MIME_TYPES = [
   "image/webp",
   "video/mp4",
   "video/webm",
+  "audio/webm",
 ];
 
 const MIME_TO_EXT_MAP: Record<string, string[]> = {
@@ -24,6 +25,7 @@ const MIME_TO_EXT_MAP: Record<string, string[]> = {
   "image/webp": ["webp"],
   "video/mp4": ["mp4"],
   "video/webm": ["webm"],
+  "audio/webm": ["webm"],
 };
 
 export async function POST(req: NextRequest) {
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
     const category = (formData.get("category") as string) || "resumes";
 
     const allowedCategoriesByRole: Record<string, Set<string>> = {
-      CANDIDATE: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes"]),
+      CANDIDATE: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "assessment-media"]),
       EMPLOYER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
       RECRUITER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
       ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media"]),
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return jsonError("Invalid file type. Supported formats: PDF, DOCX, PNG, JPEG, MP4", 415);
+      return jsonError("Invalid file type. Supported formats: PDF, DOCX, PNG, JPEG, MP4, WebM audio/video", 415);
     }
 
     const bytes = await file.arrayBuffer();

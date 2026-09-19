@@ -78,6 +78,23 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
     fetchData();
   }, []);
 
+  // Load the authenticated company's real jobs for job-scoped workflows such as proactive sourcing.
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchJobs() {
+      try {
+        const res = await fetch("/api/employer/jobs", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "Failed to load jobs");
+        if (!cancelled) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      } catch (err) {
+        console.error("Failed to fetch employer jobs:", err);
+      }
+    }
+    fetchJobs();
+    return () => { cancelled = true; };
+  }, []);
+
   // Fetch candidates on mount
   useEffect(() => {
     async function fetchCandidates() {

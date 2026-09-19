@@ -115,7 +115,7 @@ def validate_callback_url(callback_url: str):
     parsed = urlparse(callback_url)
     if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
         raise HTTPException(status_code=400, detail="Invalid callback URL")
-    if parsed.path != "/api/internal/video-analysis/callback":
+    if parsed.path not in {"/api/internal/video-analysis/callback", "/api/internal/recorded-assessment-analysis/callback"}:
         raise HTTPException(status_code=400, detail="Invalid callback path")
     if ENVIRONMENT == "production" and not callback_url.startswith(f"{CALLBACK_ORIGIN}/"):
         raise HTTPException(status_code=400, detail="Callback origin is not allowed")
@@ -198,7 +198,7 @@ def process_job(req: AnalyzeRequest):
             "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
             audio_path
         ]
-        ffmpeg_res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=30)
+        ffmpeg_res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=max(45, int(min(MAX_SECONDS, actual_duration) * 1.5)))
         if ffmpeg_res.returncode != 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
@@ -261,7 +261,7 @@ def process_job(req: AnalyzeRequest):
 
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
-            frame_sample_step = int(fps / 2) # 2 fps sampling
+            frame_sample_step = max(1, int(fps / 2)) # ~2 fps sampling, safe for low-FPS media
             total_sampled = 0
             faces_detected_count = 0
             pose_detected_count = 0

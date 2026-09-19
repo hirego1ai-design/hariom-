@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const company = await getSessionCompany(session);
       if (company.id !== interview.application.job.companyId) throw new ApiError("Interview access denied.", 403);
     }
-    if (interview.roundProgress.status === "TRANSFERRED" && body.action === "PROCEED") {
+    if (["TRANSFERRED", "FINAL_ROUND_COMPLETE"].includes(interview.roundProgress.status) && body.action === "PROCEED") {
       const nextRound = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: interview.roundProgress.round.processId, sequence: interview.roundProgress.round.sequence + 1 } }, include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } } });
       return NextResponse.json({ success: true, action: nextRound ? "PROCEED" : "FINAL_ROUND_COMPLETE", nextRound: nextRound ? { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } : null, applicationId: interview.applicationId, idempotent: true });
     }
@@ -49,10 +49,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         where: { processId_sequence: { processId: interview.roundProgress!.round.processId, sequence: interview.roundProgress!.round.sequence + 1 } },
         include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } },
       });
-      await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now } });
       if (!nextRound) {
+        await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "FINAL_ROUND_COMPLETE", completedAt: interview.roundProgress!.completedAt || now } });
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
+      await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now } });
       await tx.interviewRoundProgress.upsert({
         where: { applicationId_roundId: { applicationId: interview.applicationId, roundId: nextRound.id } },
         update: {},

@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/referrals-reconciliation",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/recorded-assessment-analysis",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
