@@ -92,6 +92,11 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
   if (variableCheck.unknown.length) throw new Error(`Template contains unapproved variables: ${variableCheck.unknown.join(", ")}`);
   if (variableCheck.missing.length) throw new Error(`Template is missing required variables for ${input.eventKey}: ${variableCheck.missing.join(", ")}`);
 
+  if (consequentialApprovalId) {
+    const consumed = await prisma.workflowApproval.updateMany({ where: { id: consequentialApprovalId, decision: "APPROVED", consumedAt: null }, data: { consumedAt: new Date() } });
+    if (consumed.count !== 1) throw new Error("Consequential communication approval was already consumed.");
+  }
+
   const delivery = await prisma.communicationDelivery.create({
     data: {
       templateId: template.id,
