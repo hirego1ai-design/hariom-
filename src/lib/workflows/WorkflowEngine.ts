@@ -324,14 +324,21 @@ export class WorkflowEngine {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
     const approval = await prisma.workflowApproval.findUnique({
       where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: actionDigest(params.action) } },
     });
     if (!approval || approval.decision !== 'APPROVED' || !approval.decidedBy || !approval.decidedAt) throw new Error('Persisted human approval is required for this exact action');
     const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
     if (!requiredRoles || !approval.decidedByRole || !requiredRoles.includes(approval.decidedByRole)) throw new Error('Persisted approval was not granted by an authorized role');
-    const consumed = await prisma.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt: new Date() } });
-    if (consumed.count !== 1) throw new Error('Approval has already been consumed');
+    const consumedAt = new Date();
+    const consumed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt } });
+      if (updated.count !== 1) throw new Error('Approval has already been consumed');
+      await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_CONSUMED', workflowId: params.workflowId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
+      return updated;
+    });
+    if (consumed.count !== 1) throw new Error('Approval consumption failed');
     const pending = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING' } });
     const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'APPROVED', consumedAt: null } });
     if (pending === 0 && unconsumed === 0) {
