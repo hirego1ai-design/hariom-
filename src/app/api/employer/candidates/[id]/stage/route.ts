@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 
 const schema = z.object({ stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"]) });
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await enforceRateLimit(req, "employer_candidate_stage", 30, 60_000);
   const session = await getCurrentSession(req.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const { id } = await params;
-    const { stage } = schema.parse(await req.json());
+    const { stage } = await readValidatedJson(req, schema, 8 * 1024);
     if (stage === "HIRED" || stage === "REJECTED") {
       return NextResponse.json({ success: false, error: "Selection and rejection are consequential actions and must use the persisted approval workflow." }, { status: 409 });
     }
@@ -23,5 +25,5 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     await prisma.application.update({ where: { id }, data: { status: stage as any } });
     return NextResponse.json({ success: true, applicationId: id, stage });
-  } catch (error) { if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message }, { status: 400 }); return NextResponse.json({ success: false, error: "Unable to update candidate stage." }, { status: 500 }); }
+  } catch (error) { return handleApiError(error); }
 }
