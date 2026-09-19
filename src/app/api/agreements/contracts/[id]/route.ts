@@ -130,7 +130,7 @@ export async function POST(
         return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
       }
 
-      await dispatchCommunication({ eventKey: "AGREEMENT_ACCEPTED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id }, idempotencyKey: `agreement:${agreement.id}:accepted:employer:email`, correlationId: agreement.id, recipientRef: session.id }).catch(() => null);
+      if (agreement.clientEmail) await dispatchCommunication({ eventKey: "AGREEMENT_ACCEPTED", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id }, idempotencyKey: `agreement:${agreement.id}:accepted:employer:email`, correlationId: agreement.id, recipientRef: session.id }).catch(() => null);
 
       return NextResponse.json({
         success: true,
@@ -176,7 +176,7 @@ export async function POST(
         return NextResponse.json({ success: false, error: "Agreement not found" }, { status: 404 });
       }
 
-      await dispatchCommunication({ eventKey: "AGREEMENT_SENT", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id, agreement_link: `/employer/agreements/${agreement.id}` }, idempotencyKey: `agreement:${agreement.id}:sent:employer:email`, correlationId: agreement.id }).catch(() => null);
+      if (agreement.clientEmail) await dispatchCommunication({ eventKey: "AGREEMENT_SENT", channel: "EMAIL", audience: "EMPLOYER", recipient: agreement.clientEmail, variables: { company_name: agreement.companyName, agreement_reference: agreement.id, agreement_link: `/employer/agreements/${agreement.id}` }, idempotencyKey: `agreement:${agreement.id}:sent:employer:email`, correlationId: agreement.id }).catch(() => null);
       if (agreement.clientPhone) await dispatchCommunication({ eventKey: "AGREEMENT_SENT", channel: "WHATSAPP", audience: "EMPLOYER", recipient: agreement.clientPhone, variables: { company_name: agreement.companyName, agreement_reference: agreement.id, agreement_link: `/employer/agreements/${agreement.id}` }, idempotencyKey: `agreement:${agreement.id}:sent:employer:whatsapp`, correlationId: agreement.id }).catch(() => null);
 
       return NextResponse.json({
