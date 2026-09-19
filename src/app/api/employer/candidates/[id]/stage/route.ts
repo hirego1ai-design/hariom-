@@ -10,6 +10,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const { stage } = schema.parse(await req.json());
+    if (stage === "HIRED" || stage === "REJECTED") {
+      return NextResponse.json({ success: false, error: "Selection and rejection are consequential actions and must use the persisted approval workflow." }, { status: 409 });
+    }
     const application = await prisma.application.findUnique({ where: { id }, include: { job: true } });
     if (!application) return NextResponse.json({ success: false, error: "Candidate application not found." }, { status: 404 });
     if (session.role !== "ADMIN") {
