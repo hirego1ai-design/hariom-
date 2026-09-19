@@ -96,9 +96,7 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
     let result: { sent?: boolean; success?: boolean; messageId?: string; reason?: string };
     if (input.channel === "WHATSAPP") {
       if (!template.providerAlias) throw new Error("Active WhatsApp template has no Meta template name.");
-      const parameters = definition.variables
-        .filter((key) => Object.prototype.hasOwnProperty.call(input.variables, key))
-        .map((key) => ({ type: "text" as const, text: String(input.variables[key] ?? "") }));
+      const configuredOrder = Array.isArray(template.providerParameterOrder)\n        ? template.providerParameterOrder.filter((value): value is string => typeof value === "string")\n        : [];\n      if (!configuredOrder.length) throw new Error("Active WhatsApp template has no explicit provider parameter mapping.");\n      const unknownMappings = configuredOrder.filter((key) => !definition.variables.includes(key));\n      if (unknownMappings.length) throw new Error(`WhatsApp template parameter mapping contains unapproved variables: ${unknownMappings.join(", ")}`);\n      const parameters = configuredOrder.map((key) => ({ type: "text" as const, text: String(input.variables[key] ?? "") }));
       const components: WhatsAppTemplateComponent[] = parameters.length ? [{ type: "body", parameters }] : [];
       result = await sendWhatsAppTemplateMessage(input.recipient, template.providerAlias, template.locale, components);
     } else {
