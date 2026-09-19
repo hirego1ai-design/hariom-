@@ -59,10 +59,11 @@
     "typescript": "^5"
   },
   "overrides": {
-    "brace-expansion": "2.0.2",
     "js-yaml": "4.3.2",
     "nanoid": "^3.3.18",
     "postcss": "8.5.23",
-    "sharp": "0.35.4"
+    "sharp": "0.35.4",
+    "minimatch@>=10": "10.2.5",
+    "minimatch@<10": "3.1.5"
   }
 }
