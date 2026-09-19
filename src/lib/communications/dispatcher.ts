@@ -39,12 +39,22 @@ function assertVariables(eventKey: CommunicationEventKey, variables: Record<stri
   if (unknown.length) throw new Error(`Unknown communication variables for ${eventKey}: ${unknown.join(", ")}`);
 }
 
+async function assertWhatsAppConsent(recipient: string) {
+  const digits = recipient.replace(/\D/g, "");
+  if (!digits) throw new Error("Invalid WhatsApp recipient.");
+  const contact = await prisma.whatsAppContact.findUnique({ where: { waId: digits }, select: { optInStatus: true } });
+  if (!contact || contact.optInStatus !== "OPTED_IN") {
+    throw new Error("WhatsApp recipient has not provided active messaging consent.");
+  }
+}
+
 export async function dispatchCommunication(input: DispatchCommunicationInput) {
   const definition = COMMUNICATION_EVENT_REGISTRY[input.eventKey];
   if (!definition.channels.includes(input.channel) || !definition.audiences.includes(input.audience)) {
     throw new Error("Communication event does not permit this channel/audience combination.");
   }
   assertVariables(input.eventKey, input.variables);
+  if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
 
   const existing = await prisma.communicationDelivery.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing) return existing;
