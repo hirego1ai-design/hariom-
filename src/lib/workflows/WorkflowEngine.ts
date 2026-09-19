@@ -178,6 +178,8 @@ export class WorkflowEngine {
     validateTenantAccess(params.context, workflow.companyId);
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     if (workflow.status !== 'RUNNING') throw new Error(`Consequential action cannot be requested while workflow is ${workflow.status}`);
+    const rejected = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'REJECTED' } });
+    if (rejected > 0) throw new Error('Rejected consequential actions make this workflow terminal');
     const approvalId = await this.pauseForApproval(params);
     return { approvalId, status: 'PENDING_APPROVAL' };
   }
@@ -341,7 +343,8 @@ export class WorkflowEngine {
     if (consumed.count !== 1) throw new Error('Approval consumption failed');
     const pending = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING' } });
     const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'APPROVED', consumedAt: null } });
-    if (pending === 0 && unconsumed === 0) {
+    const rejected = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'REJECTED' } });
+    if (pending === 0 && unconsumed === 0 && rejected === 0) {
       await prisma.workflowInstance.updateMany({ where: { id: params.workflowId, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
     }
   }
