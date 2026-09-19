@@ -1,30 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
-import { prisma } from "@/lib/prisma";
 import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
 import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
 
 
-async function resolveCompanyId(userId: string) {
-  const profile = await prisma.employerProfile.findUnique({ where: { userId } });
-  if (!profile?.companyId) {
-    throw new Error("Employer profile not found.");
-  }
-  return profile.companyId;
-}
-
 // GET employer's subscription, credits, and available plans
 export async function GET(request: NextRequest) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const companyId = await resolveCompanyId(session.id);
+    await enforceRateLimit(request, "employer_subscription_get", 60, 60_000);
+    const session = await getCurrentSession(request.headers);
+    if (!session) throw new ApiError("Unauthorized", 401);
+    if (session.role !== "EMPLOYER") throw new ApiError("Employer access required.", 403);
+    const companyId = (await getSessionCompany(session)).id;
 
     const [credits, activeSubscription, plans, services, gatewayConfig] = await Promise.all([
       subscriptionsDb.getCompanyCredits(companyId),
@@ -96,25 +86,24 @@ export async function GET(request: NextRequest) {
         aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota ?? 0 },
       },
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load subscription data.";
-    return NextResponse.json({ success: false, error: message }, { status: message === "Employer profile not found." ? 404 : 500 });
-  }
+  } catch (error) { return handleApiError(error); }
 }
 
 // POST purchase/activate a plan is blocked to prevent payment bypass
 export async function POST(request: NextRequest) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || (session.role !== "EMPLOYER" && session.role !== "ADMIN")) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  return NextResponse.json(
+  try {
+    await enforceRateLimit(request, "employer_subscription_direct_activation", 10, 60_000);
+    const session = await getCurrentSession(request.headers);
+    if (!session) throw new ApiError("Unauthorized", 401);
+    if (session.role !== "EMPLOYER") throw new ApiError("Employer access required.", 403);
+    await getSessionCompany(session);
+    return NextResponse.json(
     {
       success: false,
       error: "Direct subscription activation is disabled for security. Please initiate payment through the checkout flow at /api/payments/checkout.",
       redirectTo: "/api/payments/checkout",
     },
     { status: 403 }
-  );
+    );
+  } catch (error) { return handleApiError(error); }
 }
