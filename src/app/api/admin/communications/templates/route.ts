@@ -50,7 +50,9 @@ export async function POST(request: Request) {
     if (body.channel === "WHATSAPP") {
       const mapping = body.providerParameterOrder || [];
       const unknownMappings = mapping.filter((key) => !definition.variables.includes(key));
+      const duplicateMappings = mapping.filter((key, index) => mapping.indexOf(key) !== index);
       if (unknownMappings.length) throw new ApiError(`Unapproved provider parameter mappings: ${unknownMappings.join(", ")}`, 422);
+      if (duplicateMappings.length) throw new ApiError(`Duplicate provider parameter mappings: ${[...new Set(duplicateMappings)].join(", ")}`, 422);
       if (!mapping.length) throw new ApiError("WhatsApp templates require explicit provider parameter order.", 422);
     }
     if (body.channel === "EMAIL" && body.provider !== "ZEPTOMAIL") throw new ApiError("Stored email templates must use ZEPTOMAIL.", 422);
