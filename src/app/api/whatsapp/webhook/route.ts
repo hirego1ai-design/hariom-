@@ -195,7 +195,15 @@ async function ingestSingleMessage(message: any): Promise<void> {
     textBody = "";
   }
 
-  // Explicit opt-out commands revoke outbound messaging consent immediately.\n  // Receiving any other inbound message never grants opt-in consent.\n  const normalizedCommand = textBody.trim().toLowerCase();\n  if (["stop", "unsubscribe", "opt out", "opt-out"].includes(normalizedCommand)) {\n    await ensureWhatsAppContact(waId);\n    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");\n  }\n\n  // 2. Persist before rate limiting so a sender's valid message is never lost.
+  // Explicit opt-out commands revoke outbound messaging consent immediately.
+  // Receiving any other inbound message never grants opt-in consent.
+  const normalizedCommand = textBody.trim().toLowerCase();
+  if (["stop", "unsubscribe", "opt out", "opt-out"].includes(normalizedCommand)) {
+    await ensureWhatsAppContact(waId);
+    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");
+  }
+
+  // 2. Persist before rate limiting so a sender's valid message is never lost.
   const { isDuplicate, eventId } = await persistInboundEvent({
     providerEventId: messageId,
     waId,
