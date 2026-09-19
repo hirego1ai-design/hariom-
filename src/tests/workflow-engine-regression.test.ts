@@ -189,7 +189,34 @@ test('duplicate decided approval request cannot re-pause workflow', async (t) =>
     context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
   });
   assert.equal(result.approvalId, 'approval-a');
+  assert.equal(result.status, 'APPROVED');
   assert.equal(workflowWrites, 0);
+});
+
+test('repeated identical pending approval request does not duplicate audit evidence', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  const existing = {
+    id: 'approval-a', workflowInstanceId: 'workflow-test', companyId: 'company-a',
+    stepName: 'select', actionType: 'CANDIDATE_SELECTION', actionDigest: 'persisted',
+    decision: 'PENDING',
+  };
+  let auditWrites = 0;
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
+  stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => existing);
+  stubMethod(t, prisma.workflowApproval, 'upsert', async () => existing);
+  stubMethod(t, prisma.workflowInstance, 'update', async ({ data }: any) => ({ id: 'workflow-test', companyId: 'company-a', ...data }));
+  stubMethod(t, prisma.auditLog, 'create', async () => { auditWrites++; return {}; });
+  stubMethod(t, prisma.securityAuditOutboxEvent, 'create', async () => { auditWrites++; return {}; });
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
+  const result = await WorkflowEngine.requestConsequentialAction({
+    workflowId: 'workflow-test', stepName: 'select', actionType: 'CANDIDATE_SELECTION',
+    action: { candidateId: 'candidate-a' },
+    context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+  });
+  assert.equal(result.status, 'PENDING_APPROVAL');
+  assert.equal(auditWrites, 0);
 });
 
 
