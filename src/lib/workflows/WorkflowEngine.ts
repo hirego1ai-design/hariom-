@@ -150,6 +150,8 @@ export class WorkflowEngine {
     ]);
     if (rejected > 0) throw new Error('Workflow has a rejected consequential action');
     if (pending > 0) throw new Error('Workflow still has pending consequential approvals');
+    const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'APPROVED', consumedAt: null } });
+    if (unconsumed > 0) throw new Error('Approved consequential actions must be consumed before workflow resume');
     return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
   }
 
@@ -305,7 +307,9 @@ export class WorkflowEngine {
         const remainingPending = await tx.workflowApproval.count({
           where: { workflowInstanceId: approval.workflowInstanceId, decision: 'PENDING' },
         });
-        nextStatus = remainingPending > 0 ? 'PAUSED_FOR_APPROVAL' : 'RUNNING';
+        // Approval is authorization, not execution. Keep the workflow paused
+        // until the exact approved action has been durably consumed/executed.
+        nextStatus = 'PAUSED_FOR_APPROVAL';
       }
       return tx.workflowInstance.update({
         where: { id: approval.workflowInstanceId, status: 'PAUSED_FOR_APPROVAL' },
@@ -324,6 +328,11 @@ export class WorkflowEngine {
     if (!approval || approval.decision !== 'APPROVED' || !approval.decidedBy || !approval.decidedAt) throw new Error('Persisted human approval is required for this exact action');
     const consumed = await prisma.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt: new Date() } });
     if (consumed.count !== 1) throw new Error('Approval has already been consumed');
+    const pending = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING' } });
+    const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'APPROVED', consumedAt: null } });
+    if (pending === 0 && unconsumed === 0) {
+      await prisma.workflowInstance.updateMany({ where: { id: params.workflowId, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
+    }
   }
 
   static async recoverInterruptedSteps(workflowId: string, context: TenantContext): Promise<number> {
