@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
@@ -23,9 +23,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const session = await requireAdmin(request);
     await enforceRateLimit(request, "admin_candidate_services_write", 20, 60_000);
     const { id } = await params;
-    const data = await readValidatedJson(request, updateSchema);
-    const service = await prisma.candidateServiceCatalog.update({ where: { id }, data });
-    await logAuditEvent({ userId: session.id, action: "UPDATE_CANDIDATE_SERVICE", resource: `CandidateServiceCatalog:${service.id}` });
+    const data = await readValidatedJson(request, updateSchema, 8 * 1024);
+    const service = await prisma.$transaction(async (tx) => {
+      const updated = await tx.candidateServiceCatalog.update({ where: { id }, data });
+      const auditLog = await tx.auditLog.create({ data: { userId: session.id, action: "UPDATE_CANDIDATE_SERVICE", resource: `CandidateServiceCatalog:${updated.id}` } });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+      return updated;
+    });
     return NextResponse.json({ success: true, service });
   } catch (error) {
     return handleApiError(error);
