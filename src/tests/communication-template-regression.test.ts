@@ -50,3 +50,18 @@ test("agreement and invoice actions remain consequential", () => {
 test("candidate rejection is consequential", () => {
   assert.equal(communicationEventDefinition("APPLICATION_REJECTED").consequential, true);
 });
+
+
+test("next interview round has a dedicated non-shortlist event", () => {
+  const event = communicationEventDefinition("INTERVIEW_NEXT_ROUND");
+  assert.deepEqual(event.audiences, ["CANDIDATE"]);
+  assert(event.channels.includes("EMAIL"));
+  assert(event.channels.includes("WHATSAPP"));
+  assert(event.variables.includes("next_round"));
+  assert.equal(event.consequential, undefined);
+});
+
+test("candidate selection and rejection remain consequential", () => {
+  assert.equal(communicationEventDefinition("CANDIDATE_SELECTED").consequential, true);
+  assert.equal(communicationEventDefinition("APPLICATION_REJECTED").consequential, true);
+});
