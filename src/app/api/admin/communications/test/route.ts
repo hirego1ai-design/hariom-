@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       }
     }
     const idempotencyKey = `admin-test:${user.id}:${crypto.randomUUID()}`;
-    const delivery = await dispatchCommunication({ ...body, idempotencyKey, correlationId: idempotencyKey, recipientRef: `admin-test:${user.id}` });
+    const delivery = await dispatchCommunication({ ...body, idempotencyKey, correlationId: idempotencyKey, recipientRef: `admin-test:${user.id}`, testMode: true });
     await logCriticalAuditEvent({ userId: user.id, action: "COMMUNICATION_TEMPLATE_TEST_SENT", resource: `CommunicationDelivery:${delivery.id}`, details: `event=${body.eventKey}; channel=${body.channel}; status=${delivery.status}` });
     return NextResponse.json({ success: delivery.status === "ACCEPTED", delivery: { id: delivery.id, status: delivery.status, provider: delivery.provider, providerMessageId: delivery.providerMessageId } }, { status: delivery.status === "ACCEPTED" ? 200 : 502 });
   } catch (error) { return handleApiError(error); }
