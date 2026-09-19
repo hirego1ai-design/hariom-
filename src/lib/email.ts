@@ -1,4 +1,5 @@
 import { getConfiguredEmailProvider, getConfiguredEmailProviders, type EmailProvider, type EmailProviderRuntimeConfig } from "@/lib/email-delivery-config";
+import { buildPublicAppUrl } from "@/lib/env";
 
 export interface EmailMessage {
   to: string;
@@ -158,7 +159,7 @@ export function getWelcomeEmailTemplate(name: string): EmailMessage {
         <p style="color: #9CA3AF; line-height: 1.6;">
           Your account is active. Explore thousands of AI-matched jobs, benchmark your skills, and schedule AI mock interviews to boost your hireability score.
         </p>
-        <a href="https://hirego.ai/candidate/dashboard" style="display: inline-block; background-color: #448AFF; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
+        <a href="${buildPublicAppUrl("/candidate/dashboard")}" style="display: inline-block; background-color: #448AFF; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
           Go to Dashboard
         </a>
       </div>
@@ -178,7 +179,7 @@ export function getInterviewInviteTemplate(candidateName: string, jobTitle: stri
           You have an upcoming AI Proctor & Technical Interview session for the <strong>${jobTitle}</strong> position.
         </p>
         <p style="color: #ffffff; font-weight: bold;">Time: ${time}</p>
-        <a href="https://hirego.ai/interviews" style="display: inline-block; background-color: #FF5252; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
+        <a href="${buildPublicAppUrl("/interviews")}" style="display: inline-block; background-color: #FF5252; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 16px;">
           Join Interview Room
         </a>
       </div>
