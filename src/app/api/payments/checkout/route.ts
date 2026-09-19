@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { checkoutSchema } from "@/lib/payments/planContracts";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import type { CreateOrderResult } from "@/lib/payments/PaymentGatewayInterface";
 import { subscriptionCredits } from "@/lib/payments/subscriptionCredits";
