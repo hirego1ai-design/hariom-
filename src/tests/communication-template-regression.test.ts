@@ -81,3 +81,18 @@ test("consequential deliveries are never marked automatically retryable", () => 
   assert(source.includes("retryable: !definition.consequential && failure.retryable"));
   assert(source.includes('lastErrorCode: "AMBIGUOUS_PROVIDER_ERROR"'));
 });
+
+
+test("communication retry Prisma fields remain in schema", () => {
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  assert(schema.includes("nextAttemptAt     DateTime?"));
+  assert(schema.includes("maxAttempts       Int      @default(3)"));
+  assert(schema.includes("retryable         Boolean  @default(false)"));
+  assert(schema.includes("@@index([status, retryable, nextAttemptAt])"));
+});
+
+test("admin delivery filters fail closed", () => {
+  const source = fs.readFileSync(new URL("../app/api/admin/communications/deliveries/route.ts", import.meta.url), "utf8");
+  assert(source.includes("Invalid communication delivery status filter."));
+  assert(source.includes("Invalid communication channel filter."));
+});
