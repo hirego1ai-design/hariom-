@@ -150,3 +150,19 @@ test("candidate collaboration endpoints stay bounded and audited", () => {
   assert(collections.includes("readValidatedJson(req,updateSchema,64*1024)"));
   assert(collections.includes("CANDIDATE_COLLECTION_UPDATED"));
 });
+
+
+test("candidate credit mutations keep durable security audit evidence", () => {
+  const grants = fs.readFileSync(new URL("../app/api/admin/candidate-credits/grants/route.ts", import.meta.url), "utf8");
+  const service = fs.readFileSync(new URL("../app/api/candidate/services/[serviceKey]/request/route.ts", import.meta.url), "utf8");
+  assert(grants.includes("enqueueSecurityAuditEvent"));
+  assert(grants.includes("readValidatedJson(request, grantSchema, 8 * 1024)"));
+  assert(service.includes("enqueueSecurityAuditEvent"));
+  assert(service.includes("readValidatedJson(request, requestSchema, 4 * 1024)"));
+});
+
+test("candidate availability endpoints remain bounded and rate limited", () => {
+  const source = fs.readFileSync(new URL("../app/api/candidate/availability/route.ts", import.meta.url), "utf8");
+  assert(source.includes('enforceRateLimit(req, "candidate_availability_get", 60, 60000)'));
+  assert(source.includes("readValidatedJson(req, schema, 4 * 1024)"));
+});
