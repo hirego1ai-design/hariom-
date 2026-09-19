@@ -11,6 +11,8 @@ import { sendWhatsAppTemplateMessage, type WhatsAppTemplateComponent } from "@/l
 import { sendZeptoMailTemplate } from "@/lib/email";
 import { isWhatsAppMessagingAllowed } from "@/lib/whatsapp-identity";
 
+type ConsequentialAuthorization = { approvedByUserId: string; approvalId: string };
+
 export type DispatchCommunicationInput = {
   eventKey: CommunicationEventKey;
   channel: CommunicationChannel;
@@ -51,13 +53,13 @@ async function assertWhatsAppConsent(recipient: string) {
   }
 }
 
-export async function dispatchCommunication(input: DispatchCommunicationInput) {
+async function dispatchCommunicationInternal(input: DispatchCommunicationInput, options: { allowConsequentialWithoutProof: boolean } = { allowConsequentialWithoutProof: false }) {
   const definition = COMMUNICATION_EVENT_REGISTRY[input.eventKey];
   if (!definition.channels.includes(input.channel) || !definition.audiences.includes(input.audience)) {
     throw new Error("Communication event does not permit this channel/audience combination.");
   }
   assertVariables(input.eventKey, input.variables);
-  if (definition.consequential && !input.testMode && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {
+  if (definition.consequential && !options.allowConsequentialWithoutProof && (!input.authorizationProof?.approvedByUserId || !input.authorizationProof?.approvalId)) {
     throw new Error(`Consequential communication ${input.eventKey} requires persisted human authorization proof.`);
   }
   if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
@@ -135,4 +137,12 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
     });
     throw error;
   }
+}
+
+export async function dispatchCommunication(input: DispatchCommunicationInput) {
+  return dispatchCommunicationInternal(input);
+}
+
+export async function dispatchAdminTestCommunication(input: Omit<DispatchCommunicationInput, "authorizationProof">) {
+  return dispatchCommunicationInternal(input, { allowConsequentialWithoutProof: true });
 }
