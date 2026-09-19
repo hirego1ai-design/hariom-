@@ -6,8 +6,11 @@ import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@
 import { getSessionCompany } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
+import { createTenantContext } from "@/lib/security/TenantContext";
+import { Role } from "@prisma/client";
 
-const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]) });
+const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]), approvalId: z.string().uuid().optional(), workflowId: z.string().uuid().optional() });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,6 +43,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ success: true, action: "HOLD", message: "Candidate remains on hold after this round." });
     }
 
+    if (body.action === "REJECT") {
+      if (!body.approvalId || !body.workflowId) throw new ApiError("Persisted human approval is required before rejecting a candidate.", 409);
+      const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
+      const approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.decision !== "APPROVED" || approval.consumedAt) throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
+      if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
+      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: { interviewId: id, applicationId: interview.applicationId, action: "REJECT" }, context: tenantContext });
+    }
+
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
       if (body.action === "REJECT") {
@@ -65,8 +77,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
     const eventKey = result.action === "REJECT" ? "APPLICATION_REJECTED" : result.action === "PROCEED" ? "APPLICATION_SHORTLISTED" : null;
-    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
-    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id, authorizationProof: result.action === "REJECT" ? { approvedByUserId: session.id, approvalId: body.approvalId!, workflowId: body.workflowId! } : undefined }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id, authorizationProof: result.action === "REJECT" ? { approvedByUserId: session.id, approvalId: body.approvalId!, workflowId: body.workflowId! } : undefined }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }
