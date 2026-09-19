@@ -118,3 +118,20 @@ test("team invitation acceptance serializes the single-use token", () => {
   assert(source.includes("enqueueSecurityAuditEvent"));
   assert(source.includes("revokeAllUserSessions(acceptance.userId"));
 });
+
+
+test("password reset commits audit with credential change and bounds OTP/password input", () => {
+  const source = fs.readFileSync(new URL("../app/api/auth/reset-password/route.ts", import.meta.url), "utf8");
+  assert(source.includes("prisma.$transaction"));
+  assert(source.includes("enqueueSecurityAuditEvent"));
+  assert(source.includes('/^\\d{6}$/'));
+  assert(source.includes('newPassword: z.string().min(8'));
+  assert(source.includes("PASSWORD_RESET_SESSION_CACHE_REFRESH_FAILED"));
+});
+
+test("team removal rotates sessions and emits durable security audit", () => {
+  const source = fs.readFileSync(new URL("../app/api/employer/team/route.ts", import.meta.url), "utf8");
+  assert(source.includes("sessionVersion: { increment: 1 }"));
+  assert(source.includes("revokeAllUserSessions(member.userId"));
+  assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+});
