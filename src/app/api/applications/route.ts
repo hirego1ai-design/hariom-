@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
@@ -15,6 +15,7 @@ const applicationSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "candidate_applications_get", 60, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "candidate_application_submit", 12, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
