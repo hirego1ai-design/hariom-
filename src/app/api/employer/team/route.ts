@@ -106,6 +106,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await readValidatedJson(req, inviteSchema);
+    const inviteRole: string = body.role ?? "RECRUITER";
+    const inviteDesignation: string | undefined = body.designation;
     const normalizedEmail = body.email.toLowerCase().trim();
 
     let companyId: string;
@@ -186,7 +188,7 @@ export async function POST(req: NextRequest) {
             Hello <strong>${escapeHtml(body.name)}</strong>,
           </p>
           <p style="color: #9CA3AF; line-height: 1.6;">
-            You have been invited by <strong>${escapeHtml(session.name || "A company administrator")}</strong> to join <strong>${escapeHtml(companyName)}</strong> on HireGo as a <strong>${escapeHtml(body.role)}</strong>${body.designation ? ` (${escapeHtml(body.designation)})` : ""}.
+            You have been invited by <strong>${escapeHtml(session.name ?? "A company administrator")}</strong> to join <strong>${escapeHtml(companyName)}</strong> on HireGo as a <strong>${escapeHtml(inviteRole)}</strong>${inviteDesignation ? ` (${escapeHtml(inviteDesignation)})` : ""}.
           </p>
           <div style="margin: 28px 0;">
             <a href="${inviteUrl}" style="background-color: #448AFF; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">

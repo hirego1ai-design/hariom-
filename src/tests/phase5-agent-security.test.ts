@@ -135,10 +135,13 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
   return { results };
 }
 
-
+import { test } from "node:test";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as assert from "node:assert/strict";
 
 test("candidate stage route cannot directly hire or reject", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "src/app/api/employer/candidates/[id]/stage/route.ts"), "utf8");
-  assert.match(source, /stage === "HIRED" \\|\\| stage === "REJECTED"/);
+  assert.match(source, /stage === "HIRED" \|\| stage === "REJECTED"/);
   assert.match(source, /persisted approval workflow/);
 });

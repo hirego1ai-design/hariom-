@@ -96,3 +96,27 @@ test("admin delivery filters fail closed", () => {
   assert(source.includes("Invalid communication delivery status filter."));
   assert(source.includes("Invalid communication channel filter."));
 });
+
+test("COMMUNICATION_EVENTS array is synchronized with registry keys including INTERVIEW_NEXT_ROUND", async () => {
+  const { COMMUNICATION_EVENTS, COMMUNICATION_EVENT_REGISTRY } = await import("../lib/communications/catalog");
+  assert(COMMUNICATION_EVENTS.includes("INTERVIEW_NEXT_ROUND"));
+  for (const eventKey of COMMUNICATION_EVENTS) {
+    assert(COMMUNICATION_EVENT_REGISTRY[eventKey] !== undefined, `Missing registry definition for ${eventKey}`);
+  }
+  for (const registryKey of Object.keys(COMMUNICATION_EVENT_REGISTRY)) {
+    assert(COMMUNICATION_EVENTS.includes(registryKey as any), `Missing event constant for ${registryKey}`);
+  }
+});
+
+test("communication template route uses Prisma.JsonNull for nullable providerParameterOrder", () => {
+  const source = fs.readFileSync(new URL("../app/api/admin/communications/templates/[id]/route.ts", import.meta.url), "utf8");
+  assert(source.includes("Prisma.JsonNull"));
+  assert(source.includes("providerParameterOrder"));
+});
+
+test("employer team invitation uses narrowed strings with escapeHtml", () => {
+  const source = fs.readFileSync(new URL("../app/api/employer/team/route.ts", import.meta.url), "utf8");
+  assert(source.includes("escapeHtml(inviteRole)"));
+  assert(source.includes("escapeHtml(session.name ?? \"A company administrator\")"));
+});
+

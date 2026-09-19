@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logCriticalAuditEvent } from "@/lib/auditLogger";
@@ -30,7 +31,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
   if(current.channel==="WHATSAPP"){const definition=communicationEventDefinition(current.eventKey);const mapping=(body.providerParameterOrder===undefined?current.providerParameterOrder:body.providerParameterOrder);if(!Array.isArray(mapping)||!mapping.length)throw new ApiError("WhatsApp templates require explicit provider parameter order.",422);const unknown=mapping.filter((key):key is string=>typeof key!=="string"||!definition?.variables.includes(key));if(unknown.length)throw new ApiError("Provider parameter mapping contains unapproved variables.",422);const duplicate=mapping.filter((key,index)=>mapping.indexOf(key)!==index);if(duplicate.length)throw new ApiError("Provider parameter mapping contains duplicate variables.",422);}
   const updated=await prisma.$transaction(async tx=>{
    if(body.enabled===true)await tx.communicationTemplate.updateMany({where:{eventKey:current.eventKey,channel:current.channel,audience:current.audience,locale:current.locale,enabled:true,id:{not:id}},data:{enabled:false,status:"SUPERSEDED"}});
-   return tx.communicationTemplate.update({where:{id},data:{...body,status:body.enabled===true?"ACTIVE":body.enabled===false?"DRAFT":current.status,updatedById:user.id}});
+    return tx.communicationTemplate.update({where:{id},data:{...body,providerParameterOrder:body.providerParameterOrder===undefined?undefined:body.providerParameterOrder===null?Prisma.JsonNull:body.providerParameterOrder as Prisma.InputJsonValue,status:body.enabled===true?"ACTIVE":body.enabled===false?"DRAFT":current.status,updatedById:user.id}});
   });
   await logCriticalAuditEvent({userId:user.id,action:"COMMUNICATION_TEMPLATE_UPDATED",resource:`CommunicationTemplate:${id}`,details:`event=${updated.eventKey}; channel=${updated.channel}; enabled=${updated.enabled}; version=${updated.version}`});
   return NextResponse.json({success:true,template:updated});
