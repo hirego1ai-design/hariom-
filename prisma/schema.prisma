@@ -1771,7 +1771,7 @@ model WhatsAppContact {
   linkStatus String @default("UNLINKED")
   // UNLINKED | PENDING_VERIFICATION | LINKED | REJECTED
 
-  optInStatus String @default("OPTED_IN")
+  optInStatus String @default("UNKNOWN")
   // OPTED_IN | OPTED_OUT
 
   firstSeenAt DateTime @default(now())
