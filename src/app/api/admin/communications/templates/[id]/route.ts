@@ -11,7 +11,7 @@ const schema=z.object({
  providerTemplateId:z.string().trim().max(512).nullable().optional(),
  providerAlias:z.string().trim().max(512).nullable().optional(),
  subject:z.string().trim().max(200).nullable().optional(),
- body:z.string().min(1).max(20000).optional(),
+ body:z.string().min(1).max(20000).optional(),\n providerParameterOrder:z.array(z.string().trim().min(1).max(100)).max(50).nullable().optional(),
  enabled:z.boolean().optional(),
 }).strict();
 
@@ -25,7 +25,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
   const nextSubject=body.subject===undefined?current.subject:body.subject;const nextBody=body.body??current.body;
   const check=validateTemplateVariables(current.eventKey as any,nextSubject||undefined,nextBody);if(check.unknown.length)throw new ApiError(`Unapproved variables: ${check.unknown.join(", ")}`,422);
     if(check.missing.length)throw new ApiError(`Missing required variables: ${check.missing.join(", ")}`,422);
-  if(body.enabled===true&&!((body.providerAlias??current.providerAlias)||(body.providerTemplateId??current.providerTemplateId)))throw new ApiError("Provider mapping is required before activation.",422);
+  if(body.enabled===true&&!((body.providerAlias??current.providerAlias)||(body.providerTemplateId??current.providerTemplateId)))throw new ApiError("Provider mapping is required before activation.",422);\n  if(current.channel==="WHATSAPP"){const definition=communicationEventDefinition(current.eventKey);const mapping=(body.providerParameterOrder===undefined?current.providerParameterOrder:body.providerParameterOrder);if(!Array.isArray(mapping)||!mapping.length)throw new ApiError("WhatsApp templates require explicit provider parameter order.",422);const unknown=mapping.filter((key):key is string=>typeof key!=="string"||!definition?.variables.includes(key));if(unknown.length)throw new ApiError("Provider parameter mapping contains unapproved variables.",422);}
   const updated=await prisma.$transaction(async tx=>{
    if(body.enabled===true)await tx.communicationTemplate.updateMany({where:{eventKey:current.eventKey,channel:current.channel,audience:current.audience,locale:current.locale,enabled:true,id:{not:id}},data:{enabled:false,status:"SUPERSEDED"}});
    return tx.communicationTemplate.update({where:{id},data:{...body,status:body.enabled===true?"ACTIVE":body.enabled===false?"DRAFT":current.status,updatedById:user.id}});
