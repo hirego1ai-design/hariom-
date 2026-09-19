@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import assert from "node:assert/strict";
 import {
   communicationEventDefinition,
@@ -64,4 +65,19 @@ test("next interview round has a dedicated non-shortlist event", () => {
 test("candidate selection and rejection remain consequential", () => {
   assert.equal(communicationEventDefinition("CANDIDATE_SELECTED").consequential, true);
   assert.equal(communicationEventDefinition("APPLICATION_REJECTED").consequential, true);
+});
+
+
+test("dispatcher cannot expose a public consequential test bypass", () => {
+  const source = fs.readFileSync(new URL("../lib/communications/dispatcher.ts", import.meta.url), "utf8");
+  assert(!source.includes("testMode?: boolean"));
+  assert(source.includes("workflowId: string"));
+  assert(source.includes("assertPersistedCommunicationAuthorization(input.authorizationProof, input.eventKey)"));
+  assert(source.includes("AGENT_APPROVAL_CONSUMED"));
+});
+
+test("consequential deliveries are never marked automatically retryable", () => {
+  const source = fs.readFileSync(new URL("../lib/communications/dispatcher.ts", import.meta.url), "utf8");
+  assert(source.includes("retryable: !definition.consequential && failure.retryable"));
+  assert(source.includes('lastErrorCode: "AMBIGUOUS_PROVIDER_ERROR"'));
 });
