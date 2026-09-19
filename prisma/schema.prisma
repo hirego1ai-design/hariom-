@@ -1772,7 +1772,7 @@ model WhatsAppContact {
   // UNLINKED | PENDING_VERIFICATION | LINKED | REJECTED
 
   optInStatus String @default("UNKNOWN")
-  // OPTED_IN | OPTED_OUT
+  // UNKNOWN | OPTED_IN | OPTED_OUT
 
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @updatedAt
