@@ -10,7 +10,7 @@ import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
 import { createTenantContext } from "@/lib/security/TenantContext";
 import { Role } from "@prisma/client";
 
-const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]), approvalId: z.string().uuid().optional(), workflowId: z.string().uuid().optional() });
+const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]), approvalId: z.string().uuid().optional(), workflowId: z.string().uuid().optional(), confirmApproval: z.boolean().optional() }).strict();
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -44,12 +44,69 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (body.action === "REJECT") {
-      if (!body.approvalId || !body.workflowId) throw new ApiError("Persisted human approval is required before rejecting a candidate.", 409);
       const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
-      const approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
-      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.decision !== "APPROVED" || approval.consumedAt) throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
-      if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
       const expectedAction = { interviewId: id, applicationId: interview.applicationId, action: "REJECT" };
+
+      if (!body.approvalId || !body.workflowId) {
+        const correlationId = `interview-rejection:${id}`;
+        let workflow = await prisma.workflowInstance.findUnique({ where: { correlationId } });
+        if (!workflow) {
+          workflow = await WorkflowEngine.startWorkflow({
+            workflowType: "SELECTION_REJECTION",
+            companyId: interview.application.job.companyId,
+            jobId: interview.application.jobId,
+            candidateId: interview.application.candidateProfileId,
+            applicationId: interview.applicationId,
+            correlationId,
+            initiatedBy: session.id,
+            initialStep: "INTERVIEW_ROUND_REJECTION",
+            checkpointState: { interviewId: id, source: "round-decision" },
+            context: tenantContext,
+          });
+        }
+        if (workflow.applicationId !== interview.applicationId || workflow.companyId !== interview.application.job.companyId) {
+          throw new ApiError("Existing rejection workflow does not match this candidate application.", 409);
+        }
+        if (!["RUNNING", "PAUSED_FOR_APPROVAL"].includes(workflow.status)) {
+          throw new ApiError("Existing rejection workflow requires reconciliation before another decision.", 409);
+        }
+        let approval = await prisma.workflowApproval.findFirst({
+          where: { workflowInstanceId: workflow.id, actionType: "CANDIDATE_REJECTION", decision: { in: ["PENDING", "APPROVED"] }, consumedAt: null },
+          orderBy: { requestedAt: "desc" },
+        });
+        if (!approval) {
+          if (workflow.status !== "RUNNING") throw new ApiError("Rejection workflow is paused without a valid approval request.", 409);
+          const requested = await WorkflowEngine.requestConsequentialAction({
+            workflowId: workflow.id,
+            stepName: "INTERVIEW_ROUND_REJECTION",
+            actionType: "CANDIDATE_REJECTION",
+            action: expectedAction,
+            context: tenantContext,
+          });
+          approval = await prisma.workflowApproval.findUnique({ where: { id: requested.approvalId } });
+        }
+        if (!approval) throw new ApiError("Unable to persist rejection approval request.", 500);
+        return NextResponse.json({
+          success: true,
+          action: "REJECT",
+          requiresConfirmation: true,
+          approvalId: approval.id,
+          workflowId: workflow.id,
+          message: "Rejection approval has been persisted. Confirm once more to execute the candidate rejection.",
+        }, { status: 202 });
+      }
+
+      let approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.consumedAt) {
+        throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
+      }
+      if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
+      if (approval.decision === "PENDING") {
+        if (!body.confirmApproval) throw new ApiError("Explicit confirmation is required to approve this candidate rejection.", 409);
+        await WorkflowEngine.decideApproval({ approvalId: body.approvalId, decision: "APPROVED", notes: "Confirmed from interview round decision UI.", context: tenantContext });
+        approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+      }
+      if (approval.decision !== "APPROVED") throw new ApiError("Candidate rejection approval is not approved.", 409);
       await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: expectedAction, context: tenantContext });
     }
 
