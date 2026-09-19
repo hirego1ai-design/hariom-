@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentSession, revokeAllUserSessions, type UserSession } from "@/lib/auth";
+import { revokeAllUserSessions } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { buildPublicAppUrl } from "@/lib/env";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
@@ -317,7 +318,7 @@ export async function DELETE(req: NextRequest) {
           data: { sessionVersion: { increment: 1 } },
           select: { sessionVersion: true },
         });
-        await tx.auditLog.create({
+        const auditLog = await tx.auditLog.create({
           data: {
             userId: session.id,
             companyId: member.companyId,
@@ -327,6 +328,7 @@ export async function DELETE(req: NextRequest) {
             ipAddress: req.headers.get("x-forwarded-for") || undefined,
           },
         });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
         return updatedUser.sessionVersion;
       });
       await revokeAllUserSessions(member.userId, newSessionVersion).catch((error) => {
