@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";\nimport { COMMUNICATION_CHANNELS } from "@/lib/communications/catalog";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { COMMUNICATION_CHANNELS } from "@/lib/communications/catalog";
 
 export async function GET(request: Request) {
   try {
