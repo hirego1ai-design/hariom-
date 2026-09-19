@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "tsx src/tests/suite.test.ts",
-    "test:audit": "node scripts/audit-regressions.mjs"
+    "test:audit": "node scripts/audit-regressions.mjs",
+    "test:phase5": "tsx src/tests/run-phase5-tests.ts && tsx --test src/tests/workflow-engine-regression.test.ts && tsx --test src/tests/hiring-pipeline-contract.test.ts",
+    "verify:phase5": "prisma validate && prisma generate && tsc --noEmit && eslint src/lib/workflows/WorkflowEngine.ts src/lib/tools/ToolRegistry.ts src/lib/agents/OperationalAgents.ts src/tests/phase5-agent-security.test.ts src/tests/run-phase5-tests.ts src/tests/workflow-engine-regression.test.ts src/tests/hiring-pipeline-contract.test.ts && npm run test:phase5"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
@@ -28,7 +30,7 @@
     "html-react-parser": "^6.1.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^1.26.0",
-    "next": "16.2.12",
+    "next": "16.3.5",
     "openai": "^4.73.0",
     "pg": "^8.23.0",
     "postcss": "8.5.23",
@@ -49,7 +51,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.5",
     "glob": "^13.0.6",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.17",
@@ -57,8 +59,11 @@
     "typescript": "^5"
   },
   "overrides": {
+    "js-yaml": "4.3.2",
     "nanoid": "^3.3.18",
     "postcss": "8.5.23",
-    "sharp": "0.35.3"
+    "sharp": "0.35.4",
+    "minimatch@>=10": "10.2.5",
+    "minimatch@<10": "3.1.5"
   }
 }

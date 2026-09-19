@@ -71,3 +71,12 @@ export function getVideoAnalysisConfig() {
     whisperComputeType: process.env.WHISPER_COMPUTE_TYPE?.trim() || "int8",
   };
 }
+
+export function requireMalwareScannerEnv() {
+  const url = requireProductionEnv("MALWARE_SCANNER_URL");
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error("MALWARE_SCANNER_URL must be a credential-free HTTPS URL in production.");
+  }
+  return { url, token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
+}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
-import { handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { createPlanSchema, updatePlanSchema } from "@/lib/payments/planContracts";
 
 // GET all subscription plans (Admin view includes archived if requested)
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  await enforceRateLimit(request, "admin_subscription_plans_read", 60, 60_000);
   const { searchParams } = new URL(request.url);
   const includeArchived = searchParams.get("includeArchived") === "true";
 
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await enforceRateLimit(request, "admin_subscription_plans_write", 20, 60_000);
     const body = await readValidatedJson(request, createPlanSchema);
     const plan = await subscriptionsDb.createSubscriptionPlan(body);
 
@@ -43,6 +45,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
+    await enforceRateLimit(request, "admin_subscription_plans_write", 20, 60_000);
     const { id, ...updates } = await readValidatedJson(request, updatePlanSchema);
     const plan = await subscriptionsDb.updateSubscriptionPlan(id, updates);
     if (!plan) {
@@ -62,8 +65,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  try {
+    await enforceRateLimit(request, "admin_subscription_plans_write", 20, 60_000);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
 
   if (!id) {
     return NextResponse.json({ success: false, error: "Missing plan ID" }, { status: 400 });
@@ -74,5 +79,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Plan not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ success: true, message: "Plan archived successfully", plan });
+    return NextResponse.json({ success: true, message: "Plan archived successfully", plan });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }

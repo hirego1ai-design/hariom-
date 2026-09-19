@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export interface SubscriptionPlanSummary {
   id: string;
@@ -149,6 +150,7 @@ export const subscriptionPlans: SubscriptionPlanSummary[] = [
 
 export async function GET(req: NextRequest) {
   await requireAdminSession(req);
+  await enforceRateLimit(req, "admin_revenue_subscriptions", 60, 60_000);
   if (!allowRevenueFixtures) {
     return revenueUnavailable(new Error("Subscription revenue has no persisted reporting source."), "Subscription revenue");
   }

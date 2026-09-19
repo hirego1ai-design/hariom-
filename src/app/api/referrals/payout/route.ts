@@ -1,86 +1,48 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { referralDb } from "@/lib/referral-db";
-import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { FraudStatus } from "@/types/referral";
+
+const payoutSchema = z.object({
+  amount: z.coerce.number().finite().positive().max(10_000_000),
+  payoutMethod: z.enum(["UPI", "BANK_TRANSFER"]).default("UPI"),
+  payoutAddress: z.string().trim().min(3).max(250).optional(),
+  upiId: z.string().trim().min(3).max(150).optional(),
+}).strict().refine((body) => Boolean(body.payoutAddress || body.upiId), "Payout address is required.");
 
 export async function POST(request: Request) {
   try {
-    await enforceRateLimit(request, "referrals_payout", 5, 60000);
-
+    await enforceRateLimit(request, "referrals_payout", 5, 60_000);
     const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
+    if (!session) throw new ApiError("Authentication required.", 401);
+    const rawBody = await request.clone().json().catch(() => null);
+    if (rawBody && typeof rawBody === "object" && ("referrerId" in rawBody || "userId" in rawBody)) {
+      throw new ApiError("Payout identity is derived from the authenticated session.", 403);
     }
+    const body = await readValidatedJson(request, payoutSchema);
 
-    const body = await request.json();
-
-    // IDOR Protection: User can only request payouts for their own authenticated account
-    if (body.referrerId && body.referrerId !== session.id) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Cannot request payout for another user" },
-        { status: 403 }
-      );
-    }
-
-    if (body.userId && body.userId !== session.id) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Cannot request payout for another user" },
-        { status: 403 }
-      );
-    }
-
-    // Fraud Gate: Check if user is in FRAUD_HOLD or ADMIN_REVIEW
     const fraud = await referralDb.getUserFraudProfile(session.id);
-    if (fraud.status === FraudStatus.FRAUD_HOLD) {
-      return NextResponse.json(
-        { success: false, error: "Payout requests are suspended: Account is on FRAUD_HOLD pending security compliance review." },
-        { status: 403 }
-      );
-    }
-    if (fraud.status === FraudStatus.ADMIN_REVIEW) {
-      return NextResponse.json(
-        { success: false, error: "Payout requests are suspended: Account is currently under ADMIN_REVIEW." },
-        { status: 403 }
-      );
-    }
+    if (fraud.status === FraudStatus.FRAUD_HOLD) throw new ApiError("Payout requests are suspended pending security compliance review.", 403);
+    if (fraud.status === FraudStatus.ADMIN_REVIEW) throw new ApiError("Payout requests are suspended while the account is under administrative review.", 403);
 
-    const amount = parseFloat(body.amount);
-    if (isNaN(amount) || amount <= 0) {
-      return NextResponse.json({ success: false, error: "Invalid payout amount" }, { status: 400 });
-    }
-
-    const payoutAddress = body.payoutAddress || body.upiId;
-    if (!payoutAddress) {
-      return NextResponse.json(
-        { success: false, error: "Payout address (UPI ID or Bank Account) is required" },
-        { status: 400 }
-      );
-    }
-
+    const payoutAddress = body.payoutAddress ?? body.upiId;
+    if (!payoutAddress) throw new ApiError("Payout address is required.", 422);
     const payout = await referralDb.requestPayout({
       referrerId: session.id,
-      amount,
-      payoutMethod: body.payoutMethod || "UPI",
+      amount: body.amount,
+      payoutMethod: body.payoutMethod ?? "UPI",
       payoutAddress,
     });
 
     return NextResponse.json({
       success: true,
-      message: `Withdrawal request for ₹${amount.toLocaleString()} submitted. Awaiting admin compliance verification.`,
-      payout: {
-        id: payout.id,
-        amount: payout.amount,
-        currency: payout.currency,
-        status: payout.status,
-        createdAt: payout.createdAt,
-      },
+      message: "Withdrawal request submitted and is awaiting compliance verification.",
+      payout: { id: payout.id, amount: payout.amount, currency: payout.currency, status: payout.status, createdAt: payout.createdAt },
     });
-  } catch (error: any) {
-    if (error.message?.includes("exceeds unreserved") || error.message?.includes("Minimum payout")) {
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes("exceeds unreserved") || error.message.includes("Minimum payout"))) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
     return handleApiError(error);

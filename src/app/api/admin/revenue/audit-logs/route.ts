@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { getAuditLogs } from "@/lib/auditLogger";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   await requireAdminSession(req);
+  await enforceRateLimit(req, "admin_revenue_audit_logs", 30, 60_000);
   const logs = await getAuditLogs(200);
   const financeLogs = logs.filter((log) => {
     const searchable = `${log.action} ${log.resource} ${log.details ?? ""}`.toLowerCase();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -17,6 +17,7 @@ async function candidateProfile(request: NextRequest) {
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ serviceKey: string }> }) {
   try {
+    await enforceRateLimit(request, "candidate_service_request", 20, 60_000);
     const { session, profile } = await candidateProfile(request);
     const { serviceKey } = await params;
     const { idempotencyKey } = await readValidatedJson(request, requestSchema);

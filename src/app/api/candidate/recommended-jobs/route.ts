@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
-import { handleApiError } from '@/lib/apiSecurity';
+import { enforceRateLimit, handleApiError } from '@/lib/apiSecurity';
 import { prisma } from '@/lib/prisma';
 import { computeMatchScore } from '@/lib/matching/JobMatchingEngine';
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "candidate_recommended_jobs", 60, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session || session.role !== 'CANDIDATE') {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });

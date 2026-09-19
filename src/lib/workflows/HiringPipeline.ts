@@ -76,7 +76,7 @@ export class HiringPipeline {
 
     // 2. Initialize Workflow Instance
     const workflow = await WorkflowEngine.startWorkflow({
-      workflowType: 'END_TO_END_HIRING',
+      workflowType: 'CANDIDATE_SCREENING',
       companyId: input.companyId,
       candidateId: input.candidateProfileId,
       jobId: evidence.jobId,
@@ -84,6 +84,7 @@ export class HiringPipeline {
       correlationId: input.correlationId,
       initiatedBy: input.initiatedBy,
       initialStep: 'JD_GENERATION',
+      context: input.tenantContext,
       checkpointState: {
         phase: 'INIT', mode: 'ADVISORY_ONLY',
         evidenceSha256: createHash('sha256').update(JSON.stringify(evidence)).digest('hex'),
@@ -203,6 +204,10 @@ export class HiringPipeline {
         });
       }
     );
+
+    // Advisory completion is not a hiring decision. Refuse completion if
+    // any consequential approval is still pending or approved-but-unconsumed.
+    await WorkflowEngine.assertNoUnresolvedConsequentialActions(workflow.id);
 
     // Publish Pipeline Completed System Event via Outbox
     await prisma.$transaction(async (tx) => {

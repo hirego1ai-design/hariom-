@@ -6,6 +6,7 @@ import {
   CreateOrderResult,
   VerifyWebhookParams,
   VerifyWebhookResult,
+  AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
 
 export class RazorpayGateway implements PaymentGateway {
@@ -29,6 +30,9 @@ export class RazorpayGateway implements PaymentGateway {
             Authorization: `Basic ${auth}`,
             "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(10_000),
+          redirect: "error",
+          cache: "no-store",
           body: JSON.stringify({
             amount: Math.round(params.amount * 100), // amount in paise
             currency: params.currency || "INR",
@@ -57,9 +61,15 @@ export class RazorpayGateway implements PaymentGateway {
         throw new Error(
           `Razorpay order creation failed (${res.status}${getRazorpayErrorDetail(data) ? `: ${getRazorpayErrorDetail(data)}` : ""}).`
         );
-      } catch (err: any) {
-        console.error("Razorpay Live API Order Creation Failed:", err.message);
-        throw err; // Allow Controller to capture exception for safe failover if order was NOT created
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Razorpay order request failed.";
+        console.error("Razorpay Live API Order Creation Failed:", message);
+        // A timeout/network failure can happen after Razorpay accepted the POST.
+        // Its outcome is therefore ambiguous and must not trigger a second gateway order.
+        if (err instanceof TypeError || (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError"))) {
+          throw new AmbiguousPaymentOrderError("Razorpay order outcome is unknown and requires reconciliation.", "RAZORPAY");
+        }
+        throw err;
       }
     }
 
@@ -137,7 +147,13 @@ export class RazorpayGateway implements PaymentGateway {
     const jsonPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     const entity = jsonPayload?.payload?.payment?.entity || jsonPayload;
     const gatewayTxId = entity?.id || "";
-    const status = entity?.status === "captured" || jsonPayload?.event === "payment.captured" ? "SUCCESS" : "FAILED";
+    const event = typeof jsonPayload?.event === "string" ? jsonPayload.event : "";
+    const nativeStatus = typeof entity?.status === "string" ? entity.status : "";
+    const status: VerifyWebhookResult["status"] = nativeStatus === "captured" || event === "payment.captured"
+      ? "SUCCESS"
+      : nativeStatus === "failed" || event === "payment.failed"
+        ? "FAILED"
+        : "PENDING";
     const gatewayOrderId = entity?.order_id || jsonPayload?.order_id || jsonPayload?.payload?.payment?.entity?.order_id;
 
     return {
@@ -154,7 +170,33 @@ export class RazorpayGateway implements PaymentGateway {
   }
 
   async getPaymentStatus(gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
-    return { status: "SUCCESS" };
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      if (process.env.NODE_ENV === "production") throw new Error("Razorpay credentials missing in production environment.");
+      return { status: "PENDING" };
+    }
+    if (!/^pay_[A-Za-z0-9]+$/.test(gatewayTxId)) throw new Error("Invalid Razorpay payment id.");
+
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(gatewayTxId)}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      cache: "no-store",
+    });
+    const data: unknown = await res.json();
+    if (!res.ok || !isRazorpayPayment(data)) {
+      throw new Error(`Razorpay payment status lookup failed (${res.status}).`);
+    }
+
+    const status = data.status === "captured"
+      ? "SUCCESS"
+      : data.status === "failed" || data.status === "refunded"
+        ? "FAILED"
+        : "PENDING";
+    return { status, rawResponse: data };
   }
 }
 
@@ -168,4 +210,10 @@ function getRazorpayErrorDetail(data: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const description = (error as { description?: unknown }).description;
   return typeof description === "string" ? description : undefined;
+}
+
+function isRazorpayPayment(data: unknown): data is { id: string; status: string } & Record<string, unknown> {
+  if (typeof data !== "object" || data === null) return false;
+  const payment = data as { id?: unknown; status?: unknown };
+  return typeof payment.id === "string" && typeof payment.status === "string";
 }

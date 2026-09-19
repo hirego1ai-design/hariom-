@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { referralDb } from "@/lib/referral-db";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { FraudStatus } from "@/types/referral";
+import { z } from "zod";
+
+const fraudUpdateSchema = z.object({ userId: z.string().trim().min(1).max(191), newStatus: z.nativeEnum(FraudStatus), reason: z.string().trim().min(3).max(1000), riskScore: z.number().finite().min(0).max(100).optional(), riskFactors: z.array(z.string().trim().min(1).max(200)).max(50).optional() }).strict();
 
 export async function GET(request: Request) {
   try {
@@ -20,6 +23,7 @@ export async function GET(request: Request) {
       );
     }
 
+    await enforceRateLimit(request, "admin_referral_fraud_read", 60, 60_000);
     const url = new URL(request.url);
     const userId = url.searchParams.get("userId");
 
@@ -51,25 +55,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { userId, newStatus, reason, riskScore, riskFactors } = body;
-
-    if (!userId || !newStatus || !reason) {
-      return NextResponse.json(
-        { success: false, error: "Missing required fields: userId, newStatus, reason" },
-        { status: 400 }
-      );
-    }
-
-    if (!Object.values(FraudStatus).includes(newStatus)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Invalid status. Must be one of: ${Object.values(FraudStatus).join(", ")}`,
-        },
-        { status: 400 }
-      );
-    }
+    await enforceRateLimit(request, "admin_referral_fraud_update", 20, 60_000);
+    const { userId, newStatus, reason, riskScore, riskFactors } = await readValidatedJson(request, fraudUpdateSchema);
 
     const updatedProfile = await referralDb.updateFraudStatus({
       userId,

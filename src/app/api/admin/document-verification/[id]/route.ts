@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 const verificationActionSchema = z.object({
   action: z.enum(["Verified", "Rejected"]),
   notes: z.string().trim().max(2000).optional(),
-});
+}).strict();
 
 export async function POST(
   req: NextRequest,
@@ -16,6 +17,7 @@ export async function POST(
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Authentication required", 401);
     if (session.role !== "ADMIN") return jsonError("Administrator access required", 403);
+    await enforceRateLimit(req, "admin_document_verification_write", 20, 60_000);
 
     const { id: documentId } = await params;
     const parsed = verificationActionSchema.safeParse(await req.json());

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 
 const templateSchema = z.object({
@@ -26,6 +26,7 @@ async function requireAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
+    await enforceRateLimit(request, "admin_readiness_templates_read", 60, 60_000);
     const templates = await prisma.mcqAssessment.findMany({
       where: { scope: "PLATFORM_READINESS" },
       select: {
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
+    await enforceRateLimit(request, "admin_readiness_templates_write", 20, 60_000);
     const data = await readValidatedJson(request, templateSchema);
     const template = await prisma.mcqAssessment.create({
       data: { ...data, scope: "PLATFORM_READINESS", isActive: false },

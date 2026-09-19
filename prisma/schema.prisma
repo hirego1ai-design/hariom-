@@ -573,10 +573,14 @@ model StoredFile {
   mimeType     String
   sizeBytes    Int
   deletedAt    DateTime?
+  scanStatus   String    @default("PENDING")
+  scanCheckedAt DateTime?
+  scanDetail   String?
   createdAt    DateTime  @default(now())
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
+  @@index([scanStatus, createdAt])
 }
 
 model AiUsage {
@@ -1025,6 +1029,33 @@ enum WorkflowStatus {
   CANCELLED
 }
 
+enum WorkflowApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WorkflowApproval {
+  id                 String                   @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance         @relation(fields: [workflowInstanceId], references: [id], onDelete: Restrict)
+  companyId          String?
+  stepName           String
+  actionType         String
+  actionDigest       String
+  decision           WorkflowApprovalDecision @default(PENDING)
+  requestedBy        String
+  decidedBy          String?
+  decidedByRole      Role?
+  decisionNotes      String?
+  requestedAt        DateTime                 @default(now())
+  decidedAt          DateTime?
+  consumedAt         DateTime?
+
+  @@unique([workflowInstanceId, stepName, actionDigest])
+  @@index([companyId, decision, requestedAt])
+}
+
 model WorkflowInstance {
   id              String         @id @default(uuid())
   companyId       String?
@@ -1044,6 +1075,7 @@ model WorkflowInstance {
   updatedAt       DateTime       @updatedAt
 
   steps WorkflowStepLog[]
+  approvals WorkflowApproval[]
 }
 
 // ================================================================

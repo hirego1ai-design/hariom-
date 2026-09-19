@@ -63,6 +63,7 @@ const configSchema = z.object({
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_platform_config_read", 30, 60_000);
     const config = await readPlatformConfig();
     return NextResponse.json({ success: true, config });
   } catch (error) {

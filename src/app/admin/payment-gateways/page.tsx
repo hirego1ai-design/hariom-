@@ -1,10 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
+
+type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
+type GatewayStatus = "HEALTHY" | "DEGRADED" | "DISABLED";
+type GatewayConfig = { mode: "AUTO" | "MANUAL"; primaryGateway: GatewayName; autoFailover: boolean; allowEmployerSelection: boolean; gatewaysStatus: Record<GatewayName, GatewayStatus>; priorities: GatewayName[] };
+const GATEWAYS: GatewayName[] = ["RAZORPAY", "PAYU", "STRIPE"];
 
 export default function AdminPaymentGatewaysPage() {
-  const [config, setConfig] = useState<any>({
+  const [config, setConfig] = useState<GatewayConfig>({
     mode: "AUTO",
     primaryGateway: "RAZORPAY",
     autoFailover: true,
@@ -12,24 +16,25 @@ export default function AdminPaymentGatewaysPage() {
     gatewaysStatus: {
       RAZORPAY: "HEALTHY",
       PAYU: "HEALTHY",
-      PHONEPE: "HEALTHY",
+      STRIPE: "HEALTHY",
     },
-    priorities: ["RAZORPAY", "PAYU", "PHONEPE"],
+    priorities: ["RAZORPAY", "PAYU", "STRIPE"],
   });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchConfig() {
+    setError(null);
     try {
       const res = await fetch("/api/admin/payment-gateway/config");
       const data = await res.json();
-      if (data.success && data.config) {
-        setConfig(data.config);
-      }
+      if (!res.ok || !data.success || !data.config) throw new Error(data.error || "Unable to load gateway configuration.");
+      setConfig(data.config);
     } catch (err) {
-      console.error("Failed to load gateway config", err);
+      setError(err instanceof Error ? err.message : "Unable to load gateway configuration.");
     } finally {
       setLoading(false);
     }
@@ -41,6 +46,7 @@ export default function AdminPaymentGatewaysPage() {
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/payment-gateway/config", {
         method: "POST",
@@ -52,25 +58,23 @@ export default function AdminPaymentGatewaysPage() {
         setToast("Multi-gateway payment configuration saved!");
         setTimeout(() => setToast(null), 3000);
       } else {
-        alert("Failed to save: " + data.error);
+        setError(data.error || "Unable to save gateway configuration.");
       }
-    } catch (err: any) {
-      alert("Error: " + err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to save gateway configuration.");
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleGatewayStatus = (gw: string) => {
+  const toggleGatewayStatus = (gw: GatewayName) => {
     const current = config.gatewaysStatus[gw] || "HEALTHY";
     const next = current === "HEALTHY" ? "DEGRADED" : current === "DEGRADED" ? "DISABLED" : "HEALTHY";
-    setConfig({
-      ...config,
-      gatewaysStatus: {
-        ...config.gatewaysStatus,
-        [gw]: next,
-      },
-    });
+    const gatewaysStatus = { ...config.gatewaysStatus, [gw]: next };
+    const enabled = GATEWAYS.filter((name) => gatewaysStatus[name] !== "DISABLED");
+    if (enabled.length === 0) return setError("At least one payment gateway must remain enabled.");
+    setError(null);
+    setConfig({ ...config, gatewaysStatus, primaryGateway: gatewaysStatus[config.primaryGateway] === "DISABLED" ? enabled[0] : config.primaryGateway });
   };
 
   return (
@@ -81,6 +85,8 @@ export default function AdminPaymentGatewaysPage() {
           {toast}
         </div>
       )}
+
+      {error && <div role="alert" className="max-w-6xl mx-auto mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>}
 
       {/* Header */}
       <div className="max-w-6xl mx-auto space-y-8">
@@ -93,7 +99,7 @@ export default function AdminPaymentGatewaysPage() {
               </h1>
             </div>
             <p className="text-sm text-slate-400">
-              Admin Controller for Razorpay, PayU, and PhonePe with Safe Failover and Health Monitoring
+              Admin Controller for Razorpay, PayU, and Stripe with Safe Failover and Health Monitoring
             </p>
           </div>
 
@@ -155,12 +161,10 @@ export default function AdminPaymentGatewaysPage() {
                 </label>
                 <select
                   value={config.primaryGateway}
-                  onChange={(e) => setConfig({ ...config, primaryGateway: e.target.value })}
+                  onChange={(e) => setConfig({ ...config, primaryGateway: e.target.value as GatewayName })}
                   className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-xs text-white font-bold"
                 >
-                  <option value="RAZORPAY">Razorpay (Default)</option>
-                  <option value="PAYU">PayU Money</option>
-                  <option value="PHONEPE">PhonePe PG</option>
+                  {GATEWAYS.filter((gw) => config.gatewaysStatus[gw] !== "DISABLED").map((gw) => <option key={gw} value={gw}>{gw}</option>)}
                 </select>
               </div>
 
@@ -205,7 +209,7 @@ export default function AdminPaymentGatewaysPage() {
                 Provider Health &amp; Priority Stack
               </h2>
 
-              {["RAZORPAY", "PAYU", "PHONEPE"].map((gw) => {
+              {GATEWAYS.map((gw) => {
                 const status = config.gatewaysStatus[gw] || "HEALTHY";
                 return (
                   <div
@@ -222,7 +226,7 @@ export default function AdminPaymentGatewaysPage() {
                         )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1 font-mono">
-                        Priority Rank: #{config.priorities.indexOf(gw) + 1} • Webhook HMAC Verified
+                        Priority Rank: #{config.priorities.indexOf(gw) + 1} • Routing status controlled by administrator
                       </p>
                     </div>
 

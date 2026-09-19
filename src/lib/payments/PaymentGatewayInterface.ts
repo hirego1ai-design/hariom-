@@ -1,4 +1,11 @@
-export type GatewayName = "RAZORPAY" | "PAYU" | "PHONEPE" | "STRIPE";
+export type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
+
+export class AmbiguousPaymentOrderError extends Error {
+  constructor(message: string, public readonly provider: GatewayName) {
+    super(message);
+    this.name = "AmbiguousPaymentOrderError";
+  }
+}
 
 export interface CreateOrderParams {
   orderId: string;
@@ -36,7 +43,7 @@ export interface VerifyWebhookResult {
   planId?: string;
   amount?: number;
   currency?: string;
-  status: "SUCCESS" | "FAILED" | "REJECTED";
+  status: "SUCCESS" | "FAILED" | "PENDING" | "REJECTED";
   rawPayload: any;
   error?: string;
 }

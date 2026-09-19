@@ -4,7 +4,7 @@ import { DlqManager } from '@/lib/reliability/DlqManager';
 import { BudgetManager } from '@/lib/governance/BudgetManager';
 import { WorkflowEngine } from '@/lib/workflows/WorkflowEngine';
 import { prisma } from '@/lib/prisma';
-import { DeadLetterJob } from '@prisma/client';
+import { DeadLetterJob, Role } from '@prisma/client';
 
 // In-Memory Stubs for Worker Crash & Outbox Recovery Testing
 const dbOutbox = new Map<string, any>();
@@ -375,12 +375,14 @@ async function runWorkerCrashTests() {
   console.log('\n--- Scenario 5: Workflow Step Crash Recovery & Resume ---');
 
   const wf5 = await WorkflowEngine.startWorkflow({
-    workflowType: 'END_TO_END_HIRING',
+    workflowType: 'JOB_REQUIREMENT',
+    jobId: 'job-crash-5',
     companyId: 'comp-crash-5',
     correlationId: 'corr-crash-5',
     initiatedBy: 'user-5',
     initialStep: 'PARSE_RESUME',
     checkpointState: {},
+    context: { userId: 'user-5', userRole: Role.ADMIN, companyId: 'comp-crash-5' },
   });
 
   let stepCallCount = 0;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
-import { referralDb } from "@/lib/referral-db";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(request: Request) {
   try {
@@ -19,6 +19,8 @@ export async function GET(request: Request) {
       );
     }
 
+    await enforceRateLimit(request, "admin_referral_analytics", 30, 60_000);
+
     let totalAttributions = 0;
     let candidateAttributions = 0;
     let employerAttributions = 0;
@@ -28,37 +30,23 @@ export async function GET(request: Request) {
     let totalPaidValue = 0;
     let pendingPayoutLiability = 0;
 
-    try {
-      const client = prisma as any;
-      if (client.referralAttribution) {
-        totalAttributions = await client.referralAttribution.count();
-        candidateAttributions = await client.referralAttribution.count({
-          where: { userType: "CANDIDATE" },
-        });
-        employerAttributions = await client.referralAttribution.count({
-          where: { userType: "EMPLOYER" },
-        });
-      }
-
-      if (client.referralReward) {
-        const rewards = await client.referralReward.findMany();
-        for (const r of rewards) {
-          totalRewardsValue += r.rewardAmount;
-          if (r.status === "ELIGIBLE") totalEligibleValue += r.rewardAmount;
-          if (r.status === "LOCKED") totalLockedValue += r.rewardAmount;
-          if (r.status === "PAID") totalPaidValue += r.rewardAmount;
-        }
-      }
-
-      if (client.referralPayout) {
-        const payouts = await client.referralPayout.findMany({
-          where: { status: "PENDING_ADMIN_APPROVAL" },
-        });
-        pendingPayoutLiability = payouts.reduce((sum: number, p: any) => sum + p.amount, 0);
-      }
-    } catch {
-      // DB query failed — return zeros rather than fake numbers
+    const [totalAttributionsDb, candidateAttributionsDb, employerAttributionsDb, rewards, payouts] = await prisma.$transaction([
+      prisma.referralAttribution.count(),
+      prisma.referralAttribution.count({ where: { userType: "CANDIDATE" } }),
+      prisma.referralAttribution.count({ where: { userType: "EMPLOYER" } }),
+      prisma.referralReward.findMany({ select: { rewardAmount: true, status: true } }),
+      prisma.referralPayout.findMany({ where: { status: "PENDING_ADMIN_APPROVAL" }, select: { amount: true } }),
+    ]);
+    totalAttributions = totalAttributionsDb;
+    candidateAttributions = candidateAttributionsDb;
+    employerAttributions = employerAttributionsDb;
+    for (const r of rewards) {
+      totalRewardsValue += r.rewardAmount;
+      if (r.status === "ELIGIBLE") totalEligibleValue += r.rewardAmount;
+      if (r.status === "LOCKED") totalLockedValue += r.rewardAmount;
+      if (r.status === "PAID") totalPaidValue += r.rewardAmount;
     }
+    pendingPayoutLiability = payouts.reduce((sum, p) => sum + p.amount, 0);
 
     const analytics = {
       summary: {
@@ -81,7 +69,7 @@ export async function GET(request: Request) {
     };
 
     return NextResponse.json({ success: true, data: analytics });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

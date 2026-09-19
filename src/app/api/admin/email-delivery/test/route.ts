@@ -8,7 +8,7 @@ import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@
 const testSchema = z.object({
   email: z.string().email("Enter a valid test email address."),
   provider: z.enum(EMAIL_PROVIDERS).optional(),
-});
+}).strict();
 
 export async function POST(request: Request) {
   try {

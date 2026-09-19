@@ -19,10 +19,12 @@ test('six-stage advisory contracts and readiness API (offline only)', async (t) 
   let published = 0;
   const fake = {
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fake),
-    application: { findFirst: async ({ where }: { where: { job: { companyId: string } } }) => {
-      assert.equal(where.job.companyId, 'tenant-a'); return owned ? { id: 'application-a' } : null;
-    } },
+    application: {
+      findFirst: async ({ where }: { where: { job: { companyId: string } } }) => { assert.equal(where.job.companyId, 'tenant-a'); return owned ? { id: 'application-a' } : null; },
+      findUnique: async () => owned ? ({ id: 'application-a', jobId: 'job-a', candidateProfileId: 'candidate-a', job: { companyId: 'tenant-a' } }) : null,
+    },
     employerProfile: { findUnique: async () => ({ companyId: 'tenant-a' }) },
+    jobListing: { findUnique: async () => ({ companyId: 'tenant-a' }) },
     workflowInstance: {
       findUnique: async ({ where }: { where: Row }) => [...workflows.values()].find((row) => where.correlationId ? row.correlationId === where.correlationId : row.id === where.id) ?? null,
       create: async ({ data }: { data: Row }) => {
@@ -32,10 +34,13 @@ test('six-stage advisory contracts and readiness API (offline only)', async (t) 
       update: async ({ where, data }: { where: { id: string }; data: Row }) => { const row = workflows.get(where.id)!; Object.assign(row, data); return row; },
     },
     workflowStepLog: {
+      count: async () => 0,
+      findMany: async () => [...steps.values()],
       findUnique: async ({ where }: { where: { executionKey: string } }) => steps.get(where.executionKey) ?? null,
       create: async ({ data }: { data: Row }) => { const key = String(data.executionKey); if (steps.has(key)) throw new Error('duplicate step'); steps.set(key, { ...data }); return data; },
       update: async ({ where, data }: { where: { executionKey: string }; data: Row }) => { const row = steps.get(where.executionKey)!; Object.assign(row, data); return row; },
     },
+    workflowApproval: { count: async () => 0 },
     outboxEntry: { create: async ({ data }: { data: Row }) => { published++; return data; } },
   };
   globals.prisma = fake;

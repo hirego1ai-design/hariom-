@@ -35,8 +35,8 @@ export default function AdminInfrastructurePage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#26A69A]/10 text-[#26A69A] border border-[#26A69A]/20 mb-1">
               CLOUD ARCHITECTURE
             </div>
-            <h1 className="text-2xl font-bold text-white">Railway + Supabase + R2 + Vercel Infrastructure</h1>
-            <p className="text-xs text-slate-400">Real-time status monitor of database pools, cloud storage & edge CDN nodes</p>
+            <h1 className="text-2xl font-bold text-white">Production Infrastructure Evidence</h1>
+            <p className="text-xs text-slate-400">Observed database health and configured service evidence from the running application</p>
           </div>
 
           <button
@@ -58,8 +58,8 @@ export default function AdminInfrastructurePage() {
                   <span className="material-symbols-outlined text-2xl animate-pulse">cloud_done</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">All Cloud Systems Operational</h3>
-                  <p className="text-xs text-slate-400">Production SLA Uptime: <strong className="text-[#26A69A]">{data.uptimePercent}%</strong></p>
+                  <h3 className="text-lg font-bold text-white">Observed Application Status</h3>
+                  <p className="text-xs text-slate-400">This view does not claim provider SLA or regional availability.</p>
                 </div>
               </div>
 
@@ -70,7 +70,7 @@ export default function AdminInfrastructurePage() {
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase">Overall Status</span>
-                  <span className="text-[#26A69A] font-bold">OPTIMAL</span>
+                  <span className="text-[#26A69A] font-bold">{data.overallStatus}</span>
                 </div>
               </div>
             </div>
@@ -93,12 +93,12 @@ export default function AdminInfrastructurePage() {
                   <div className="grid grid-cols-2 gap-3 bg-[#16161B] p-3 rounded-xl border border-white/5 text-xs font-mono">
                     <div>
                       <span className="text-[10px] text-slate-500 block">Latency</span>
-                      <span className="font-bold text-white">{s.latencyMs} ms</span>
+                      <span className="font-bold text-white">{typeof s.latencyMs === "number" ? `${s.latencyMs} ms` : "Not measured"}</span>
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-500 block">Health Metric</span>
                       <span className="font-bold text-[#29B6F6]">
-                        {s.activeConnections ? `${s.activeConnections}/${s.maxConnections} Conns` : s.memoryHeapMb ? `${s.memoryHeapMb} MB Heap` : "100% SLA"}
+                        {s.activeConnections ? `${s.activeConnections}/${s.maxConnections} Conns` : s.memoryHeapMb ? `${s.memoryHeapMb} MB Heap` : "Not measured"}
                       </span>
                     </div>
                   </div>

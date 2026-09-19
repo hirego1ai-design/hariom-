@@ -15,6 +15,11 @@ export class DelegationDeniedError extends Error {
  * Governing Rule: The CEO agent (or orchestrator) is NOT a privileged super-agent.
  * CEO agent delegations must strictly obey tenant boundaries, RBAC permissions,
  * budget limits, and kill switches.
+ *
+ * Budget authorization is performed by the same durable reservation used by
+ * ExecutionLoop. A delegation guard must never perform a disposable "probe"
+ * reservation because that can double-debit AI entitlements when execution
+ * subsequently reserves again.
  */
 export class CeoDelegationGuard {
   private static killSwitchManager = new KillSwitchManager();
@@ -24,8 +29,11 @@ export class CeoDelegationGuard {
     targetAgentId: string;
     resourceCompanyId: string | null;
     estimatedSpendMinor: bigint;
+    executionId?: string;
+    correlationId?: string;
+    reserveBudget?: boolean;
+    billableAgentId?: string;
   }): Promise<void> {
-    // 1. Enforce Tenant Isolation
     try {
       RbacGuard.assertOwnership(params.callerContext, { companyId: params.resourceCompanyId });
     } catch (err) {
@@ -34,7 +42,6 @@ export class CeoDelegationGuard {
       );
     }
 
-    // 2. Enforce Kill Switches (Global or Agent specific)
     const isKilled = await this.killSwitchManager.isKilled(
       KillSwitchType.AGENT,
       params.targetAgentId
@@ -45,10 +52,29 @@ export class CeoDelegationGuard {
       );
     }
 
-    // 3. Enforce Budget Limits (if companyId is present)
-    if (params.callerContext.companyId) {
+    if (params.estimatedSpendMinor < BigInt(0)) {
+      throw new DelegationDeniedError('CEO Delegation blocked: estimated spend cannot be negative');
+    }
+
+    // Callers that want this guard to authorize billable execution must provide
+    // the durable execution identity and opt into the reservation here. This
+    // makes the budget decision real and fail-closed rather than a no-op.
+    if (params.reserveBudget) {
+      const companyId = params.callerContext.companyId;
+      if (!companyId || !params.executionId || !params.correlationId) {
+        throw new DelegationDeniedError(
+          'CEO Delegation blocked: durable execution, correlation, and company identity are required for budget authorization'
+        );
+      }
+
       try {
-        // Test reservation feasibility (or rely on ExecutionLoop for actual reservation)
+        await BudgetManager.reserveBudget({
+          companyId,
+          executionId: params.executionId,
+          correlationId: params.correlationId,
+          estimatedMinor: params.estimatedSpendMinor,
+          billableAgentId: params.billableAgentId,
+        });
       } catch (err) {
         throw new DelegationDeniedError(
           `CEO Delegation blocked by Budget Guard: ${err instanceof Error ? err.message : String(err)}`

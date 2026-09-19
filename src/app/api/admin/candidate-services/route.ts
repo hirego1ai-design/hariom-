@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -21,6 +21,7 @@ async function requireAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
+    await enforceRateLimit(request, "admin_candidate_services_read", 60, 60_000);
     const services = await prisma.candidateServiceCatalog.findMany({ orderBy: { updatedAt: "desc" } });
     return NextResponse.json({ success: true, services });
   } catch (error) {
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
+    await enforceRateLimit(request, "admin_candidate_services_write", 20, 60_000);
     const data = await readValidatedJson(request, serviceSchema);
     const service = await prisma.candidateServiceCatalog.create({ data });
     await logAuditEvent({ userId: session.id, action: "CREATE_CANDIDATE_SERVICE", resource: `CandidateServiceCatalog:${service.id}` });
