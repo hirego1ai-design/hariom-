@@ -103,3 +103,18 @@ test("managed hiring placement operations stay bounded and rate limited", () => 
   assert(source.includes('enforceRateLimit(request, "employer_managed_hiring_join_action", 10, 60000)'));
   assert(source.includes("readValidatedJson(request, actionSchema, 8 * 1024)"));
 });
+
+
+test("internal video callback uses bounded input and timing-safe authentication", () => {
+  const source = fs.readFileSync(new URL("../app/api/internal/video-analysis/callback/route.ts", import.meta.url), "utf8");
+  assert(source.includes("timingSafeEqual"));
+  assert(source.includes("readValidatedJson(request, callbackSchema, 128 * 1024)"));
+});
+
+test("team invitation acceptance serializes the single-use token", () => {
+  const source = fs.readFileSync(new URL("../app/api/employer/team/accept/route.ts", import.meta.url), "utf8");
+  assert(source.includes('FOR UPDATE'));
+  assert(source.includes('status: "PENDING"'));
+  assert(source.includes("enqueueSecurityAuditEvent"));
+  assert(source.includes("revokeAllUserSessions(acceptance.userId"));
+});
