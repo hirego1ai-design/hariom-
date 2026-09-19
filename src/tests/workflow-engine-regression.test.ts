@@ -215,9 +215,14 @@ test('approved action consumption is single-use under replay', async (t) => {
   let consumes = 0;
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a' }));
   stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({
-    id: 'approval-a', decision: 'APPROVED', decidedBy: 'reviewer', decidedAt: new Date(), consumedAt: null,
+    id: 'approval-a', decision: 'APPROVED', decidedBy: 'reviewer', decidedAt: new Date(), decidedByRole: Role.EMPLOYER, actionType: 'CANDIDATE_SELECTION', consumedAt: null,
   }));
   stubMethod(t, prisma.workflowApproval, 'updateMany', async () => ({ count: ++consumes === 1 ? 1 : 0 }));
+  stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
+  stubMethod(t, prisma.workflowInstance, 'updateMany', async () => ({ count: 1 }));
+  stubMethod(t, prisma.auditLog, 'create', async ({ data }: any) => ({ id: 'audit-a', ...data }));
+  stubMethod(t, prisma.securityAuditOutboxEvent, 'create', async ({ data }: any) => data);
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
   const params = {
     workflowId: 'workflow-test', stepName: 'select', action: { candidateId: 'candidate-a' },
     context: createTenantContext('company-a', 'worker', Role.EMPLOYER),
