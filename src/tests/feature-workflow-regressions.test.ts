@@ -166,3 +166,25 @@ test("candidate availability endpoints remain bounded and rate limited", () => {
   assert(source.includes('enforceRateLimit(req, "candidate_availability_get", 60, 60000)'));
   assert(source.includes("readValidatedJson(req, schema, 4 * 1024)"));
 });
+
+
+test("candidate pipeline and profile endpoints remain explicitly scoped and bounded", () => {
+  const pipeline = fs.readFileSync(new URL("../app/api/employer/candidates/route.ts", import.meta.url), "utf8");
+  const profile = fs.readFileSync(new URL("../app/api/candidate/profile/route.ts", import.meta.url), "utf8");
+  const readiness = fs.readFileSync(new URL("../app/api/candidate/readiness/route.ts", import.meta.url), "utf8");
+  const videoStatus = fs.readFileSync(new URL("../app/api/candidate/video-resume/status/route.ts", import.meta.url), "utf8");
+  assert(pipeline.includes('enforceRateLimit(req, "employer_candidates_get", 60, 60_000)'));
+  assert(pipeline.includes('companyId query parameter is required for administrators.'));
+  assert(profile.includes("readValidatedJson(request, profileUpdateSchema, 64 * 1024)"));
+  assert(readiness.includes("readValidatedJson(request, selectReadinessSchema, 4 * 1024)"));
+  assert(videoStatus.includes('enforceRateLimit(request, "video_resume_status", 60, 60_000)'));
+});
+
+test("admin candidate service catalog mutations are bounded and atomically audited", () => {
+  const create = fs.readFileSync(new URL("../app/api/admin/candidate-services/route.ts", import.meta.url), "utf8");
+  const update = fs.readFileSync(new URL("../app/api/admin/candidate-services/[id]/route.ts", import.meta.url), "utf8");
+  assert(create.includes("readValidatedJson(request, serviceSchema, 8 * 1024)"));
+  assert(create.includes("enqueueSecurityAuditEvent"));
+  assert(update.includes("readValidatedJson(request, updateSchema, 8 * 1024)"));
+  assert(update.includes("enqueueSecurityAuditEvent"));
+});
