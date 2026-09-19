@@ -7,6 +7,7 @@ import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJso
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { buildPublicAppUrl } from "@/lib/env";
 
 const inviteSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
