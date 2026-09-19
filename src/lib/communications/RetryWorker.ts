@@ -21,11 +21,15 @@ export async function prepareCommunicationRetries(batchSize = 50): Promise<Commu
       exhausted += result.count;
       continue;
     }
-    // This worker deliberately does not resend. Delivery rows do not persist raw
-    // recipient addresses or message variables, so reconstructing a provider
-    // request here would either require storing sensitive payloads or guessing.
-    // Keep eligible failures durable for a trusted domain-specific re-dispatcher.
-    eligible++;
+    // Delivery rows intentionally do not persist raw recipient addresses or message
+    // variables. Without a trusted domain replay source, an automatic resend would
+    // require storing sensitive payloads or guessing. Quarantine the retry marker
+    // instead of leaving the row permanently due and repeatedly reprocessing it.
+    const quarantined = await prisma.communicationDelivery.updateMany({
+      where: { id: row.id, status: "FAILED", retryable: true, attemptCount: row.attemptCount },
+      data: { retryable: false, nextAttemptAt: null, lastErrorCode: "MANUAL_REDISPATCH_REQUIRED" },
+    });
+    eligible += quarantined.count;
   }
   return { eligible, exhausted };
 }
