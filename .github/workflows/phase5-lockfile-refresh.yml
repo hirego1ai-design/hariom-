@@ -6,6 +6,7 @@ on:
       - phase5-release-operations-hardening
     paths:
       - package.json
+      - .github/workflows/phase5-lockfile-refresh.yml
 
 permissions:
   contents: write
@@ -37,4 +38,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package-lock.json
           git commit -m "security: regenerate lockfile for patched dependencies"
+          git pull --rebase origin phase5-release-operations-hardening
           git push origin HEAD:phase5-release-operations-hardening
