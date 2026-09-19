@@ -23,7 +23,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
   const {id}=await params;const body=await readValidatedJson(request,schema);
   const current=await prisma.communicationTemplate.findUnique({where:{id}});if(!current)throw new ApiError("Template not found.",404);
   const nextSubject=body.subject===undefined?current.subject:body.subject;const nextBody=body.body??current.body;
-  const check=validateTemplateVariables(current.eventKey as any,nextSubject||undefined,nextBody);if(check.unknown.length)throw new ApiError(`Unapproved variables: ${check.unknown.join(", ")}`,422);\n  if(check.missing.length)throw new ApiError(`Missing required variables: ${check.missing.join(", ")}`,422);
+  const check=validateTemplateVariables(current.eventKey as any,nextSubject||undefined,nextBody);if(check.unknown.length)throw new ApiError(`Unapproved variables: ${check.unknown.join(", ")}`,422);
+    if(check.missing.length)throw new ApiError(`Missing required variables: ${check.missing.join(", ")}`,422);
   if(body.enabled===true&&!((body.providerAlias??current.providerAlias)||(body.providerTemplateId??current.providerTemplateId)))throw new ApiError("Provider mapping is required before activation.",422);
   const updated=await prisma.$transaction(async tx=>{
    if(body.enabled===true)await tx.communicationTemplate.updateMany({where:{eventKey:current.eventKey,channel:current.channel,audience:current.audience,locale:current.locale,enabled:true,id:{not:id}},data:{enabled:false,status:"SUPERSEDED"}});
