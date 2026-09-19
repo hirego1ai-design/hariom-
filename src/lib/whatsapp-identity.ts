@@ -318,6 +318,14 @@ export async function markEventProcessed(eventId: string, error?: string): Promi
 }
 
 
+export function isWhatsAppMessagingAllowed(status: string | null | undefined): boolean {
+  return status === "OPTED_IN";
+}
+
+export function isWhatsAppOptOutCommand(value: string): boolean {
+  return ["stop", "unsubscribe", "opt out", "opt-out", "end", "quit"].includes(value.trim().toLowerCase());
+}
+
 export async function setWhatsAppConsent(waId: string, status: "OPTED_IN" | "OPTED_OUT", source: string): Promise<void> {
   const now = new Date();
   await prisma.whatsAppContact.update({
