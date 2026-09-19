@@ -3,6 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { getSessionCompany } from "@/lib/routeAuthorization";
+import { logAuditEvent } from "@/lib/auditLogger";
+import { ApplicationStatus } from "@prisma/client";
 
 const schema = z.object({ stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED", "HIRED", "REJECTED"]) });
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,12 +21,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const application = await prisma.application.findUnique({ where: { id }, include: { job: true } });
     if (!application) return NextResponse.json({ success: false, error: "Candidate application not found." }, { status: 404 });
     if (session.role !== "ADMIN") {
-      const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
-      if (!profile || profile.companyId !== application.job.companyId) {
+      const company = await getSessionCompany(session);
+      if (company.id !== application.job.companyId) {
         return NextResponse.json({ success: false, error: "Candidate is not in your company pipeline." }, { status: 403 });
       }
     }
-    await prisma.application.update({ where: { id }, data: { status: stage as any } });
+    await prisma.application.update({ where: { id }, data: { status: stage as ApplicationStatus } });
+    await logAuditEvent({
+      userId: session.id,
+      companyId: application.job.companyId,
+      action: "CANDIDATE_STAGE_UPDATED",
+      resource: `Application:${id}`,
+      details: `Stage changed to ${stage}`,
+      ipAddress: req.headers.get("x-forwarded-for") || undefined,
+    });
     return NextResponse.json({ success: true, applicationId: id, stage });
   } catch (error) { return handleApiError(error); }
 }
