@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { authorizeBilling, confirmPphJoining, joiningSchema } from "@/lib/pph-billing";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 async function actorFor(request: Request) {
   const session = await requireAuthenticatedSession(request);
@@ -17,7 +18,17 @@ export async function POST(request: Request) {
   try {
     const actor = await actorFor(request);
     await enforceRateLimit(request, "employer_managed_hiring_join", 10, 60000);
-    const result = await confirmPphJoining(await readValidatedJson(request, joiningSchema), actor);
+    const input = await readValidatedJson(request, joiningSchema);
+    const result = await confirmPphJoining(input, actor);
+    if (!result.duplicate) {
+      const application = await prisma.application.findUnique({ where: { id: input.applicationId }, include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
+      const candidate = application?.candidateProfile.user;
+      if (application && candidate) {
+        const variables = { candidate_name: candidate.name || "Candidate", company_name: application.job.company.name, job_title: application.job.title, joining_date: new Date(input.joinedAt).toLocaleDateString() };
+        if (candidate.email) await dispatchCommunication({ eventKey: "JOINING_COMPLETED", channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables, idempotencyKey: `placement:${result.placement.id}:joining:candidate:email`, correlationId: result.placement.id, recipientRef: candidate.id }).catch(() => null);
+        if (candidate.phoneNumber) await dispatchCommunication({ eventKey: "JOINING_COMPLETED", channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables, idempotencyKey: `placement:${result.placement.id}:joining:candidate:whatsapp`, correlationId: result.placement.id, recipientRef: candidate.id }).catch(() => null);
+      }
+    }
     return NextResponse.json({ success: true, ...result,
       message: "Joining recorded. Invoice is scheduled for 25 days after joining, subject to holds and accepted terms." },
       { status: result.duplicate ? 200 : 201 });
