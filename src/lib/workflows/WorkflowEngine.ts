@@ -172,7 +172,7 @@ export class WorkflowEngine {
     });
   }
 
-  static async requestConsequentialAction(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<{ approvalId: string; status: 'PENDING_APPROVAL' }> {
+  static async requestConsequentialAction(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<{ approvalId: string; status: 'PENDING_APPROVAL' | 'APPROVED' }> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
@@ -180,8 +180,7 @@ export class WorkflowEngine {
     if (workflow.status !== 'RUNNING') throw new Error(`Consequential action cannot be requested while workflow is ${workflow.status}`);
     const rejected = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'REJECTED' } });
     if (rejected > 0) throw new Error('Rejected consequential actions make this workflow terminal');
-    const approvalId = await this.pauseForApproval(params);
-    return { approvalId, status: 'PENDING_APPROVAL' };
+    return this.pauseForApproval(params);
   }
 
   static async cancelWorkflow(params: { workflowId: string; context: TenantContext; reason: string }): Promise<WorkflowInstance> {
@@ -261,7 +260,7 @@ export class WorkflowEngine {
     return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'RUNNING' }, data: { status: 'COMPLETED', updatedAt: new Date() } });
   }
 
-  static async pauseForApproval(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<string> {
+  static async pauseForApproval(params: { workflowId: string; stepName: string; actionType: string; action: unknown; context: TenantContext }): Promise<{ approvalId: string; status: 'PENDING_APPROVAL' | 'APPROVED' }> {
     const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
@@ -273,7 +272,8 @@ export class WorkflowEngine {
       const existing = await tx.workflowApproval.findUnique({ where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } } });
       if (existing && existing.actionType !== params.actionType) throw new Error('Approval action type does not match the persisted action');
       if (existing?.decision === 'REJECTED') throw new Error('This exact consequential action was already rejected');
-      if (existing?.decision === 'APPROVED') return existing;
+      if (existing?.decision === 'APPROVED') return { record: existing, created: false };
+      const created = !existing;
       const record = await tx.workflowApproval.upsert({
         where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } },
         update: {},
@@ -281,10 +281,10 @@ export class WorkflowEngine {
       });
       if (record.decision !== 'PENDING') throw new Error('This exact consequential action was already decided');
       await tx.workflowInstance.update({ where: { id: params.workflowId }, data: { status: 'PAUSED_FOR_APPROVAL', currentStep: params.stepName } });
-      if (record.decision === 'PENDING') await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_REQUESTED', workflowId: params.workflowId, approvalId: record.id, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, role: params.context.userRole });
-      return record;
+      if (created && record.decision === 'PENDING') await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_REQUESTED', workflowId: params.workflowId, approvalId: record.id, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, role: params.context.userRole });
+      return { record, created };
     });
-    return approval.id;
+    return { approvalId: approval.record.id, status: approval.record.decision === 'APPROVED' ? 'APPROVED' : 'PENDING_APPROVAL' };
   }
 
   static async decideApproval(params: { approvalId: string; decision: 'APPROVED' | 'REJECTED'; notes?: string; context: TenantContext }): Promise<WorkflowInstance> {
