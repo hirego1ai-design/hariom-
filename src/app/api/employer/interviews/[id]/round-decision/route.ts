@@ -49,7 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
       if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.decision !== "APPROVED" || approval.consumedAt) throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
       if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
-      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: { interviewId: id, applicationId: interview.applicationId, action: "REJECT" }, context: tenantContext });
+      const expectedAction = { interviewId: id, applicationId: interview.applicationId, action: "REJECT" };
+      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: expectedAction, context: tenantContext });
     }
 
     const now = new Date();
@@ -76,9 +77,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
-    const eventKey = result.action === "REJECT" ? "APPLICATION_REJECTED" : result.action === "PROCEED" ? "APPLICATION_SHORTLISTED" : null;
-    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id, authorizationProof: result.action === "REJECT" ? { approvedByUserId: session.id, approvalId: body.approvalId!, workflowId: body.workflowId! } : undefined }).catch(() => null);
-    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: result.action === "PROCEED" ? { ...variables, next_step: result.nextRound?.name || "Next interview round" } : variables, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id, authorizationProof: result.action === "REJECT" ? { approvedByUserId: session.id, approvalId: body.approvalId!, workflowId: body.workflowId! } : undefined }).catch(() => null);
+    const eventKey = result.action === "PROCEED" ? "APPLICATION_SHORTLISTED" : null;
+    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: { ...variables, next_step: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: { ...variables, next_step: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }
