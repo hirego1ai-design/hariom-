@@ -9,6 +9,7 @@ import {
 } from "./catalog";
 import { sendWhatsAppTemplateMessage, type WhatsAppTemplateComponent } from "@/lib/whatsapp";
 import { sendZeptoMailTemplate } from "@/lib/email";
+import { isWhatsAppMessagingAllowed } from "@/lib/whatsapp-identity";
 
 export type DispatchCommunicationInput = {
   eventKey: CommunicationEventKey;
@@ -45,7 +46,7 @@ async function assertWhatsAppConsent(recipient: string) {
   const digits = recipient.replace(/\D/g, "");
   if (!digits) throw new Error("Invalid WhatsApp recipient.");
   const contact = await prisma.whatsAppContact.findUnique({ where: { waId: digits }, select: { optInStatus: true } });
-  if (!contact || contact.optInStatus !== "OPTED_IN") {
+  if (!contact || !isWhatsAppMessagingAllowed(contact.optInStatus)) {
     throw new Error("WhatsApp recipient has not provided active messaging consent.");
   }
 }
