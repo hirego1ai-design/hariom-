@@ -77,9 +77,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
-    const eventKey = result.action === "PROCEED" ? "APPLICATION_SHORTLISTED" : null;
-    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: { ...variables, next_step: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
-    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: { ...variables, next_step: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    const eventKey = result.action === "PROCEED" ? "INTERVIEW_NEXT_ROUND" : null;
+    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }
