@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const actor = await actorFor(request);
+    await enforceRateLimit(request, "employer_managed_hiring_join_get", 60, 60000);
     const applicationId = new URL(request.url).searchParams.get("applicationId");
     const placements = await prisma.pphPlacement.findMany({
       where: { ...(actor.role === "ADMIN" ? {} : { companyId: actor.companyId }), ...(applicationId ? { applicationId } : {}) },
@@ -53,7 +54,8 @@ const actionSchema = z.object({ placementId: z.string().uuid(), action: z.enum([
 export async function PATCH(request: Request) {
   try {
     const actor = await actorFor(request);
-    const body = await readValidatedJson(request, actionSchema);
+    await enforceRateLimit(request, "employer_managed_hiring_join_action", 10, 60000);
+    const body = await readValidatedJson(request, actionSchema, 8 * 1024);
     const placement = await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM "PphPlacement" WHERE id = ${body.placementId} FOR UPDATE`;
       const row = await tx.pphPlacement.findUnique({ where: { id: body.placementId } });
