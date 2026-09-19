@@ -9,6 +9,10 @@ import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { buildPublicAppUrl } from "@/lib/env";
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
+}
+
 const inviteSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().trim().email("Invalid email address").toLowerCase(),
@@ -179,10 +183,10 @@ export async function POST(req: NextRequest) {
         <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; border-radius: 12px; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #448AFF; margin-top: 0;">Team Invitation</h2>
           <p style="color: #E0E0E0; font-size: 16px; line-height: 1.5;">
-            Hello <strong>${body.name}</strong>,
+            Hello <strong>${escapeHtml(body.name)}</strong>,
           </p>
           <p style="color: #9CA3AF; line-height: 1.6;">
-            You have been invited by <strong>${session.name}</strong> to join <strong>${companyName}</strong> on HireGo as a <strong>${body.role}</strong>${body.designation ? ` (${body.designation})` : ""}.
+            You have been invited by <strong>${escapeHtml(session.name || "A company administrator")}</strong> to join <strong>${escapeHtml(companyName)}</strong> on HireGo as a <strong>${escapeHtml(body.role)}</strong>${body.designation ? ` (${escapeHtml(body.designation)})` : ""}.
           </p>
           <div style="margin: 28px 0;">
             <a href="${inviteUrl}" style="background-color: #448AFF; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
