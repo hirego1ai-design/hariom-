@@ -230,15 +230,38 @@ async function reconcileOutboundStatus(status: any): Promise<void> {
   if (!providerMessageId || !["sent", "delivered", "read", "failed"].includes(providerStatus)) return;
 
   const { prisma } = await import("@/lib/prisma");
-  const existing = await prisma.communicationDelivery.findFirst({ where: { providerMessageId }, select: { id: true, status: true } });
+  const existing = await prisma.communicationDelivery.findFirst({
+    where: { providerMessageId },
+    select: { id: true, status: true },
+  });
   if (!existing) return;
 
+  const rank: Record<string, number> = { PROCESSING: 0, ACCEPTED: 1, DELIVERED: 2, READ: 3 };
+  const currentRank = rank[existing.status] ?? -1;
   const now = new Date();
-  const data =
-    providerStatus === "read" ? { status: "READ", readAt: now, deliveredAt: now } :
-    providerStatus === "delivered" ? { status: "DELIVERED", deliveredAt: now } :
-    providerStatus === "sent" ? { status: existing.status === "PROCESSING" ? "ACCEPTED" : existing.status, acceptedAt: now } :
-    { status: "FAILED", failedAt: now, lastErrorCode: String(status?.errors?.[0]?.code ?? "META_DELIVERY_FAILED"), lastError: String(status?.errors?.[0]?.title ?? "Meta reported delivery failure.").slice(0, 1000) };
+  let data: Record<string, unknown> | null = null;
 
-  await prisma.communicationDelivery.update({ where: { id: existing.id }, data });
+  if (providerStatus === "read" && currentRank < rank.READ) {
+    data = { status: "READ", readAt: now, deliveredAt: now };
+  } else if (providerStatus === "delivered" && currentRank < rank.DELIVERED) {
+    data = { status: "DELIVERED", deliveredAt: now };
+  } else if (providerStatus === "sent" && currentRank < rank.ACCEPTED) {
+    data = { status: "ACCEPTED", acceptedAt: now };
+  } else if (providerStatus === "failed" && currentRank < rank.DELIVERED) {
+    const rawError = String(status?.errors?.[0]?.title ?? "Meta reported delivery failure.");
+    const safeError = rawError
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+      .replace(/\+?\d[\d\s().-]{7,}\d/g, "[redacted-phone]")
+      .slice(0, 1000);
+    data = {
+      status: "FAILED",
+      failedAt: now,
+      lastErrorCode: String(status?.errors?.[0]?.code ?? "META_DELIVERY_FAILED").slice(0, 100),
+      lastError: safeError,
+    };
+  }
+
+  if (data) {
+    await prisma.communicationDelivery.update({ where: { id: existing.id }, data });
+  }
 }
