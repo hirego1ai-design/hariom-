@@ -43,6 +43,16 @@ function addressHash(value: string) {
   return createHmac("sha256", secret || "hirego-dev-communication-hash").update(value.trim().toLowerCase()).digest("hex");
 }
 
+function safeRetryClassification(reason: string | undefined) {
+  if (!reason) return { retryable: false, code: "PROVIDER_FAILURE" };
+  const match = reason.match(/(?:returned|API returned)\\s+(\\d{3})/i);
+  const status = match ? Number(match[1]) : null;
+  // Retry only definitive provider responses where the request was not accepted.
+  // Network/timeout failures are intentionally non-retryable because acceptance is ambiguous.
+  const retryable = status === 429 || (status !== null && status >= 500 && status <= 599);
+  return { retryable, code: status ? `HTTP_${status}` : "PROVIDER_FAILURE" };
+}
+
 function safeProviderError(value: unknown) {
   const raw = value instanceof Error ? value.message : String(value || "Communication provider failure.");
   return raw.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]").replace(/\+?\d[\d\s().-]{7,}\d/g, "[redacted-phone]").slice(0, 1000);
@@ -143,12 +153,12 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
       where: { id: delivery.id },
       data: successful
         ? { status: "ACCEPTED", providerMessageId: result.messageId, acceptedAt: new Date() }
-        : { status: "FAILED", lastError: result.reason || "Provider rejected communication.", failedAt: new Date() },
+        : (() => { const failure = safeRetryClassification(result.reason); return { status: "FAILED", lastErrorCode: failure.code, lastError: result.reason || "Provider rejected communication.", failedAt: new Date(), retryable: !definition.consequential && failure.retryable, nextAttemptAt: !definition.consequential && failure.retryable ? new Date(Date.now() + 60_000) : null }; })(),
     });
   } catch (error) {
     await prisma.communicationDelivery.update({
       where: { id: delivery.id },
-      data: { status: "FAILED", lastError: safeProviderError(error), failedAt: new Date() },
+      data: { status: "FAILED", lastErrorCode: "AMBIGUOUS_PROVIDER_ERROR", lastError: safeProviderError(error), failedAt: new Date(), retryable: false, nextAttemptAt: null },
     });
     throw error;
   }
