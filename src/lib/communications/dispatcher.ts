@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createHash } from "crypto";
+import { createHmac } from "crypto";
 import {
   COMMUNICATION_EVENT_REGISTRY,
   type CommunicationAudience,
@@ -23,7 +23,14 @@ export type DispatchCommunicationInput = {
 };
 
 function addressHash(value: string) {
-  return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
+  const secret = process.env.COMMUNICATION_HASH_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") throw new Error("COMMUNICATION_HASH_SECRET is required in production.");
+  return createHmac("sha256", secret || "hirego-dev-communication-hash").update(value.trim().toLowerCase()).digest("hex");
+}
+
+function safeProviderError(value: unknown) {
+  const raw = value instanceof Error ? value.message : String(value || "Communication provider failure.");
+  return raw.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]").replace(/\+?\d[\d\s().-]{7,}\d/g, "[redacted-phone]").slice(0, 1000);
 }
 
 function assertVariables(eventKey: CommunicationEventKey, variables: Record<string, unknown>) {
@@ -103,7 +110,7 @@ export async function dispatchCommunication(input: DispatchCommunicationInput) {
   } catch (error) {
     await prisma.communicationDelivery.update({
       where: { id: delivery.id },
-      data: { status: "FAILED", lastError: error instanceof Error ? error.message.slice(0, 1000) : "Communication provider failure.", failedAt: new Date() },
+      data: { status: "FAILED", lastError: safeProviderError(error), failedAt: new Date() },
     });
     throw error;
   }
