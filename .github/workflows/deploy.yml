@@ -4,7 +4,8 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, phase5-release-operations-hardening]
+  workflow_dispatch:
 
 jobs:
   audit-and-build:
