@@ -173,8 +173,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 5. Build secure acceptance link & dispatch email
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://hirego.ai";
-    const inviteUrl = `${baseUrl}/employer/invitation/accept?token=${rawToken}`;
+    const inviteUrl = buildPublicAppUrl(`/employer/invitation/accept?token=${encodeURIComponent(rawToken)}`);
 
     const emailResult = await sendEmail({
       to: normalizedEmail,
