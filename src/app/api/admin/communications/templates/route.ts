@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const definition = communicationEventDefinition(body.eventKey);
     if (!definition?.channels.includes(body.channel) || !definition.audiences.includes(body.audience)) throw new ApiError("Event does not permit this audience/channel.", 422);
     const variableCheck = validateTemplateVariables(body.eventKey, body.subject, body.body);
-    if (!variableCheck.valid) throw new ApiError(`Unapproved variables: ${variableCheck.unknown.join(", ")}`, 422);
+    if (variableCheck.unknown.length) throw new ApiError(`Unapproved variables: ${variableCheck.unknown.join(", ")}`, 422);\n    if (variableCheck.missing.length) throw new ApiError(`Missing required variables: ${variableCheck.missing.join(", ")}`, 422);
     if (body.channel === "WHATSAPP" && body.provider !== "META") throw new ApiError("WhatsApp templates must use META.", 422);
     if (body.channel === "EMAIL" && body.provider !== "ZEPTOMAIL") throw new ApiError("Stored email templates must use ZEPTOMAIL.", 422);
     if (body.enabled && !body.providerAlias && !body.providerTemplateId) throw new ApiError("An enabled template requires a provider template mapping.", 422);
