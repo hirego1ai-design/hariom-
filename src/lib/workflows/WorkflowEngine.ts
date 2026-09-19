@@ -232,7 +232,7 @@ export class WorkflowEngine {
       where: { id: params.workflowId },
       select: { id: true, companyId: true, workflowType: true, status: true, currentStep: true, failureCount: true, correlationId: true, createdAt: true, updatedAt: true,
         approvals: { where: { decision: 'PENDING' }, select: { id: true, stepName: true, actionType: true, requestedAt: true } },
-        stepLogs: { orderBy: { createdAt: 'desc' }, take: 10, select: { stepName: true, attemptNumber: true, status: true, sideEffectDone: true, errorMessage: true, createdAt: true } } },
+        steps: { orderBy: { createdAt: 'desc' }, take: 10, select: { stepName: true, attemptNumber: true, status: true, sideEffectDone: true, errorMessage: true, createdAt: true } } },
     });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
@@ -241,7 +241,7 @@ export class WorkflowEngine {
       id: workflow.id, workflowType: workflow.workflowType, status: workflow.status, currentStep: workflow.currentStep,
       failureCount: workflow.failureCount, correlationId: workflow.correlationId, createdAt: workflow.createdAt, updatedAt: workflow.updatedAt,
       pendingApprovals: workflow.approvals,
-      recentSteps: workflow.stepLogs,
+      recentSteps: workflow.steps,
     };
   }
 
