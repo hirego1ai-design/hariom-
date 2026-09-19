@@ -13,6 +13,9 @@ export async function GET(request: Request) {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || "100"), 1), 250);
     const status = url.searchParams.get("status") || undefined;
     const channel = url.searchParams.get("channel") || undefined;
+    const allowedStatuses = new Set(["PENDING", "PROCESSING", "ACCEPTED", "DELIVERED", "READ", "FAILED"]);
+    if (status && !allowedStatuses.has(status)) throw new ApiError("Invalid communication delivery status filter.", 400);
+    if (channel && !COMMUNICATION_CHANNELS.includes(channel as (typeof COMMUNICATION_CHANNELS)[number])) throw new ApiError("Invalid communication channel filter.", 400);
     const deliveries = await prisma.communicationDelivery.findMany({
       where: { ...(status ? { status } : {}), ...(channel ? { channel } : {}) },
       orderBy: { createdAt: "desc" },
