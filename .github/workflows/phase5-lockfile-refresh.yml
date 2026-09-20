@@ -1,0 +1,43 @@
+name: Phase 5 Lockfile Refresh
+
+on:
+  push:
+    branches: [phase5-release-operations-hardening]
+    paths:
+      - package.json
+      - .github/workflows/phase5-lockfile-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase5-release-operations-hardening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Regenerate lockfile with npm
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify clean install
+        run: npm ci --ignore-scripts
+      - name: Verify lint compatibility
+        run: npm run lint
+      - name: Verify high/critical dependency audit
+        run: npm audit --audit-level=high
+      - name: Commit regenerated lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "security: regenerate compatible patched lockfile"
+          git pull --rebase origin phase5-release-operations-hardening
+          git push origin HEAD:phase5-release-operations-hardening

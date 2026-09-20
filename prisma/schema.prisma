@@ -170,15 +170,15 @@ model CandidateProfile {
   videoResumes VideoResume[]
   applications Application[]
 
-  mcqAttempts                   McqAttempt[]
-  typingAssessments             TypingAssessment[]
-  mockInterviewSessions         MockInterviewSession[]
-  recordedAssessmentAttempts    RecordedAssessmentAttempt[]
-  readinessRecords              CandidateReadiness[]
-  creditWallet                  CandidateCreditWallet?
-  creditLedgerEntries           CandidateCreditLedger[]
-  serviceUsages                 CandidateServiceUsage[]
-  sourcingRelationships CandidateSourcingRelationship[]
+  mcqAttempts                McqAttempt[]
+  typingAssessments          TypingAssessment[]
+  mockInterviewSessions      MockInterviewSession[]
+  recordedAssessmentAttempts RecordedAssessmentAttempt[]
+  readinessRecords           CandidateReadiness[]
+  creditWallet               CandidateCreditWallet?
+  creditLedgerEntries        CandidateCreditLedger[]
+  serviceUsages              CandidateServiceUsage[]
+  sourcingRelationships      CandidateSourcingRelationship[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -278,12 +278,12 @@ model JobListing {
 
   applications Application[]
 
-  savedBy                       SavedJob[]
-  mcqAssessments                McqAssessment[]
-  recordedAssessmentConfig      RecordedAssessmentConfig?
-  recordedAssessmentAttempts    RecordedAssessmentAttempt[]
-  interviewProcess              JobInterviewProcess?
-  sourcingRelationships CandidateSourcingRelationship[]
+  savedBy                    SavedJob[]
+  mcqAssessments             McqAssessment[]
+  recordedAssessmentConfig   RecordedAssessmentConfig?
+  recordedAssessmentAttempts RecordedAssessmentAttempt[]
+  interviewProcess           JobInterviewProcess?
+  sourcingRelationships      CandidateSourcingRelationship[]
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -1103,6 +1103,33 @@ enum WorkflowStatus {
   CANCELLED
 }
 
+enum WorkflowApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WorkflowApproval {
+  id                 String                   @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance         @relation(fields: [workflowInstanceId], references: [id], onDelete: Restrict)
+  companyId          String?
+  stepName           String
+  actionType         String
+  actionDigest       String
+  decision           WorkflowApprovalDecision @default(PENDING)
+  requestedBy        String
+  decidedBy          String?
+  decidedByRole      Role?
+  decisionNotes      String?
+  requestedAt        DateTime                 @default(now())
+  decidedAt          DateTime?
+  consumedAt         DateTime?
+
+  @@unique([workflowInstanceId, stepName, actionDigest])
+  @@index([companyId, decision, requestedAt])
+}
+
 model WorkflowInstance {
   id              String         @id @default(uuid())
   companyId       String?
@@ -1121,7 +1148,8 @@ model WorkflowInstance {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  steps WorkflowStepLog[]
+  steps     WorkflowStepLog[]
+  approvals WorkflowApproval[]
 }
 
 // =

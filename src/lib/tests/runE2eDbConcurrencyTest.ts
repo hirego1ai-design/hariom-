@@ -463,19 +463,20 @@ async function runDbConcurrencyTests() {
   // ----------------------------------------------------------------
   console.log('\n--- Scenario 6: Concurrent Workflow State Transitions ---');
   const wf = await WorkflowEngine.startWorkflow({
-    workflowType: 'END_TO_END_HIRING',
+    workflowType: 'JOB_REQUIREMENT',
+    jobId: 'job-db-6',
     companyId: 'comp-db-6',
     correlationId: 'corr-sc6',
     initiatedBy: 'user-6',
     initialStep: 'INIT',
     checkpointState: {},
+    context: { userId: 'user-6', userRole: Role.ADMIN, companyId: 'comp-db-6' },
   });
 
   // Launch competing state updates concurrently
   const tasks6 = [
-    WorkflowEngine.pauseForApproval(wf.id, 'APPROVAL_NEEDED'),
-    WorkflowEngine.resumeWorkflow(wf.id, 'approver-1'),
-    WorkflowEngine.pauseForApproval(wf.id, 'APPROVAL_NEEDED_2'),
+    WorkflowEngine.pauseForApproval({ workflowId: wf.id, stepName: 'INIT', actionType: 'CANDIDATE_SELECTION', action: { candidateId: 'candidate-1' }, context: { userId: 'user-6', userRole: Role.ADMIN, companyId: 'comp-db-6' } }),
+    WorkflowEngine.pauseForApproval({ workflowId: wf.id, stepName: 'INIT', actionType: 'EXTERNAL_COMMUNICATION', action: { channel: 'EMAIL' }, context: { userId: 'user-6', userRole: Role.ADMIN, companyId: 'comp-db-6' } }),
   ];
 
   await Promise.all(tasks6);

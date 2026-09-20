@@ -1,0 +1,55 @@
+name: Phase 5 Verification
+
+on:
+  push:
+    branches: [phase5-release-operations-hardening]
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: phase5
+          POSTGRES_PASSWORD: phase5
+          POSTGRES_DB: hirego_test_phase5
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U phase5 -d hirego_test_phase5"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Prisma validate/generate require both datasource variables even though
+      # Phase 5 offline verification must not connect to a live database.
+      DATABASE_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_test_phase5
+      DIRECT_URL: postgresql://phase5:phase5@127.0.0.1:5432/hirego_test_phase5
+      # Explicitly authorize only this isolated CI test database for the suite guard.
+      HIREGO_TEST_DATABASE: '1'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:phase5
+      - name: Apply isolated test migrations
+        run: npx prisma migrate deploy
+      - run: npm test
+      - run: npm run test:audit
+      - run: npm run build
+      - name: Dependency audit (high/critical)
+        run: npm audit --audit-level=high

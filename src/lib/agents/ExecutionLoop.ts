@@ -1,5 +1,5 @@
 import { AgentRegistry } from './AgentRegistry';
-import { ToolExecutionContext } from '../tools/ToolRegistry';
+import { AGENT_PERMISSIONS, ToolExecutionContext } from '../tools/ToolRegistry';
 import { transitionLifecycle, verdictToTransition, EvaluatorVerdict } from './AgentLifecycle';
 import { KillSwitchManager } from '../security/KillSwitchManager';
 import { KillSwitchType, AgentLifecycleState } from '@prisma/client';
@@ -37,6 +37,11 @@ export class ExecutionLoop {
     if (params.context.agentId !== params.agentId) throw new ExecutionLoopError('Agent context mismatch');
     const billable = isBillableAiAgent(params.agentId);
     const estimatedMinor = billable ? params.estimatedSpendMinor : BigInt(0);
+    const spendPolicy = AGENT_PERMISSIONS[params.agentId];
+    if (!spendPolicy) throw new ExecutionLoopError(`Agent '${params.agentId}' has no spending policy`);
+    if (estimatedMinor > BigInt(spendPolicy.maxCostPerTask)) {
+      throw new ExecutionLoopError(`Agent '${params.agentId}' estimated spend exceeds its per-task ceiling`);
+    }
     if (billable && estimatedMinor <= BigInt(0)) throw new ExecutionLoopError('Billable agents require a positive budget reservation');
 
     // 1. Assert Kill Switch is NOT active
