@@ -109,33 +109,32 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  candidateProfile      CandidateProfile?
-  employerProfile       EmployerProfile?
-  invitationsSent       CompanyInvitation[]   @relation("InvitedByUser")
-  auditLogs             AuditLog[]
-  notifications         Notification[]
-  aiUsages              AiUsage[]
-  proctoringEvents      ProctoringTelemetry[]
-  interviewRoundAssignments InterviewRoundInterviewer[]
-  interviewFeedbacks        InterviewFeedback[]
-  storedFiles           StoredFile[]
-  savedJobs             SavedJob[]
-  referralsInitiated    ReferralAttribution[] @relation("UserReferrer")
-  referralReceived      ReferralAttribution?  @relation("UserReferred")
-  referralPayouts       ReferralPayout[]
-  referralRewards       ReferralReward[]      @relation("UserReferralRewards")
-  referralLedgerEntries ReferralLedgerEntry[]
-  customSkillRequests   CustomSkillRequest[]
-  whatsAppContact       WhatsAppContact?
-  assessmentRestrictions RecordedAssessmentRestriction[] @relation("RestrictedAssessmentUser")
-  assessmentRestrictionReviews RecordedAssessmentRestriction[] @relation("AssessmentRestrictionReviewer")
- @relation("CandidateSourcedBy")
+  candidateProfile              CandidateProfile?
+  employerProfile               EmployerProfile?
+  invitationsSent               CompanyInvitation[]             @relation("InvitedByUser")
+  auditLogs                     AuditLog[]
+  notifications                 Notification[]
+  aiUsages                      AiUsage[]
+  proctoringEvents              ProctoringTelemetry[]
+  interviewRoundAssignments     InterviewRoundInterviewer[]
+  interviewFeedbacks            InterviewFeedback[]
+  storedFiles                   StoredFile[]
+  savedJobs                     SavedJob[]
+  referralsInitiated            ReferralAttribution[]           @relation("UserReferrer")
+  referralReceived              ReferralAttribution?            @relation("UserReferred")
+  referralPayouts               ReferralPayout[]
+  referralRewards               ReferralReward[]                @relation("UserReferralRewards")
+  referralLedgerEntries         ReferralLedgerEntry[]
+  customSkillRequests           CustomSkillRequest[]
+  whatsAppContact               WhatsAppContact?
+  assessmentRestrictions        RecordedAssessmentRestriction[] @relation("RestrictedAssessmentUser")
+  assessmentRestrictionReviews  RecordedAssessmentRestriction[] @relation("AssessmentRestrictionReviewer")
+  candidateNotesAuthored        EmployerCandidateNote[]
+  candidateTagsCreated          EmployerCandidateTag[]
+  candidateCollectionsCreated   EmployerCandidateCollection[]
+  sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
 
   @@index([phoneNumber])
-  candidateNotesAuthored EmployerCandidateNote[]
-  candidateTagsCreated EmployerCandidateTag[]
-  candidateCollectionsCreated EmployerCandidateCollection[]
-  sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
 }
 
 enum CandidateAvailabilityStatus {
@@ -147,38 +146,39 @@ enum CandidateAvailabilityStatus {
 }
 
 model CandidateProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headline        String?
-  bio             String?
-  location        String?
-  skills          String[] @default([])
-  education       Json?
-  experience      Json?
-  preferences     Json?
-  experienceYears Float    @default(0)
-  hireGoScore     Int      @default(0)
-  resumeUrl       String?
-  isVerified      Boolean  @default(false)
-  availabilityStatus CandidateAvailabilityStatus @default(RECONFIRMATION_REQUIRED)
+  id                          String                      @id @default(uuid())
+  userId                      String                      @unique
+  user                        User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline                    String?
+  bio                         String?
+  location                    String?
+  skills                      String[]                    @default([])
+  education                   Json?
+  experience                  Json?
+  preferences                 Json?
+  experienceYears             Float                       @default(0)
+  hireGoScore                 Int                         @default(0)
+  resumeUrl                   String?
+  isVerified                  Boolean                     @default(false)
+  availabilityStatus          CandidateAvailabilityStatus @default(RECONFIRMATION_REQUIRED)
   lastAvailabilityConfirmedAt DateTime?
-  availabilitySource String?
-  availabilityNote String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  availabilitySource          String?
+  availabilityNote            String?
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
 
-  videoResumes          VideoResume[]
-  applications          Application[]
+  videoResumes VideoResume[]
+  applications Application[]
 
-  mcqAttempts           McqAttempt[]
-  typingAssessments     TypingAssessment[]
-  mockInterviewSessions MockInterviewSession[]
-  recordedAssessmentAttempts RecordedAssessmentAttempt[]
-  readinessRecords      CandidateReadiness[]
-  creditWallet          CandidateCreditWallet?
-  creditLedgerEntries   CandidateCreditLedger[]
-  serviceUsages         CandidateServiceUsage[]
+  mcqAttempts                   McqAttempt[]
+  typingAssessments             TypingAssessment[]
+  mockInterviewSessions         MockInterviewSession[]
+  recordedAssessmentAttempts    RecordedAssessmentAttempt[]
+  readinessRecords              CandidateReadiness[]
+  creditWallet                  CandidateCreditWallet?
+  creditLedgerEntries           CandidateCreditLedger[]
+  serviceUsages                 CandidateServiceUsage[]
+  CandidateSourcingRelationship CandidateSourcingRelationship[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -200,20 +200,17 @@ model Company {
   jobs                 JobListing[]
   subscriptions        CompanySubscription[]
   credits              CompanyCredits?
-  referralReceived     ReferralAttribution?  @relation("CompanyReferred")
+  referralReceived     ReferralAttribution?          @relation("CompanyReferred")
   hiringRequirements   HiringRequirement[]
   commercialAgreements CommercialAgreement[]
   storedFiles          StoredFile[]
   auditLogs            AuditLog[]
   interviewProcesses   JobInterviewProcess[]
-  candidateNotes        EmployerCandidateNote[]
-  candidateTags         EmployerCandidateTag[]
-  candidateCollections  EmployerCandidateCollection[]
+  candidateNotes       EmployerCandidateNote[]
+  candidateTags        EmployerCandidateTag[]
+  candidateCollections EmployerCandidateCollection[]
 
-  sourcingRelationships  CandidateSourcingRelationship[]
-
-
-
+  sourcingRelationships CandidateSourcingRelationship[]
 }
 
 enum InvitationStatus {
@@ -279,13 +276,14 @@ model JobListing {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  applications   Application[]
+  applications Application[]
 
-  savedBy        SavedJob[]
-  mcqAssessments McqAssessment[]
-  recordedAssessmentConfig RecordedAssessmentConfig?
-  recordedAssessmentAttempts RecordedAssessmentAttempt[]
-  interviewProcess JobInterviewProcess?
+  savedBy                       SavedJob[]
+  mcqAssessments                McqAssessment[]
+  recordedAssessmentConfig      RecordedAssessmentConfig?
+  recordedAssessmentAttempts    RecordedAssessmentAttempt[]
+  interviewProcess              JobInterviewProcess?
+  CandidateSourcingRelationship CandidateSourcingRelationship[]
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -360,7 +358,6 @@ model OtpVerification {
   @@index([email, type])
 }
 
-
 enum CandidateSourcingStatus {
   SOURCED
   SHORTLISTED
@@ -406,14 +403,13 @@ model Application {
   annualCtc          Float?
   pphPlacement       PphPlacement?
 
-  interviews Interview[]
+  interviews    Interview[]
   roundProgress InterviewRoundProgress[]
   employerNotes EmployerCandidateNote[]
-  employerTags EmployerCandidateTag[]
+  employerTags  EmployerCandidateTag[]
 
   @@unique([candidateProfileId, jobId])
 }
-
 
 model EmployerCandidateNote {
   id            String      @id @default(uuid())
@@ -426,6 +422,7 @@ model EmployerCandidateNote {
   text          String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
   @@index([applicationId, createdAt])
   @@index([companyId])
 }
@@ -440,20 +437,22 @@ model EmployerCandidateTag {
   createdById   String
   createdBy     User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt     DateTime    @default(now())
+
   @@unique([applicationId, label])
   @@index([companyId])
 }
 
 model EmployerCandidateCollection {
-  id          String   @id @default(uuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  name        String
-  candidateIds Json    @default("[]")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  name         String
+  candidateIds Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   @@unique([companyId, name])
   @@index([companyId])
 }
@@ -527,12 +526,12 @@ model VideoAnalysisJob {
 }
 
 model Interview {
-  id               String                @id @default(uuid())
+  id               String                  @id @default(uuid())
   applicationId    String
-  application      Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application      Application             @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   scheduledAt      DateTime
-  durationMins     Int                   @default(30)
-  status           String                @default("SCHEDULED")
+  durationMins     Int                     @default(30)
+  status           String                  @default("SCHEDULED")
   roomUrl          String?
   transcript       String?
   aiFeedback       String?
@@ -540,7 +539,7 @@ model Interview {
   signals          InterviewSignal[]
   roundProgress    InterviewRoundProgress?
   feedbacks        InterviewFeedback[]
-  createdAt        DateTime              @default(now())
+  createdAt        DateTime                @default(now())
 }
 
 // Short-lived, database-backed WebRTC signaling. This deliberately replaces
@@ -586,16 +585,16 @@ model Notification {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
+  id        String                    @id @default(uuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
   companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  company   Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   action    String
   resource  String
   ipAddress String?
   details   String?
-  createdAt DateTime @default(now())
+  createdAt DateTime                  @default(now())
   siemEvent SecurityAuditOutboxEvent?
 
   @@index([companyId, createdAt])
@@ -605,21 +604,21 @@ model AuditLog {
 // A separate worker can claim PENDING records and forward them to a SIEM
 // without making request handling depend on an external SIEM credential.
 model SecurityAuditOutboxEvent {
-  id            String   @id @default(uuid())
-  auditLogId    String   @unique
-  auditLog      AuditLog @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
-  eventType     String   @default("security.audit.v1")
+  id            String    @id @default(uuid())
+  auditLogId    String    @unique
+  auditLog      AuditLog  @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+  eventType     String    @default("security.audit.v1")
   payload       Json
   payloadSha256 String
-  status        String   @default("PENDING")
-  attempts      Int      @default(0)
-  availableAt   DateTime @default(now())
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  availableAt   DateTime  @default(now())
   leaseId       String?
   leasedUntil   DateTime?
   deliveredAt   DateTime?
   lastError     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status, availableAt])
   @@index([createdAt])
@@ -636,25 +635,24 @@ model AdminConfiguration {
 }
 
 model StoredFile {
-  id           String    @id @default(uuid())
-  ownerId      String
-  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  companyId    String?
-  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  objectKey    String    @unique
-  category     String
-  originalName String
-  mimeType     String
-  sizeBytes    Int
-  deletedAt    DateTime?
-  scanStatus   String    @default("PENDING")
-  scanCheckedAt DateTime?
-  scanDetail   String?
-  createdAt    DateTime  @default(now())
-
-  @@index([ownerId, createdAt])
+  id                  String                       @id @default(uuid())
+  ownerId             String
+  owner               User                         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  companyId           String?
+  company             Company?                     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  objectKey           String                       @unique
+  category            String
+  originalName        String
+  mimeType            String
+  sizeBytes           Int
+  deletedAt           DateTime?
+  scanStatus          String                       @default("PENDING")
+  scanCheckedAt       DateTime?
+  scanDetail          String?
+  createdAt           DateTime                     @default(now())
   assessmentResponses RecordedAssessmentResponse[]
 
+  @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
   @@index([scanStatus, createdAt])
 }
@@ -789,7 +787,7 @@ model CommercialAgreement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  events AgreementEvent[]
+  events     AgreementEvent[]
   placements PphPlacement[]
 
   @@index([companyId])
@@ -833,9 +831,9 @@ model Invoice {
 }
 
 model PphPlacement {
-  id                String   @id @default(uuid())
-  applicationId     String   @unique
-  application       Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  id                String              @id @default(uuid())
+  applicationId     String              @unique
+  application       Application         @relation(fields: [applicationId], references: [id], onDelete: Restrict)
   agreementId       String
   agreement         CommercialAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
   companyId         String
@@ -843,21 +841,21 @@ model PphPlacement {
   invoiceEligibleAt DateTime
   approvedBy        String
   approvedRole      String
-  approvedAt        DateTime @default(now())
-  annualCtc         Decimal @db.Decimal(18, 2)
-  amount            Decimal @db.Decimal(18, 2)
-  taxAmount         Decimal @db.Decimal(18, 2)
-  totalAmount       Decimal @db.Decimal(18, 2)
-  currency          String @default("INR")
+  approvedAt        DateTime            @default(now())
+  annualCtc         Decimal             @db.Decimal(18, 2)
+  amount            Decimal             @db.Decimal(18, 2)
+  taxAmount         Decimal             @db.Decimal(18, 2)
+  totalAmount       Decimal             @db.Decimal(18, 2)
+  currency          String              @default("INR")
   creditDays        Int
   termsSnapshot     Json
   requestHash       String
-  status            String @default("SCHEDULED")
+  status            String              @default("SCHEDULED")
   holdReason        String?
-  invoiceId         String? @unique
-  invoice           Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  invoiceId         String?             @unique
+  invoice           Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([status, invoiceEligibleAt])
   @@index([companyId, createdAt])
@@ -1308,7 +1306,6 @@ model ShadowExecutionLog {
 // MODEL 12: HIRING OUTCOME FEEDBACK
 // =
 
-
 enum CandidateFeedbackPolicy {
   REQUIRED
   OPTIONAL
@@ -1334,35 +1331,35 @@ enum InterviewRoundProgressStatus {
 }
 
 model JobInterviewProcess {
-  id        String   @id @default(uuid())
-  jobId     String   @unique
-  job       JobListing @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id        String           @id @default(uuid())
+  jobId     String           @unique
+  job       JobListing       @relation(fields: [jobId], references: [id], onDelete: Cascade)
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   rounds    InterviewRound[]
 
   @@index([companyId])
 }
 
 model InterviewRound {
-  id                         String   @id @default(uuid())
+  id                         String                      @id @default(uuid())
   processId                  String
-  process                    JobInterviewProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  process                    JobInterviewProcess         @relation(fields: [processId], references: [id], onDelete: Cascade)
   sequence                   Int
   name                       String
   purpose                    String?
   department                 String?
-  interviewType              String   @default("VIDEO")
-  durationMins               Int      @default(30)
-  mandatory                  Boolean  @default(true)
-  mandatoryFeedback          Boolean  @default(true)
-  candidateFeedbackPolicy    CandidateFeedbackPolicy @default(OPTIONAL)
-  previousFeedbackVisibility PreviousFeedbackVisibility @default(HIDDEN_UNTIL_OWN_FEEDBACK)
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  interviewType              String                      @default("VIDEO")
+  durationMins               Int                         @default(30)
+  mandatory                  Boolean                     @default(true)
+  mandatoryFeedback          Boolean                     @default(true)
+  candidateFeedbackPolicy    CandidateFeedbackPolicy     @default(OPTIONAL)
+  previousFeedbackVisibility PreviousFeedbackVisibility  @default(HIDDEN_UNTIL_OWN_FEEDBACK)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
   interviewers               InterviewRoundInterviewer[]
   progress                   InterviewRoundProgress[]
 
@@ -1371,31 +1368,31 @@ model InterviewRound {
 }
 
 model InterviewRoundInterviewer {
-  id        String   @id @default(uuid())
+  id        String         @id @default(uuid())
   roundId   String
   round     InterviewRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  required  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  required  Boolean        @default(true)
+  createdAt DateTime       @default(now())
 
   @@unique([roundId, userId])
   @@index([userId])
 }
 
 model InterviewRoundProgress {
-  id            String   @id @default(uuid())
+  id            String                       @id @default(uuid())
   applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application   Application                  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   roundId       String
-  round         InterviewRound @relation(fields: [roundId], references: [id], onDelete: Restrict)
-  interviewId   String?  @unique
-  interview     Interview? @relation(fields: [interviewId], references: [id], onDelete: SetNull)
+  round         InterviewRound               @relation(fields: [roundId], references: [id], onDelete: Restrict)
+  interviewId   String?                      @unique
+  interview     Interview?                   @relation(fields: [interviewId], references: [id], onDelete: SetNull)
   status        InterviewRoundProgressStatus @default(PENDING)
   startedAt     DateTime?
   completedAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
   feedbacks     InterviewFeedback[]
 
   @@unique([applicationId, roundId])
@@ -1403,20 +1400,20 @@ model InterviewRoundProgress {
 }
 
 model InterviewFeedback {
-  id               String   @id @default(uuid())
-  interviewId      String
-  interview        Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  roundProgressId  String?
-  roundProgress    InterviewRoundProgress? @relation(fields: [roundProgressId], references: [id], onDelete: SetNull)
-  authorId         String
-  author           User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
-  recommendation   String
-  internalFeedback Json
+  id                String                  @id @default(uuid())
+  interviewId       String
+  interview         Interview               @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  roundProgressId   String?
+  roundProgress     InterviewRoundProgress? @relation(fields: [roundProgressId], references: [id], onDelete: SetNull)
+  authorId          String
+  author            User                    @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  recommendation    String
+  internalFeedback  Json
   candidateFeedback String?
-  candidateVisible Boolean  @default(false)
-  finalizedAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  candidateVisible  Boolean                 @default(false)
+  finalizedAt       DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   @@unique([interviewId, authorId])
   @@index([roundProgressId])
@@ -1894,17 +1891,17 @@ model RecordedAssessmentQuestionBank {
 }
 
 model RecordedAssessmentConfig {
-  id                       String                      @id @default(uuid())
-  jobListingId             String                      @unique
-  jobListing               JobListing                  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
-  mediaType                RecordedAssessmentMediaType @default(VIDEO)
-  defaultReadingTimeSeconds Int                        @default(10)
-  defaultAnswerSeconds     Int                         @default(30)
-  questionCount            Int                         @default(6)
-  proctoringEnabled        Boolean                     @default(true)
-  isActive                 Boolean                     @default(true)
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  id                        String                      @id @default(uuid())
+  jobListingId              String                      @unique
+  jobListing                JobListing                  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  mediaType                 RecordedAssessmentMediaType @default(VIDEO)
+  defaultReadingTimeSeconds Int                         @default(10)
+  defaultAnswerSeconds      Int                         @default(30)
+  questionCount             Int                         @default(6)
+  proctoringEnabled         Boolean                     @default(true)
+  isActive                  Boolean                     @default(true)
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
 }
 
 model RecordedAssessmentAttempt {
@@ -1923,7 +1920,7 @@ model RecordedAssessmentAttempt {
   createdAt          DateTime                        @default(now())
   updatedAt          DateTime                        @updatedAt
 
-  questions       RecordedAssessmentAttemptQuestion[]
+  questions        RecordedAssessmentAttemptQuestion[]
   proctoringEvents RecordedAssessmentProctoringEvent[]
 
   @@index([candidateProfileId, createdAt])
@@ -1931,22 +1928,22 @@ model RecordedAssessmentAttempt {
 }
 
 model RecordedAssessmentAttemptQuestion {
-  id                    String                    @id @default(uuid())
+  id                    String                          @id @default(uuid())
   attemptId             String
-  attempt               RecordedAssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attempt               RecordedAssessmentAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   sourceQuestionId      String?
   sourceQuestion        RecordedAssessmentQuestionBank? @relation(fields: [sourceQuestionId], references: [id], onDelete: SetNull)
   questionText          String
   roleTitle             String
-  skillTags             String[]                  @default([])
+  skillTags             String[]                        @default([])
   orderIndex            Int
-  readingTimeSeconds    Int                       @default(10)
+  readingTimeSeconds    Int                             @default(10)
   answerDurationSeconds Int
   sourceVersion         Int
   difficulty            String
   industry              String?
   department            String?
-  createdAt             DateTime                  @default(now())
+  createdAt             DateTime                        @default(now())
 
   response RecordedAssessmentResponse?
 
@@ -1955,40 +1952,39 @@ model RecordedAssessmentAttemptQuestion {
 }
 
 model RecordedAssessmentResponse {
-  id                String                           @id @default(uuid())
-  attemptQuestionId String                           @unique
+  id                String                            @id @default(uuid())
+  attemptQuestionId String                            @unique
   attemptQuestion   RecordedAssessmentAttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
   storedFileId      String?
-  storedFile        StoredFile?                      @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
+  storedFile        StoredFile?                       @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
   mediaType         RecordedAssessmentMediaType
   durationSeconds   Int
   transcript        String?
-  analysisStatus    RecordedAssessmentAnalysisStatus @default(PENDING)
+  analysisStatus    RecordedAssessmentAnalysisStatus  @default(PENDING)
   analysisResult    Json?
   analysisJobs      RecordedAssessmentAnalysisJob[]
-  createdAt         DateTime                         @default(now())
-  updatedAt         DateTime                         @updatedAt
+  createdAt         DateTime                          @default(now())
+  updatedAt         DateTime                          @updatedAt
 
   @@index([storedFileId])
   @@index([analysisStatus])
 }
 
-
 model RecordedAssessmentAnalysisJob {
-  id             String                     @id @default(uuid())
+  id             String                           @id @default(uuid())
   responseId     String
-  response       RecordedAssessmentResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  response       RecordedAssessmentResponse       @relation(fields: [responseId], references: [id], onDelete: Cascade)
   status         RecordedAssessmentAnalysisStatus @default(PENDING)
-  idempotencyKey String                     @unique
-  attempts       Int                        @default(0)
-  maxAttempts    Int                        @default(3)
+  idempotencyKey String                           @unique
+  attempts       Int                              @default(0)
+  maxAttempts    Int                              @default(3)
   error          String?
   payload        Json?
   result         Json?
   startedAt      DateTime?
   completedAt    DateTime?
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
 
   @@index([responseId])
   @@index([status])
@@ -2003,23 +1999,23 @@ enum RecordedAssessmentRestrictionStatus {
 }
 
 model RecordedAssessmentRestriction {
-  id              String                              @id @default(uuid())
-  userId          String
-  user            User                                @relation("RestrictedAssessmentUser", fields: [userId], references: [id], onDelete: Cascade)
-  attemptId       String?
-  status          RecordedAssessmentRestrictionStatus @default(PENDING_REVIEW)
-  proposedMonths  Int
-  suspendedUntil  DateTime?
-  reason          String
-  evidence        Json?
-  reviewedById    String?
-  reviewedBy      User?                               @relation("AssessmentRestrictionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt      DateTime?
-  reviewNote      String?
-  appealNote      String?
-  appealedAt      DateTime?
-  createdAt       DateTime                            @default(now())
-  updatedAt       DateTime                            @updatedAt
+  id             String                              @id @default(uuid())
+  userId         String
+  user           User                                @relation("RestrictedAssessmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  attemptId      String?
+  status         RecordedAssessmentRestrictionStatus @default(PENDING_REVIEW)
+  proposedMonths Int
+  suspendedUntil DateTime?
+  reason         String
+  evidence       Json?
+  reviewedById   String?
+  reviewedBy     User?                               @relation("AssessmentRestrictionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  reviewNote     String?
+  appealNote     String?
+  appealedAt     DateTime?
+  createdAt      DateTime                            @default(now())
+  updatedAt      DateTime                            @updatedAt
 
   @@index([userId, status])
   @@index([status, createdAt])
