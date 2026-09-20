@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { TestResult } from "./suite.test";

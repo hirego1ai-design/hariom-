@@ -105,7 +105,7 @@ export async function runAuditFixesTests(): Promise<{
   // 4. PaymentOrder Interface & Notes Structure
   try {
     // Razorpay must use its dedicated webhook secret, including in test mode.
-    process.env.RAZORPAY_WEBHOOK_SECRET = "audit_test_razorpay_webhook_secret";
+    process.env.STRIPE_WEBHOOK_SECRET = "audit_test_STRIPE_webhook_secret";
     const { RazorpayGateway } = await import("@/lib/payments/RazorpayGateway");
     const rzp = new RazorpayGateway();
 
@@ -124,7 +124,7 @@ export async function runAuditFixesTests(): Promise<{
       },
     });
 
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
+    const secret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
     const signature = secret
       ? (await import("crypto")).createHmac("sha256", secret).update(rawBody).digest("hex")
@@ -134,7 +134,7 @@ export async function runAuditFixesTests(): Promise<{
     const mockWebhookRes = await rzp.verifyWebhook({
       rawBody,
       signature,
-      provider: "RAZORPAY",
+      provider: "STRIPE",
       headers: {},
     });
 
@@ -164,9 +164,9 @@ export async function runAuditFixesTests(): Promise<{
   try {
     const savedEnvironment = {
       NODE_ENV: process.env.NODE_ENV,
-      RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
-      RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
-      RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+      STRIPE_KEY_ID: process.env.STRIPE_KEY_ID,
+      STRIPE_KEY_SECRET: process.env.STRIPE_KEY_SECRET,
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
       PAYMENT_WEBHOOK_SECRET: process.env.PAYMENT_WEBHOOK_SECRET,
     };
     const mutableEnvironment = process.env as Record<string, string | undefined>;
@@ -181,9 +181,9 @@ export async function runAuditFixesTests(): Promise<{
 
     try {
       mutableEnvironment.NODE_ENV = "production";
-      process.env.RAZORPAY_KEY_ID = "rzp_live_test_id";
-      process.env.RAZORPAY_KEY_SECRET = "rzp_live_test_api_secret";
-      process.env.RAZORPAY_WEBHOOK_SECRET = "dedicated_webhook_secret";
+      process.env.STRIPE_KEY_ID = "rzp_live_test_id";
+      process.env.STRIPE_KEY_SECRET = "rzp_live_test_api_secret";
+      process.env.STRIPE_WEBHOOK_SECRET = "dedicated_webhook_secret";
       globalThis.fetch = (async () => new Response(JSON.stringify({
         error: { description: "provider unavailable" },
       }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch;
@@ -204,14 +204,14 @@ export async function runAuditFixesTests(): Promise<{
         productionOrderRejected = true;
       }
 
-      delete process.env.RAZORPAY_WEBHOOK_SECRET;
+      delete process.env.STRIPE_WEBHOOK_SECRET;
       process.env.PAYMENT_WEBHOOK_SECRET = "generic_webhook_secret";
       const rawBody = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_test", order_id: "order_test", amount: 499900 } } } });
-      const apiSecretSignature = (await import("crypto")).createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(rawBody).digest("hex");
+      const apiSecretSignature = (await import("crypto")).createHmac("sha256", process.env.STRIPE_KEY_SECRET).update(rawBody).digest("hex");
       const rejectedApiSecret = await rzp.verifyWebhook({
         rawBody,
         signature: apiSecretSignature,
-        provider: "RAZORPAY",
+        provider: "STRIPE",
         headers: {},
       });
 

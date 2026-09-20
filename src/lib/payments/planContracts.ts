@@ -27,6 +27,6 @@ export const updatePlanSchema = z.object(planFields).partial()
 
 export const checkoutSchema = z.object({
   planId: planIdSchema,
-  paymentMethod: z.enum(["RAZORPAY", "STRIPE", "PAYU", "PHONEPE", "AUTO"]).optional(),
+  paymentMethod: z.enum(["STRIPE", "PAYU", "AUTO"]).optional(),
   promoCode: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
 }).strict();

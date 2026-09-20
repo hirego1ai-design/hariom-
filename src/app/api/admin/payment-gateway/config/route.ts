@@ -6,14 +6,14 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
 
 const gatewayStatusSchema = z.enum(["HEALTHY", "DEGRADED", "DISABLED"]);
-const gatewayNameSchema = z.enum(["RAZORPAY", "PAYU", "STRIPE"]);
+const gatewayNameSchema = z.enum(["PAYU", "STRIPE"]);
 const gatewayConfigSchema = z.object({
   mode: z.enum(["AUTO", "MANUAL"]).optional(),
   primaryGateway: gatewayNameSchema.optional(),
   autoFailover: z.boolean().optional(),
   allowEmployerSelection: z.boolean().optional(),
   gatewaysStatus: z.object({
-    RAZORPAY: gatewayStatusSchema.optional(),
+    
     PAYU: gatewayStatusSchema.optional(),
     STRIPE: gatewayStatusSchema.optional(),
   }).strict().optional(),

@@ -115,9 +115,7 @@ export async function readPrivateObjectForSecurityScan(objectKey: string): Promi
   const bytes = await response.Body.transformToByteArray();
   return Buffer.from(bytes);
 }
-
-
-
+export async function getPrivateDownloadUrl(objectKey: string, fileName: string, disposition: "attachment" | "inline" = "attachment") {
   if (!isProduction()) return null;
   const { client, bucket } = s3Client();
   return getSignedUrl(client, new GetObjectCommand({
@@ -156,3 +154,7 @@ export async function deleteObject(objectKey: string) {
   }
   await unlink(devObjectPath(objectKey));
 }
+
+
+
+

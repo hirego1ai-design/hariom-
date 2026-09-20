@@ -113,9 +113,9 @@ test("manual disabled gateway cannot create a payment order", async t => {
     RazorpayGateway.prototype.createOrder = createOrder;
   });
   PaymentGatewayController.getConfig = async () => ({
-    mode: "MANUAL", primaryGateway: "RAZORPAY", autoFailover: false,
-    allowEmployerSelection: false, priorities: ["RAZORPAY"],
-    gatewaysStatus: { RAZORPAY: "DISABLED", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" },
+    mode: "MANUAL", primaryGateway: "STRIPE", autoFailover: false,
+    allowEmployerSelection: false, priorities: ["STRIPE"],
+    gatewaysStatus: { STRIPE: "DISABLED", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" },
   });
   RazorpayGateway.prototype.createOrder = async () => {
     calls++;
@@ -136,9 +136,9 @@ test("an explicitly selected disabled gateway is rejected instead of silently re
     RazorpayGateway.prototype.createOrder = createOrder;
   });
   PaymentGatewayController.getConfig = async () => ({
-    mode: "AUTO", primaryGateway: "RAZORPAY", autoFailover: true,
-    allowEmployerSelection: true, priorities: ["RAZORPAY"],
-    gatewaysStatus: { RAZORPAY: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" },
+    mode: "AUTO", primaryGateway: "STRIPE", autoFailover: true,
+    allowEmployerSelection: true, priorities: ["STRIPE"],
+    gatewaysStatus: { STRIPE: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" },
   });
   RazorpayGateway.prototype.createOrder = async () => {
     calls++;

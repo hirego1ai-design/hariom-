@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { RazorpayGateway } from "../src/lib/payments/RazorpayGateway";
+
 import { PayUGateway } from "../src/lib/payments/PayUGateway";
 import { PaymentGatewayController } from "../src/lib/payments/PaymentGatewayController";
 
@@ -35,10 +35,10 @@ async function runRazorpayTests() {
       companyId: "comp-sandbox-rzp",
     });
 
-    const passed = order.success && order.gateway === "RAZORPAY" && !!order.gatewayOrderId;
-    record("Razorpay", "Order Creation", passed, `Gateway Order ID: ${order.gatewayOrderId}`);
+    const passed = order.success && order.gateway === "STRIPE" && !!order.gatewayOrderId;
+    record("STRIPE", "Order Creation", passed, `Gateway Order ID: ${order.gatewayOrderId}`);
   } catch (err: any) {
-    record("Razorpay", "Order Creation", false, err.message);
+    record("STRIPE", "Order Creation", false, err.message);
   }
 
   // Test 1.2: Signature Verification (Valid)
@@ -69,14 +69,14 @@ async function runRazorpayTests() {
     const verifyResult = await rzp.verifyWebhook({
       rawBody: rawPayload,
       signature: validSignature,
-      provider: "RAZORPAY",
+      provider: "STRIPE",
       headers: { "x-razorpay-signature": validSignature },
     });
 
     const passed = verifyResult.isValid && verifyResult.status === "SUCCESS" && verifyResult.amount === 4999;
-    record("Razorpay", "Valid Webhook Signature", passed, `Verified tx: ${verifyResult.gatewayTxId}, Amount: ₹${verifyResult.amount}`);
+    record("STRIPE", "Valid Webhook Signature", passed, `Verified tx: ${verifyResult.gatewayTxId}, Amount: ₹${verifyResult.amount}`);
   } catch (err: any) {
-    record("Razorpay", "Valid Webhook Signature", false, err.message);
+    record("STRIPE", "Valid Webhook Signature", false, err.message);
   }
 
   // Test 1.3: Signature Verification (Tampered/Invalid)
@@ -87,14 +87,14 @@ async function runRazorpayTests() {
     const verifyResult = await rzp.verifyWebhook({
       rawBody: rawPayload,
       signature: invalidSignature,
-      provider: "RAZORPAY",
+      provider: "STRIPE",
       headers: { "x-razorpay-signature": invalidSignature },
     });
 
     const passed = !verifyResult.isValid && verifyResult.status === "REJECTED";
-    record("Razorpay", "Tampered Signature Rejection", passed, `Correctly rejected: ${verifyResult.error}`);
+    record("STRIPE", "Tampered Signature Rejection", passed, `Correctly rejected: ${verifyResult.error}`);
   } catch (err: any) {
-    record("Razorpay", "Tampered Signature Rejection", false, err.message);
+    record("STRIPE", "Tampered Signature Rejection", false, err.message);
   }
 
   // Test 1.4: Payment Failed Event
@@ -116,14 +116,14 @@ async function runRazorpayTests() {
     const verifyResult = await rzp.verifyWebhook({
       rawBody: rawPayload,
       signature,
-      provider: "RAZORPAY",
+      provider: "STRIPE",
       headers: { "x-razorpay-signature": signature },
     });
 
     const passed = verifyResult.isValid && verifyResult.status === "FAILED";
-    record("Razorpay", "Payment Failed Event Handling", passed, `Status correctly resolved to: ${verifyResult.status}`);
+    record("STRIPE", "Payment Failed Event Handling", passed, `Status correctly resolved to: ${verifyResult.status}`);
   } catch (err: any) {
-    record("Razorpay", "Payment Failed Event Handling", false, err.message);
+    record("STRIPE", "Payment Failed Event Handling", false, err.message);
   }
 
   // Test 1.5: Amount Mismatch Integrity Check
@@ -132,9 +132,9 @@ async function runRazorpayTests() {
     const tamperedGatewayAmount = 100; // Hacker tried to pay ₹100 instead of ₹4999
     const isAmountValid = Math.abs(tamperedGatewayAmount - expectedPlanPrice) <= 0.01;
     const passed = !isAmountValid;
-    record("Razorpay", "Amount Mismatch Rejection Guard", passed, `Tampered amount ₹${tamperedGatewayAmount} rejected against plan price ₹${expectedPlanPrice}`);
+    record("STRIPE", "Amount Mismatch Rejection Guard", passed, `Tampered amount ₹${tamperedGatewayAmount} rejected against plan price ₹${expectedPlanPrice}`);
   } catch (err: any) {
-    record("Razorpay", "Amount Mismatch Rejection Guard", false, err.message);
+    record("STRIPE", "Amount Mismatch Rejection Guard", false, err.message);
   }
 }
 
@@ -156,7 +156,7 @@ async function runControllerRoutingTests() {
   try {
     await PaymentGatewayController.updateConfig({
       mode: "MANUAL",
-      primaryGateway: "RAZORPAY",
+      primaryGateway: "STRIPE",
       allowEmployerSelection: false,
     });
 
@@ -168,7 +168,7 @@ async function runControllerRoutingTests() {
       companyId: "comp-1",
     });
 
-    const passed = order.gateway === "RAZORPAY";
+    const passed = order.gateway === "STRIPE";
     record("Controller", "MANUAL Mode (Razorpay)", passed, `Selected Gateway: ${order.gateway}`);
   } catch (err: any) {
     record("Controller", "MANUAL Mode (Razorpay)", false, err.message);
@@ -219,7 +219,7 @@ async function runControllerRoutingTests() {
       mode: "AUTO",
       autoFailover: true,
       gatewaysStatus: {
-        RAZORPAY: "DISABLED",
+        STRIPE: "DISABLED",
         PAYU: "HEALTHY",
         STRIPE: "HEALTHY",
       },

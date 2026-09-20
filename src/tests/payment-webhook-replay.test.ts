@@ -41,13 +41,13 @@ test("captured webhook cannot grant credits when another event already fulfilled
   const originalTransaction = prisma.$transaction;
   let claims = 0;
   try {
-    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "RAZORPAY", autoFailover: false,
-      allowEmployerSelection: false, gatewaysStatus: { RAZORPAY: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["RAZORPAY"] });
+    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "STRIPE", autoFailover: false,
+      allowEmployerSelection: false, gatewaysStatus: { STRIPE: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["STRIPE"] });
     PaymentGatewayController.verifyWebhook = async () => ({ isValid: true, gatewayTxId: "payment-second",
       gatewayOrderId: "order-provider", status: "SUCCESS", amount: 100, currency: "INR", rawPayload: {} });
     prisma.paymentTransaction.findUnique = (async () => null) as unknown as typeof originalFindTx;
     prisma.paymentOrder.findFirst = (async () => ({ orderId: "order-local", companyId: "company", planId: "plan",
-      planSnapshot: purchasedPlan, gateway: "RAZORPAY", gatewayOrderId: "order-provider", expectedAmount: 100 })) as unknown as typeof originalFindOrder;
+      planSnapshot: purchasedPlan, gateway: "STRIPE", gatewayOrderId: "order-provider", expectedAmount: 100 })) as unknown as typeof originalFindOrder;
     prisma.subscriptionPlan.findUnique = (async () => ({ id: "plan", currency: "INR" })) as unknown as typeof originalFindPlan;
     prisma.$transaction = (async (callback: (tx: unknown) => Promise<unknown>) => callback({
       paymentTransaction: { findUnique: async () => null },
@@ -80,8 +80,8 @@ test("a disabled provider still accepts a signed event for an order already boun
   const originalFindTx = prisma.paymentTransaction.findUnique;
   const originalFindOrder = prisma.paymentOrder.findFirst;
   try {
-    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "RAZORPAY", autoFailover: false,
-      allowEmployerSelection: false, gatewaysStatus: { RAZORPAY: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["RAZORPAY"] });
+    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "STRIPE", autoFailover: false,
+      allowEmployerSelection: false, gatewaysStatus: { STRIPE: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["STRIPE"] });
     PaymentGatewayController.verifyWebhook = async () => ({ isValid: true, gatewayTxId: "payment-finished",
       gatewayOrderId: "order-disabled", status: "SUCCESS", amount: 100, currency: "INR", rawPayload: {} });
     prisma.paymentOrder.findFirst = (async () => ({ orderId: "order-local", companyId: "company", planId: "plan",
@@ -106,8 +106,8 @@ test("a disabled provider webhook without an order bound to it remains rejected"
   const originalVerify = PaymentGatewayController.verifyWebhook;
   const originalFindOrder = prisma.paymentOrder.findFirst;
   try {
-    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "RAZORPAY", autoFailover: false,
-      allowEmployerSelection: false, gatewaysStatus: { RAZORPAY: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["RAZORPAY"] });
+    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "STRIPE", autoFailover: false,
+      allowEmployerSelection: false, gatewaysStatus: { STRIPE: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["STRIPE"] });
     PaymentGatewayController.verifyWebhook = async () => ({ isValid: true, gatewayTxId: "payment-unknown",
       gatewayOrderId: "order-unknown", status: "SUCCESS", amount: 100, currency: "INR", rawPayload: {} });
     prisma.paymentOrder.findFirst = (async () => null) as unknown as typeof originalFindOrder;
@@ -131,13 +131,13 @@ test("webhook routing trusts only the provider-normalized failure status", async
   const originalTransaction = prisma.$transaction;
   let failedTransactions = 0;
   try {
-    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "RAZORPAY", autoFailover: false,
-      allowEmployerSelection: false, gatewaysStatus: { RAZORPAY: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["RAZORPAY"] });
+    PaymentGatewayController.getConfig = async () => ({ mode: "AUTO", primaryGateway: "STRIPE", autoFailover: false,
+      allowEmployerSelection: false, gatewaysStatus: { STRIPE: "HEALTHY", STRIPE: "DISABLED", PAYU: "DISABLED", PHONEPE: "DISABLED" }, priorities: ["STRIPE"] });
     PaymentGatewayController.verifyWebhook = async () => ({ isValid: true, gatewayTxId: "payment-failed",
       gatewayOrderId: "order-provider", status: "FAILED", amount: 100, currency: "INR", rawPayload: {} });
     prisma.paymentTransaction.findUnique = (async () => null) as unknown as typeof originalFindTx;
     prisma.paymentOrder.findFirst = (async () => ({ orderId: "order-local", companyId: "company", planId: "plan",
-      gateway: "RAZORPAY", gatewayOrderId: "order-provider", expectedAmount: 100 })) as unknown as typeof originalFindOrder;
+      gateway: "STRIPE", gatewayOrderId: "order-provider", expectedAmount: 100 })) as unknown as typeof originalFindOrder;
     prisma.$transaction = (async (callback: (tx: unknown) => Promise<unknown>) => callback({
       paymentOrder: {
         updateMany: async (args: { where: { status: unknown } }) => {

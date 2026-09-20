@@ -178,7 +178,7 @@ model CandidateProfile {
   creditWallet                  CandidateCreditWallet?
   creditLedgerEntries           CandidateCreditLedger[]
   serviceUsages                 CandidateServiceUsage[]
-  CandidateSourcingRelationship CandidateSourcingRelationship[]
+  sourcingRelationships CandidateSourcingRelationship[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -283,7 +283,7 @@ model JobListing {
   recordedAssessmentConfig      RecordedAssessmentConfig?
   recordedAssessmentAttempts    RecordedAssessmentAttempt[]
   interviewProcess              JobInterviewProcess?
-  CandidateSourcingRelationship CandidateSourcingRelationship[]
+  sourcingRelationships CandidateSourcingRelationship[]
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
