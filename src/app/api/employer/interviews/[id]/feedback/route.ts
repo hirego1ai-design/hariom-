@@ -59,6 +59,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (existing?.finalizedAt) throw new ApiError("Finalized feedback cannot be edited. Use an audited amendment workflow for corrections.", 409);
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
+      // Serialize finalization for this interview so concurrent submissions by
+      // the same interviewer cannot both pass the preflight immutability check.
+      await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${id} FOR UPDATE`;
+      const lockedExisting = await tx.interviewFeedback.findUnique({
+        where: { interviewId_authorId: { interviewId: id, authorId: session.id } },
+        select: { finalizedAt: true },
+      });
+      if (lockedExisting?.finalizedAt) {
+        throw new ApiError("Finalized feedback cannot be edited. Use an audited amendment workflow for corrections.", 409);
+      }
       const feedback = await tx.interviewFeedback.upsert({
         where: { interviewId_authorId: { interviewId: id, authorId: session.id } },
         update: { recommendation: body.recommendation, internalFeedback: { strengths: body.strengths, concerns: body.concerns, notes: body.notes }, candidateFeedback: policy === "NOT_SHARED" ? null : body.candidateFeedback || null, candidateVisible: false, finalizedAt: now },
@@ -69,8 +79,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (requiredIds.length === 0) throw new ApiError("At least one required interviewer must be assigned before this round can complete.", 409);
       const complete = requiredIds.every((uid) => finalized.some((f) => f.authorId === uid));
       if (complete) {
-        await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "ROUND_COMPLETE", completedAt: now } });
-        await tx.interview.update({ where: { id }, data: { status: "FEEDBACK_SUBMITTED" } });
+        await tx.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress!.id, status: "ENDED_PENDING_FEEDBACK" },
+          data: { status: "ROUND_COMPLETE", completedAt: now },
+        });
+        await tx.interview.updateMany({
+          where: { id, status: "COMPLETED" },
+          data: { status: "FEEDBACK_SUBMITTED" },
+        });
       }
       return { feedback, roundComplete: complete, pendingFeedbackCount: Math.max(0, requiredIds.length - finalized.length) };
     });
