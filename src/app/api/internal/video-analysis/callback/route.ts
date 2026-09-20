@@ -3,7 +3,7 @@ import { z } from "zod";
 import { handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { canApplyVideoAnalysisCallback, VIDEO_ANALYSIS_TERMINAL_STATUSES } from "@/lib/videoAnalysisState";
+import { canApplyVideoAnalysisCallback } from "@/lib/videoAnalysisState";
 import { Prisma } from "@prisma/client";
 
 const callbackSchema = z.object({
