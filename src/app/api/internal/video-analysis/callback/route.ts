@@ -3,12 +3,13 @@ import { z } from "zod";
 import { handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { canApplyVideoAnalysisCallback, VIDEO_ANALYSIS_TERMINAL_STATUSES } from "@/lib/videoAnalysisState";
+import { canApplyVideoAnalysisCallback } from "@/lib/videoAnalysisState";
 import { Prisma } from "@prisma/client";
 
 const callbackSchema = z.object({
   jobId: z.string().uuid(),
   videoResumeId: z.string().uuid(),
+  claimToken: z.string().uuid(),
   status: z.enum(["COMPLETED", "FAILED", "BLOCKED_INFRA"]),
   error: z.string().nullable().optional(),
   modelName: z.string().optional(),
@@ -84,11 +85,14 @@ export async function POST(request: NextRequest) {
       const res = body.result;
       const applied = await prisma.$transaction(async (tx) => {
         const claim = await tx.videoAnalysisJob.updateMany({
-          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
           data: {
             status: "COMPLETED",
             result: body.result as Prisma.InputJsonValue,
             completedAt: now,
+            claimToken: null,
+            claimedAt: null,
+            leaseExpiresAt: null,
           },
         });
         if (claim.count !== 1) return false;
@@ -130,11 +134,14 @@ export async function POST(request: NextRequest) {
     } else {
       const applied = await prisma.$transaction(async (tx) => {
         const claim = await tx.videoAnalysisJob.updateMany({
-          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
           data: {
             status: body.status,
             error: body.error || "Analysis failed",
             completedAt: now,
+            claimToken: null,
+            claimedAt: null,
+            leaseExpiresAt: null,
           },
         });
         if (claim.count !== 1) return false;
