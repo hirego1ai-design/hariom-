@@ -129,12 +129,13 @@ model User {
   whatsAppContact       WhatsAppContact?
   assessmentRestrictions RecordedAssessmentRestriction[] @relation("RestrictedAssessmentUser")
   assessmentRestrictionReviews RecordedAssessmentRestriction[] @relation("AssessmentRestrictionReviewer")
-  sourcingRelationships CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
+ @relation("CandidateSourcedBy")
 
   @@index([phoneNumber])
   candidateNotesAuthored EmployerCandidateNote[]
   candidateTagsCreated EmployerCandidateTag[]
   candidateCollectionsCreated EmployerCandidateCollection[]
+  sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
 }
 
 enum CandidateAvailabilityStatus {
@@ -169,7 +170,7 @@ model CandidateProfile {
 
   videoResumes          VideoResume[]
   applications          Application[]
-  sourcingRelationships CandidateSourcingRelationship[]
+
   mcqAttempts           McqAttempt[]
   typingAssessments     TypingAssessment[]
   mockInterviewSessions MockInterviewSession[]
@@ -208,7 +209,11 @@ model Company {
   candidateNotes        EmployerCandidateNote[]
   candidateTags         EmployerCandidateTag[]
   candidateCollections  EmployerCandidateCollection[]
+
   sourcingRelationships  CandidateSourcingRelationship[]
+
+
+
 }
 
 enum InvitationStatus {
@@ -275,7 +280,7 @@ model JobListing {
   updatedAt          DateTime  @updatedAt
 
   applications   Application[]
-  sourcingRelationships CandidateSourcingRelationship[]
+
   savedBy        SavedJob[]
   mcqAssessments McqAssessment[]
   recordedAssessmentConfig RecordedAssessmentConfig?
@@ -1002,19 +1007,19 @@ model AiServiceCost {
   updatedAt   DateTime @updatedAt
 }
 
-// ================================================================
+// =
 // HireGo AI ROS — Recruitment Operating System Models
 // 16 models. Single migration: init_ros_architecture
 // These models integrate WITH the existing HireGo business schema.
 // They do NOT replace User, Company, JobListing, Application, etc.
-// ================================================================
+// =
 
-// ================================================================
+// =
 // MODEL 1: SYSTEM EVENT (IMMUTABLE EVENT HISTORY)
-// ================================================================
+// =
 // What actually happened. Immutable after creation.
 // Created by EventDispatcher via idempotent upsert.
-// ================================================================
+// =
 
 enum EventScope {
   GLOBAL
@@ -1038,13 +1043,13 @@ model SystemEvent {
   @@index([correlationId])
 }
 
-// ================================================================
+// =
 // MODEL 2: TRANSACTIONAL OUTBOX (DELIVERY MECHANISM)
-// ================================================================
+// =
 // Written in same DB transaction as business state change.
 // Polled by OutboxPoller using FOR UPDATE SKIP LOCKED.
 // Status: PENDING → PROCESSING → DISPATCHED | FAILED
-// ================================================================
+// =
 
 model OutboxEntry {
   id             String    @id @default(uuid())
@@ -1064,14 +1069,14 @@ model OutboxEntry {
   @@index([status, createdAt])
 }
 
-// ================================================================
+// =
 // MODEL 3: EVENT CONSUMER CHECKPOINT (CONSUMER PROCESSING STATE)
-// ================================================================
+// =
 // Tracks which consumers have processed which events.
 // Composite unique: one event may be processed by multiple consumers.
 // This is a record of completion, NOT a distributed lock.
 // Consumer handlers must be independently idempotent.
-// ================================================================
+// =
 
 model EventConsumerCheckpoint {
   id             String   @id @default(uuid())
@@ -1083,9 +1088,9 @@ model EventConsumerCheckpoint {
   @@unique([idempotencyKey, consumerId])
 }
 
-// ================================================================
+// =
 // MODEL 4: WORKFLOW INSTANCE
-// ================================================================
+// =
 
 enum WorkflowStatus {
   PENDING
@@ -1117,14 +1122,14 @@ model WorkflowInstance {
   steps WorkflowStepLog[]
 }
 
-// ================================================================
+// =
 // MODEL 5: WORKFLOW STEP LOG (REAL IDEMPOTENCY KEY)
-// ================================================================
+// =
 // executionKey = deterministic: "{workflowId}:{stepName}:{attemptNumber}"
 // sideEffectDone guards against re-execution on crash recovery.
 // External side effects must additionally use their own business
 // idempotency keys (see IdempotencyGuard).
-// ================================================================
+// =
 
 model WorkflowStepLog {
   id                 String           @id @default(uuid())
@@ -1144,12 +1149,12 @@ model WorkflowStepLog {
   @@index([workflowInstanceId, stepName])
 }
 
-// ================================================================
+// =
 // MODEL 6: AGENT MEMORY RECORD (3 AGENT LAYERS ONLY)
-// ================================================================
+// =
 // BUSINESS_STATE is NOT stored here. It lives in PostgreSQL
 // business tables and is accessed exclusively through Tools.
-// ================================================================
+// =
 
 enum MemoryType {
   WORKING
@@ -1185,9 +1190,9 @@ model AgentMemoryRecord {
   @@index([companyId, scopeLevel, scopeId])
 }
 
-// ================================================================
+// =
 // MODEL 7: AI COMPANY BUDGET
-// ================================================================
+// =
 
 model AiCompanyBudget {
   id                         String   @id @default(uuid())
@@ -1202,13 +1207,13 @@ model AiCompanyBudget {
   updatedAt                  DateTime @updatedAt
 }
 
-// ================================================================
+// =
 // MODEL 8: BUDGET RESERVATION (KEYED BY EXECUTION ID)
-// ================================================================
+// =
 // Currency inherited from AiCompanyBudget. Not stored here.
 // executionId = one agent task execution (not correlationId,
 // because one workflow may spawn multiple billable executions).
-// ================================================================
+// =
 
 model BudgetReservation {
   id            String    @id @default(uuid())
@@ -1226,9 +1231,9 @@ model BudgetReservation {
   @@index([expiresAt])
 }
 
-// ================================================================
+// =
 // MODEL 9: AGENT EVALUATION LOG
-// ================================================================
+// =
 
 model AgentEvaluationLog {
   id                 String   @id @default(uuid())
@@ -1253,9 +1258,9 @@ model AgentEvaluationLog {
   @@index([executionId])
 }
 
-// ================================================================
+// =
 // MODEL 10: KILL SWITCH CONFIG
-// ================================================================
+// =
 
 enum KillSwitchType {
   GLOBAL
@@ -1277,9 +1282,9 @@ model KillSwitchConfig {
   @@unique([targetType, targetId])
 }
 
-// ================================================================
+// =
 // MODEL 11: SHADOW EXECUTION LOG
-// ================================================================
+// =
 
 model ShadowExecutionLog {
   id               String   @id @default(uuid())
@@ -1295,9 +1300,9 @@ model ShadowExecutionLog {
   @@index([agentId, correlationId])
 }
 
-// ================================================================
+// =
 // MODEL 12: HIRING OUTCOME FEEDBACK
-// ================================================================
+// =
 
 
 enum CandidateFeedbackPolicy {
@@ -1428,14 +1433,14 @@ model HiringOutcomeFeedback {
   @@index([companyId])
 }
 
-// ================================================================
+// =
 // MODEL 13: CONFIGURABLE DATA RETENTION
-// ================================================================
+// =
 // WARNING: @@unique([companyId, dataType]) with nullable companyId.
 // PostgreSQL allows multiple NULL values in unique constraints.
 // Application-level code must explicitly handle global (null companyId)
 // policies to ensure at most one global policy per dataType.
-// ================================================================
+// =
 
 model DataRetentionConfig {
   id            String   @id @default(uuid())
@@ -1448,9 +1453,9 @@ model DataRetentionConfig {
   @@unique([companyId, dataType])
 }
 
-// ================================================================
+// =
 // MODEL 14: AGENT LIFECYCLE LOG
-// ================================================================
+// =
 
 enum AgentLifecycleState {
   REGISTERED
@@ -1480,9 +1485,9 @@ model AgentLifecycleLog {
   @@index([correlationId])
 }
 
-// ================================================================
+// =
 // MODEL 15: DEAD LETTER JOB
-// ================================================================
+// =
 
 model DeadLetterJob {
   id            String    @id @default(uuid())
@@ -1503,9 +1508,9 @@ model DeadLetterJob {
   @@index([correlationId])
 }
 
-// ================================================================
+// =
 // MODEL 16: EXECUTION TRACE RECORD
-// ================================================================
+// =
 
 model TraceRecord {
   id               String   @id @default(uuid())
@@ -1534,9 +1539,9 @@ model TraceRecord {
   @@index([agentId])
 }
 
-// ================================================================
+// =
 // MODEL 17: DOCUMENT VERIFICATION (EMPLOYER KYC)
-// ================================================================
+// =
 
 model DocumentVerification {
   id              String                    @id @default(uuid())
@@ -1557,9 +1562,9 @@ model DocumentVerification {
   @@index([riskScore])
 }
 
-// ================================================================
+// =
 // MODEL 18: DOCUMENT VERIFICATION LOG (AUDIT TRAIL)
-// ================================================================
+// =
 
 model DocumentVerificationLog {
   id          String               @id @default(uuid())
@@ -1574,9 +1579,9 @@ model DocumentVerificationLog {
   @@index([performedBy])
 }
 
-// ================================================================
+// =
 // MODEL 19: REFERRAL ENGINE PHASE 1
-// ================================================================
+// =
 
 enum ReferralStatus {
   ATTRIBUTED
@@ -1728,10 +1733,10 @@ model ReferralProgramConfig {
   updatedAt                          DateTime @updatedAt
 }
 
-// ================================================================
+// =
 // WHATSAPP CHANNEL — Identity, Session, Event Models
 // Migration: add_whatsapp_channel
-// ================================================================
+// =
 
 // ── MODEL: WhatsAppContact ────────────────────────────────────────────────────
 // One canonical identity mapping per Meta WABA contact (waId).

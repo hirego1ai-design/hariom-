@@ -3,6 +3,7 @@ import "./globals.css";
 import { AppProvider } from "@/context/AppContext";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://hiregoai.com"),
   title: "HireGo AI — Autonomous Agentic Hiring Operating System",
   description:
     "HireGo AI is not a job portal. It is an Autonomous Agentic AI Hiring Operating System that automates the full recruitment lifecycle.",

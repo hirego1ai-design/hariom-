@@ -11,7 +11,7 @@ export default function CandidateVideoResumePage() {
       <div>
         <h1 className="font-display-xl text-headline-md text-text-primary mb-1">My Video Resume</h1>
         <p className="text-text-secondary text-xs">
-          Record or upload your 2-minute pitch to increase employer response rates by up to 3x.
+          Record or upload a short introduction so employers can hear about your experience in your own words.
         </p>
       </div>
 

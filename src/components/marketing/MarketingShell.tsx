@@ -1,12 +1,13 @@
 import MarketingFooter from "./MarketingFooter";
 import MarketingNav from "./MarketingNav";
 
-export default function MarketingShell({ children }: { children: React.ReactNode }) {
+export default function MarketingShell({ children, home = false }: { children: React.ReactNode; home?: boolean }) {
   return (
-    <div className="min-h-screen bg-[#0e0e10] text-white">
+    <div className="relative min-h-screen bg-[#01050b] text-white">
       <MarketingNav />
-      <main>{children}</main>
+      <main className={home ? undefined : "pt-24"}>{children}</main>
       <MarketingFooter />
     </div>
   );
 }
+

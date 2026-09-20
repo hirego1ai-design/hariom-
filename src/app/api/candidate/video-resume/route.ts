@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
         durationSeconds: body.durationSeconds,
         workerUrl: config.workerUrl,
         token: config.internalToken,
+        callbackOrigin: request.nextUrl.origin,
       });
     }
 
@@ -138,13 +139,14 @@ async function dispatchWorkerJob(params: {
   durationSeconds: number;
   workerUrl: string;
   token: string;
+  callbackOrigin: string;
 }) {
   try {
     const claim = await claimVideoAnalysisJob(params.jobId);
     if (!claim) return;
     const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
       || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
-      || "http://localhost:3000";
+      || params.callbackOrigin.replace(/\/$/, "");
     if (process.env.NODE_ENV === "production") {
       const parsedOrigin = new URL(appOrigin);
       if (parsedOrigin.protocol !== "https:" || parsedOrigin.username || parsedOrigin.password) {

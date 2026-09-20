@@ -44,6 +44,7 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     currentLocation: profile.location || "Not provided",
     preferredLocation: "Not provided",
     hasVideoResume: profile.videoResumes.length > 0,
+    videoResumeId: profile.videoResumes[0]?.id ?? null,
     assessmentScore: null,
     aiInterviewScore: null,
     recruiterNotes: null,

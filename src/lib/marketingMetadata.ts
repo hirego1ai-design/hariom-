@@ -14,8 +14,25 @@ const titles: Record<string, string> = {
   privacy: "Privacy — HireGo AI",
 };
 
+const paths: Record<string, string> = {
+  home: "/", features: "/features", pricing: "/pricing", enterprise: "/enterprise",
+  about: "/about", company: "/company", careers: "/careers", blog: "/blog",
+  contact: "/contact", terms: "/terms", privacy: "/privacy",
+};
+
+export function marketingMetadata({ path, title, description, image = "/marketing/og/home.webp" }: { path: string; title: string; description: string; image?: string }): Metadata {
+  const url = `https://hiregoai.com${path === "/" ? "" : path}`;
+  return {
+    title, description,
+    alternates: { canonical: url },
+    robots: { index: true, follow: true },
+    openGraph: { type: "website", siteName: "HireGo AI", title, description, url, images: [{ url: image, width: 1200, height: 630, alt: `${title} — HireGo AI` }] },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
+  };
+}
+
 export function createMarketingMetadata(kind: string): Metadata {
   const title = titles[kind] ?? "HireGo AI";
-  const description = "HireGo AI helps candidates become job-ready and helps employers hire with confidence.";
-  return { title, description, openGraph: { title, description, type: "website" }, twitter: { card: "summary_large_image", title, description } };
+  const description = "HireGo AI connects candidate sourcing, screening, assessments and interviews in one hiring workflow, with people in control of hiring decisions.";
+  return marketingMetadata({ title, description, path: paths[kind] ?? "/" });
 }

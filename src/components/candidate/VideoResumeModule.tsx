@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 
 // ─── Analysis Report Types ───────────────────────────────────────
 interface AnalysisReport {
@@ -8,14 +9,6 @@ interface AnalysisReport {
   analysisStatus: string;
   durationSeconds: number;
   transcript: string | null;
-  scores: {
-    communicationScore: number | null;
-    clarityScore: number | null;
-    confidenceScore: number | null;
-    professionalism: number | null;
-    speechDeliveryScore: number | null;
-    contentStructureScore: number | null;
-  };
   metrics: {
     detectedLanguage: string | null;
     wordsPerMinute: number | null;
@@ -24,36 +17,16 @@ interface AnalysisReport {
     transcriptConfidence: number | null;
     lowConfidence: boolean | null;
     audioQuality: string | null;
-    facePresenceRatio: number | null;
-    cameraFacingRatioEstimate: number | null;
-    headPoseIndicators: Record<string, unknown> | null;
-    postureIndicators: Record<string, unknown> | null;
-  };
-  insights: {
-    strengths: string[] | null;
-    improvementSuggestions: string[] | null;
-  };
-  modelInfo: {
-    analysisVersion: string | null;
-    workerVersion: string | null;
-    modelName: string | null;
-    modelVersion: string | null;
   };
   error: string | null;
   completedAt: string | null;
 }
 
-// ─── Score display helpers ───────────────────────────────────────
-const ScoreCard = ({ label, value, icon }: { label: string; value: number | null; icon: string }) => {
-  const color = value === null ? "text-text-secondary" : value >= 75 ? "text-green" : value >= 50 ? "text-yellow-400" : "text-red";
-  return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col items-center gap-2 min-w-[120px]">
-      <span className="material-symbols-outlined text-2xl text-primary">{icon}</span>
-      <span className={`text-2xl font-bold ${color}`}>{value ?? "—"}</span>
-      <span className="text-[10px] text-text-secondary uppercase tracking-wider font-bold text-center">{label}</span>
-    </div>
-  );
-};
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
 
 const MetricRow = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
   <div className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
@@ -76,6 +49,7 @@ export default function VideoResumeModule() {
   const [analysisReport, setAnalysisReport] = useState<AnalysisReport | null>(null);
   const [analysisPolling, setAnalysisPolling] = useState(false);
   const [savedVideoId, setSavedVideoId] = useState<string | null>(null);
+  const [understandsProcessing, setUnderstandsProcessing] = useState(false);
   const [savedVideo, setSavedVideo] = useState<{
     url: string;
     duration: string;
@@ -118,7 +92,6 @@ export default function VideoResumeModule() {
   };
 
   useEffect(() => {
-    requestPermissions();
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
@@ -220,6 +193,10 @@ export default function VideoResumeModule() {
 
   // ─── Real Upload + Analysis Pipeline ─────────────────────────────
   const uploadAndAnalyze = async (blob: Blob, durationFallback: number) => {
+    if (!understandsProcessing) {
+      setUploadError("Please read and acknowledge the video processing notice before saving.");
+      return;
+    }
     setIsUploading(true);
     setUploadProgress(0);
     setUploadError(null);
@@ -235,6 +212,10 @@ export default function VideoResumeModule() {
       if (duration > MAX_DURATION) {
         setUploadError(`Video is ${duration}s — exceeds the 2-minute (120s) limit.`);
         setIsUploading(false);
+        return;
+      }
+      if (blob.size > 10 * 1024 * 1024) {
+        setUploadError("Video exceeds the 10 MB limit. Please record a shorter clip or upload a smaller file.");
         return;
       }
 
@@ -268,7 +249,8 @@ export default function VideoResumeModule() {
         throw new Error(err.error || `Submission failed (${submitRes.status})`);
       }
       const submitData = await submitRes.json();
-      const videoId = submitData.videoResumeId || submitData.id;
+      const videoId = submitData.videoId || submitData.videoResumeId || submitData.id;
+      if (!videoId) throw new Error("Submission response missing video ID");
 
       setUploadProgress(80);
 
@@ -282,7 +264,7 @@ export default function VideoResumeModule() {
       setUploadProgress(100);
 
       // Step 4: Start polling for analysis status
-      if (videoId) startPolling(videoId);
+      startPolling(videoId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Upload failed";
       setUploadError(msg);
@@ -313,6 +295,27 @@ export default function VideoResumeModule() {
     pollRef.current = setInterval(poll, 5000);
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/candidate/video-resume", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!data?.videos?.length) return;
+        const latest = data.videos[0];
+        if (!latest.id || !latest.videoUrl) return;
+        setSavedVideo({
+          url: latest.videoUrl,
+          duration: formatTime(latest.durationSeconds || 0),
+          date: new Date(latest.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+          size: "Saved recording",
+        });
+        setSavedVideoId(latest.id);
+        startPolling(latest.id);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [startPolling]);
+
   // ─── Save Recorded Video Handler ─────────────────────────────────
   const handleSaveVideo = () => {
     if (!videoBlob) return;
@@ -324,8 +327,8 @@ export default function VideoResumeModule() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 100 * 1024 * 1024) {
-      setUploadError("File size exceeds 100 MB limit. Please upload a smaller video.");
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File size exceeds the 10 MB limit. Please upload a smaller video.");
       return;
     }
 
@@ -343,12 +346,6 @@ export default function VideoResumeModule() {
 
 
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
   return (
     <div className="glass-card rounded-2xl p-6 border border-white/10 w-full shadow-2xl relative overflow-hidden">
       {/* Header */}
@@ -358,11 +355,11 @@ export default function VideoResumeModule() {
             <span className="material-symbols-outlined text-primary text-2xl">videocam</span>
             <h2 className="font-headline-md text-headline-sm text-text-primary font-bold">Video Resume Module</h2>
             <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-              AI Powered
+              Optional
             </span>
           </div>
           <p className="text-text-secondary text-xs">
-            Stand out to top tech employers with a 2-minute video pitch highlighting your skills & achievements.
+            Add a two-minute introduction about your experience, skills and a project you are proud of.
           </p>
         </div>
 
@@ -379,7 +376,7 @@ export default function VideoResumeModule() {
               <span>Record Live</span>
             </button>
             <button
-              onClick={() => setActiveTab("upload")}
+              onClick={() => { stopStream(); setHasPermissions(null); setActiveTab("upload"); }}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 activeTab === "upload" ? "bg-primary text-white shadow-md" : "text-text-secondary hover:text-white"
               }`}
@@ -391,13 +388,18 @@ export default function VideoResumeModule() {
         )}
       </div>
 
+      <div className="mb-6 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm leading-6 text-text-secondary">
+        <p>Your video may be transcribed and analyzed for observable presentation details. The report can be wrong and does not make a hiring decision. See our <Link href="/privacy" className="text-primary underline">Privacy Policy</Link> and <Link href="/terms" className="text-primary underline">Terms</Link>. If video is not suitable for you, ask for another way to present your experience.</p>
+        <label className="mt-3 flex cursor-pointer items-start gap-3 text-white"><input type="checkbox" checked={understandsProcessing} onChange={event => setUnderstandsProcessing(event.target.checked)} className="mt-1 h-4 w-4 accent-blue-500" /><span>I understand how my video and report may be used.</span></label>
+      </div>
+
       {/* Recording Instructions Callout Box */}
       <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6 flex items-start gap-3">
         <span className="material-symbols-outlined text-primary text-xl flex-shrink-0 mt-0.5">info</span>
         <div>
           <h4 className="font-bold text-xs text-primary mb-1 uppercase tracking-wider">Recording Instructions</h4>
           <p className="text-xs text-text-secondary leading-relaxed">
-            "Introduce yourself in a maximum of 2 minutes. Tell employers about your experience, skills, achievements, career goals, communication skills, and why you are the right candidate."
+            In up to 2 minutes, introduce yourself, describe the role you want, and explain one relevant project or result. You do not need a perfect script or studio setup.
           </p>
         </div>
       </div>
@@ -444,7 +446,7 @@ export default function VideoResumeModule() {
                 className="btn-ghost px-4 py-2 rounded-xl text-xs font-bold text-white hover:border-primary/40 flex items-center justify-center gap-1.5 border border-white/10 w-full sm:w-auto"
               >
                 <span className="material-symbols-outlined text-[16px]">sync</span>
-                <span>Replace Video</span>
+                <span>Record another</span>
               </button>
               <button
                 onClick={() => {
@@ -456,17 +458,18 @@ export default function VideoResumeModule() {
                 className="px-3 py-2 rounded-xl text-xs font-bold text-red hover:bg-red/10 transition-colors flex items-center justify-center gap-1 border border-red/20 w-full sm:w-auto"
               >
                 <span className="material-symbols-outlined text-[16px]">delete</span>
-                <span>Delete</span>
+                <span>Close preview</span>
               </button>
             </div>
           </div>
+          <p className="text-xs leading-5 text-text-secondary">Closing this preview or recording another video does not delete a saved upload. To request deletion, contact <a href="mailto:legal@hiregoai.com" className="text-primary underline">legal@hiregoai.com</a>.</p>
 
           {/* ─── ANALYSIS POLLING STATUS ─────────────────────────── */}
           {analysisPolling && (
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 flex flex-col items-center gap-3 animate-pulse">
               <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
               <p className="text-sm font-bold text-white">Analyzing your video resume...</p>
-              <p className="text-xs text-text-secondary">Local AI is processing speech, facial expressions, and posture. This typically takes 30–90 seconds.</p>
+              <p className="text-xs text-text-secondary">The service is preparing a transcript and presentation report. Timing depends on availability.</p>
             </div>
           )}
 
@@ -475,21 +478,13 @@ export default function VideoResumeModule() {
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 pt-2">
                 <span className="material-symbols-outlined text-primary text-xl">analytics</span>
-                <h3 className="font-bold text-sm text-white uppercase tracking-wider">AI Analysis Report</h3>
+                <h3 className="font-bold text-sm text-white uppercase tracking-wider">Video presentation report</h3>
                 <span className="bg-green/20 text-green border border-green/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Completed</span>
               </div>
 
-              {/* Score Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <ScoreCard label="Communication" value={analysisReport.scores.communicationScore} icon="forum" />
-                <ScoreCard label="Clarity" value={analysisReport.scores.clarityScore} icon="visibility" />
-                <ScoreCard label="Confidence" value={analysisReport.scores.confidenceScore} icon="psychology" />
-                <ScoreCard label="Professionalism" value={analysisReport.scores.professionalism} icon="business_center" />
-                <ScoreCard label="Speech Delivery" value={analysisReport.scores.speechDeliveryScore} icon="record_voice_over" />
-                <ScoreCard label="Content Structure" value={analysisReport.scores.contentStructureScore} icon="format_list_numbered" />
-              </div>
+              <p className="text-xs leading-5 text-text-secondary">This report organizes your recording and transcript. It does not score your character or job suitability. A person should review your actual words and experience.</p>
 
-              {/* Speech & Visual Metrics */}
+              {/* Observable speech details and report context */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                   <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -504,58 +499,13 @@ export default function VideoResumeModule() {
                   <MetricRow label="Transcript Confidence" value={analysisReport.metrics.transcriptConfidence !== null && analysisReport.metrics.transcriptConfidence !== undefined ? `${(analysisReport.metrics.transcriptConfidence * 100).toFixed(0)}%` : null} />
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-sm">face</span>
-                    Visual Metrics (MediaPipe)
-                  </h4>
-                  <MetricRow label="Face Presence" value={analysisReport.metrics.facePresenceRatio !== null && analysisReport.metrics.facePresenceRatio !== undefined ? `${(analysisReport.metrics.facePresenceRatio * 100).toFixed(0)}%` : null} />
-                  <MetricRow label="Camera Facing" value={analysisReport.metrics.cameraFacingRatioEstimate !== null && analysisReport.metrics.cameraFacingRatioEstimate !== undefined ? `${(analysisReport.metrics.cameraFacingRatioEstimate * 100).toFixed(0)}%` : null} />
-                  <MetricRow label="Posture (Upright)" value={
-                    analysisReport.metrics.postureIndicators && typeof analysisReport.metrics.postureIndicators === "object" && "uprightRatio" in analysisReport.metrics.postureIndicators
-                      ? `${((analysisReport.metrics.postureIndicators as { uprightRatio: number }).uprightRatio * 100).toFixed(0)}%`
-                      : null
-                  } />
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3">About this report</h4>
+                  <p className="text-xs leading-6 text-text-secondary">The report is generated from your recording and may be incomplete or wrong. Recording quality, language and accessibility needs can affect the output. Ask a person to review the video in context.</p>
                   <MetricRow label="Duration" value={`${analysisReport.durationSeconds}s`} />
-                  <MetricRow label="Model" value={analysisReport.modelInfo.modelName} />
-                  <MetricRow label="Version" value={analysisReport.modelInfo.modelVersion} />
                 </div>
               </div>
 
-              {/* Strengths & Improvements */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {analysisReport.insights.strengths && analysisReport.insights.strengths.length > 0 && (
-                  <div className="bg-green/5 border border-green/20 rounded-xl p-4">
-                    <h4 className="text-xs font-bold text-green uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm">thumb_up</span>
-                      Strengths
-                    </h4>
-                    <ul className="space-y-2">
-                      {analysisReport.insights.strengths.map((s, i) => (
-                        <li key={i} className="text-xs text-text-secondary flex items-start gap-2">
-                          <span className="text-green mt-0.5">✓</span>
-                          <span>{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {analysisReport.insights.improvementSuggestions && analysisReport.insights.improvementSuggestions.length > 0 && (
-                  <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4">
-                    <h4 className="text-xs font-bold text-yellow-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm">lightbulb</span>
-                      Suggestions for Improvement
-                    </h4>
-                    <ul className="space-y-2">
-                      {analysisReport.insights.improvementSuggestions.map((s, i) => (
-                        <li key={i} className="text-xs text-text-secondary flex items-start gap-2">
-                          <span className="text-yellow-400 mt-0.5">→</span>
-                          <span>{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              {analysisReport.metrics.lowConfidence && <p className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-xs leading-6 text-yellow-200">The transcript may be less accurate than usual. Check the recording before drawing conclusions.</p>}
 
               {/* Transcript */}
               {analysisReport.transcript && (
@@ -596,16 +546,16 @@ export default function VideoResumeModule() {
                   <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100" />
                 )}
 
-                {/* Permission Banner if denied */}
-                {hasPermissions === false && (
+                {/* Request camera access only after the candidate chooses to record. */}
+                {hasPermissions !== true && !videoUrl && (
                   <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 text-center z-20">
-                    <span className="material-symbols-outlined text-red text-4xl mb-2">videocam_off</span>
-                    <h3 className="font-bold text-white text-sm mb-1">Camera & Microphone Access Required</h3>
+                    <span className="material-symbols-outlined text-primary text-4xl mb-2">videocam</span>
+                    <h3 className="font-bold text-white text-sm mb-1">Record a video introduction</h3>
                     <p className="text-xs text-text-secondary max-w-sm mb-4">
-                      Please enable browser permissions to record your live video resume.
+                      {hasPermissions === false ? "Camera access was unavailable. You can try again or upload a video instead." : "Choose Enable camera when you are ready. Uploading a file does not require camera access."}
                     </p>
                     <button onClick={requestPermissions} className="btn-3d-red px-5 py-2.5 rounded-xl text-xs font-bold text-white">
-                      Grant Permission
+                      Enable camera
                     </button>
                   </div>
                 )}
@@ -684,7 +634,7 @@ export default function VideoResumeModule() {
               <div className="border-2 border-dashed border-white/20 hover:border-primary/50 transition-colors rounded-2xl p-8 flex flex-col items-center justify-center text-center bg-white/5 relative">
                 <input
                   type="file"
-                  accept="video/mp4,video/mov,video/webm"
+                  accept="video/mp4,video/webm"
                   onChange={handleFileUpload}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
@@ -692,10 +642,10 @@ export default function VideoResumeModule() {
                   <span className="material-symbols-outlined text-primary text-3xl">cloud_upload</span>
                 </div>
                 <h3 className="font-bold text-sm text-text-primary mb-1">Drag & Drop or Click to Upload Video</h3>
-                <p className="text-xs text-text-secondary mb-3">Formats: MP4, MOV, WebM • Maximum file size: 100 MB</p>
+                <p className="text-xs text-text-secondary mb-3">Formats: MP4 or WebM • Maximum 2 minutes and 10 MB</p>
                 <div className="inline-flex items-center gap-1.5 text-[11px] text-tertiary bg-tertiary/10 border border-tertiary/20 px-3 py-1 rounded-full font-bold">
                   <span className="material-symbols-outlined text-sm">auto_fix_high</span>
-                  <span>Auto-compresses large files for fast loading</span>
+                  <span>Video resume is optional</span>
                 </div>
               </div>
             </div>

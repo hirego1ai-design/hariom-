@@ -14,6 +14,6 @@ export async function GET(request: NextRequest) {
       orderBy:{invitedAt:"desc"},
       select:{id:true,status:true,invitedAt:true,acceptedAt:true,declinedAt:true,job:{select:{id:true,title:true,location:true,type:true,company:{select:{name:true}}}}},
     });
-    return NextResponse.json({success:true,invitations});
+    return NextResponse.json({success:true,invitations:invitations.map(({job,...invitation})=>({...invitation,job:{...job,employmentType:job.type}}))});
   } catch(error){return handleApiError(error);}
 }

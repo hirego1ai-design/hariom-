@@ -20,9 +20,11 @@ test("application match is not fabricated into assessment or interview results",
 
 test("document resume alone does not indicate a video resume", () => {
   assert.equal(toEmployerCandidate(application).hasVideoResume, false);
-  assert.equal(toEmployerCandidate({ ...application, candidateProfile: {
+  const withVideo = toEmployerCandidate({ ...application, candidateProfile: {
     ...application.candidateProfile, videoResumes: [{ id: "actual-video-row" }],
-  } }).hasVideoResume, true);
+  } });
+  assert.equal(withVideo.hasVideoResume, true);
+  assert.equal(withVideo.videoResumeId, "actual-video-row");
 });
 
 test("candidate supplied biography is separate from recruiter notes and salary/source are not invented", () => {
