@@ -74,8 +74,6 @@ export default function TypingTestActivePage() {
 
   useEffect(() => {
     if (isCompleted && !resultSaved && !submitting && !submissionAttempted) void submitResult();
-  // submitResult deliberately runs once when the client ends a practice attempt.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCompleted, resultSaved, submitting, submissionAttempted]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {

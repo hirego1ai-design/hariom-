@@ -40,6 +40,7 @@ export default function VideoAssessmentActivePage() {
   const busyRef = useRef(false);
   const warningRef = useRef(0);
   const pendingAnswerRef = useRef<{ questionId: string; blob: Blob; mime: string; durationSeconds: number; storedFileId?: string } | null>(null);
+  const [pendingAnswerQuestionId, setPendingAnswerQuestionId] = useState<string | null>(null);
 
   const question = attempt?.questions[index];
 
@@ -48,7 +49,11 @@ export default function VideoAssessmentActivePage() {
     try {
       const result = await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/proctoring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventType, severity, evidence }) });
       if (result.warningNumber) { warningRef.current = result.warningNumber; setMessage(`Proctoring warning ${result.warningNumber} of 3. Keep the assessment visible and camera/microphone active.`); }
-      if (result.terminated) { recorderRef.current?.state !== "inactive" && recorderRef.current?.stop(); setPhase("ERROR"); setMessage("This assessment attempt was ended after repeated proctoring violations. Your existing evidence has been preserved."); }
+      if (result.terminated) {
+        if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+        setPhase("ERROR");
+        setMessage("This assessment attempt was ended after repeated proctoring violations. Your existing evidence has been preserved.");
+      }
     } catch { /* Telemetry failure must not fabricate a violation or silently terminate an attempt. */ }
   }, [attempt, phase]);
 
@@ -133,7 +138,7 @@ export default function VideoAssessmentActivePage() {
   const advanceAfterSavedAnswer = useCallback(async (responseId: string) => {
     if (!attempt || !question) return;
     const updated = { ...attempt, questions: attempt.questions.map((item) => item.id === question.id ? { ...item, response: { id: responseId } } : item) };
-    setAttempt(updated); pendingAnswerRef.current = null; chunksRef.current = []; recorderRef.current = null;
+    setAttempt(updated); pendingAnswerRef.current = null; setPendingAnswerQuestionId(null); chunksRef.current = []; recorderRef.current = null;
     if (index + 1 >= updated.questions.length) { await completeAttempt(); return; }
     setMessage("Answer saved — preparing next question.");
     window.setTimeout(() => { setIndex((value) => value + 1); setSeconds(updated.questions[index + 1].readingTimeSeconds); setPhase("PREPARE"); }, 2500);
@@ -151,6 +156,7 @@ export default function VideoAssessmentActivePage() {
       if (!blob.size) throw new Error("No media was captured. Check your camera and microphone.");
       const durationSeconds = Math.max(1, Math.min(question.answerDurationSeconds, Math.ceil((Date.now() - startedAtRef.current) / 1000)));
       pendingAnswerRef.current = { questionId: question.id, blob, mime, durationSeconds };
+      setPendingAnswerQuestionId(question.id);
       const saved = await persistPendingAnswer();
       await advanceAfterSavedAnswer(saved.response.id);
     } catch (error) {
@@ -225,8 +231,8 @@ export default function VideoAssessmentActivePage() {
           </div>
           {message && <div role="status" className="rounded-2xl border border-outline bg-bg-card p-4 text-sm">{message}</div>}
           {phase === "READY" && <button onClick={startAssessment} disabled={!mediaReady || !question} className="min-h-11 px-6 rounded-full btn-3d-red font-bold disabled:opacity-50">{attempt?.status === "IN_PROGRESS" ? "Resume Assessment" : "Start Assessment"}</button>}
-          {phase === "ERROR" && question && pendingAnswerRef.current?.questionId === question.id && <button onClick={retryPendingAnswer} className="min-h-11 px-6 rounded-full btn-3d-red font-bold">Retry saving answer</button>}
-          {phase === "ERROR" && question && pendingAnswerRef.current?.questionId !== question.id && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
+          {phase === "ERROR" && question && pendingAnswerQuestionId === question.id && <button onClick={retryPendingAnswer} className="min-h-11 px-6 rounded-full btn-3d-red font-bold">Retry saving answer</button>}
+          {phase === "ERROR" && question && pendingAnswerQuestionId !== question.id && <button onClick={() => { setMessage(""); setSeconds(question.readingTimeSeconds); setPhase("PREPARE"); }} className="min-h-11 px-6 rounded-full border border-outline bg-bg-card font-bold">Retry current question</button>}
         </section>
         <section className="lg:col-span-5">
           {phase === "COMPLETE" ? <div className="rounded-3xl border border-outline bg-bg-card p-6 text-center space-y-4"><h2 className="text-xl font-bold">Assessment complete</h2><p className="text-sm text-text-secondary">Your recorded responses have been securely saved.</p><Link href="/applications/timeline" className="inline-flex min-h-11 items-center px-6 rounded-full btn-3d-red font-bold">Application timeline</Link></div>

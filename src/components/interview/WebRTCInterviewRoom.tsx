@@ -43,6 +43,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const [status, setStatus] = useState("Preparing camera and microphone...");
   const [error, setError] = useState("");
   const [interviewId, setInterviewId] = useState("");
+  const [isHost, setIsHost] = useState(false);
 
   const signal = async (action: string, targetId?: string, payload: Record<string, unknown> = {}) => {
     const res = await fetch("/api/interviews/room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, action, ...(targetId ? { targetId } : {}), ...payload }) });
@@ -93,6 +94,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         if (room.status === "COMPLETED") throw new Error("This interview has already ended.");
         selfId.current = room.participantId;
         hostRef.current = room.isHost;
+        setIsHost(room.isHost);
         iceServersRef.current = room.iceServers;
         setInterviewId(room.interviewId);
 
@@ -225,6 +227,6 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
       {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={interviewerName} />)}
       <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{candidateName} (You)</span></div>
     </div>
-    <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{hostRef.current && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
+    <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{isHost && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
   </div>;
 }
