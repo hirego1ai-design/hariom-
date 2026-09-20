@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         attemptQuestion: { select: { attempt: { select: { jobListing: { select: { companyId: true } } } } } },
       },
     });
-    if (!response || response.storedFile.deletedAt) throw new ApiError("Assessment media not found.", 404);
+    if (!response?.storedFile || response.storedFile.deletedAt) throw new ApiError("Assessment media not found.", 404);
 
     if (session.role !== "ADMIN") {
       const employer = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
