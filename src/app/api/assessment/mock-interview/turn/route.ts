@@ -7,7 +7,7 @@ import { dispatchAiTask } from '@/utils/aiRouter';
 
 const mockInterviewTurnSchema = z.object({
   sessionId: z.string().uuid(),
-  answer: z.string().min(1).max(10_000),
+  answer: z.string().trim().min(5, 'Answer must be at least 5 characters').max(10_000),
   durationMs: z.number().int().min(0).max(3_600_000).optional(),
 }).strict();
 
@@ -38,7 +38,11 @@ async function evaluateTurn({
 
   try {
     const response = await dispatchAiTask({ task: "INTERVIEW_EVALUATION", prompt });
-    return turnEvaluationSchema.parse(JSON.parse(response.resultText));
+    const parsed = turnEvaluationSchema.parse(JSON.parse(response.resultText));
+    return {
+      score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+      feedback: parsed.feedback,
+    };
   } catch {
     throw new ApiError("Mock interview evaluation service is unavailable. Please try again later.", 503);
   }

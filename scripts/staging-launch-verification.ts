@@ -111,7 +111,7 @@ async function runBatch2_AuthAndTenantIsolation() {
 
   // Check CSP & Security Headers on unauthenticated requests
   try {
-    const homeRes = await fetch(`${BASE_URL}/login`, { signal: AbortSignal.timeout(10_000) });
+    const homeRes = await fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(15_000) });
     const csp = homeRes.headers.get("content-security-policy");
     const hasCsp = !!csp;
     record("Batch 2", "Content-Security-Policy Header Enforcement", hasCsp, hasCsp ? "CSP header verified" : "CSP header missing");

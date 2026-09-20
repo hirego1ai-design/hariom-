@@ -10,8 +10,6 @@ export default function MockInterviewSetupPage() {
   const [roleTarget, setRoleTarget] = useState("Full Stack Engineer");
   const [seniority, setSeniority] = useState("Senior");
   const [totalQuestions, setTotalQuestions] = useState(3);
-  const [responseMode, setResponseMode] = useState<"text" | "voice">("text");
-  const [micStatus, setMicStatus] = useState<"unchecked" | "requesting" | "granted" | "denied">("unchecked");
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<any[]>([]);
@@ -36,24 +34,6 @@ export default function MockInterviewSetupPage() {
     }
     loadHistory();
   }, []);
-
-  const handleTestMic = async () => {
-    setMicStatus("requesting");
-    setErrorMessage(null);
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setMicStatus("denied");
-        setErrorMessage("Microphone access is not supported by your browser. You can still practice in Text mode.");
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicStatus("granted");
-      stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      setMicStatus("denied");
-      setErrorMessage("Microphone permission was denied. You can proceed using Text mode.");
-    }
-  };
 
   const handleStartInterview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +62,7 @@ export default function MockInterviewSetupPage() {
         throw new Error(data.error || "Failed to start mock interview session.");
       }
 
-      router.push(`/ai/mock-interview/active?sessionId=${data.session.id}&mode=${responseMode}`);
+      router.push(`/ai/mock-interview/active?sessionId=${data.session.id}`);
     } catch (err: any) {
       setErrorMessage(err.message || "An unexpected error occurred. Please try again.");
       setIsStarting(false);
@@ -118,32 +98,41 @@ export default function MockInterviewSetupPage() {
       {/* Main Container */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10">
         <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">
-            AI Mock Interview Practice
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-2 flex items-center gap-2.5">
+            Technical Mock Interview Setup
           </h1>
           <p className="text-sm text-white/60 max-w-2xl">
-            Simulate realistic, role-tailored technical and behavioral interview scenarios with the HireGo AI Interviewer. Receive immediate, constructive feedback on answer relevance, technical depth, and structure.
+            Prepare for real engineering interviews with AI-generated technical challenges. Type your answers, receive instant turn-by-turn evaluation, and track your practice progression.
           </p>
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 rounded-xl bg-[#C5221F]/10 border border-[#C5221F]/30 text-white flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-[#C5221F] shrink-0 mt-0.5" />
-            <div className="text-sm leading-relaxed">{errorMessage}</div>
-          </div>
-        )}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Setup Form */}
+          <div className="lg:col-span-7 bg-[#141414] border border-white/10 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#C5221F]" /> Interview Parameters
+            </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Setup Form (Col 1 & 2) */}
-          <div className="lg:col-span-2 bg-[#161616] border border-white/10 rounded-2xl p-6 md:p-8">
+            {errorMessage && (
+              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-3">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             <form onSubmit={handleStartInterview} className="space-y-6">
-              {/* Target Role */}
+              {/* Role Target */}
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Target Role
+                  Target Technical Role
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                  {["Full Stack Engineer", "Frontend Engineer", "Backend Engineer", "DevOps Engineer"].map((role) => (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {[
+                    "Full Stack Engineer",
+                    "Frontend Architect",
+                    "Backend Systems",
+                    "AI / ML Engineer",
+                  ].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -199,9 +188,9 @@ export default function MockInterviewSetupPage() {
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { count: 3, label: "Short (3 Questions)", time: "~10 mins" },
-                    { count: 5, label: "Standard (5 Questions)", time: "~20 mins" },
-                    { count: 8, label: "Comprehensive (8 Questions)", time: "~35 mins" },
+                    { count: 3, label: "Short (3 Qs)", time: "~10 mins" },
+                    { count: 5, label: "Standard (5 Qs)", time: "~20 mins" },
+                    { count: 8, label: "Comprehensive (8 Qs)", time: "~35 mins" },
                   ].map((len) => (
                     <button
                       key={len.count}
@@ -222,72 +211,18 @@ export default function MockInterviewSetupPage() {
                 </div>
               </div>
 
-              {/* Response Mode */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Response Mode
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setResponseMode("text")}
-                    className={`text-left p-3.5 rounded-xl border transition-all ${
-                      responseMode === "text"
-                        ? "border-[#C5221F] bg-[#C5221F]/10 text-white"
-                        : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-white mb-0.5">Written Text Mode</div>
-                    <div className="text-[11px] text-white/50">Type your answers in the structured response editor.</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setResponseMode("voice")}
-                    className={`text-left p-3.5 rounded-xl border transition-all ${
-                      responseMode === "voice"
-                        ? "border-[#C5221F] bg-[#C5221F]/10 text-white"
-                        : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-white mb-0.5 flex items-center gap-1.5">
-                      <Mic className="w-3.5 h-3.5 text-[#C5221F]" /> Voice / Audio Mode
-                    </div>
-                    <div className="text-[11px] text-white/50">Speak naturally; transcribed into structured responses.</div>
-                  </button>
+              {/* Text-Based Evaluation Notice */}
+              <div className="p-4 rounded-xl bg-black/30 border border-white/5 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white">Text-Based Technical Evaluation</div>
+                  <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
+                    Questions are generated adaptively based on your selected target role and skills. Type your solutions into the structured technical editor to receive rigorous scoring on technical accuracy, design tradeoffs, and clarity.
+                  </div>
                 </div>
               </div>
-
-              {/* Mic Check (for Voice Mode) */}
-              {responseMode === "voice" && (
-                <div className="p-4 rounded-xl bg-black/30 border border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                      micStatus === "granted" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/60"
-                    }`}>
-                      <Volume2 className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-white">Microphone Check</div>
-                      <div className="text-[11px] text-white/50">
-                        {micStatus === "granted" && "Microphone connected and verified."}
-                        {micStatus === "denied" && "Microphone permission denied. Using text fallback."}
-                        {micStatus === "requesting" && "Requesting permission..."}
-                        {micStatus === "unchecked" && "Test your microphone before starting."}
-                      </div>
-                    </div>
-                  </div>
-                  {micStatus !== "granted" && (
-                    <button
-                      type="button"
-                      onClick={handleTestMic}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-                    >
-                      Test Mic
-                    </button>
-                  )}
-                </div>
-              )}
 
               {/* Start Button */}
               <button

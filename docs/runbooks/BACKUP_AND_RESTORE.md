@@ -1,5 +1,10 @@
 # HireGo AI — Production Backup & Disaster Recovery Runbook
 
+> [!NOTE]
+> **Operational Boundary & Verification Status**:
+> - **Verified in Repository**: Prisma schema validation, migration consistency across all 42 migrations, isolated database transactions, and database health probes.
+> - **[RECOMMENDED / NOT CURRENTLY VERIFIED]**: Supabase PITR retention configuration, external cold-storage GCS/S3 WORM compliance, and automated restore drill schedules represent cloud infrastructure configurations that must be established on the target managed database provider.
+
 ## 1. Disaster Recovery Objectives (SLAs)
 
 | Objective | Target SLA | Strategy |

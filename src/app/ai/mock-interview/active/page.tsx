@@ -3,13 +3,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mic, MicOff, Send, Clock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, BookOpen } from "lucide-react";
+import { Send, Clock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, BookOpen } from "lucide-react";
 
 export default function MockInterviewActivePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
-  const mode = searchParams.get("mode") || "text";
 
   const [session, setSession] = useState<any | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
@@ -27,10 +26,6 @@ export default function MockInterviewActivePage() {
   // Timer state
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Speech Recognition state
-  const [isListening, setIsListening] = useState<boolean>(false);
-  const recognitionRef = useRef<any>(null);
 
   // Load session from backend
   useEffect(() => {
@@ -89,68 +84,10 @@ export default function MockInterviewActivePage() {
     };
   }, [currentQuestionIndex]);
 
-  // Voice recognition setup
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (transcript) {
-          setAnswerText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-        }
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, []);
-
-  const toggleVoiceInput = () => {
-    if (!recognitionRef.current) {
-      setErrorMessage("Speech recognition is not supported in this browser. Please type your response.");
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      setErrorMessage(null);
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch {
-        setIsListening(false);
-      }
-    }
-  };
-
   const handleSubmitAnswer = async () => {
     if (!answerText.trim()) {
-      setErrorMessage("Please write or speak an answer before submitting.");
+      setErrorMessage("Please write your technical answer before submitting.");
       return;
-    }
-
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
     }
 
     setIsSubmitting(true);
@@ -312,24 +249,12 @@ export default function MockInterviewActivePage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/70 font-bold">
               <BookOpen className="w-3.5 h-3.5 text-[#4285F4]" />
-              Your Response
+              Structured Technical Response
             </div>
-            <div className="flex items-center gap-3 text-xs text-white/50">
-              <span>{wordCount} words</span>
-              {mode === "voice" && (
-                <button
-                  type="button"
-                  onClick={toggleVoiceInput}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                    isListening
-                      ? "bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse"
-                      : "bg-white/5 text-white/70 hover:bg-white/10 border border-white/10"
-                  }`}
-                >
-                  {isListening ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
-                  {isListening ? "Listening..." : "Click to Speak"}
-                </button>
-              )}
+            <div className="flex items-center gap-3 text-xs text-white/50 font-mono">
+              <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+              <span>•</span>
+              <span>{answerText.length} characters</span>
             </div>
           </div>
 
@@ -337,12 +262,8 @@ export default function MockInterviewActivePage() {
             value={answerText}
             onChange={(e) => setAnswerText(e.target.value)}
             disabled={isSubmitting}
-            placeholder={
-              mode === "voice"
-                ? "Speak or type your structured technical response here. Outline your rationale, approach, and edge-case handling..."
-                : "Type your structured technical response here. Outline your rationale, approach, architecture, and edge-case handling..."
-            }
-            className="flex-1 min-h-[220px] w-full text-sm leading-relaxed bg-black/40 border border-white/10 rounded-xl p-4 text-white placeholder-white/25 focus:outline-none focus:border-[#C5221F] transition-colors resize-none mb-4"
+            placeholder="Type your structured technical response here. Outline your rationale, approach, architecture, and edge-case handling..."
+            className="flex-1 min-h-[220px] w-full text-sm leading-relaxed bg-black/40 border border-white/10 rounded-xl p-4 text-white placeholder-white/25 focus:outline-none focus:border-[#C5221F] transition-colors resize-none mb-4 font-sans"
           />
 
           <div className="flex items-center justify-between pt-2 border-t border-white/5">

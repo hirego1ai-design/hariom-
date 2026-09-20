@@ -4,6 +4,11 @@
 
 This runbook establishes mandatory incident response procedures, operational boundaries, and recovery pathways for the HireGo AI production ecosystem.
 
+> [!NOTE]
+> **Operational Boundary & Verification Status**:
+> - **Verified in Repository**: Next.js API endpoints, PostgreSQL (Supabase 42 migrations deployed), Stripe & PayU signature verification, RBAC & tenant isolation gates, and AI router fallback chain.
+> - **[RECOMMENDED / NOT CURRENTLY VERIFIED]**: External Redis cluster failover, automated video worker daemon, and dedicated status page services represent target cloud architecture requiring production infrastructure deployment.
+
 ### Incident Severity Matrix
 
 | Severity | Definition | Target Response (MTTD) | Target Resolution (MTTR) | Communication Cadence |
@@ -56,9 +61,9 @@ This runbook establishes mandatory incident response procedures, operational bou
      ```
   3. Verify PgBouncer pooler status in Supabase dashboard.
   4. Ensure application deployment utilizes `?pgbouncer=true&connection_limit=10`.
-  5. If primary node is degraded, trigger managed database failover to secondary replica.
+  5. If primary node is degraded, trigger managed database failover to secondary replica [RECOMMENDED / NOT CURRENTLY VERIFIED].
 
-### 3.2 Redis Cache & Distributed Lock Outage
+### 3.2 Redis Cache & Distributed Lock Outage [RECOMMENDED / NOT CURRENTLY VERIFIED]
 * **Symptoms**: Rate limiting returns 429 prematurely or fails open, session cache misses spike, BullMQ job stalls.
 * **Immediate Actions**:
   1. Check Redis connectivity: `redis-cli -u $REDIS_URL ping`.
@@ -74,7 +79,7 @@ This runbook establishes mandatory incident response procedures, operational bou
 ### 3.3 AI Gateway Provider Degradation & Outage
 * **Symptoms**: AI Mock Interview turns timing out (> 15s), candidate assessment generation failing with 502/504, provider 429 quota exhaustion.
 * **Immediate Actions**:
-  1. Check `/api/health` provider telemetry.
+  1. Check `/api/health` status (`database: "connected"`, `status: "healthy"`).
   2. Trigger automatic provider failover:
      - Primary: OpenAI `gpt-4o-mini`
      - Failover 1: Google Gemini `gemini-1.5-flash`
@@ -82,24 +87,24 @@ This runbook establishes mandatory incident response procedures, operational bou
   3. If rate-limited on primary tier, toggle `AI_ACTIVE_PROVIDER=GEMINI` in environment variables and trigger zero-downtime redeploy.
   4. Enable mock fallback in non-production or degraded grace response to user with automatic turn retry.
 
-### 3.4 Payment Gateways (Razorpay & Cashfree) Webhook & Settlement Failures
-* **Symptoms**: Subscriptions pending after payment, invoices missing receipts, webhook 500 errors.
+### 3.4 Payment Gateways (Stripe & PayU) Webhook & Settlement Failures
+* **Symptoms**: Subscriptions pending after payment, invoices missing receipts, webhook 500/401 errors.
 * **Immediate Actions**:
   1. Review pending payments in `/api/payments/status`.
   2. Idempotent webhook verification:
-     - Never replay webhooks without validating `x-razorpay-signature` or `x-cashfree-signature`.
+     - Never replay webhooks without validating `stripe-signature` (Stripe) or `x-payu-signature` / body hash (PayU).
      - Invoices and subscriptions use row-level locks to prevent double-crediting.
   3. Reconcile stuck checkouts:
      ```bash
      npx tsx scripts/reconcile-pending-payments.ts
      ```
-  4. If payment provider is down, switch default gateway in `NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER` from `RAZORPAY` to `CASHFREE`.
+  4. If payment provider is down, switch default gateway in `NEXT_PUBLIC_DEFAULT_PAYMENT_PROVIDER` between `STRIPE` and `PAYU`.
 
 ### 3.5 Communications Delivery Failure (SendGrid, ZeptoMail, WhatsApp)
 * **Symptoms**: OTP delivery delays (> 30s), interview invitations not sent.
 * **Immediate Actions**:
   1. Check `EmailDeliveryConfig` table in database.
-  2. Toggle active email provider from SendGrid to ZeptoMail:
+  2. Toggle active email provider between SendGrid and ZeptoMail:
      - Auto-failover is built into `sendEmail()` on 4xx rejections.
   3. Check Meta WhatsApp Cloud API access token validity in `.env` (`WHATSAPP_TOKEN`).
   4. Ensure audit log outbox captures all delivery intents in `SecurityAuditOutboxEvent`.

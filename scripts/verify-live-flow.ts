@@ -27,7 +27,7 @@ async function testLiveFlow() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: testEmail,
-      otp: "123456",
+      otp: regJson.debugOtp || "123456",
       type: "VERIFY_EMAIL",
     }),
   });
@@ -92,14 +92,15 @@ async function testLiveFlow() {
       confirmPassword: "StrongPassword123!",
     }),
   });
-  console.log(`Employer Register Status: ${empRegRes.status}`);
+  const empRegJson = await empRegRes.json();
+  console.log(`Employer Register Status: ${empRegRes.status} | Success: ${empRegJson.success}`);
 
   const empOtpRes = await fetch(`${baseUrl}/api/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: empEmail,
-      otp: "123456",
+      otp: empRegJson.debugOtp || "123456",
       type: "VERIFY_EMAIL",
     }),
   });

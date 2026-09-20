@@ -1,5 +1,10 @@
 # HireGo AI — Production Deployment & Rollback Runbook
 
+> [!NOTE]
+> **Operational Boundary & Verification Status**:
+> - **Verified in Repository**: Next.js 16 build pipeline, Prisma migration tooling, automated regression suites, and `/api/health` status probe.
+> - **[RECOMMENDED / NOT CURRENTLY VERIFIED]**: Zero-downtime edge DNS traffic shifting, instant deployment rollbacks via CLI, and canary traffic routing are platform-level infrastructure capabilities configured during production hosting setup.
+
 ## 1. Release Gating & Pre-Flight Checks
 
 Before promoting code to production, all changes must clear the automated gating pipeline without exemptions:
@@ -56,8 +61,9 @@ curl -f https://hirego.ai/api/health
 ```
 Assert that:
 - `status` is `"healthy"` (HTTP 200)
-- `database.connected` is `true`
-- `latencyMs` is within acceptable thresholds (< 350ms)
+- `database` is `"connected"`
+- Response time is within acceptable thresholds (< 350ms)
+- `uptime` is positive integer
 
 ---
 

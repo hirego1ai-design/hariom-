@@ -56,3 +56,37 @@ test("legacy dna prototype page redirects to real mock interview setup", () => {
 
   assert.ok(src.includes('redirect("/ai/mock-interview/setup")'), "dna page must redirect to real setup flow");
 });
+
+test("mock interview UI enforces text-only interview flow without audio/voice dependencies", () => {
+  const setupPath = path.resolve(process.cwd(), "src/app/ai/mock-interview/setup/page.tsx");
+  const activePath = path.resolve(process.cwd(), "src/app/ai/mock-interview/active/page.tsx");
+
+  const setupSrc = fs.readFileSync(setupPath, "utf-8");
+  const activeSrc = fs.readFileSync(activePath, "utf-8");
+
+  // Verify setup page has no mic check or voice mode
+  assert.ok(!setupSrc.includes("handleTestMic"), "setup page must not have microphone test logic");
+  assert.ok(!setupSrc.includes("navigator.mediaDevices"), "setup page must not request microphone media devices");
+
+  // Verify active page has no speech recognition
+  assert.ok(!activeSrc.includes("webkitSpeechRecognition"), "active page must not use webkitSpeechRecognition");
+  assert.ok(!activeSrc.includes("SpeechRecognition"), "active page must not use SpeechRecognition");
+  assert.ok(!activeSrc.includes("isListening"), "active page must not have listening state");
+});
+
+test("mock interview turn schema validates answer minimum length and score clamping", () => {
+  const turnRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/turn/route.ts");
+  const src = fs.readFileSync(turnRoutePath, "utf-8");
+
+  assert.ok(src.includes("min(5"), "turn answer must require at least 5 characters");
+  assert.ok(src.includes("Math.max(0, Math.min(100"), "turn evaluation must clamp scores to [0, 100]");
+});
+
+test("mock interview finish route is idempotent for COMPLETED sessions", () => {
+  const finishRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/finish/route.ts");
+  const src = fs.readFileSync(finishRoutePath, "utf-8");
+
+  assert.ok(src.includes("interviewSession.status === 'COMPLETED'"), "finish route must handle already-completed sessions idempotently");
+  assert.ok(src.includes("MOCK_INTERVIEW_COMPLETED"), "finish route must record completion audit event");
+});
+
