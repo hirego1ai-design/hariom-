@@ -41,8 +41,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "InterviewRoundProgress" WHERE id = ${interview.roundProgress!.id} FOR UPDATE`;
+      const lockedProgress = await tx.interviewRoundProgress.findUnique({
+        where: { id: interview.roundProgress!.id },
+        select: { status: true, roundId: true },
+      });
+      if (lockedProgress?.status !== "ROUND_COMPLETE") {
+        throw new ApiError("This interview round decision was already processed.", 409);
+      }
+      const lockedRequiredFeedbackMissing = await tx.interviewRoundInterviewer.count({
+        where: {
+          roundId: lockedProgress.roundId,
+          required: true,
+          user: { interviewFeedbacks: { none: { interviewId: id, finalizedAt: { not: null } } } },
+        },
+      });
+      if (lockedRequiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
+
       if (body.action === "REJECT") {
-        await tx.application.update({ where: { id: interview.applicationId }, data: { status: "REJECTED" } });
+        const claimed = await tx.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
+        });
+        if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
+        const rejected = await tx.application.updateMany({
+          where: { id: interview.applicationId, status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] } },
+          data: { status: "REJECTED" },
+        });
+        if (rejected.count !== 1) throw new ApiError("Application is already in a terminal state and cannot be rejected from this interview round.", 409);
         return { action: "REJECT" as const, nextRound: null };
       }
       const nextRound = await tx.interviewRound.findUnique({
@@ -50,10 +76,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } },
       });
       if (!nextRound) {
-        await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "FINAL_ROUND_COMPLETE", completedAt: interview.roundProgress!.completedAt || now } });
+        const claimed = await tx.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          data: { status: "FINAL_ROUND_COMPLETE", completedAt: interview.roundProgress!.completedAt || now },
+        });
+        if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
+        const selected = await tx.application.updateMany({
+          where: { id: interview.applicationId, status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] } },
+          data: { status: "SHORTLISTED" },
+        });
+        if (selected.count !== 1) throw new ApiError("Application is already in a terminal state and cannot be selected.", 409);
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
-      await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress!.id }, data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now } });
+      const claimed = await tx.interviewRoundProgress.updateMany({
+        where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+        data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
+      });
+      if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
       await tx.interviewRoundProgress.upsert({
         where: { applicationId_roundId: { applicationId: interview.applicationId, roundId: nextRound.id } },
         update: {},
