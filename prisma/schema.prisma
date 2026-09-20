@@ -507,11 +507,17 @@ model VideoAnalysisJob {
   result         Json?
   startedAt      DateTime?
   completedAt    DateTime?
+  claimedAt      DateTime?
+  leaseExpiresAt DateTime?
+  nextAttemptAt  DateTime?
+  claimToken     String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([videoResumeId])
   @@index([status])
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
 }
 
 model Interview {
