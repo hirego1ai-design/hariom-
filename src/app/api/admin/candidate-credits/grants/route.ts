@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -22,6 +22,7 @@ async function requireAdmin(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
+    await enforceRateLimit(request, "admin_candidate_credit_grants", 10, 60_000);
     const data = await readValidatedJson(request, grantSchema);
     const ledger = await prisma.$transaction(async (tx) => {
       const prior = await tx.candidateCreditLedger.findUnique({ where: { idempotencyKey: data.idempotencyKey } });

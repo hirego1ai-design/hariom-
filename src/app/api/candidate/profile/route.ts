@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -35,6 +35,7 @@ async function requireCandidate(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
     const profile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
     const body = await readValidatedJson(request, profileUpdateSchema);
     const existing = await prisma.candidateProfile.findUnique({ where: { userId: session.id } });

@@ -647,12 +647,16 @@ model StoredFile {
   mimeType     String
   sizeBytes    Int
   deletedAt    DateTime?
+  scanStatus   String    @default("PENDING")
+  scanCheckedAt DateTime?
+  scanDetail   String?
   createdAt    DateTime  @default(now())
 
   @@index([ownerId, createdAt])
   assessmentResponses RecordedAssessmentResponse[]
 
   @@index([companyId, createdAt])
+  @@index([scanStatus, createdAt])
 }
 
 model AiUsage {

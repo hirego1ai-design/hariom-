@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import {
   getReferralProgramConfig,
   updateReferralProgramConfig,
@@ -35,10 +36,11 @@ export async function GET(request: Request) {
       );
     }
 
+    await enforceRateLimit(request, "admin_referral_config_read", 60, 60_000);
     const config = await getReferralProgramConfig();
     return NextResponse.json({ success: true, config });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
@@ -58,21 +60,15 @@ export async function PUT(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const parsed = configUpdateSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: "Invalid configuration values", details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-    const updated = await updateReferralProgramConfig(parsed.data);
+    await enforceRateLimit(request, "admin_referral_config_write", 20, 60_000);
+    const body = await readValidatedJson(request, configUpdateSchema);
+    const updated = await updateReferralProgramConfig(body);
     return NextResponse.json({
       success: true,
       message: "Referral program configuration updated successfully",
       config: updated,
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  } catch (error) {
+    return handleApiError(error);
   }
 }

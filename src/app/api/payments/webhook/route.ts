@@ -17,15 +17,14 @@ export async function POST(req: NextRequest) {
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
     const requestedProvider = req.nextUrl.searchParams.get("provider")?.toUpperCase();
-    if (requestedProvider && !["RAZORPAY", "STRIPE", "PHONEPE", "PAYU"].includes(requestedProvider)) {
+    if (requestedProvider && !["RAZORPAY", "STRIPE", "PAYU"].includes(requestedProvider)) {
       throw new ApiError("Unsupported payment webhook provider", 400);
     }
-    const providerParam = ["RAZORPAY", "STRIPE", "PHONEPE", "PAYU"].includes(requestedProvider || "")
+    const providerParam = ["RAZORPAY", "STRIPE", "PAYU"].includes(requestedProvider || "")
       ? (requestedProvider as GatewayName)
       : null;
     const razorpaySignature = req.headers.get("x-razorpay-signature");
     const stripeSignature = req.headers.get("stripe-signature");
-    const phonePeSignature = req.headers.get("x-verify");
     const payuSignature = req.headers.get("x-payu-signature") || body?.hash;
     const providerHeader =
       providerParam ||
@@ -33,8 +32,6 @@ export async function POST(req: NextRequest) {
         ? "RAZORPAY"
         : stripeSignature
         ? "STRIPE"
-        : phonePeSignature
-        ? "PHONEPE"
         : payuSignature
         ? "PAYU"
         : "RAZORPAY");
@@ -42,7 +39,6 @@ export async function POST(req: NextRequest) {
     const signature =
       razorpaySignature ||
       stripeSignature ||
-      phonePeSignature ||
       payuSignature ||
       body?.hash ||
       "";
@@ -176,6 +172,15 @@ export async function POST(req: NextRequest) {
         received: true,
         status: "FAILED",
         message: "Payment failure recorded. Subscription and credits remain uncharged.",
+      });
+    }
+
+    if (verification.status === "PENDING") {
+      return NextResponse.json({
+        success: true,
+        received: true,
+        status: "PENDING",
+        message: "Nonterminal payment event acknowledged without changing subscription, credits, promo usage, or payment-order state.",
       });
     }
 

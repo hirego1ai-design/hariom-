@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -21,6 +21,7 @@ async function requireAdmin(request: NextRequest) {
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAdmin(request);
+    await enforceRateLimit(request, "admin_candidate_services_write", 20, 60_000);
     const { id } = await params;
     const data = await readValidatedJson(request, updateSchema);
     const service = await prisma.candidateServiceCatalog.update({ where: { id }, data });

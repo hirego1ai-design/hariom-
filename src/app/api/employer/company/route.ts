@@ -1,84 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError, type UserSession } from "@/lib";
+import { z } from "zod";
+import { getCurrentSession } from "@/lib/auth";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
 
-
-function isEmployerSession(session: UserSession | null): session is UserSession {
-  return !!session && (session.role === "EMPLOYER" || session.role === "RECRUITER");
-}
+const updateCompanySchema = z.object({
+  name: z.string().trim().min(2).max(160).optional(),
+  website: z.string().trim().url().max(500).nullable().optional(),
+  description: z.string().trim().max(5000).nullable().optional(),
+  industry: z.string().trim().max(120).nullable().optional(),
+  size: z.string().trim().max(80).nullable().optional(),
+  location: z.string().trim().max(200).nullable().optional(),
+  logoUrl: z.string().trim().max(1000).nullable().optional(),
+  designation: z.string().trim().max(100).optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, "At least one company field is required.");
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!isEmployerSession(session)) {
-      return jsonError("Employer or recruiter access required", 403);
-    }
-
-    const employerProfile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
-      include: { company: true },
-    });
-
-    if (!employerProfile) {
-      return jsonError("Employer profile not found. Please complete registration.", 404);
-    }
-
-    return NextResponse.json({
-      success: true,
-      company: employerProfile.company,
-      employer: {
-        id: employerProfile.id,
-        designation: employerProfile.designation,
-      },
-    });
-  } catch (error) {
-    return handleApiError(error);
-  }
+    await enforceRateLimit(req, "employer_company_get", 60, 60_000);
+    const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "ADMIN") throw new ApiError("Administrator access requires an explicitly scoped company endpoint.", 400);
+    const company = await getSessionCompany(session);
+    const employerProfile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { id: true, designation: true } });
+    if (!employerProfile) throw new ApiError("Employer profile not found.", 404);
+    const record = await prisma.company.findUnique({ where: { id: company.id } });
+    if (!record) throw new ApiError("Company not found.", 404);
+    return NextResponse.json({ success: true, company: record, employer: employerProfile });
+  } catch (error) { return handleApiError(error); }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "employer_company_update", 20, 60_000);
     const session = await getCurrentSession(req.headers);
-    if (!isEmployerSession(session)) {
-      return jsonError("Employer or recruiter access required", 403);
-    }
-
-    const body = await req.json();
-
-    const employerProfile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
+    if (!session) throw new ApiError("Authentication required.", 401);
+    // Company-wide settings are owner policy, not recruiter profile data.
+    if (session.role !== "EMPLOYER") throw new ApiError("Only the company owner can update company settings.", 403);
+    const body = await readValidatedJson(req, updateCompanySchema);
+    const company = await getSessionCompany(session);
+    const { designation, ...companyData } = body;
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.company.update({ where: { id: company.id }, data: companyData });
+      if (designation !== undefined) await tx.employerProfile.update({ where: { userId: session.id }, data: { designation } });
+      return result;
     });
-
-    if (!employerProfile?.companyId) {
-      return jsonError("Employer company profile not found.", 404);
-    }
-
-    const updated = await prisma.company.update({
-      where: { id: employerProfile.companyId },
-      data: {
-        name: body.name,
-        website: body.website,
-        description: body.description,
-        industry: body.industry,
-        size: body.size,
-        location: body.location,
-        logoUrl: body.logoUrl,
-      },
-    });
-
-    if (body.designation) {
-      await prisma.employerProfile.update({
-        where: { id: employerProfile.id },
-        data: { designation: body.designation },
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Company profile updated successfully",
-      company: updated,
-    });
-  } catch (error) {
-    return handleApiError(error);
-  }
+    return NextResponse.json({ success: true, message: "Company profile updated successfully", company: updated });
+  } catch (error) { return handleApiError(error); }
 }

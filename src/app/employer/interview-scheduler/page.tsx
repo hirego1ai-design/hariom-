@@ -80,10 +80,11 @@ function EmployerInterviewSchedulerContent() {
             />
           </label>
           <label className="block text-sm text-text-secondary">
-            Configured round ID
             <input value={roundId} onChange={(e) => setRoundId(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" placeholder="Round ID from the job interview process" />
           </label>
           <div className="grid md:grid-cols-2 gap-4">
+            <label className="block text-sm text-text-secondary">
+            </label>
             <label className="block text-sm text-text-secondary">
               Date
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />

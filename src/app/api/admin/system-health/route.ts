@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
     await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_system_health", 30, 60_000);
     const memoryUsage = process.memoryUsage();
     
     // DB health check
@@ -22,25 +23,25 @@ export async function GET(req: NextRequest) {
 
     const services = [
       {
-        name: "Supabase PostgreSQL Database Pool",
+        name: "PostgreSQL Database",
         type: "DATABASE",
-        provider: "Supabase (AWS ap-south-1)",
+        provider: "PostgreSQL",
         status: dbStatus,
         latencyMs: dbLatencyMs,
         details: dbStatus === "HEALTHY" ? "Database query succeeded." : "Database query failed; no in-memory fallback is used.",
       },
       {
-        name: "Cloudflare R2 Object Storage",
+        name: "S3-Compatible Object Storage",
         type: "STORAGE",
-        provider: "Cloudflare R2",
+        provider: "S3-compatible",
         status: process.env.S3_BUCKET_NAME && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
         bucketName: process.env.S3_BUCKET_NAME || null,
         details: "Credentials are configured; a storage probe is not performed by this endpoint.",
       },
       {
-        name: "Upstash Redis Queue & Cache",
+        name: "Redis Queue & Cache",
         type: "CACHE",
-        provider: "Upstash Redis",
+        provider: "Redis REST",
         status: process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? "CONFIGURED" : "NOT_CONFIGURED",
         memoryUsedMb: Math.round(memoryUsage.heapUsed / 1024 / 1024),
         details: "Credentials are configured; a Redis probe is not performed by this endpoint.",
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
         details: `Node.js runtime active (${Math.round(memoryUsage.rss / 1024 / 1024)}MB RSS)`,
       },
       {
-        name: "Multi-LLM Router Gateway",
+        name: "AI Provider Gateway",
         type: "AI_GATEWAY",
         provider: "OpenAI",
         status: process.env.OPENAI_API_KEY ? "CONFIGURED" : "NOT_CONFIGURED",

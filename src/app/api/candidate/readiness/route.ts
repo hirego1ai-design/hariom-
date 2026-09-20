@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 
 const selectReadinessSchema = z.object({
   roleTitle: z.string().trim().min(1).max(120),
@@ -19,6 +19,7 @@ async function candidateProfile(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_readiness", 60, 60_000);
     const profile = await candidateProfile(request);
     const [templates, records] = await Promise.all([
       prisma.mcqAssessment.findMany({
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_readiness", 60, 60_000);
     const profile = await candidateProfile(request);
     const { roleTitle, seniority } = await readValidatedJson(request, selectReadinessSchema);
     const template = await prisma.mcqAssessment.findFirst({

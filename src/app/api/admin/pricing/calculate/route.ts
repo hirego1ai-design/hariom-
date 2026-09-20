@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateCommercialFee, CommercialPricingModel } from "@/utils";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { z } from "zod";
 
 const pricingRequestSchema = z.object({
@@ -13,18 +13,16 @@ const pricingRequestSchema = z.object({
   discountPct: z.number().finite().min(0).max(100).optional(),
   taxRatePct: z.number().finite().min(0).max(100).optional(),
   replacementDays: z.number().int().min(0).max(3650).optional(),
-});
+}).strict();
 
 export async function POST(req: NextRequest) {
   try {
     await requireAdminSession(req);
-    const parsed = pricingRequestSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ success: false, error: "Invalid pricing parameters", details: parsed.error.flatten() }, { status: 400 });
-    }
-    const body = parsed.data;
+    await enforceRateLimit(req, "admin_pricing_calculate", 60, 60_000);
+    const body = await readValidatedJson(req, pricingRequestSchema);
 
-    const ctcAnnual = body.ctcAnnual ?? body.ctc ?? 1_500_000;
+    const ctcAnnual = body.ctcAnnual ?? body.ctc;
+    if (ctcAnnual === undefined) return NextResponse.json({ success: false, error: "ctcAnnual is required" }, { status: 400 });
     const pricingModel: CommercialPricingModel = body.pricingModel;
     const feeValue = body.feeValue ?? (pricingModel === "PERCENTAGE" ? 8.33 : 50_000);
     const retainerAmount = body.retainerAmount ?? 25_000;

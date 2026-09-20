@@ -1,37 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
-import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
+import { z } from "zod";
+import { PaymentGatewayController, type GatewayConfigState } from "@/lib/payments/PaymentGatewayController";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { logAuditEvent } from "@/lib/auditLogger";
+
+const gatewayStatusSchema = z.enum(["HEALTHY", "DEGRADED", "DISABLED"]);
+const gatewayNameSchema = z.enum(["RAZORPAY", "PAYU", "STRIPE"]);
+const gatewayConfigSchema = z.object({
+  mode: z.enum(["AUTO", "MANUAL"]).optional(),
+  primaryGateway: gatewayNameSchema.optional(),
+  autoFailover: z.boolean().optional(),
+  allowEmployerSelection: z.boolean().optional(),
+  gatewaysStatus: z.object({
+    RAZORPAY: gatewayStatusSchema.optional(),
+    PAYU: gatewayStatusSchema.optional(),
+    STRIPE: gatewayStatusSchema.optional(),
+  }).strict().optional(),
+  priorities: z.array(gatewayNameSchema).min(1).max(3).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
+}).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Unauthorized: Admin role required." }, { status: 401 });
-    }
-
-    const config = await PaymentGatewayController.getConfig();
-    return NextResponse.json({ success: true, config });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+    const admin=await requireAdminSession(req);
+    await enforceRateLimit(req,`admin_payment_gateway_config_get:${admin.id}`,30,60_000);
+    const config=await PaymentGatewayController.getConfig();
+    return NextResponse.json({success:true,config},{headers:{"Cache-Control":"no-store"}});
+  } catch(error){return handleApiError(error);}
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ success: false, error: "Unauthorized: Admin role required." }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const updatedConfig = await PaymentGatewayController.updateConfig(body);
-
-    return NextResponse.json({
-      success: true,
-      message: "Payment gateway configuration updated successfully.",
-      config: updatedConfig,
-    });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+    const admin=await requireAdminSession(req);
+    await enforceRateLimit(req,`admin_payment_gateway_config_update:${admin.id}`,10,60_000);
+    const body=await readValidatedJson(req,gatewayConfigSchema);
+    const updatedConfig=await PaymentGatewayController.updateConfig(body as Partial<GatewayConfigState>);
+    await logAuditEvent({userId:admin.id,action:"PAYMENT_GATEWAY_CONFIG_UPDATED",resource:"Payment gateway configuration",ipAddress:req.headers.get("x-forwarded-for")||undefined,details:"Payment gateway routing configuration updated; credentials were not accepted by this endpoint."});
+    return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig},{headers:{"Cache-Control":"no-store"}});
+  } catch(error){return handleApiError(error);}
 }

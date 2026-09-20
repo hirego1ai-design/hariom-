@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { logAuditEvent } from "@/lib/auditLogger";
 
@@ -20,6 +20,7 @@ async function requireAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
+    await enforceRateLimit(request, "admin_typing_prompts_read", 60, 60_000);
     const prompts = await prisma.typingPracticePrompt.findMany({ orderBy: { updatedAt: "desc" } });
     return NextResponse.json({ success: true, prompts });
   } catch (error) {
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
+    await enforceRateLimit(request, "admin_typing_prompts_write", 20, 60_000);
     const data = await readValidatedJson(request, promptSchema);
     const prompt = await prisma.typingPracticePrompt.create({ data });
     await logAuditEvent({ userId: session.id, action: "CREATE_TYPING_PRACTICE_PROMPT", resource: `TypingPracticePrompt:${prompt.id}` });

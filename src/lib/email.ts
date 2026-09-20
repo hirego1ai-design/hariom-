@@ -9,6 +9,8 @@ export interface EmailMessage {
 
 export type EmailDeliveryResult = { success: boolean; messageId: string; provider?: EmailProvider };
 
+const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
+
 class EmailProviderDispatchError extends Error {
   constructor(message: string, readonly canFailover: boolean) {
     super(message);
@@ -19,6 +21,9 @@ async function sendWithSendGrid(message: EmailMessage, apiKey: string, sender: s
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
+    redirect: "error",
+    cache: "no-store",
     body: JSON.stringify({
       personalizations: [{ to: [{ email: message.to }] }],
       from: { email: sender },
@@ -37,6 +42,9 @@ async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: 
   const response = await fetch("https://api.zeptomail.com/v1.1/email", {
     method: "POST",
     headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
+    redirect: "error",
+    cache: "no-store",
     body: JSON.stringify({
       from: { address: sender },
       to: [{ email_address: { address: message.to } }],
