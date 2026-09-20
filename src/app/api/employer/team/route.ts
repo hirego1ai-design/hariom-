@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentSession, type UserSession } from "@/lib/auth";
+import { revokeAllUserSessions } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { buildPublicAppUrl } from "@/lib/env";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
+}
 
 const inviteSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
@@ -100,6 +106,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await readValidatedJson(req, inviteSchema);
+    const inviteRole: string = body.role ?? "RECRUITER";
+    const inviteDesignation: string | undefined = body.designation;
     const normalizedEmail = body.email.toLowerCase().trim();
 
     let companyId: string;
@@ -168,8 +176,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 5. Build secure acceptance link & dispatch email
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "https://hirego.ai";
-    const inviteUrl = `${baseUrl}/employer/invitation/accept?token=${rawToken}`;
+    const inviteUrl = buildPublicAppUrl(`/employer/invitation/accept?token=${encodeURIComponent(rawToken)}`);
 
     const emailResult = await sendEmail({
       to: normalizedEmail,
@@ -178,10 +185,10 @@ export async function POST(req: NextRequest) {
         <div style="font-family: Arial, sans-serif; background-color: #0A0A0C; color: #ffffff; padding: 32px; border-radius: 12px; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #448AFF; margin-top: 0;">Team Invitation</h2>
           <p style="color: #E0E0E0; font-size: 16px; line-height: 1.5;">
-            Hello <strong>${body.name}</strong>,
+            Hello <strong>${escapeHtml(body.name)}</strong>,
           </p>
           <p style="color: #9CA3AF; line-height: 1.6;">
-            You have been invited by <strong>${session.name}</strong> to join <strong>${companyName}</strong> on HireGo as a <strong>${body.role}</strong>${body.designation ? ` (${body.designation})` : ""}.
+            You have been invited by <strong>${escapeHtml(session.name ?? "A company administrator")}</strong> to join <strong>${escapeHtml(companyName)}</strong> on HireGo as a <strong>${escapeHtml(inviteRole)}</strong>${inviteDesignation ? ` (${escapeHtml(inviteDesignation)})` : ""}.
           </p>
           <div style="margin: 28px 0;">
             <a href="${inviteUrl}" style="background-color: #448AFF; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
@@ -306,17 +313,28 @@ export async function DELETE(req: NextRequest) {
         throw new ApiError("Cannot remove the last remaining company team member.", 400);
       }
 
-      await prisma.employerProfile.delete({
-        where: { id: targetId },
+      const newSessionVersion = await prisma.$transaction(async (tx) => {
+        await tx.employerProfile.delete({ where: { id: targetId } });
+        const updatedUser = await tx.user.update({
+          where: { id: member.userId },
+          data: { sessionVersion: { increment: 1 } },
+          select: { sessionVersion: true },
+        });
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            companyId: member.companyId,
+            action: "TEAM_MEMBER_REMOVED",
+            resource: `EmployerProfile:${targetId}`,
+            details: `Removed team member ${member.user?.email || targetId}`,
+            ipAddress: req.headers.get("x-forwarded-for") || undefined,
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+        return updatedUser.sessionVersion;
       });
-
-      await logAuditEvent({
-        userId: session.id,
-        companyId: member.companyId,
-        action: "TEAM_MEMBER_REMOVED",
-        resource: `EmployerProfile:${targetId}`,
-        details: `Removed team member ${member.user?.email || targetId}`,
-        ipAddress: req.headers.get("x-forwarded-for") || undefined,
+      await revokeAllUserSessions(member.userId, newSessionVersion).catch((error) => {
+        console.error("TEAM_MEMBER_SESSION_CACHE_REFRESH_FAILED", { userId: member.userId, error });
       });
 
       return NextResponse.json({

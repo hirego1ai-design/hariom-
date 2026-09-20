@@ -178,7 +178,6 @@ const COMMANDS: Record<string, OnboardingStep | "back" | "edit" | "restart" | "c
   restart: "restart",
   "start over": "restart",
   cancel: "cancel",
-  stop: "cancel",
   help: "help",
   hi: "help",
   hello: "help",

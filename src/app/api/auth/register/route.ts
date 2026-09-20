@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/prisma";
+import { db, prisma } from "@/lib/prisma";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logCriticalAuditEvent } from "@/lib/auditLogger";
@@ -47,6 +47,16 @@ export async function POST(request: Request) {
       name: body.name,
       role: "CANDIDATE",
     });
+
+    try {
+      await prisma.candidateProfile.create({
+        data: {
+          userId: user.id,
+        },
+      });
+    } catch (profileErr: any) {
+      console.warn("[Register] Candidate profile initialization notice:", profileErr?.message);
+    }
 
     // Referral Attribution Capture (Rule 11, 12, 13)
     let refCode = body.referralCode;

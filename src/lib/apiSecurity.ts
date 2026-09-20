@@ -155,6 +155,15 @@ export function handleApiError(error: unknown) {
     );
   }
 
+  // Handle Prisma-specific database errors cleanly
+  const prismaCode = (error as any)?.code;
+  if (prismaCode === "P1001" || prismaCode === "P1002") {
+    return jsonError("Database service temporarily unavailable. Please retry.", 503);
+  }
+  if (prismaCode === "P2025") {
+    return jsonError("Requested resource not found.", 404);
+  }
+
   console.error("Unhandled API error", error);
   return jsonError("Internal server error.", 500);
 }

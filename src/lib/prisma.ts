@@ -35,6 +35,13 @@ export const prisma = process.env.MOCK_DB === "true"
   : (globalForPrisma.prisma ??
     new PrismaClient({
       log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+      datasources: process.env.DATABASE_URL
+        ? {
+            db: {
+              url: process.env.DATABASE_URL,
+            },
+          }
+        : undefined,
     }));
 
 if (process.env.NODE_ENV !== "production" && process.env.MOCK_DB !== "true") {

@@ -635,22 +635,22 @@ model AdminConfiguration {
 }
 
 model StoredFile {
-  id                  String                       @id @default(uuid())
-  ownerId             String
-  owner               User                         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  companyId           String?
-  company             Company?                     @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  objectKey           String                       @unique
-  category            String
-  originalName        String
-  mimeType            String
-  sizeBytes           Int
-  deletedAt           DateTime?
-  scanStatus          String                       @default("PENDING")
-  scanCheckedAt       DateTime?
-  scanDetail          String?
-  createdAt           DateTime                     @default(now())
-  assessmentResponses RecordedAssessmentResponse[]
+  id                         String                       @id @default(uuid())
+  ownerId                    String
+  owner                      User                         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  companyId                  String?
+  company                    Company?                     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  objectKey                  String                       @unique
+  category                   String
+  originalName               String
+  mimeType                   String
+  sizeBytes                  Int
+  deletedAt                  DateTime?
+  scanStatus                 String                       @default("PENDING")
+  scanCheckedAt              DateTime?
+  scanDetail                 String?
+  createdAt                  DateTime                     @default(now())
+  RecordedAssessmentResponse RecordedAssessmentResponse[]
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
@@ -921,6 +921,69 @@ model EmailDeliveryConfig {
   updatedAt                DateTime @updatedAt
 }
 
+model CommunicationTemplate {
+  id                     String   @id @default(uuid())
+  eventKey               String
+  channel                String
+  audience               String
+  name                   String
+  locale                 String   @default("en")
+  status                 String   @default("DRAFT")
+  provider               String?
+  providerTemplateId     String?
+  providerAlias          String?
+  subject                String?
+  body                   String
+  variableSchema         Json     @default("{}")
+  buttons                Json?
+  providerParameterOrder Json?
+  enabled                Boolean  @default(false)
+  version                Int      @default(1)
+  createdById            String?
+  updatedById            String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  deliveries CommunicationDelivery[]
+
+  @@unique([eventKey, channel, audience, locale, version])
+  @@index([eventKey, channel, enabled])
+  @@index([channel, status, updatedAt])
+}
+
+model CommunicationDelivery {
+  id                   String                 @id @default(uuid())
+  templateId           String?
+  template             CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  eventKey             String
+  channel              String
+  audience             String
+  recipientRef         String?
+  recipientAddressHash String?
+  provider             String?
+  providerMessageId    String?
+  idempotencyKey       String                 @unique
+  correlationId        String?
+  status               String                 @default("PENDING")
+  attemptCount         Int                    @default(0)
+  nextAttemptAt        DateTime?
+  maxAttempts          Int                    @default(3)
+  retryable            Boolean                @default(false)
+  lastErrorCode        String?
+  lastError            String?
+  acceptedAt           DateTime?
+  deliveredAt          DateTime?
+  readAt               DateTime?
+  failedAt             DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([eventKey, channel, createdAt])
+  @@index([status, createdAt])
+  @@index([status, retryable, nextAttemptAt])
+  @@index([providerMessageId])
+}
+
 model AiExecutionLog {
   id               String   @id @default(uuid())
   task             String
@@ -1148,7 +1211,8 @@ model WorkflowInstance {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  steps     WorkflowStepLog[]
+  steps WorkflowStepLog[]
+
   approvals WorkflowApproval[]
 }
 
@@ -1787,8 +1851,11 @@ model WhatsAppContact {
   linkStatus String @default("UNLINKED")
   // UNLINKED | PENDING_VERIFICATION | LINKED | REJECTED
 
-  optInStatus String @default("OPTED_IN")
-  // OPTED_IN | OPTED_OUT
+  optInStatus   String    @default("UNKNOWN")
+  // UNKNOWN | OPTED_IN | OPTED_OUT
+  optInAt       DateTime?
+  optOutAt      DateTime?
+  consentSource String?
 
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @updatedAt
@@ -2294,3 +2361,5 @@ model MockInterviewTurn {
 
   @@unique([sessionId, questionIndex])
 }
+
+

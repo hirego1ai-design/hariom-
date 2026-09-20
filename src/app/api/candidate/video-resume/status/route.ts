@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "video_resume_status", 60, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
 
     const { searchParams } = new URL(request.url);
     const videoId = searchParams.get("videoId");
     if (!videoId) return jsonError("videoId parameter is required", 400);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId)) return jsonError("Video resume not found", 404);
 
     const videoResume = await prisma.videoResume.findUnique({
       where: { id: videoId },

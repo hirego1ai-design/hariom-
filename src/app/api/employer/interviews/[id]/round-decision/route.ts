@@ -5,8 +5,12 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
+import { createTenantContext } from "@/lib/security/TenantContext";
+import { Role } from "@prisma/client";
 
-const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]) });
+const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]), approvalId: z.string().uuid().optional(), workflowId: z.string().uuid().optional(), confirmApproval: z.boolean().optional() }).strict();
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -17,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await readValidatedJson(req, schema);
     const interview = await prisma.interview.findUnique({
       where: { id },
-      include: { application: { include: { job: true } }, roundProgress: { include: { round: true, feedbacks: true } } },
+      include: { application: { include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } }, roundProgress: { include: { round: true, feedbacks: true } } },
     });
     if (!interview?.roundProgress) throw new ApiError("Configured interview round not found.", 404);
     if (session.role !== "ADMIN") {
@@ -37,6 +41,73 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.action === "HOLD") {
       await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD" });
       return NextResponse.json({ success: true, action: "HOLD", message: "Candidate remains on hold after this round." });
+    }
+
+    if (body.action === "REJECT") {
+      const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
+      const expectedAction = { interviewId: id, applicationId: interview.applicationId, action: "REJECT" };
+
+      if (!body.approvalId || !body.workflowId) {
+        const correlationId = `interview-rejection:${id}`;
+        let workflow = await prisma.workflowInstance.findUnique({ where: { correlationId } });
+        if (!workflow) {
+          workflow = await WorkflowEngine.startWorkflow({
+            workflowType: "SELECTION_REJECTION",
+            companyId: interview.application.job.companyId,
+            jobId: interview.application.jobId,
+            candidateId: interview.application.candidateProfileId,
+            applicationId: interview.applicationId,
+            correlationId,
+            initiatedBy: session.id,
+            initialStep: "INTERVIEW_ROUND_REJECTION",
+            checkpointState: { interviewId: id, source: "round-decision" },
+            context: tenantContext,
+          });
+        }
+        if (workflow.applicationId !== interview.applicationId || workflow.companyId !== interview.application.job.companyId) {
+          throw new ApiError("Existing rejection workflow does not match this candidate application.", 409);
+        }
+        if (!["RUNNING", "PAUSED_FOR_APPROVAL"].includes(workflow.status)) {
+          throw new ApiError("Existing rejection workflow requires reconciliation before another decision.", 409);
+        }
+        let approval = await prisma.workflowApproval.findFirst({
+          where: { workflowInstanceId: workflow.id, actionType: "CANDIDATE_REJECTION", decision: { in: ["PENDING", "APPROVED"] }, consumedAt: null },
+          orderBy: { requestedAt: "desc" },
+        });
+        if (!approval) {
+          if (workflow.status !== "RUNNING") throw new ApiError("Rejection workflow is paused without a valid approval request.", 409);
+          const requested = await WorkflowEngine.requestConsequentialAction({
+            workflowId: workflow.id,
+            stepName: "INTERVIEW_ROUND_REJECTION",
+            actionType: "CANDIDATE_REJECTION",
+            action: expectedAction,
+            context: tenantContext,
+          });
+          approval = await prisma.workflowApproval.findUnique({ where: { id: requested.approvalId } });
+        }
+        if (!approval) throw new ApiError("Unable to persist rejection approval request.", 500);
+        return NextResponse.json({
+          success: true,
+          action: "REJECT",
+          requiresConfirmation: true,
+          approvalId: approval.id,
+          workflowId: workflow.id,
+          message: "Rejection approval has been persisted. Confirm once more to execute the candidate rejection.",
+        }, { status: 202 });
+      }
+
+      let approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.consumedAt) {
+        throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
+      }
+      if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
+      if (approval.decision === "PENDING") {
+        if (!body.confirmApproval) throw new ApiError("Explicit confirmation is required to approve this candidate rejection.", 409);
+        await WorkflowEngine.decideApproval({ approvalId: body.approvalId, decision: "APPROVED", notes: "Confirmed from interview round decision UI.", context: tenantContext });
+        approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+      }
+      if (approval.decision !== "APPROVED") throw new ApiError("Candidate rejection approval is not approved.", 409);
+      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: expectedAction, context: tenantContext });
     }
 
     const now = new Date();
@@ -101,6 +172,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return { action: "PROCEED" as const, nextRound: { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } };
     });
     await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
+    const candidate = interview.application.candidateProfile.user;
+    const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
+    const eventKey = result.action === "PROCEED" ? "INTERVIEW_NEXT_ROUND" : null;
+    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }

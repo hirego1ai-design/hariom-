@@ -20,6 +20,7 @@ async function profile(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "candidate_availability_get", 60, 60000);
     const { candidate } = await profile(req);
     return NextResponse.json({ success: true, availability: { status: candidate.availabilityStatus, lastConfirmedAt: candidate.lastAvailabilityConfirmedAt, source: candidate.availabilitySource, note: candidate.availabilityNote } });
   } catch(e) { return handleApiError(e); }
@@ -29,7 +30,7 @@ export async function PUT(req: NextRequest) {
   try {
     await enforceRateLimit(req, "candidate_availability", 20, 60000);
     const { session, candidate } = await profile(req);
-    const body = await readValidatedJson(req, schema);
+    const body = await readValidatedJson(req, schema, 4 * 1024);
     const now = new Date();
     const updated = await prisma.candidateProfile.update({
       where: { id: candidate.id },

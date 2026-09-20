@@ -42,6 +42,25 @@ export async function POST(request: Request) {
 
     const practiceFeedback = `Practice session completed with ${turnCount} answered turns. The score is a fluency practice metric only; it is not a technical, communication, or hiring evaluation.`;
 
+    // Idempotent early-return if already completed
+    if (interviewSession.status === 'COMPLETED') {
+      return NextResponse.json({
+        success: true,
+        report: {
+          mode: 'PRACTICE',
+          fluencyPracticeScore: interviewSession.overallScore ?? overallScore,
+          turnCount,
+          practiceFeedback: interviewSession.aiFeedback || practiceFeedback,
+          turns: turns.map(t => ({
+            questionIndex: t.questionIndex,
+            question: t.questionText,
+            score: t.score,
+            feedback: t.feedback
+          }))
+        }
+      });
+    }
+
     await prisma.mockInterviewSession.update({
       where: { id: sessionId },
       data: {

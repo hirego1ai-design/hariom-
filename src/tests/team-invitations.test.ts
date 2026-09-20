@@ -270,7 +270,25 @@ export async function runTeamInvitationTests(): Promise<{
         "Failed with 400 Bad Request"
       );
 
-      // --- Scenario 6: Cross-Company Invitation Attempt (Rejected) ---
+      // --- Scenario 6: Concurrent use of a single invitation token ---
+      const emailConcurrent = `concurrent-${testId}@hirego.test`;
+      const { rawToken: concurrentToken } = await createInvite(emailConcurrent, "RECRUITER", companyA.id);
+      const [concurrentA, concurrentB] = await Promise.all([
+        callAcceptApi(concurrentToken, "ConcurrentPass123!", "Concurrent User"),
+        callAcceptApi(concurrentToken, "ConcurrentPass123!", "Concurrent User"),
+      ]);
+      const concurrentStatuses = [concurrentA.status, concurrentB.status].sort((a, b) => a - b);
+      const concurrentUser = await prisma.user.findUnique({ where: { email: emailConcurrent } });
+      const concurrentProfileCount = concurrentUser
+        ? await prisma.employerProfile.count({ where: { userId: concurrentUser.id, companyId: companyA.id } })
+        : 0;
+      assert(
+        "Concurrent use of one invitation token is single-use",
+        concurrentStatuses[0] === 200 && concurrentStatuses[1] >= 400 && concurrentProfileCount === 1,
+        `Concurrent accept statuses=${concurrentStatuses.join(",")}, profileCount=${concurrentProfileCount}`
+      );
+
+      // --- Scenario 7: Cross-Company Invitation Attempt (Rejected) ---
       const email6 = `cross-${testId}@hirego.test`;
       const crossUser = await prisma.user.create({
         data: {
@@ -301,13 +319,13 @@ export async function runTeamInvitationTests(): Promise<{
 
       // Cleanup
       await prisma.companyInvitation.deleteMany({
-        where: { email: { in: [email1, email2, email3, email4, email5, email5b, email6] } },
+        where: { email: { in: [email1, email2, email3, email4, email5, email5b, emailConcurrent, email6] } },
       }).catch(() => undefined);
       await prisma.employerProfile.deleteMany({
-        where: { userId: { in: [candidateUser.id, recruiterUser.id, employerUser.id, memberUser.id, crossUser.id, ownerA.id] } },
+        where: { userId: { in: [candidateUser.id, recruiterUser.id, employerUser.id, memberUser.id, ...(concurrentUser ? [concurrentUser.id] : []), crossUser.id, ownerA.id] } },
       }).catch(() => undefined);
       await prisma.user.deleteMany({
-        where: { id: { in: [candidateUser.id, recruiterUser.id, employerUser.id, memberUser.id, crossUser.id, ownerA.id] } },
+        where: { id: { in: [candidateUser.id, recruiterUser.id, employerUser.id, memberUser.id, ...(concurrentUser ? [concurrentUser.id] : []), crossUser.id, ownerA.id] } },
       }).catch(() => undefined);
       await prisma.company.deleteMany({
         where: { id: { in: [companyA.id, companyB.id] } },

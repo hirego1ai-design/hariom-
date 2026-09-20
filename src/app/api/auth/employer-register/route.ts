@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
       }
     } catch (databaseError) {
-      if (process.env.NODE_ENV === "production") throw databaseError;
+      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw databaseError;
       const existing = getDevEmployer(email);
       if (existing) return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
       const passwordHash = await hashPassword(body.password);
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         },
       });
       return { createdUser, companyId: company.id };
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
 
     // Create referral attribution OUTSIDE transaction — non-critical, must not block registration
     if (referrerId && referralCode) {

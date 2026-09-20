@@ -52,7 +52,7 @@ export async function PUT(request: NextRequest) {
   try {
     await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
-    const body = await readValidatedJson(request, profileUpdateSchema);
+    const body = await readValidatedJson(request, profileUpdateSchema, 64 * 1024);
     const existing = await prisma.candidateProfile.findUnique({ where: { userId: session.id } });
     const existingPreferences = existing?.preferences && typeof existing.preferences === "object" && !Array.isArray(existing.preferences) ? existing.preferences as Record<string, unknown> : {};
     const preferences = body.preferences !== undefined || body.linkedinUrl ? { ...existingPreferences, ...(body.preferences ?? {}), ...(body.linkedinUrl ? { linkedinUrl: body.linkedinUrl } : {}) } : undefined;
@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
         update: { ...(body.headline !== undefined ? { headline: body.headline } : {}), ...(body.bio !== undefined ? { bio: body.bio } : {}), ...(body.location !== undefined ? { location: body.location } : {}), ...(body.skills !== undefined ? { skills: body.skills } : {}), ...(body.experienceYears !== undefined ? { experienceYears: body.experienceYears } : {}), ...(body.resumeUrl !== undefined ? { resumeUrl: body.resumeUrl } : {}), ...(body.education !== undefined ? { education: toNullableJson(body.education) } : {}), ...(body.experience !== undefined ? { experience: toNullableJson(body.experience) } : {}), ...(preferences !== undefined ? { preferences: toNullableJson(preferences) } : {}) },
         create: { userId: session.id, headline: body.headline ?? "", bio: body.bio ?? "", location: body.location ?? "", skills: body.skills ?? [], experienceYears: body.experienceYears ?? 0, resumeUrl: body.resumeUrl ?? null, education: toNullableJson(body.education ?? []), experience: toNullableJson(body.experience ?? []), preferences: toNullableJson(preferences ?? {}) },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
     return NextResponse.json({ success: true, profile });
   } catch (error) { return handleApiError(error); }
 }

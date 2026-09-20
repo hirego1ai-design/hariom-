@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { canApplyVideoAnalysisCallback } from "@/lib/videoAnalysisState";
 import { Prisma } from "@prisma/client";
+import { timingSafeEqual } from "node:crypto";
 
 const callbackSchema = z.object({
   jobId: z.string().uuid(),
@@ -43,12 +44,13 @@ export async function POST(request: NextRequest) {
 
     const authHeader = request.headers.get("Authorization");
     const expectedToken = `Bearer ${config.internalToken}`;
-
-    if (!authHeader || authHeader !== expectedToken) {
+    const presented = Buffer.from(authHeader || "");
+    const expected = Buffer.from(expectedToken);
+    if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
       return jsonError("Unauthorized internal callback token", 401);
     }
 
-    const body = await readValidatedJson(request, callbackSchema);
+    const body = await readValidatedJson(request, callbackSchema, 128 * 1024);
 
     const job = await prisma.videoAnalysisJob.findUnique({
       where: { id: body.jobId },
