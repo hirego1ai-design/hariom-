@@ -57,8 +57,7 @@ function existingCheckoutResponse(order: PaymentOrder) {
       gatewayOrderId: order.gatewayOrderId,
       gateway: order.gateway,
       planId: order.planId,
-      keyId: order.gateway === "RAZORPAY" ? process.env.RAZORPAY_KEY_ID : undefined,
-      planName: snapshot.name,
+            planName: snapshot.name,
       originalPrice: order.originalAmount,
       discountAmount: order.discountAmount,
       finalAmount: order.expectedAmount,
@@ -186,11 +185,7 @@ export async function POST(req: NextRequest) {
     const { planId, paymentMethod, promoCode } = await readValidatedJson(req, checkoutSchema);
 
     const isProduction = process.env.NODE_ENV === "production";
-    const hasRazorpayCredentials = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
-
-    if (isProduction && !hasRazorpayCredentials) {
-      throw new Error("Payment gateway credentials not configured in production environment.");
-    }
+    
 
     if (!planId) {
       return jsonError("planId is required", 400);
@@ -270,8 +265,7 @@ export async function POST(req: NextRequest) {
         gatewayOrderId: gatewayResult.gatewayOrderId,
         gateway: gatewayResult.gateway,
         planId: plan.id,
-        keyId: gatewayResult.gateway === "RAZORPAY" ? process.env.RAZORPAY_KEY_ID : undefined,
-        planName: plan.name,
+                planName: plan.name,
         originalPrice: plan.price,
         discountAmount: reservation.discountApplied,
         finalAmount: reservation.finalPrice,
@@ -285,3 +279,4 @@ export async function POST(req: NextRequest) {
     return handleApiError(error);
   }
 }
+

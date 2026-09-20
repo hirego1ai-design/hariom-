@@ -105,7 +105,6 @@ export async function getPrivateObject(objectKey: string): Promise<Buffer> {
 }
 
 
-export async function getPrivateDownloadUrl(objectKey: string, fileName: string, disposition: "attachment" | "inline" = "attachment") {
 
 export async function readPrivateObjectForSecurityScan(objectKey: string): Promise<Buffer> {
   if (!isProduction()) return readFile(devObjectPath(objectKey));
@@ -154,6 +153,7 @@ export async function deleteObject(objectKey: string) {
   }
   await unlink(devObjectPath(objectKey));
 }
+
 
 
 
