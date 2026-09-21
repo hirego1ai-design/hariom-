@@ -69,16 +69,18 @@ export function registerSideEffectTools(registry: ToolRegistry): void {
       applicationId: z.string(),
       status: z.string(),
     }),
-    handler: async (params) => {
+    handler: async (params, context) => {
       const p = params as { idempotencyKey: string; applicationId: string; status: any };
-      try {
-        await prisma.application.update({
-          where: { id: p.applicationId },
-          data: { status: p.status },
-        });
-      } catch {
-        // Database fallback
-      }
+      const application = await prisma.application.findUnique({
+        where: { id: p.applicationId },
+        select: { job: { select: { companyId: true } } },
+      });
+      if (!application) throw new Error("Application not found.");
+      validateTenantAccess(context.tenantContext, application.job.companyId);
+      await prisma.application.update({
+        where: { id: p.applicationId },
+        data: { status: p.status },
+      });
       return {
         success: true,
         applicationId: p.applicationId,
@@ -102,28 +104,28 @@ export function registerSideEffectTools(registry: ToolRegistry): void {
       interviewId: z.string(),
       roomId: z.string(),
     }),
-    handler: async (params) => {
+    handler: async (params, context) => {
       const p = params as { idempotencyKey: string; applicationId: string; scheduledAt: string };
-      const roomId = `room-${Date.now()}`;
-      let interviewId = `int-${Date.now()}`;
+      const application = await prisma.application.findUnique({
+        where: { id: p.applicationId },
+        select: { job: { select: { companyId: true } } },
+      });
+      if (!application) throw new Error("Application not found.");
+      validateTenantAccess(context.tenantContext, application.job.companyId);
 
-      try {
-        const intRecord = await prisma.interview.create({
-          data: {
-            applicationId: p.applicationId,
-            scheduledAt: new Date(p.scheduledAt),
-            status: 'SCHEDULED',
-            roomUrl: `https://hirego.ai/interviews/room/${roomId}`,
-          },
-        });
-        interviewId = intRecord.id;
-      } catch {
-        // Fallback
-      }
+      const roomId = `room-${Date.now()}`;
+      const intRecord = await prisma.interview.create({
+        data: {
+          applicationId: p.applicationId,
+          scheduledAt: new Date(p.scheduledAt),
+          status: 'SCHEDULED',
+          roomUrl: `https://hirego.ai/interviews/room/${roomId}`,
+        },
+      });
 
       return {
         success: true,
-        interviewId,
+        interviewId: intRecord.id,
         roomId,
       };
     },
