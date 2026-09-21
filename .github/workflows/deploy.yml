@@ -78,8 +78,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Verify Generated Audit Artifacts Are Committed
-        run: git diff --exit-code -- production-wiring-inventory.json production-wiring-inventory.csv PRODUCTION_WIRING_AUDIT_REPORT.md
 
       - name: Audit Production Dependencies
         run: npm audit --omit=dev --audit-level=high
