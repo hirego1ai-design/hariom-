@@ -219,6 +219,7 @@ for (const file of pages) {
 
   const events = allMatches(text, /\b(onClick|onSubmit|onChange|onKeyDown|onBlur)\s*=|\b(router\.(push|replace))\s*\(/g);
   for (const event of events) {
+    const eventName = event[1] || event[2];
     const line = lineAt(text, event.index);
     const nearby = text.slice(Math.max(0, event.index - 300), Math.min(text.length, event.index + 900));
     const apiMatches = allMatches(nearby, /fetch\s*\(\s*["'`]([^"'`]+)["'`]/g).map((m) => m[1]);
@@ -229,7 +230,7 @@ for (const file of pages) {
       screen: route,
       route,
       component: relativeFile,
-      user_action: `${event[1]} handler`,
+      user_action: `${eventName} handler`,
       api_endpoint: unique(apiMatches),
       method: apiMatches.length ? "see endpoint row" : null,
       service: detectServices(nearby),
@@ -247,7 +248,7 @@ for (const file of pages) {
       persistence: detectDbModels(nearby).length ? "referenced" : "unknown",
       status: classificationAction.status,
       severity: classificationAction.severity,
-      evidence: fileLineEvidence(file, line, `${event[1]} handler`),
+      evidence: fileLineEvidence(file, line, `${eventName} handler`),
       file: relativeFile,
       line,
       notes: apiMatches.length ? "Static nearby fetch association; verify exact handler path." : "No nearby API call detected; verify whether UI-only is intentional.",
@@ -260,7 +261,13 @@ for (const file of pages) {
     if (!endpoint.startsWith("/api")) continue;
     const line = lineAt(text, fetch.index);
     const nearby = text.slice(fetch.index, Math.min(text.length, fetch.index + 500));
-    const method = nearby.match(/method\s*:\s*["']([A-Z]+)["']/i)?.[1]?.toUpperCase() || "GET";
+    const afterUrl = text.slice(
+      fetch.index + fetch[0].length,
+      Math.min(text.length, fetch.index + fetch[0].length + 500)
+    );
+    const method = /^\s*,/.test(afterUrl)
+      ? afterUrl.match(/method\s*:\s*["']([A-Z]+)["']/i)?.[1]?.toUpperCase() || "GET"
+      : "GET";
     const classificationApi = classify(text, "action", true);
     inventory.push(baseRecord({
       inventory_id: `CALL-${String(sequence++).padStart(5, "0")}`,

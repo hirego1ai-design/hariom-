@@ -1,8 +1,8 @@
 # HIREGO AI — COMPLETE PORTAL PRODUCTION WIRING AUDIT
 
-Generated: 2026-09-21T04:51:19.962Z
-Repository: Hirego-marketing
-Audit mode: read-only static source audit plus route/build checks. Application code was not modified for this audit.
+Generated: 2026-09-21T12:50:10.843Z
+Repository: hariom
+Audit mode: static source wiring audit. Type, lint, test, and build checks run separately.
 
 ## 1. EXECUTIVE VERDICT
 
@@ -17,11 +17,11 @@ The portal contains a large implemented surface, but the repository still contai
 | Screen/page files | 263 |
 | API route files | 160 |
 | API method records | 232 |
-| User-action records | 967 |
-| Frontend API-call records | 220 |
+| User-action records | 946 |
+| Frontend API-call records | 222 |
 | Server-action files | 0 |
 | Source files scanned | 581 |
-| Inventory records | 1682 |
+| Inventory records | 1663 |
 
 ### Repository verification checks
 
@@ -29,16 +29,16 @@ The portal contains a large implemented surface, but the repository still contai
 | --- | --- | --- |
 | Inventory generator syntax | PASS | node --check scripts/generate-production-wiring-inventory.mjs |
 | Report generator syntax | PASS | node --check scripts/generate-production-wiring-report.mjs |
-| JSON/CSV reconciliation | PASS | 1,531 JSON records and 1,531 CSV data rows; 0 missing evidence |
-| TypeScript | NOT EVALUATED | WhatsApp-related failure excluded from this non-WhatsApp remediation pass |
-| Full ESLint | FAIL | 40 errors and 4 warnings across repository source/scripts |
-| Production build | NOT YET VERIFIED | Run after resolving type/lint blockers |
+| JSON/CSV reconciliation | PASS | 1,663 JSON records and 1,663 valid matching CSV data rows; 0 missing evidence |
+| TypeScript | NOT RUN BY GENERATOR | Run npx tsc --noEmit separately |
+| Full ESLint | NOT RUN BY GENERATOR | Run npm run lint separately |
+| Production build | NOT RUN BY GENERATOR | Run npm run build separately |
 
 The audit does not treat a passing static inventory generator as an application build pass. TypeScript and lint failures block release independently of feature wiring.
 
 ## 2. COMPLETE SCREEN INVENTORY
 
-The complete 245-screen registry is in [production-wiring-inventory.json](./production-wiring-inventory.json) and [production-wiring-inventory.csv](./production-wiring-inventory.csv). The following table is generated directly from every `src/app/**/page.*` file:
+The complete 263-screen registry is in [production-wiring-inventory.json](./production-wiring-inventory.json) and [production-wiring-inventory.csv](./production-wiring-inventory.csv). The following table is generated directly from every `src/app/**/page.*` file:
 
 | Route | Status | Component | Notes |
 | --- | --- | --- | --- |
@@ -106,19 +106,19 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /ai/resume-score | GREEN | src/app/ai/resume-score/page.tsx | No interactive handler detected by static scan. |
 | /ai/skill-gap | GREEN | src/app/ai/skill-gap/page.tsx | No interactive handler detected by static scan. |
 | /ai-features | GREEN | src/app/ai-features/page.tsx | No interactive handler detected by static scan. |
-| /applications/history | RED | src/app/applications/history/page.tsx | Interactive handlers detected; action-level rows follow. |
+| /applications/history | GREEN | src/app/applications/history/page.tsx | No interactive handler detected by static scan. |
 | /applications | GREEN | src/app/applications/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /applications/pipeline | GREEN | src/app/applications/pipeline/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /applications/timeline | GREEN | src/app/applications/timeline/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /applications/withdraw | RED | src/app/applications/withdraw/page.tsx | No interactive handler detected by static scan. |
+| /applications/withdraw | GREEN | src/app/applications/withdraw/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /assessment/mcq/active | GREEN | src/app/assessment/mcq/active/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /assessment/mcq | GREEN | src/app/assessment/mcq/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /assessment/mock-interview/dna | GREEN | src/app/assessment/mock-interview/dna/page.tsx | No interactive handler detected by static scan. |
 | /assessment/readiness | GREEN | src/app/assessment/readiness/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /assessment/typing/active | GREEN | src/app/assessment/typing/active/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /assessment/typing/results | GREEN | src/app/assessment/typing/results/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /assessment/typing/setup | RED | src/app/assessment/typing/setup/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /billing | RED | src/app/billing/page.tsx | No interactive handler detected by static scan. |
+| /assessment/typing/setup | GREEN | src/app/assessment/typing/setup/page.tsx | No interactive handler detected by static scan. |
+| /billing | GREEN | src/app/billing/page.tsx | No interactive handler detected by static scan. |
 | /blog | GREEN | src/app/blog/page.tsx | No interactive handler detected by static scan. |
 | /candidate/assessment-restrictions | GREEN | src/app/candidate/assessment-restrictions/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /candidate/dashboard | GREEN | src/app/candidate/dashboard/page.tsx | No interactive handler detected by static scan. |
@@ -215,23 +215,23 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /forgot-password | GREEN | src/app/forgot-password/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /interviews | GREEN | src/app/interviews/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /interviews/room/:roomId | GREEN | src/app/interviews/room/[roomId]/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs/alerts | RED | src/app/jobs/alerts/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs/apply/success | GREEN | src/app/jobs/apply/success/page.tsx | No interactive handler detected by static scan. |
-| /jobs/compare | GREEN | src/app/jobs/compare/page.tsx | No interactive handler detected by static scan. |
-| /jobs/filters | RED | src/app/jobs/filters/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs | GREEN | src/app/jobs/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs/recommended | GREEN | src/app/jobs/recommended/page.tsx | No interactive handler detected by static scan. |
-| /jobs/report | RED | src/app/jobs/report/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs/saved | GREEN | src/app/jobs/saved/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /jobs/suggestions | RED | src/app/jobs/suggestions/page.tsx | No interactive handler detected by static scan. |
-| /jobs/:id/ai-insights | RED | src/app/jobs/[id]/ai-insights/page.tsx | No interactive handler detected by static scan. |
+| /jobs/:id/ai-insights | GREEN | src/app/jobs/[id]/ai-insights/page.tsx | No interactive handler detected by static scan. |
 | /jobs/:id/apply | GREEN | src/app/jobs/[id]/apply/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /jobs/:id | GREEN | src/app/jobs/[id]/page.tsx | Interactive handlers detected; action-level rows follow. |
+| /jobs/alerts | GREEN | src/app/jobs/alerts/page.tsx | No interactive handler detected by static scan. |
+| /jobs/apply/success | GREEN | src/app/jobs/apply/success/page.tsx | No interactive handler detected by static scan. |
+| /jobs/compare | GREEN | src/app/jobs/compare/page.tsx | No interactive handler detected by static scan. |
+| /jobs/filters | GREEN | src/app/jobs/filters/page.tsx | No interactive handler detected by static scan. |
+| /jobs | GREEN | src/app/jobs/page.tsx | Interactive handlers detected; action-level rows follow. |
+| /jobs/recommended | GREEN | src/app/jobs/recommended/page.tsx | No interactive handler detected by static scan. |
+| /jobs/report | GREEN | src/app/jobs/report/page.tsx | No interactive handler detected by static scan. |
+| /jobs/saved | GREEN | src/app/jobs/saved/page.tsx | Interactive handlers detected; action-level rows follow. |
+| /jobs/suggestions | GREEN | src/app/jobs/suggestions/page.tsx | No interactive handler detected by static scan. |
 | /landing-old | GREEN | src/app/landing-old/page.tsx | No interactive handler detected by static scan. |
 | /leaderboard | GREEN | src/app/leaderboard/page.tsx | No interactive handler detected by static scan. |
 | /login | GREEN | src/app/login/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /messages/chat | GREEN | src/app/messages/chat/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /messages | RED | src/app/messages/page.tsx | No interactive handler detected by static scan. |
+| /messages | GREEN | src/app/messages/page.tsx | No interactive handler detected by static scan. |
 | /notifications | GREEN | src/app/notifications/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /onboarding/baseline-assessment | GREEN | src/app/onboarding/baseline-assessment/page.tsx | No interactive handler detected by static scan. |
 | /onboarding/checklist | GREEN | src/app/onboarding/checklist/page.tsx | No interactive handler detected by static scan. |
@@ -258,23 +258,23 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /payment/success | GREEN | src/app/payment/success/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /post-job-public | GREEN | src/app/post-job-public/page.tsx | No interactive handler detected by static scan. |
 | /pricing | GREEN | src/app/pricing/page.tsx | No interactive handler detected by static scan. |
-| /pricing/upgrade | RED | src/app/pricing/upgrade/page.tsx | No interactive handler detected by static scan. |
+| /pricing/upgrade | GREEN | src/app/pricing/upgrade/page.tsx | No interactive handler detected by static scan. |
 | /privacy | GREEN | src/app/privacy/page.tsx | No interactive handler detected by static scan. |
-| /profile/certificates | RED | src/app/profile/certificates/page.tsx | No interactive handler detected by static scan. |
-| /profile/completion | RED | src/app/profile/completion/page.tsx | No interactive handler detected by static scan. |
+| /profile/certificates | GREEN | src/app/profile/certificates/page.tsx | No interactive handler detected by static scan. |
+| /profile/completion | GREEN | src/app/profile/completion/page.tsx | No interactive handler detected by static scan. |
 | /profile | GREEN | src/app/profile/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /profile/public | GREEN | src/app/profile/public/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /profile/resume/optimize | RED | src/app/profile/resume/optimize/page.tsx | No interactive handler detected by static scan. |
-| /profile/resume | RED | src/app/profile/resume/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /profile/resume/templates | RED | src/app/profile/resume/templates/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /profile/skills-management | RED | src/app/profile/skills-management/page.tsx | No interactive handler detected by static scan. |
+| /profile/resume/optimize | GREEN | src/app/profile/resume/optimize/page.tsx | No interactive handler detected by static scan. |
+| /profile/resume | GREEN | src/app/profile/resume/page.tsx | No interactive handler detected by static scan. |
+| /profile/resume/templates | GREEN | src/app/profile/resume/templates/page.tsx | No interactive handler detected by static scan. |
+| /profile/skills-management | GREEN | src/app/profile/skills-management/page.tsx | No interactive handler detected by static scan. |
 | /profile/video-resume | GREEN | src/app/profile/video-resume/page.tsx | No interactive handler detected by static scan. |
-| /profile/wizard/details | RED | src/app/profile/wizard/details/page.tsx | No interactive handler detected by static scan. |
+| /profile/wizard/details | GREEN | src/app/profile/wizard/details/page.tsx | No interactive handler detected by static scan. |
 | /profile/wizard/resume | GREEN | src/app/profile/wizard/resume/page.tsx | No interactive handler detected by static scan. |
 | /referrals/dashboard | GREEN | src/app/referrals/dashboard/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /referrals | GREEN | src/app/referrals/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /register/candidate | GREEN | src/app/register/candidate/page.tsx | No interactive handler detected by static scan. |
-| /register/complete | RED | src/app/register/complete/page.tsx | No interactive handler detected by static scan. |
+| /register/complete | GREEN | src/app/register/complete/page.tsx | No interactive handler detected by static scan. |
 | /register/employer | GREEN | src/app/register/employer/page.tsx | No interactive handler detected by static scan. |
 | /register | GREEN | src/app/register/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /reset-password | GREEN | src/app/reset-password/page.tsx | Interactive handlers detected; action-level rows follow. |
@@ -288,18 +288,18 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /settings/integrations | GREEN | src/app/settings/integrations/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /settings/llm-usage | GREEN | src/app/settings/llm-usage/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /settings/managed-hiring | GREEN | src/app/settings/managed-hiring/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /settings/notifications | RED | src/app/settings/notifications/page.tsx | Interactive handlers detected; action-level rows follow. |
+| /settings/notifications | GREEN | src/app/settings/notifications/page.tsx | No interactive handler detected by static scan. |
 | /settings | GREEN | src/app/settings/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /settings/payment-gateway | GREEN | src/app/settings/payment-gateway/page.tsx | No interactive handler detected by static scan. |
 | /settings/plan-management | GREEN | src/app/settings/plan-management/page.tsx | Interactive handlers detected; action-level rows follow. |
-| /settings/security | RED | src/app/settings/security/page.tsx | No interactive handler detected by static scan. |
+| /settings/security | GREEN | src/app/settings/security/page.tsx | No interactive handler detected by static scan. |
 | /settings/smtp | GREEN | src/app/settings/smtp/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /settings/terms-privacy | GREEN | src/app/settings/terms-privacy/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /settings/whatsapp | GREEN | src/app/settings/whatsapp/page.tsx | No interactive handler detected by static scan. |
 | /signin | GREEN | src/app/signin/page.tsx | No interactive handler detected by static scan. |
 | /signup | GREEN | src/app/signup/page.tsx | No interactive handler detected by static scan. |
 | /solutions | GREEN | src/app/solutions/page.tsx | No interactive handler detected by static scan. |
-| /subscriptions | RED | src/app/subscriptions/page.tsx | No interactive handler detected by static scan. |
+| /subscriptions | GREEN | src/app/subscriptions/page.tsx | No interactive handler detected by static scan. |
 | /terms | GREEN | src/app/terms/page.tsx | No interactive handler detected by static scan. |
 | /video-assessment/active | GREEN | src/app/video-assessment/active/page.tsx | Interactive handlers detected; action-level rows follow. |
 | /video-assessment/complete | GREEN | src/app/video-assessment/complete/page.tsx | No interactive handler detected by static scan. |
@@ -308,7 +308,7 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 
 ## 3. COMPLETE USER-ACTION INVENTORY
 
-967 handler records were discovered from `onClick`, `onSubmit`, `onChange`, `onKeyDown`, `onBlur`, and router navigation patterns. The exact file, line, action, nearby API association, persistence signal, and status are in the JSON/CSV inventory. A nearby API association is heuristic and must be confirmed during runtime testing.
+946 handler records were discovered from `onClick`, `onSubmit`, `onChange`, `onKeyDown`, `onBlur`, and router navigation patterns. The exact file, line, action, nearby API association, persistence signal, and status are in the JSON/CSV inventory. A nearby API association is heuristic and must be confirmed during runtime testing.
 
 ## 4. COMPLETE API INVENTORY
 
@@ -317,19 +317,19 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/admin/analytics | GREEN | prisma.user, prisma.application, prisma.interview, prisma.companySubscription | 1 | src/app/api/admin/analytics/route.ts:6 — GET /api/admin/analytics |
 | GET | /api/admin/audit-logs | GREEN |  | 1 | src/app/api/admin/audit-logs/route.ts:6 — GET /api/admin/audit-logs |
 | POST | /api/admin/candidate-credits/grants | GREEN |  | 0 | src/app/api/admin/candidate-credits/grants/route.ts:22 — POST /api/admin/candidate-credits/grants |
+| PUT | /api/admin/candidate-services/:id | GREEN |  | 0 | src/app/api/admin/candidate-services/[id]/route.ts:21 — PUT /api/admin/candidate-services/:id |
 | GET | /api/admin/candidate-services | GREEN | prisma.candidateServiceCatalog | 0 | src/app/api/admin/candidate-services/route.ts:21 — GET /api/admin/candidate-services |
 | POST | /api/admin/candidate-services | GREEN | prisma.candidateServiceCatalog | 0 | src/app/api/admin/candidate-services/route.ts:32 — POST /api/admin/candidate-services |
-| PUT | /api/admin/candidate-services/:id | GREEN |  | 0 | src/app/api/admin/candidate-services/[id]/route.ts:21 — PUT /api/admin/candidate-services/:id |
 | GET | /api/admin/communications/deliveries | GREEN | prisma.communicationDelivery | 1 | src/app/api/admin/communications/deliveries/route.ts:7 — GET /api/admin/communications/deliveries |
+| PATCH | /api/admin/communications/templates/:id | GREEN | prisma.communicationTemplate | 1 | src/app/api/admin/communications/templates/[id]/route.ts:22 — PATCH /api/admin/communications/templates/:id |
 | GET | /api/admin/communications/templates | GREEN | prisma.communicationTemplate | 1 | src/app/api/admin/communications/templates/route.ts:30 — GET /api/admin/communications/templates |
 | POST | /api/admin/communications/templates | GREEN | prisma.communicationTemplate | 1 | src/app/api/admin/communications/templates/route.ts:39 — POST /api/admin/communications/templates |
-| PATCH | /api/admin/communications/templates/:id | GREEN | prisma.communicationTemplate | 1 | src/app/api/admin/communications/templates/[id]/route.ts:22 — PATCH /api/admin/communications/templates/:id |
 | POST | /api/admin/communications/test | GREEN |  | 0 | src/app/api/admin/communications/test/route.ts:19 — POST /api/admin/communications/test |
 | GET | /api/admin/config | GREEN | prisma.adminConfiguration | 1 | src/app/api/admin/config/route.ts:63 — GET /api/admin/config |
 | POST | /api/admin/config | GREEN | prisma.adminConfiguration | 1 | src/app/api/admin/config/route.ts:74 — POST /api/admin/config |
+| POST | /api/admin/document-verification/:id | GREEN |  | 1 | src/app/api/admin/document-verification/[id]/route.ts:12 — POST /api/admin/document-verification/:id |
 | GET | /api/admin/document-verification | GREEN | prisma.documentVerification, prisma.employerProfile | 2 | src/app/api/admin/document-verification/route.ts:60 — GET /api/admin/document-verification |
 | POST | /api/admin/document-verification | GREEN | prisma.documentVerification, prisma.employerProfile | 2 | src/app/api/admin/document-verification/route.ts:141 — POST /api/admin/document-verification |
-| POST | /api/admin/document-verification/:id | GREEN |  | 1 | src/app/api/admin/document-verification/[id]/route.ts:12 — POST /api/admin/document-verification/:id |
 | GET | /api/admin/email-delivery/config | GREEN |  | 1 | src/app/api/admin/email-delivery/config/route.ts:41 — GET /api/admin/email-delivery/config |
 | POST | /api/admin/email-delivery/config | GREEN |  | 1 | src/app/api/admin/email-delivery/config/route.ts:51 — POST /api/admin/email-delivery/config |
 | POST | /api/admin/email-delivery/test | GREEN |  | 1 | src/app/api/admin/email-delivery/test/route.ts:13 — POST /api/admin/email-delivery/test |
@@ -345,12 +345,12 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | POST | /api/admin/pricing/calculate | GREEN |  | 0 | src/app/api/admin/pricing/calculate/route.ts:18 — POST /api/admin/pricing/calculate |
 | GET | /api/admin/readiness-templates | GREEN | prisma.mcqAssessment | 0 | src/app/api/admin/readiness-templates/route.ts:26 — GET /api/admin/readiness-templates |
 | POST | /api/admin/readiness-templates | GREEN | prisma.mcqAssessment | 0 | src/app/api/admin/readiness-templates/route.ts:45 — POST /api/admin/readiness-templates |
+| DELETE | /api/admin/recorded-assessment/questions/:id | GREEN | prisma.recordedAssessmentQuestionBank | 1 | src/app/api/admin/recorded-assessment/questions/[id]/route.ts:7 — DELETE /api/admin/recorded-assessment/questions/:id |
 | GET | /api/admin/recorded-assessment/questions | GREEN | prisma.recordedAssessmentQuestionBank | 2 | src/app/api/admin/recorded-assessment/questions/route.ts:21 — GET /api/admin/recorded-assessment/questions |
 | POST | /api/admin/recorded-assessment/questions | GREEN | prisma.recordedAssessmentQuestionBank | 2 | src/app/api/admin/recorded-assessment/questions/route.ts:36 — POST /api/admin/recorded-assessment/questions |
-| DELETE | /api/admin/recorded-assessment/questions/:id | GREEN | prisma.recordedAssessmentQuestionBank | 1 | src/app/api/admin/recorded-assessment/questions/[id]/route.ts:7 — DELETE /api/admin/recorded-assessment/questions/:id |
+| POST | /api/admin/recorded-assessment/restrictions/:id | GREEN | prisma.recordedAssessmentRestriction | 1 | src/app/api/admin/recorded-assessment/restrictions/[id]/route.ts:22 — POST /api/admin/recorded-assessment/restrictions/:id |
 | GET | /api/admin/recorded-assessment/restrictions | GREEN | prisma.recordedAssessmentRestriction, prisma.recordedAssessmentAttempt | 1 | src/app/api/admin/recorded-assessment/restrictions/route.ts:16 — GET /api/admin/recorded-assessment/restrictions |
 | POST | /api/admin/recorded-assessment/restrictions | GREEN | prisma.recordedAssessmentRestriction, prisma.recordedAssessmentAttempt | 1 | src/app/api/admin/recorded-assessment/restrictions/route.ts:33 — POST /api/admin/recorded-assessment/restrictions |
-| POST | /api/admin/recorded-assessment/restrictions/:id | GREEN | prisma.recordedAssessmentRestriction | 1 | src/app/api/admin/recorded-assessment/restrictions/[id]/route.ts:22 — POST /api/admin/recorded-assessment/restrictions/:id |
 | GET | /api/admin/referrals/analytics | GREEN | prisma.referralAttribution, prisma.referralReward, prisma.referralPayout | 1 | src/app/api/admin/referrals/analytics/route.ts:6 — GET /api/admin/referrals/analytics |
 | GET | /api/admin/referrals/config | GREEN |  | 1 | src/app/api/admin/referrals/config/route.ts:23 — GET /api/admin/referrals/config |
 | PUT | /api/admin/referrals/config | GREEN |  | 1 | src/app/api/admin/referrals/config/route.ts:47 — PUT /api/admin/referrals/config |
@@ -381,31 +381,31 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/admin/system/queues | GREEN | prisma.outboxEntry, prisma.securityAuditOutboxEvent, prisma.whatsAppInboundEvent, prisma.videoAnalysisJob | 1 | src/app/api/admin/system/queues/route.ts:34 — GET /api/admin/system/queues |
 | GET | /api/admin/system-health | GREEN |  | 2 | src/app/api/admin/system-health/route.ts:6 — GET /api/admin/system-health |
 | POST | /api/admin/tests/run | GREEN |  | 0 | src/app/api/admin/tests/run/route.ts:6 — POST /api/admin/tests/run |
+| PUT | /api/admin/typing-prompts/:id | GREEN |  | 0 | src/app/api/admin/typing-prompts/[id]/route.ts:21 — PUT /api/admin/typing-prompts/:id |
 | GET | /api/admin/typing-prompts | GREEN | prisma.typingPracticePrompt | 0 | src/app/api/admin/typing-prompts/route.ts:20 — GET /api/admin/typing-prompts |
 | POST | /api/admin/typing-prompts | GREEN | prisma.typingPracticePrompt | 0 | src/app/api/admin/typing-prompts/route.ts:31 — POST /api/admin/typing-prompts |
-| PUT | /api/admin/typing-prompts/:id | GREEN |  | 0 | src/app/api/admin/typing-prompts/[id]/route.ts:21 — PUT /api/admin/typing-prompts/:id |
 | POST | /api/admin/uploads/purge-infected | GREEN |  | 0 | src/app/api/admin/uploads/purge-infected/route.ts:13 — POST /api/admin/uploads/purge-infected |
 | POST | /api/admin/uploads/rescan | GREEN |  | 0 | src/app/api/admin/uploads/rescan/route.ts:10 — POST /api/admin/uploads/rescan |
 | GET | /api/admin/users | GREEN | prisma.user | 2 | src/app/api/admin/users/route.ts:13 — GET /api/admin/users |
 | POST | /api/agents/dispatch | GREEN | prisma.employerProfile | 1 | src/app/api/agents/dispatch/route.ts:45 — POST /api/agents/dispatch |
-| GET | /api/agreements/contracts | GREEN | prisma.company, prisma.hiringRequirement | 6 | src/app/api/agreements/contracts/route.ts:8 — GET /api/agreements/contracts |
-| POST | /api/agreements/contracts | GREEN | prisma.company, prisma.hiringRequirement | 6 | src/app/api/agreements/contracts/route.ts:40 — POST /api/agreements/contracts |
 | GET | /api/agreements/contracts/:id | GREEN |  | 2 | src/app/api/agreements/contracts/[id]/route.ts:38 — GET /api/agreements/contracts/:id |
 | PUT | /api/agreements/contracts/:id | GREEN |  | 2 | src/app/api/agreements/contracts/[id]/route.ts:69 — PUT /api/agreements/contracts/:id |
 | POST | /api/agreements/contracts/:id | GREEN |  | 2 | src/app/api/agreements/contracts/[id]/route.ts:101 — POST /api/agreements/contracts/:id |
-| GET | /api/agreements/requirements | GREEN | prisma.company | 6 | src/app/api/agreements/requirements/route.ts:8 — GET /api/agreements/requirements |
-| POST | /api/agreements/requirements | GREEN | prisma.company | 6 | src/app/api/agreements/requirements/route.ts:29 — POST /api/agreements/requirements |
+| GET | /api/agreements/contracts | GREEN | prisma.company, prisma.hiringRequirement | 6 | src/app/api/agreements/contracts/route.ts:8 — GET /api/agreements/contracts |
+| POST | /api/agreements/contracts | GREEN | prisma.company, prisma.hiringRequirement | 6 | src/app/api/agreements/contracts/route.ts:40 — POST /api/agreements/contracts |
 | GET | /api/agreements/requirements/:id | GREEN |  | 1 | src/app/api/agreements/requirements/[id]/route.ts:6 — GET /api/agreements/requirements/:id |
 | PATCH | /api/agreements/requirements/:id | GREEN |  | 1 | src/app/api/agreements/requirements/[id]/route.ts:27 — PATCH /api/agreements/requirements/:id |
-| GET | /api/agreements/templates | GREEN |  | 4 | src/app/api/agreements/templates/route.ts:6 — GET /api/agreements/templates |
-| POST | /api/agreements/templates | GREEN |  | 4 | src/app/api/agreements/templates/route.ts:18 — POST /api/agreements/templates |
+| GET | /api/agreements/requirements | GREEN | prisma.company | 6 | src/app/api/agreements/requirements/route.ts:8 — GET /api/agreements/requirements |
+| POST | /api/agreements/requirements | GREEN | prisma.company | 6 | src/app/api/agreements/requirements/route.ts:29 — POST /api/agreements/requirements |
 | GET | /api/agreements/templates/:id | GREEN |  | 1 | src/app/api/agreements/templates/[id]/route.ts:6 — GET /api/agreements/templates/:id |
 | PUT | /api/agreements/templates/:id | GREEN |  | 1 | src/app/api/agreements/templates/[id]/route.ts:23 — PUT /api/agreements/templates/:id |
 | POST | /api/agreements/templates/:id | GREEN |  | 1 | src/app/api/agreements/templates/[id]/route.ts:47 — POST /api/agreements/templates/:id |
 | DELETE | /api/agreements/templates/:id | GREEN |  | 1 | src/app/api/agreements/templates/[id]/route.ts:74 — DELETE /api/agreements/templates/:id |
-| GET | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 7 | src/app/api/applications/route.ts:16 — GET /api/applications |
-| POST | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 7 | src/app/api/applications/route.ts:48 — POST /api/applications |
-| PATCH | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 7 | src/app/api/applications/route.ts:133 — PATCH /api/applications |
+| GET | /api/agreements/templates | GREEN |  | 4 | src/app/api/agreements/templates/route.ts:6 — GET /api/agreements/templates |
+| POST | /api/agreements/templates | GREEN |  | 4 | src/app/api/agreements/templates/route.ts:18 — POST /api/agreements/templates |
+| GET | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 8 | src/app/api/applications/route.ts:17 — GET /api/applications |
+| POST | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 8 | src/app/api/applications/route.ts:49 — POST /api/applications |
+| PATCH | /api/applications | GREEN | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | 8 | src/app/api/applications/route.ts:134 — PATCH /api/applications |
 | GET | /api/assessment/mcq/assigned | GREEN | prisma.candidateProfile, prisma.application, prisma.mcqAttempt | 1 | src/app/api/assessment/mcq/assigned/route.ts:15 — GET /api/assessment/mcq/assigned |
 | POST | /api/assessment/mcq/start | GREEN | prisma.candidateProfile, prisma.mcqAssessment, prisma.application, prisma.candidateReadiness, prisma.mcqAttempt | 1 | src/app/api/assessment/mcq/start/route.ts:12 — POST /api/assessment/mcq/start |
 | POST | /api/assessment/mcq/submit | GREEN | prisma.candidateProfile, prisma.mcqAttempt, prisma.candidateReadiness | 1 | src/app/api/assessment/mcq/submit/route.ts:18 — POST /api/assessment/mcq/submit |
@@ -413,9 +413,9 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/assessment/mock-interview/session | GREEN | prisma.candidateProfile, prisma.mockInterviewSession | 3 | src/app/api/assessment/mock-interview/session/route.ts:11 — GET /api/assessment/mock-interview/session |
 | POST | /api/assessment/mock-interview/start | GREEN | prisma.candidateProfile, prisma.mockInterviewSession | 1 | src/app/api/assessment/mock-interview/start/route.ts:13 — POST /api/assessment/mock-interview/start |
 | POST | /api/assessment/mock-interview/turn | GREEN | prisma.mockInterviewSession, prisma.candidateProfile | 1 | src/app/api/assessment/mock-interview/turn/route.ts:51 — POST /api/assessment/mock-interview/turn |
+| GET | /api/assessment/typing/:id | GREEN | prisma.typingAssessment | 2 | src/app/api/assessment/typing/[id]/route.ts:6 — GET /api/assessment/typing/:id |
 | GET | /api/assessment/typing/prompt | GREEN | prisma.typingPracticePrompt | 1 | src/app/api/assessment/typing/prompt/route.ts:6 — GET /api/assessment/typing/prompt |
 | POST | /api/assessment/typing/submit | GREEN | prisma.typingPracticePrompt, prisma.candidateProfile, prisma.typingAssessment | 1 | src/app/api/assessment/typing/submit/route.ts:16 — POST /api/assessment/typing/submit |
-| GET | /api/assessment/typing/:id | GREEN | prisma.typingAssessment | 2 | src/app/api/assessment/typing/[id]/route.ts:6 — GET /api/assessment/typing/:id |
 | POST | /api/auth/employer-register | GREEN | prisma.user | 1 | src/app/api/auth/employer-register/route.ts:16 — POST /api/auth/employer-register |
 | POST | /api/auth/forgot-password | GREEN | db.findUserByEmail | 2 | src/app/api/auth/forgot-password/route.ts:11 — POST /api/auth/forgot-password |
 | POST | /api/auth/login | GREEN | db.findUserByEmail | 3 | src/app/api/auth/login/route.ts:19 — POST /api/auth/login |
@@ -433,20 +433,20 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/candidate/readiness | GREEN | prisma.candidateProfile, prisma.mcqAssessment, prisma.candidateReadiness | 1 | src/app/api/candidate/readiness/route.ts:20 — GET /api/candidate/readiness |
 | POST | /api/candidate/readiness | GREEN | prisma.candidateProfile, prisma.mcqAssessment, prisma.candidateReadiness | 1 | src/app/api/candidate/readiness/route.ts:41 — POST /api/candidate/readiness |
 | GET | /api/candidate/recommended-jobs | GREEN | prisma.candidateProfile, prisma.jobListing | 0 | src/app/api/candidate/recommended-jobs/route.ts:7 — GET /api/candidate/recommended-jobs |
-| POST | /api/candidate/recorded-assessment/attempts | GREEN |  | 1 | src/app/api/candidate/recorded-assessment/attempts/route.ts:9 — POST /api/candidate/recorded-assessment/attempts |
 | POST | /api/candidate/recorded-assessment/attempts/:id/complete | GREEN | prisma.recordedAssessmentAttempt | 0 | src/app/api/candidate/recorded-assessment/attempts/[id]/complete/route.ts:6 — POST /api/candidate/recorded-assessment/attempts/:id/complete |
 | POST | /api/candidate/recorded-assessment/attempts/:id/proctoring | GREEN |  | 0 | src/app/api/candidate/recorded-assessment/attempts/[id]/proctoring/route.ts:22 — POST /api/candidate/recorded-assessment/attempts/:id/proctoring |
 | POST | /api/candidate/recorded-assessment/attempts/:id/responses | GREEN | prisma.recordedAssessmentAttempt, prisma.storedFile, prisma.recordedAssessmentResponse | 0 | src/app/api/candidate/recorded-assessment/attempts/[id]/responses/route.ts:15 — POST /api/candidate/recorded-assessment/attempts/:id/responses |
 | GET | /api/candidate/recorded-assessment/attempts/:id | GREEN | prisma.recordedAssessmentAttempt | 1 | src/app/api/candidate/recorded-assessment/attempts/[id]/route.ts:6 — GET /api/candidate/recorded-assessment/attempts/:id |
 | POST | /api/candidate/recorded-assessment/attempts/:id/start | GREEN | prisma.recordedAssessmentAttempt | 0 | src/app/api/candidate/recorded-assessment/attempts/[id]/start/route.ts:11 — POST /api/candidate/recorded-assessment/attempts/:id/start |
+| POST | /api/candidate/recorded-assessment/attempts | GREEN |  | 1 | src/app/api/candidate/recorded-assessment/attempts/route.ts:9 — POST /api/candidate/recorded-assessment/attempts |
 | GET | /api/candidate/recorded-assessment/restrictions | GREEN | prisma.recordedAssessmentRestriction | 1 | src/app/api/candidate/recorded-assessment/restrictions/route.ts:10 — GET /api/candidate/recorded-assessment/restrictions |
 | POST | /api/candidate/recorded-assessment/restrictions | GREEN | prisma.recordedAssessmentRestriction | 1 | src/app/api/candidate/recorded-assessment/restrictions/route.ts:26 — POST /api/candidate/recorded-assessment/restrictions |
 | GET | /api/candidate/saved-jobs | GREEN | prisma.savedJob, prisma.jobListing | 3 | src/app/api/candidate/saved-jobs/route.ts:14 — GET /api/candidate/saved-jobs |
 | POST | /api/candidate/saved-jobs | GREEN | prisma.savedJob, prisma.jobListing | 3 | src/app/api/candidate/saved-jobs/route.ts:23 — POST /api/candidate/saved-jobs |
 | DELETE | /api/candidate/saved-jobs | GREEN | prisma.savedJob, prisma.jobListing | 3 | src/app/api/candidate/saved-jobs/route.ts:35 — DELETE /api/candidate/saved-jobs |
 | POST | /api/candidate/services/:serviceKey/request | GREEN | prisma.candidateProfile | 0 | src/app/api/candidate/services/[serviceKey]/request/route.ts:18 — POST /api/candidate/services/:serviceKey/request |
-| GET | /api/candidate/sourcing-invitations | GREEN | prisma.candidateProfile, prisma.candidateSourcingRelationship | 1 | src/app/api/candidate/sourcing-invitations/route.ts:6 — GET /api/candidate/sourcing-invitations |
 | POST | /api/candidate/sourcing-invitations/:id/decision | GREEN |  | 0 | src/app/api/candidate/sourcing-invitations/[id]/decision/route.ts:10 — POST /api/candidate/sourcing-invitations/:id/decision |
+| GET | /api/candidate/sourcing-invitations | GREEN | prisma.candidateProfile, prisma.candidateSourcingRelationship | 1 | src/app/api/candidate/sourcing-invitations/route.ts:6 — GET /api/candidate/sourcing-invitations |
 | GET | /api/candidate/video-resume | GREEN | prisma.candidateProfile, prisma.storedFile, prisma.videoResume, prisma.videoAnalysisJob | 1 | src/app/api/candidate/video-resume/route.ts:18 — GET /api/candidate/video-resume |
 | POST | /api/candidate/video-resume | GREEN | prisma.candidateProfile, prisma.storedFile, prisma.videoResume, prisma.videoAnalysisJob | 1 | src/app/api/candidate/video-resume/route.ts:46 — POST /api/candidate/video-resume |
 | GET | /api/candidate/video-resume/status | GREEN | prisma.videoResume, prisma.employerProfile, prisma.application | 1 | src/app/api/candidate/video-resume/status/route.ts:5 — GET /api/candidate/video-resume/status |
@@ -454,22 +454,21 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | POST | /api/cron/recorded-assessment-analysis | GREEN | prisma.recordedAssessmentAnalysisJob, prisma.recordedAssessmentResponse | 0 | src/app/api/cron/recorded-assessment-analysis/route.ts:70 — POST /api/cron/recorded-assessment-analysis |
 | GET | /api/cron/referrals-reconciliation | GREEN |  | 0 | src/app/api/cron/referrals-reconciliation/route.ts:111 — GET /api/cron/referrals-reconciliation |
 | POST | /api/cron/referrals-reconciliation | GREEN |  | 0 | src/app/api/cron/referrals-reconciliation/route.ts:115 — POST /api/cron/referrals-reconciliation |
-| POST | /api/employer/assessments | GREEN | prisma.jobListing, prisma.mcqAssessment | 1 | src/app/api/employer/assessments/route.ts:17 — POST /api/employer/assessments |
-| GET | /api/employer/assessments | GREEN | prisma.jobListing, prisma.mcqAssessment | 1 | src/app/api/employer/assessments/route.ts:70 — GET /api/employer/assessments |
+| PUT | /api/employer/assessments/:id/questions/:questionId | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 0 | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:28 — PUT /api/employer/assessments/:id/questions/:questionId |
+| DELETE | /api/employer/assessments/:id/questions/:questionId | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 0 | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:116 — DELETE /api/employer/assessments/:id/questions/:questionId |
 | POST | /api/employer/assessments/:id/questions/reorder | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 0 | src/app/api/employer/assessments/[id]/questions/reorder/route.ts:15 — POST /api/employer/assessments/:id/questions/reorder |
 | POST | /api/employer/assessments/:id/questions | GREEN | prisma.mcqAssessment, prisma.mcqAttempt, prisma.mcqQuestion | 0 | src/app/api/employer/assessments/[id]/questions/route.ts:28 — POST /api/employer/assessments/:id/questions |
 | GET | /api/employer/assessments/:id/questions | GREEN | prisma.mcqAssessment, prisma.mcqAttempt, prisma.mcqQuestion | 0 | src/app/api/employer/assessments/[id]/questions/route.ts:109 — GET /api/employer/assessments/:id/questions |
-| PUT | /api/employer/assessments/:id/questions/:questionId | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 0 | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:28 — PUT /api/employer/assessments/:id/questions/:questionId |
-| DELETE | /api/employer/assessments/:id/questions/:questionId | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 0 | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:116 — DELETE /api/employer/assessments/:id/questions/:questionId |
 | PUT | /api/employer/assessments/:id | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 1 | src/app/api/employer/assessments/[id]/route.ts:17 — PUT /api/employer/assessments/:id |
 | DELETE | /api/employer/assessments/:id | GREEN | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | 1 | src/app/api/employer/assessments/[id]/route.ts:78 — DELETE /api/employer/assessments/:id |
-| GET | /api/employer/billing/invoices | GREEN | prisma.commercialAgreement, prisma.invoice | 1 | src/app/api/employer/billing/invoices/route.ts:7 — GET /api/employer/billing/invoices |
+| POST | /api/employer/assessments | GREEN | prisma.jobListing, prisma.mcqAssessment | 1 | src/app/api/employer/assessments/route.ts:17 — POST /api/employer/assessments |
+| GET | /api/employer/assessments | GREEN | prisma.jobListing, prisma.mcqAssessment | 1 | src/app/api/employer/assessments/route.ts:70 — GET /api/employer/assessments |
 | POST | /api/employer/billing/invoices/:id/pay | GREEN | prisma.invoice, prisma.commercialAgreement | 0 | src/app/api/employer/billing/invoices/[id]/pay/route.ts:8 — POST /api/employer/billing/invoices/:id/pay |
 | POST | /api/employer/billing/invoices/:id/receipt | GREEN | prisma.invoice, prisma.commercialAgreement, prisma.storedFile, prisma.company | 0 | src/app/api/employer/billing/invoices/[id]/receipt/route.ts:19 — POST /api/employer/billing/invoices/:id/receipt |
+| GET | /api/employer/billing/invoices | GREEN | prisma.commercialAgreement, prisma.invoice | 1 | src/app/api/employer/billing/invoices/route.ts:7 — GET /api/employer/billing/invoices |
 | GET | /api/employer/candidate-collections | GREEN | prisma.employerCandidateCollection, prisma.application | 0 | src/app/api/employer/candidate-collections/route.ts:10 — GET /api/employer/candidate-collections |
 | POST | /api/employer/candidate-collections | GREEN | prisma.employerCandidateCollection, prisma.application | 0 | src/app/api/employer/candidate-collections/route.ts:11 — POST /api/employer/candidate-collections |
 | PATCH | /api/employer/candidate-collections | GREEN | prisma.employerCandidateCollection, prisma.application | 0 | src/app/api/employer/candidate-collections/route.ts:12 — PATCH /api/employer/candidate-collections |
-| GET | /api/employer/candidates | GREEN | prisma.application | 1 | src/app/api/employer/candidates/route.ts:10 — GET /api/employer/candidates |
 | GET | /api/employer/candidates/:id/notes | GREEN | prisma.application, prisma.employerCandidateNote | 0 | src/app/api/employer/candidates/[id]/notes/route.ts:10 — GET /api/employer/candidates/:id/notes |
 | POST | /api/employer/candidates/:id/notes | GREEN | prisma.application, prisma.employerCandidateNote | 0 | src/app/api/employer/candidates/[id]/notes/route.ts:11 — POST /api/employer/candidates/:id/notes |
 | GET | /api/employer/candidates/:id | GREEN | prisma.candidateProfile | 1 | src/app/api/employer/candidates/[id]/route.ts:7 — GET /api/employer/candidates/:id |
@@ -477,21 +476,20 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/employer/candidates/:id/tags | GREEN | prisma.application, prisma.employerCandidateTag | 0 | src/app/api/employer/candidates/[id]/tags/route.ts:9 — GET /api/employer/candidates/:id/tags |
 | POST | /api/employer/candidates/:id/tags | GREEN | prisma.application, prisma.employerCandidateTag | 0 | src/app/api/employer/candidates/[id]/tags/route.ts:10 — POST /api/employer/candidates/:id/tags |
 | DELETE | /api/employer/candidates/:id/tags | GREEN | prisma.application, prisma.employerCandidateTag | 0 | src/app/api/employer/candidates/[id]/tags/route.ts:11 — DELETE /api/employer/candidates/:id/tags |
+| GET | /api/employer/candidates | GREEN | prisma.application | 1 | src/app/api/employer/candidates/route.ts:10 — GET /api/employer/candidates |
 | GET | /api/employer/company | GREEN | prisma.employerProfile, prisma.company | 1 | src/app/api/employer/company/route.ts:19 — GET /api/employer/company |
 | PUT | /api/employer/company | GREEN | prisma.employerProfile, prisma.company | 1 | src/app/api/employer/company/route.ts:33 — PUT /api/employer/company |
 | GET | /api/employer/dashboard | GREEN | prisma.jobListing, prisma.application, prisma.companyCredits, prisma.interview | 0 | src/app/api/employer/dashboard/route.ts:6 — GET /api/employer/dashboard |
 | GET | /api/employer/hiring-pipeline/readiness | GREEN | prisma.employerProfile, prisma.application | 0 | src/app/api/employer/hiring-pipeline/readiness/route.ts:10 — GET /api/employer/hiring-pipeline/readiness |
-| GET | /api/employer/interviews/pending-feedback | GREEN | prisma.interviewRoundProgress | 1 | src/app/api/employer/interviews/pending-feedback/route.ts:7 — GET /api/employer/interviews/pending-feedback |
-| GET | /api/employer/interviews | GREEN | prisma.employerProfile, prisma.interview | 5 | src/app/api/employer/interviews/route.ts:15 — GET /api/employer/interviews |
-| POST | /api/employer/interviews/schedule | GREEN | prisma.interviewRoundProgress, prisma.application, prisma.employerProfile, prisma.interviewRound, prisma.notification | 1 | src/app/api/employer/interviews/schedule/route.ts:21 — POST /api/employer/interviews/schedule |
 | GET | /api/employer/interviews/:id/calendar | YELLOW | prisma.interview, prisma.employerProfile | 0 | src/app/api/employer/interviews/[id]/calendar/route.ts:5 — GET /api/employer/interviews/:id/calendar |
 | GET | /api/employer/interviews/:id/feedback | GREEN | prisma.interview, prisma.interviewFeedback | 0 | src/app/api/employer/interviews/[id]/feedback/route.ts:33 — GET /api/employer/interviews/:id/feedback |
 | POST | /api/employer/interviews/:id/feedback | GREEN | prisma.interview, prisma.interviewFeedback | 0 | src/app/api/employer/interviews/[id]/feedback/route.ts:48 — POST /api/employer/interviews/:id/feedback |
 | POST | /api/employer/interviews/:id/round-decision | GREEN | prisma.interview, prisma.interviewRound, prisma.interviewRoundInterviewer, prisma.workflowInstance, prisma.workflowApproval | 0 | src/app/api/employer/interviews/[id]/round-decision/route.ts:15 — POST /api/employer/interviews/:id/round-decision |
 | GET | /api/employer/interviews/:id | GREEN | prisma.interview, prisma.employerProfile | 5 | src/app/api/employer/interviews/[id]/route.ts:33 — GET /api/employer/interviews/:id |
 | PATCH | /api/employer/interviews/:id | GREEN | prisma.interview, prisma.employerProfile | 5 | src/app/api/employer/interviews/[id]/route.ts:66 — PATCH /api/employer/interviews/:id |
-| GET | /api/employer/jobs | GREEN | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | 8 | src/app/api/employer/jobs/route.ts:30 — GET /api/employer/jobs |
-| POST | /api/employer/jobs | GREEN | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | 8 | src/app/api/employer/jobs/route.ts:54 — POST /api/employer/jobs |
+| GET | /api/employer/interviews/pending-feedback | GREEN | prisma.interviewRoundProgress | 1 | src/app/api/employer/interviews/pending-feedback/route.ts:7 — GET /api/employer/interviews/pending-feedback |
+| GET | /api/employer/interviews | GREEN | prisma.employerProfile, prisma.interview | 5 | src/app/api/employer/interviews/route.ts:15 — GET /api/employer/interviews |
+| POST | /api/employer/interviews/schedule | GREEN | prisma.interviewRoundProgress, prisma.application, prisma.employerProfile, prisma.interviewRound, prisma.notification | 1 | src/app/api/employer/interviews/schedule/route.ts:21 — POST /api/employer/interviews/schedule |
 | GET | /api/employer/jobs/:id/interview-process | GREEN | prisma.jobListing, prisma.jobInterviewProcess, prisma.employerProfile | 0 | src/app/api/employer/jobs/[id]/interview-process/route.ts:35 — GET /api/employer/jobs/:id/interview-process |
 | PUT | /api/employer/jobs/:id/interview-process | GREEN | prisma.jobListing, prisma.jobInterviewProcess, prisma.employerProfile | 0 | src/app/api/employer/jobs/[id]/interview-process/route.ts:60 — PUT /api/employer/jobs/:id/interview-process |
 | POST | /api/employer/jobs/:id/match | GREEN | prisma.jobListing | 0 | src/app/api/employer/jobs/[id]/match/route.ts:8 — POST /api/employer/jobs/:id/match |
@@ -503,6 +501,8 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | DELETE | /api/employer/jobs/:id | GREEN | prisma.jobListing, prisma.employerProfile | 5 | src/app/api/employer/jobs/[id]/route.ts:119 — DELETE /api/employer/jobs/:id |
 | POST | /api/employer/jobs/:id/source-candidates/action | GREEN | prisma.jobListing, prisma.candidateProfile | 0 | src/app/api/employer/jobs/[id]/source-candidates/action/route.ts:9 — POST /api/employer/jobs/:id/source-candidates/action |
 | GET | /api/employer/jobs/:id/source-candidates | GREEN | prisma.jobListing, prisma.candidateProfile | 0 | src/app/api/employer/jobs/[id]/source-candidates/route.ts:8 — GET /api/employer/jobs/:id/source-candidates |
+| GET | /api/employer/jobs | GREEN | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | 8 | src/app/api/employer/jobs/route.ts:30 — GET /api/employer/jobs |
+| POST | /api/employer/jobs | GREEN | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | 8 | src/app/api/employer/jobs/route.ts:54 — POST /api/employer/jobs |
 | POST | /api/employer/managed-hiring/join | GREEN | prisma.employerProfile, prisma.application, prisma.pphPlacement | 1 | src/app/api/employer/managed-hiring/join/route.ts:18 — POST /api/employer/managed-hiring/join |
 | GET | /api/employer/managed-hiring/join | GREEN | prisma.employerProfile, prisma.application, prisma.pphPlacement | 1 | src/app/api/employer/managed-hiring/join/route.ts:46 — GET /api/employer/managed-hiring/join |
 | PATCH | /api/employer/managed-hiring/join | GREEN | prisma.employerProfile, prisma.application, prisma.pphPlacement | 1 | src/app/api/employer/managed-hiring/join/route.ts:62 — PATCH /api/employer/managed-hiring/join |
@@ -525,8 +525,8 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/internal/workflows/recover | GREEN |  | 0 | src/app/api/internal/workflows/recover/route.ts:28 — GET /api/internal/workflows/recover |
 | GET | /api/interviews/room | GREEN | prisma.interview, prisma.employerProfile, prisma.interviewSignal, prisma.interviewRoundProgress | 1 | src/app/api/interviews/room/route.ts:66 — GET /api/interviews/room |
 | POST | /api/interviews/room | GREEN | prisma.interview, prisma.employerProfile, prisma.interviewSignal, prisma.interviewRoundProgress | 1 | src/app/api/interviews/room/route.ts:112 — POST /api/interviews/room |
-| GET | /api/jobs/search | GREEN | prisma.jobListing | 1 | src/app/api/jobs/search/route.ts:5 — GET /api/jobs/search |
 | GET | /api/jobs/:id | GREEN | prisma.jobListing | 3 | src/app/api/jobs/[id]/route.ts:5 — GET /api/jobs/:id |
+| GET | /api/jobs/search | GREEN | prisma.jobListing | 1 | src/app/api/jobs/search/route.ts:5 — GET /api/jobs/search |
 | GET | /api/notifications | GREEN | prisma.notification | 1 | src/app/api/notifications/route.ts:10 — GET /api/notifications |
 | PUT | /api/notifications | GREEN | prisma.notification | 1 | src/app/api/notifications/route.ts:23 — PUT /api/notifications |
 | POST | /api/payments/checkout | GREEN | prisma.employerProfile, prisma.paymentOrder, prisma.subscriptionPlan | 1 | src/app/api/payments/checkout/route.ts:165 — POST /api/payments/checkout |
@@ -554,7 +554,7 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /admin/agreements/builder | GET | /api/agreements/requirements | GREEN | src/app/admin/agreements/builder/page.tsx:31 — frontend call GET /api/agreements/requirements |
 | /admin/agreements/builder | GET | /api/agreements/templates | GREEN | src/app/admin/agreements/builder/page.tsx:32 — frontend call GET /api/agreements/templates |
 | /admin/agreements/builder | POST | /api/agreements/contracts | GREEN | src/app/admin/agreements/builder/page.tsx:86 — frontend call POST /api/agreements/contracts |
-| /admin/agreements/templates | POST | /api/agreements/templates | GREEN | src/app/admin/agreements/templates/page.tsx:15 — frontend call POST /api/agreements/templates |
+| /admin/agreements/templates | GET | /api/agreements/templates | GREEN | src/app/admin/agreements/templates/page.tsx:15 — frontend call GET /api/agreements/templates |
 | /admin/agreements/templates | POST | /api/agreements/templates | GREEN | src/app/admin/agreements/templates/page.tsx:29 — frontend call POST /api/agreements/templates |
 | /admin/communications | GET | /api/admin/communications/templates | GREEN | src/app/admin/communications/page.tsx:14 — frontend call GET /api/admin/communications/templates |
 | /admin/communications | GET | /api/admin/communications/deliveries?${q} | GREEN | src/app/admin/communications/page.tsx:14 — frontend call GET /api/admin/communications/deliveries?${q} |
@@ -578,7 +578,7 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /admin/managed-hiring/operations | GET | /api/admin/invoices | GREEN | src/app/admin/managed-hiring/operations/page.tsx:25 — frontend call GET /api/admin/invoices |
 | /admin/managed-hiring/pipeline | GET | /api/agreements/requirements | GREEN | src/app/admin/managed-hiring/pipeline/page.tsx:13 — frontend call GET /api/agreements/requirements |
 | /admin/managed-hiring/requests | GET | /api/agreements/requirements | GREEN | src/app/admin/managed-hiring/requests/page.tsx:14 — frontend call GET /api/agreements/requirements |
-| /admin/managed-hiring/templates | POST | /api/agreements/templates | GREEN | src/app/admin/managed-hiring/templates/page.tsx:17 — frontend call POST /api/agreements/templates |
+| /admin/managed-hiring/templates | GET | /api/agreements/templates | GREEN | src/app/admin/managed-hiring/templates/page.tsx:17 — frontend call GET /api/agreements/templates |
 | /admin/managed-hiring/templates | POST | /api/agreements/templates/${id} | GREEN | src/app/admin/managed-hiring/templates/page.tsx:31 — frontend call POST /api/agreements/templates/${id} |
 | /admin/managed-hiring/templates | DELETE | /api/agreements/templates/${id} | GREEN | src/app/admin/managed-hiring/templates/page.tsx:50 — frontend call DELETE /api/agreements/templates/${id} |
 | /admin/payment-gateways | GET | /api/admin/payment-gateway/config | GREEN | src/app/admin/payment-gateways/page.tsx:31 — frontend call GET /api/admin/payment-gateway/config |
@@ -620,6 +620,8 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /ai/mock-interview/summary | GET | /api/assessment/mock-interview/session?id=${sessionId} | GREEN | src/app/ai/mock-interview/summary/page.tsx:26 — frontend call GET /api/assessment/mock-interview/session?id=${sessionId} |
 | /applications | GET | /api/applications | GREEN | src/app/applications/page.tsx:15 — frontend call GET /api/applications |
 | /applications/timeline | GET | /api/applications | GREEN | src/app/applications/timeline/page.tsx:28 — frontend call GET /api/applications |
+| /applications/withdraw | GET | /api/applications | GREEN | src/app/applications/withdraw/page.tsx:69 — frontend call GET /api/applications |
+| /applications/withdraw | PATCH | /api/applications | GREEN | src/app/applications/withdraw/page.tsx:98 — frontend call PATCH /api/applications |
 | /assessment/mcq/active | POST | /api/assessment/mcq/start | GREEN | src/app/assessment/mcq/active/page.tsx:76 — frontend call POST /api/assessment/mcq/start |
 | /assessment/mcq/active | POST | /api/assessment/mcq/submit | GREEN | src/app/assessment/mcq/active/page.tsx:133 — frontend call POST /api/assessment/mcq/submit |
 | /assessment/mcq | GET | /api/assessment/mcq/assigned | GREEN | src/app/assessment/mcq/page.tsx:23 — frontend call GET /api/assessment/mcq/assigned |
@@ -635,7 +637,7 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /dashboard | POST | /api/auth/logout | GREEN | src/app/dashboard/page.tsx:24 — frontend call POST /api/auth/logout |
 | /dashboard | GET | /api/candidate/profile | GREEN | src/app/dashboard/page.tsx:33 — frontend call GET /api/candidate/profile |
 | /dashboard | GET | /api/candidate/availability | GREEN | src/app/dashboard/page.tsx:45 — frontend call GET /api/candidate/availability |
-| /dashboard | PUT | /api/applications | GREEN | src/app/dashboard/page.tsx:50 — frontend call PUT /api/applications |
+| /dashboard | GET | /api/applications | GREEN | src/app/dashboard/page.tsx:50 — frontend call GET /api/applications |
 | /dashboard | PUT | /api/candidate/availability | GREEN | src/app/dashboard/page.tsx:63 — frontend call PUT /api/candidate/availability |
 | /employer/active-video-interview-interviewer-view | GET | /api/interviews/room?roomId=${encodeURIComponent(requestedRoomId)} | GREEN | src/app/employer/active-video-interview-interviewer-view/page.tsx:25 — frontend call GET /api/interviews/room?roomId=${encodeURIComponent(requestedRoomId)} |
 | /employer/active-video-interview-interviewer-view | GET | /api/employer/interviews/${encodeURIComponent(id)} | GREEN | src/app/employer/active-video-interview-interviewer-view/page.tsx:32 — frontend call GET /api/employer/interviews/${encodeURIComponent(id)} |
@@ -663,7 +665,7 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /employer/employer-registration-otp-verification | POST | /api/auth/verify-otp | GREEN | src/app/employer/employer-registration-otp-verification/page.tsx:155 — frontend call POST /api/auth/verify-otp |
 | /employer/employer-registration-plan-selection | GET | /api/employer/subscribe | GREEN | src/app/employer/employer-registration-plan-selection/page.tsx:28 — frontend call GET /api/employer/subscribe |
 | /employer/employer-registration-plan-selection | POST | /api/employer/subscribe | GREEN | src/app/employer/employer-registration-plan-selection/page.tsx:45 — frontend call POST /api/employer/subscribe |
-| /employer/employer-sign-in | POST | /api/auth/login | GREEN | src/app/employer/employer-sign-in/page.tsx:48 — frontend call POST /api/auth/login |
+| /employer/employer-sign-in | POST | /api/auth/login | GREEN | src/app/employer/employer-sign-in/page.tsx:49 — frontend call POST /api/auth/login |
 | /employer/employer-subscription-and-plans | GET | /api/agreements/contracts | GREEN | src/app/employer/employer-subscription-and-plans/page.tsx:14 — frontend call GET /api/agreements/contracts |
 | /employer/final-round-feedback | GET | /api/employer/interviews/${encodeURIComponent(interviewId)}/feedback | GREEN | src/app/employer/final-round-feedback/page.tsx:30 — frontend call GET /api/employer/interviews/${encodeURIComponent(interviewId)}/feedback |
 | /employer/final-round-feedback | POST | /api/employer/interviews/${encodeURIComponent(interviewId)}/feedback | GREEN | src/app/employer/final-round-feedback/page.tsx:51 — frontend call POST /api/employer/interviews/${encodeURIComponent(interviewId)}/feedback |
@@ -717,20 +719,20 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | /forgot-password/otp | POST | /api/auth/forgot-password | GREEN | src/app/forgot-password/otp/page.tsx:89 — frontend call POST /api/auth/forgot-password |
 | /forgot-password | POST | /api/auth/forgot-password | GREEN | src/app/forgot-password/page.tsx:22 — frontend call POST /api/auth/forgot-password |
 | /interviews | GET | /api/interviews | GREEN | src/app/interviews/page.tsx:14 — frontend call GET /api/interviews |
+| /jobs/:id/apply | GET | /api/candidate/profile | GREEN | src/app/jobs/[id]/apply/page.tsx:21 — frontend call GET /api/candidate/profile |
+| /jobs/:id/apply | GET | /api/jobs/${jobId} | GREEN | src/app/jobs/[id]/apply/page.tsx:31 — frontend call GET /api/jobs/${jobId} |
+| /jobs/:id/apply | POST | /api/applications | GREEN | src/app/jobs/[id]/apply/page.tsx:44 — frontend call POST /api/applications |
+| /jobs/:id | GET | /api/jobs/${jobId} | GREEN | src/app/jobs/[id]/page.tsx:41 — frontend call GET /api/jobs/${jobId} |
+| /jobs/:id | GET | /api/candidate/saved-jobs | GREEN | src/app/jobs/[id]/page.tsx:52 — frontend call GET /api/candidate/saved-jobs |
+| /jobs/:id | POST | /api/applications | GREEN | src/app/jobs/[id]/page.tsx:66 — frontend call POST /api/applications |
+| /jobs/:id | POST | /api/candidate/saved-jobs | GREEN | src/app/jobs/[id]/page.tsx:85 — frontend call POST /api/candidate/saved-jobs |
+| /jobs/:id | DELETE | /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} | GREEN | src/app/jobs/[id]/page.tsx:90 — frontend call DELETE /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} |
 | /jobs | GET | /api/jobs/search?q=${encodeURIComponent(query)} | GREEN | src/app/jobs/page.tsx:33 — frontend call GET /api/jobs/search?q=${encodeURIComponent(query)} |
 | /jobs | GET | /api/candidate/saved-jobs | GREEN | src/app/jobs/page.tsx:50 — frontend call GET /api/candidate/saved-jobs |
 | /jobs | POST | /api/applications | GREEN | src/app/jobs/page.tsx:62 — frontend call POST /api/applications |
 | /jobs/saved | GET | /api/candidate/saved-jobs | GREEN | src/app/jobs/saved/page.tsx:34 — frontend call GET /api/candidate/saved-jobs |
 | /jobs/saved | DELETE | /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} | GREEN | src/app/jobs/saved/page.tsx:54 — frontend call DELETE /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} |
 | /jobs/saved | POST | /api/applications | GREEN | src/app/jobs/saved/page.tsx:69 — frontend call POST /api/applications |
-| /jobs/:id/apply | GET | /api/candidate/profile | GREEN | src/app/jobs/[id]/apply/page.tsx:21 — frontend call GET /api/candidate/profile |
-| /jobs/:id/apply | POST | /api/jobs/${jobId} | GREEN | src/app/jobs/[id]/apply/page.tsx:31 — frontend call POST /api/jobs/${jobId} |
-| /jobs/:id/apply | POST | /api/applications | GREEN | src/app/jobs/[id]/apply/page.tsx:44 — frontend call POST /api/applications |
-| /jobs/:id | GET | /api/jobs/${jobId} | GREEN | src/app/jobs/[id]/page.tsx:41 — frontend call GET /api/jobs/${jobId} |
-| /jobs/:id | POST | /api/candidate/saved-jobs | GREEN | src/app/jobs/[id]/page.tsx:52 — frontend call POST /api/candidate/saved-jobs |
-| /jobs/:id | POST | /api/applications | GREEN | src/app/jobs/[id]/page.tsx:66 — frontend call POST /api/applications |
-| /jobs/:id | POST | /api/candidate/saved-jobs | GREEN | src/app/jobs/[id]/page.tsx:85 — frontend call POST /api/candidate/saved-jobs |
-| /jobs/:id | DELETE | /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} | GREEN | src/app/jobs/[id]/page.tsx:90 — frontend call DELETE /api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)} |
 | /login | POST | /api/auth/login | GREEN | src/app/login/page.tsx:39 — frontend call POST /api/auth/login |
 | /notifications | GET | /api/notifications | GREEN | src/app/notifications/page.tsx:24 — frontend call GET /api/notifications |
 | /notifications | GET | /api/candidate/sourcing-invitations | GREEN | src/app/notifications/page.tsx:38 — frontend call GET /api/candidate/sourcing-invitations |
@@ -779,19 +781,19 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/admin/analytics | prisma.user, prisma.application, prisma.interview, prisma.companySubscription | referenced | src/app/api/admin/analytics/route.ts:6 — GET /api/admin/analytics |
 | GET | /api/admin/audit-logs |  | referenced | src/app/api/admin/audit-logs/route.ts:6 — GET /api/admin/audit-logs |
 | POST | /api/admin/candidate-credits/grants |  | referenced | src/app/api/admin/candidate-credits/grants/route.ts:22 — POST /api/admin/candidate-credits/grants |
+| PUT | /api/admin/candidate-services/:id |  | referenced | src/app/api/admin/candidate-services/[id]/route.ts:21 — PUT /api/admin/candidate-services/:id |
 | GET | /api/admin/candidate-services | prisma.candidateServiceCatalog | referenced | src/app/api/admin/candidate-services/route.ts:21 — GET /api/admin/candidate-services |
 | POST | /api/admin/candidate-services | prisma.candidateServiceCatalog | referenced | src/app/api/admin/candidate-services/route.ts:32 — POST /api/admin/candidate-services |
-| PUT | /api/admin/candidate-services/:id |  | referenced | src/app/api/admin/candidate-services/[id]/route.ts:21 — PUT /api/admin/candidate-services/:id |
 | GET | /api/admin/communications/deliveries | prisma.communicationDelivery | referenced | src/app/api/admin/communications/deliveries/route.ts:7 — GET /api/admin/communications/deliveries |
+| PATCH | /api/admin/communications/templates/:id | prisma.communicationTemplate | referenced | src/app/api/admin/communications/templates/[id]/route.ts:22 — PATCH /api/admin/communications/templates/:id |
 | GET | /api/admin/communications/templates | prisma.communicationTemplate | referenced | src/app/api/admin/communications/templates/route.ts:30 — GET /api/admin/communications/templates |
 | POST | /api/admin/communications/templates | prisma.communicationTemplate | referenced | src/app/api/admin/communications/templates/route.ts:39 — POST /api/admin/communications/templates |
-| PATCH | /api/admin/communications/templates/:id | prisma.communicationTemplate | referenced | src/app/api/admin/communications/templates/[id]/route.ts:22 — PATCH /api/admin/communications/templates/:id |
 | POST | /api/admin/communications/test |  | referenced | src/app/api/admin/communications/test/route.ts:19 — POST /api/admin/communications/test |
 | GET | /api/admin/config | prisma.adminConfiguration | referenced | src/app/api/admin/config/route.ts:63 — GET /api/admin/config |
 | POST | /api/admin/config | prisma.adminConfiguration | referenced | src/app/api/admin/config/route.ts:74 — POST /api/admin/config |
+| POST | /api/admin/document-verification/:id |  | referenced | src/app/api/admin/document-verification/[id]/route.ts:12 — POST /api/admin/document-verification/:id |
 | GET | /api/admin/document-verification | prisma.documentVerification, prisma.employerProfile | referenced | src/app/api/admin/document-verification/route.ts:60 — GET /api/admin/document-verification |
 | POST | /api/admin/document-verification | prisma.documentVerification, prisma.employerProfile | referenced | src/app/api/admin/document-verification/route.ts:141 — POST /api/admin/document-verification |
-| POST | /api/admin/document-verification/:id |  | referenced | src/app/api/admin/document-verification/[id]/route.ts:12 — POST /api/admin/document-verification/:id |
 | GET | /api/admin/email-delivery/config |  | referenced | src/app/api/admin/email-delivery/config/route.ts:41 — GET /api/admin/email-delivery/config |
 | POST | /api/admin/email-delivery/config |  | referenced | src/app/api/admin/email-delivery/config/route.ts:51 — POST /api/admin/email-delivery/config |
 | POST | /api/admin/email-delivery/test |  | referenced | src/app/api/admin/email-delivery/test/route.ts:13 — POST /api/admin/email-delivery/test |
@@ -807,12 +809,12 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | POST | /api/admin/pricing/calculate |  | referenced | src/app/api/admin/pricing/calculate/route.ts:18 — POST /api/admin/pricing/calculate |
 | GET | /api/admin/readiness-templates | prisma.mcqAssessment | referenced | src/app/api/admin/readiness-templates/route.ts:26 — GET /api/admin/readiness-templates |
 | POST | /api/admin/readiness-templates | prisma.mcqAssessment | referenced | src/app/api/admin/readiness-templates/route.ts:45 — POST /api/admin/readiness-templates |
+| DELETE | /api/admin/recorded-assessment/questions/:id | prisma.recordedAssessmentQuestionBank | referenced | src/app/api/admin/recorded-assessment/questions/[id]/route.ts:7 — DELETE /api/admin/recorded-assessment/questions/:id |
 | GET | /api/admin/recorded-assessment/questions | prisma.recordedAssessmentQuestionBank | referenced | src/app/api/admin/recorded-assessment/questions/route.ts:21 — GET /api/admin/recorded-assessment/questions |
 | POST | /api/admin/recorded-assessment/questions | prisma.recordedAssessmentQuestionBank | referenced | src/app/api/admin/recorded-assessment/questions/route.ts:36 — POST /api/admin/recorded-assessment/questions |
-| DELETE | /api/admin/recorded-assessment/questions/:id | prisma.recordedAssessmentQuestionBank | referenced | src/app/api/admin/recorded-assessment/questions/[id]/route.ts:7 — DELETE /api/admin/recorded-assessment/questions/:id |
+| POST | /api/admin/recorded-assessment/restrictions/:id | prisma.recordedAssessmentRestriction | referenced | src/app/api/admin/recorded-assessment/restrictions/[id]/route.ts:22 — POST /api/admin/recorded-assessment/restrictions/:id |
 | GET | /api/admin/recorded-assessment/restrictions | prisma.recordedAssessmentRestriction, prisma.recordedAssessmentAttempt | referenced | src/app/api/admin/recorded-assessment/restrictions/route.ts:16 — GET /api/admin/recorded-assessment/restrictions |
 | POST | /api/admin/recorded-assessment/restrictions | prisma.recordedAssessmentRestriction, prisma.recordedAssessmentAttempt | referenced | src/app/api/admin/recorded-assessment/restrictions/route.ts:33 — POST /api/admin/recorded-assessment/restrictions |
-| POST | /api/admin/recorded-assessment/restrictions/:id | prisma.recordedAssessmentRestriction | referenced | src/app/api/admin/recorded-assessment/restrictions/[id]/route.ts:22 — POST /api/admin/recorded-assessment/restrictions/:id |
 | GET | /api/admin/referrals/analytics | prisma.referralAttribution, prisma.referralReward, prisma.referralPayout | referenced | src/app/api/admin/referrals/analytics/route.ts:6 — GET /api/admin/referrals/analytics |
 | GET | /api/admin/referrals/config |  | referenced | src/app/api/admin/referrals/config/route.ts:23 — GET /api/admin/referrals/config |
 | PUT | /api/admin/referrals/config |  | referenced | src/app/api/admin/referrals/config/route.ts:47 — PUT /api/admin/referrals/config |
@@ -843,31 +845,31 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/admin/system/queues | prisma.outboxEntry, prisma.securityAuditOutboxEvent, prisma.whatsAppInboundEvent, prisma.videoAnalysisJob | referenced | src/app/api/admin/system/queues/route.ts:34 — GET /api/admin/system/queues |
 | GET | /api/admin/system-health |  | referenced | src/app/api/admin/system-health/route.ts:6 — GET /api/admin/system-health |
 | POST | /api/admin/tests/run |  | referenced | src/app/api/admin/tests/run/route.ts:6 — POST /api/admin/tests/run |
+| PUT | /api/admin/typing-prompts/:id |  | referenced | src/app/api/admin/typing-prompts/[id]/route.ts:21 — PUT /api/admin/typing-prompts/:id |
 | GET | /api/admin/typing-prompts | prisma.typingPracticePrompt | referenced | src/app/api/admin/typing-prompts/route.ts:20 — GET /api/admin/typing-prompts |
 | POST | /api/admin/typing-prompts | prisma.typingPracticePrompt | referenced | src/app/api/admin/typing-prompts/route.ts:31 — POST /api/admin/typing-prompts |
-| PUT | /api/admin/typing-prompts/:id |  | referenced | src/app/api/admin/typing-prompts/[id]/route.ts:21 — PUT /api/admin/typing-prompts/:id |
 | POST | /api/admin/uploads/purge-infected |  | referenced | src/app/api/admin/uploads/purge-infected/route.ts:13 — POST /api/admin/uploads/purge-infected |
 | POST | /api/admin/uploads/rescan |  | referenced | src/app/api/admin/uploads/rescan/route.ts:10 — POST /api/admin/uploads/rescan |
 | GET | /api/admin/users | prisma.user | referenced | src/app/api/admin/users/route.ts:13 — GET /api/admin/users |
 | POST | /api/agents/dispatch | prisma.employerProfile | referenced | src/app/api/agents/dispatch/route.ts:45 — POST /api/agents/dispatch |
-| GET | /api/agreements/contracts | prisma.company, prisma.hiringRequirement | referenced | src/app/api/agreements/contracts/route.ts:8 — GET /api/agreements/contracts |
-| POST | /api/agreements/contracts | prisma.company, prisma.hiringRequirement | referenced | src/app/api/agreements/contracts/route.ts:40 — POST /api/agreements/contracts |
 | GET | /api/agreements/contracts/:id |  | referenced | src/app/api/agreements/contracts/[id]/route.ts:38 — GET /api/agreements/contracts/:id |
 | PUT | /api/agreements/contracts/:id |  | referenced | src/app/api/agreements/contracts/[id]/route.ts:69 — PUT /api/agreements/contracts/:id |
 | POST | /api/agreements/contracts/:id |  | referenced | src/app/api/agreements/contracts/[id]/route.ts:101 — POST /api/agreements/contracts/:id |
-| GET | /api/agreements/requirements | prisma.company | referenced | src/app/api/agreements/requirements/route.ts:8 — GET /api/agreements/requirements |
-| POST | /api/agreements/requirements | prisma.company | referenced | src/app/api/agreements/requirements/route.ts:29 — POST /api/agreements/requirements |
+| GET | /api/agreements/contracts | prisma.company, prisma.hiringRequirement | referenced | src/app/api/agreements/contracts/route.ts:8 — GET /api/agreements/contracts |
+| POST | /api/agreements/contracts | prisma.company, prisma.hiringRequirement | referenced | src/app/api/agreements/contracts/route.ts:40 — POST /api/agreements/contracts |
 | GET | /api/agreements/requirements/:id |  | referenced | src/app/api/agreements/requirements/[id]/route.ts:6 — GET /api/agreements/requirements/:id |
 | PATCH | /api/agreements/requirements/:id |  | referenced | src/app/api/agreements/requirements/[id]/route.ts:27 — PATCH /api/agreements/requirements/:id |
-| GET | /api/agreements/templates |  | referenced | src/app/api/agreements/templates/route.ts:6 — GET /api/agreements/templates |
-| POST | /api/agreements/templates |  | referenced | src/app/api/agreements/templates/route.ts:18 — POST /api/agreements/templates |
+| GET | /api/agreements/requirements | prisma.company | referenced | src/app/api/agreements/requirements/route.ts:8 — GET /api/agreements/requirements |
+| POST | /api/agreements/requirements | prisma.company | referenced | src/app/api/agreements/requirements/route.ts:29 — POST /api/agreements/requirements |
 | GET | /api/agreements/templates/:id |  | referenced | src/app/api/agreements/templates/[id]/route.ts:6 — GET /api/agreements/templates/:id |
 | PUT | /api/agreements/templates/:id |  | referenced | src/app/api/agreements/templates/[id]/route.ts:23 — PUT /api/agreements/templates/:id |
 | POST | /api/agreements/templates/:id |  | referenced | src/app/api/agreements/templates/[id]/route.ts:47 — POST /api/agreements/templates/:id |
 | DELETE | /api/agreements/templates/:id |  | referenced | src/app/api/agreements/templates/[id]/route.ts:74 — DELETE /api/agreements/templates/:id |
-| GET | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:16 — GET /api/applications |
-| POST | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:48 — POST /api/applications |
-| PATCH | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:133 — PATCH /api/applications |
+| GET | /api/agreements/templates |  | referenced | src/app/api/agreements/templates/route.ts:6 — GET /api/agreements/templates |
+| POST | /api/agreements/templates |  | referenced | src/app/api/agreements/templates/route.ts:18 — POST /api/agreements/templates |
+| GET | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:17 — GET /api/applications |
+| POST | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:49 — POST /api/applications |
+| PATCH | /api/applications | prisma.candidateProfile, prisma.application, prisma.jobListing, prisma.candidateReadiness, prisma.user, prisma.company | referenced | src/app/api/applications/route.ts:134 — PATCH /api/applications |
 | GET | /api/assessment/mcq/assigned | prisma.candidateProfile, prisma.application, prisma.mcqAttempt | referenced | src/app/api/assessment/mcq/assigned/route.ts:15 — GET /api/assessment/mcq/assigned |
 | POST | /api/assessment/mcq/start | prisma.candidateProfile, prisma.mcqAssessment, prisma.application, prisma.candidateReadiness, prisma.mcqAttempt | referenced | src/app/api/assessment/mcq/start/route.ts:12 — POST /api/assessment/mcq/start |
 | POST | /api/assessment/mcq/submit | prisma.candidateProfile, prisma.mcqAttempt, prisma.candidateReadiness | referenced | src/app/api/assessment/mcq/submit/route.ts:18 — POST /api/assessment/mcq/submit |
@@ -875,9 +877,9 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/assessment/mock-interview/session | prisma.candidateProfile, prisma.mockInterviewSession | referenced | src/app/api/assessment/mock-interview/session/route.ts:11 — GET /api/assessment/mock-interview/session |
 | POST | /api/assessment/mock-interview/start | prisma.candidateProfile, prisma.mockInterviewSession | referenced | src/app/api/assessment/mock-interview/start/route.ts:13 — POST /api/assessment/mock-interview/start |
 | POST | /api/assessment/mock-interview/turn | prisma.mockInterviewSession, prisma.candidateProfile | referenced | src/app/api/assessment/mock-interview/turn/route.ts:51 — POST /api/assessment/mock-interview/turn |
+| GET | /api/assessment/typing/:id | prisma.typingAssessment | referenced | src/app/api/assessment/typing/[id]/route.ts:6 — GET /api/assessment/typing/:id |
 | GET | /api/assessment/typing/prompt | prisma.typingPracticePrompt | referenced | src/app/api/assessment/typing/prompt/route.ts:6 — GET /api/assessment/typing/prompt |
 | POST | /api/assessment/typing/submit | prisma.typingPracticePrompt, prisma.candidateProfile, prisma.typingAssessment | referenced | src/app/api/assessment/typing/submit/route.ts:16 — POST /api/assessment/typing/submit |
-| GET | /api/assessment/typing/:id | prisma.typingAssessment | referenced | src/app/api/assessment/typing/[id]/route.ts:6 — GET /api/assessment/typing/:id |
 | POST | /api/auth/employer-register | prisma.user | referenced | src/app/api/auth/employer-register/route.ts:16 — POST /api/auth/employer-register |
 | POST | /api/auth/forgot-password | db.findUserByEmail | referenced | src/app/api/auth/forgot-password/route.ts:11 — POST /api/auth/forgot-password |
 | POST | /api/auth/login | db.findUserByEmail | referenced | src/app/api/auth/login/route.ts:19 — POST /api/auth/login |
@@ -895,20 +897,20 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/candidate/readiness | prisma.candidateProfile, prisma.mcqAssessment, prisma.candidateReadiness | referenced | src/app/api/candidate/readiness/route.ts:20 — GET /api/candidate/readiness |
 | POST | /api/candidate/readiness | prisma.candidateProfile, prisma.mcqAssessment, prisma.candidateReadiness | referenced | src/app/api/candidate/readiness/route.ts:41 — POST /api/candidate/readiness |
 | GET | /api/candidate/recommended-jobs | prisma.candidateProfile, prisma.jobListing | referenced | src/app/api/candidate/recommended-jobs/route.ts:7 — GET /api/candidate/recommended-jobs |
-| POST | /api/candidate/recorded-assessment/attempts |  | referenced | src/app/api/candidate/recorded-assessment/attempts/route.ts:9 — POST /api/candidate/recorded-assessment/attempts |
 | POST | /api/candidate/recorded-assessment/attempts/:id/complete | prisma.recordedAssessmentAttempt | referenced | src/app/api/candidate/recorded-assessment/attempts/[id]/complete/route.ts:6 — POST /api/candidate/recorded-assessment/attempts/:id/complete |
 | POST | /api/candidate/recorded-assessment/attempts/:id/proctoring |  | referenced | src/app/api/candidate/recorded-assessment/attempts/[id]/proctoring/route.ts:22 — POST /api/candidate/recorded-assessment/attempts/:id/proctoring |
 | POST | /api/candidate/recorded-assessment/attempts/:id/responses | prisma.recordedAssessmentAttempt, prisma.storedFile, prisma.recordedAssessmentResponse | referenced | src/app/api/candidate/recorded-assessment/attempts/[id]/responses/route.ts:15 — POST /api/candidate/recorded-assessment/attempts/:id/responses |
 | GET | /api/candidate/recorded-assessment/attempts/:id | prisma.recordedAssessmentAttempt | referenced | src/app/api/candidate/recorded-assessment/attempts/[id]/route.ts:6 — GET /api/candidate/recorded-assessment/attempts/:id |
 | POST | /api/candidate/recorded-assessment/attempts/:id/start | prisma.recordedAssessmentAttempt | referenced | src/app/api/candidate/recorded-assessment/attempts/[id]/start/route.ts:11 — POST /api/candidate/recorded-assessment/attempts/:id/start |
+| POST | /api/candidate/recorded-assessment/attempts |  | referenced | src/app/api/candidate/recorded-assessment/attempts/route.ts:9 — POST /api/candidate/recorded-assessment/attempts |
 | GET | /api/candidate/recorded-assessment/restrictions | prisma.recordedAssessmentRestriction | referenced | src/app/api/candidate/recorded-assessment/restrictions/route.ts:10 — GET /api/candidate/recorded-assessment/restrictions |
 | POST | /api/candidate/recorded-assessment/restrictions | prisma.recordedAssessmentRestriction | referenced | src/app/api/candidate/recorded-assessment/restrictions/route.ts:26 — POST /api/candidate/recorded-assessment/restrictions |
 | GET | /api/candidate/saved-jobs | prisma.savedJob, prisma.jobListing | referenced | src/app/api/candidate/saved-jobs/route.ts:14 — GET /api/candidate/saved-jobs |
 | POST | /api/candidate/saved-jobs | prisma.savedJob, prisma.jobListing | referenced | src/app/api/candidate/saved-jobs/route.ts:23 — POST /api/candidate/saved-jobs |
 | DELETE | /api/candidate/saved-jobs | prisma.savedJob, prisma.jobListing | referenced | src/app/api/candidate/saved-jobs/route.ts:35 — DELETE /api/candidate/saved-jobs |
 | POST | /api/candidate/services/:serviceKey/request | prisma.candidateProfile | referenced | src/app/api/candidate/services/[serviceKey]/request/route.ts:18 — POST /api/candidate/services/:serviceKey/request |
-| GET | /api/candidate/sourcing-invitations | prisma.candidateProfile, prisma.candidateSourcingRelationship | referenced | src/app/api/candidate/sourcing-invitations/route.ts:6 — GET /api/candidate/sourcing-invitations |
 | POST | /api/candidate/sourcing-invitations/:id/decision |  | referenced | src/app/api/candidate/sourcing-invitations/[id]/decision/route.ts:10 — POST /api/candidate/sourcing-invitations/:id/decision |
+| GET | /api/candidate/sourcing-invitations | prisma.candidateProfile, prisma.candidateSourcingRelationship | referenced | src/app/api/candidate/sourcing-invitations/route.ts:6 — GET /api/candidate/sourcing-invitations |
 | GET | /api/candidate/video-resume | prisma.candidateProfile, prisma.storedFile, prisma.videoResume, prisma.videoAnalysisJob | referenced | src/app/api/candidate/video-resume/route.ts:18 — GET /api/candidate/video-resume |
 | POST | /api/candidate/video-resume | prisma.candidateProfile, prisma.storedFile, prisma.videoResume, prisma.videoAnalysisJob | referenced | src/app/api/candidate/video-resume/route.ts:46 — POST /api/candidate/video-resume |
 | GET | /api/candidate/video-resume/status | prisma.videoResume, prisma.employerProfile, prisma.application | referenced | src/app/api/candidate/video-resume/status/route.ts:5 — GET /api/candidate/video-resume/status |
@@ -916,22 +918,21 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | POST | /api/cron/recorded-assessment-analysis | prisma.recordedAssessmentAnalysisJob, prisma.recordedAssessmentResponse | referenced | src/app/api/cron/recorded-assessment-analysis/route.ts:70 — POST /api/cron/recorded-assessment-analysis |
 | GET | /api/cron/referrals-reconciliation |  | referenced | src/app/api/cron/referrals-reconciliation/route.ts:111 — GET /api/cron/referrals-reconciliation |
 | POST | /api/cron/referrals-reconciliation |  | referenced | src/app/api/cron/referrals-reconciliation/route.ts:115 — POST /api/cron/referrals-reconciliation |
-| POST | /api/employer/assessments | prisma.jobListing, prisma.mcqAssessment | referenced | src/app/api/employer/assessments/route.ts:17 — POST /api/employer/assessments |
-| GET | /api/employer/assessments | prisma.jobListing, prisma.mcqAssessment | referenced | src/app/api/employer/assessments/route.ts:70 — GET /api/employer/assessments |
+| PUT | /api/employer/assessments/:id/questions/:questionId | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:28 — PUT /api/employer/assessments/:id/questions/:questionId |
+| DELETE | /api/employer/assessments/:id/questions/:questionId | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:116 — DELETE /api/employer/assessments/:id/questions/:questionId |
 | POST | /api/employer/assessments/:id/questions/reorder | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/questions/reorder/route.ts:15 — POST /api/employer/assessments/:id/questions/reorder |
 | POST | /api/employer/assessments/:id/questions | prisma.mcqAssessment, prisma.mcqAttempt, prisma.mcqQuestion | referenced | src/app/api/employer/assessments/[id]/questions/route.ts:28 — POST /api/employer/assessments/:id/questions |
 | GET | /api/employer/assessments/:id/questions | prisma.mcqAssessment, prisma.mcqAttempt, prisma.mcqQuestion | referenced | src/app/api/employer/assessments/[id]/questions/route.ts:109 — GET /api/employer/assessments/:id/questions |
-| PUT | /api/employer/assessments/:id/questions/:questionId | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:28 — PUT /api/employer/assessments/:id/questions/:questionId |
-| DELETE | /api/employer/assessments/:id/questions/:questionId | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/questions/[questionId]/route.ts:116 — DELETE /api/employer/assessments/:id/questions/:questionId |
 | PUT | /api/employer/assessments/:id | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/route.ts:17 — PUT /api/employer/assessments/:id |
 | DELETE | /api/employer/assessments/:id | prisma.mcqAssessment, prisma.mcqQuestion, prisma.mcqAttempt | referenced | src/app/api/employer/assessments/[id]/route.ts:78 — DELETE /api/employer/assessments/:id |
-| GET | /api/employer/billing/invoices | prisma.commercialAgreement, prisma.invoice | referenced | src/app/api/employer/billing/invoices/route.ts:7 — GET /api/employer/billing/invoices |
+| POST | /api/employer/assessments | prisma.jobListing, prisma.mcqAssessment | referenced | src/app/api/employer/assessments/route.ts:17 — POST /api/employer/assessments |
+| GET | /api/employer/assessments | prisma.jobListing, prisma.mcqAssessment | referenced | src/app/api/employer/assessments/route.ts:70 — GET /api/employer/assessments |
 | POST | /api/employer/billing/invoices/:id/pay | prisma.invoice, prisma.commercialAgreement | referenced | src/app/api/employer/billing/invoices/[id]/pay/route.ts:8 — POST /api/employer/billing/invoices/:id/pay |
 | POST | /api/employer/billing/invoices/:id/receipt | prisma.invoice, prisma.commercialAgreement, prisma.storedFile, prisma.company | referenced | src/app/api/employer/billing/invoices/[id]/receipt/route.ts:19 — POST /api/employer/billing/invoices/:id/receipt |
+| GET | /api/employer/billing/invoices | prisma.commercialAgreement, prisma.invoice | referenced | src/app/api/employer/billing/invoices/route.ts:7 — GET /api/employer/billing/invoices |
 | GET | /api/employer/candidate-collections | prisma.employerCandidateCollection, prisma.application | referenced | src/app/api/employer/candidate-collections/route.ts:10 — GET /api/employer/candidate-collections |
 | POST | /api/employer/candidate-collections | prisma.employerCandidateCollection, prisma.application | referenced | src/app/api/employer/candidate-collections/route.ts:11 — POST /api/employer/candidate-collections |
 | PATCH | /api/employer/candidate-collections | prisma.employerCandidateCollection, prisma.application | referenced | src/app/api/employer/candidate-collections/route.ts:12 — PATCH /api/employer/candidate-collections |
-| GET | /api/employer/candidates | prisma.application | referenced | src/app/api/employer/candidates/route.ts:10 — GET /api/employer/candidates |
 | GET | /api/employer/candidates/:id/notes | prisma.application, prisma.employerCandidateNote | referenced | src/app/api/employer/candidates/[id]/notes/route.ts:10 — GET /api/employer/candidates/:id/notes |
 | POST | /api/employer/candidates/:id/notes | prisma.application, prisma.employerCandidateNote | referenced | src/app/api/employer/candidates/[id]/notes/route.ts:11 — POST /api/employer/candidates/:id/notes |
 | GET | /api/employer/candidates/:id | prisma.candidateProfile | referenced | src/app/api/employer/candidates/[id]/route.ts:7 — GET /api/employer/candidates/:id |
@@ -939,21 +940,20 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/employer/candidates/:id/tags | prisma.application, prisma.employerCandidateTag | referenced | src/app/api/employer/candidates/[id]/tags/route.ts:9 — GET /api/employer/candidates/:id/tags |
 | POST | /api/employer/candidates/:id/tags | prisma.application, prisma.employerCandidateTag | referenced | src/app/api/employer/candidates/[id]/tags/route.ts:10 — POST /api/employer/candidates/:id/tags |
 | DELETE | /api/employer/candidates/:id/tags | prisma.application, prisma.employerCandidateTag | referenced | src/app/api/employer/candidates/[id]/tags/route.ts:11 — DELETE /api/employer/candidates/:id/tags |
+| GET | /api/employer/candidates | prisma.application | referenced | src/app/api/employer/candidates/route.ts:10 — GET /api/employer/candidates |
 | GET | /api/employer/company | prisma.employerProfile, prisma.company | referenced | src/app/api/employer/company/route.ts:19 — GET /api/employer/company |
 | PUT | /api/employer/company | prisma.employerProfile, prisma.company | referenced | src/app/api/employer/company/route.ts:33 — PUT /api/employer/company |
 | GET | /api/employer/dashboard | prisma.jobListing, prisma.application, prisma.companyCredits, prisma.interview | referenced | src/app/api/employer/dashboard/route.ts:6 — GET /api/employer/dashboard |
 | GET | /api/employer/hiring-pipeline/readiness | prisma.employerProfile, prisma.application | referenced | src/app/api/employer/hiring-pipeline/readiness/route.ts:10 — GET /api/employer/hiring-pipeline/readiness |
-| GET | /api/employer/interviews/pending-feedback | prisma.interviewRoundProgress | referenced | src/app/api/employer/interviews/pending-feedback/route.ts:7 — GET /api/employer/interviews/pending-feedback |
-| GET | /api/employer/interviews | prisma.employerProfile, prisma.interview | referenced | src/app/api/employer/interviews/route.ts:15 — GET /api/employer/interviews |
-| POST | /api/employer/interviews/schedule | prisma.interviewRoundProgress, prisma.application, prisma.employerProfile, prisma.interviewRound, prisma.notification | referenced | src/app/api/employer/interviews/schedule/route.ts:21 — POST /api/employer/interviews/schedule |
 | GET | /api/employer/interviews/:id/calendar | prisma.interview, prisma.employerProfile | referenced | src/app/api/employer/interviews/[id]/calendar/route.ts:5 — GET /api/employer/interviews/:id/calendar |
 | GET | /api/employer/interviews/:id/feedback | prisma.interview, prisma.interviewFeedback | referenced | src/app/api/employer/interviews/[id]/feedback/route.ts:33 — GET /api/employer/interviews/:id/feedback |
 | POST | /api/employer/interviews/:id/feedback | prisma.interview, prisma.interviewFeedback | referenced | src/app/api/employer/interviews/[id]/feedback/route.ts:48 — POST /api/employer/interviews/:id/feedback |
 | POST | /api/employer/interviews/:id/round-decision | prisma.interview, prisma.interviewRound, prisma.interviewRoundInterviewer, prisma.workflowInstance, prisma.workflowApproval | referenced | src/app/api/employer/interviews/[id]/round-decision/route.ts:15 — POST /api/employer/interviews/:id/round-decision |
 | GET | /api/employer/interviews/:id | prisma.interview, prisma.employerProfile | referenced | src/app/api/employer/interviews/[id]/route.ts:33 — GET /api/employer/interviews/:id |
 | PATCH | /api/employer/interviews/:id | prisma.interview, prisma.employerProfile | referenced | src/app/api/employer/interviews/[id]/route.ts:66 — PATCH /api/employer/interviews/:id |
-| GET | /api/employer/jobs | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | referenced | src/app/api/employer/jobs/route.ts:30 — GET /api/employer/jobs |
-| POST | /api/employer/jobs | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | referenced | src/app/api/employer/jobs/route.ts:54 — POST /api/employer/jobs |
+| GET | /api/employer/interviews/pending-feedback | prisma.interviewRoundProgress | referenced | src/app/api/employer/interviews/pending-feedback/route.ts:7 — GET /api/employer/interviews/pending-feedback |
+| GET | /api/employer/interviews | prisma.employerProfile, prisma.interview | referenced | src/app/api/employer/interviews/route.ts:15 — GET /api/employer/interviews |
+| POST | /api/employer/interviews/schedule | prisma.interviewRoundProgress, prisma.application, prisma.employerProfile, prisma.interviewRound, prisma.notification | referenced | src/app/api/employer/interviews/schedule/route.ts:21 — POST /api/employer/interviews/schedule |
 | GET | /api/employer/jobs/:id/interview-process | prisma.jobListing, prisma.jobInterviewProcess, prisma.employerProfile | referenced | src/app/api/employer/jobs/[id]/interview-process/route.ts:35 — GET /api/employer/jobs/:id/interview-process |
 | PUT | /api/employer/jobs/:id/interview-process | prisma.jobListing, prisma.jobInterviewProcess, prisma.employerProfile | referenced | src/app/api/employer/jobs/[id]/interview-process/route.ts:60 — PUT /api/employer/jobs/:id/interview-process |
 | POST | /api/employer/jobs/:id/match | prisma.jobListing | referenced | src/app/api/employer/jobs/[id]/match/route.ts:8 — POST /api/employer/jobs/:id/match |
@@ -965,6 +965,8 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | DELETE | /api/employer/jobs/:id | prisma.jobListing, prisma.employerProfile | referenced | src/app/api/employer/jobs/[id]/route.ts:119 — DELETE /api/employer/jobs/:id |
 | POST | /api/employer/jobs/:id/source-candidates/action | prisma.jobListing, prisma.candidateProfile | referenced | src/app/api/employer/jobs/[id]/source-candidates/action/route.ts:9 — POST /api/employer/jobs/:id/source-candidates/action |
 | GET | /api/employer/jobs/:id/source-candidates | prisma.jobListing, prisma.candidateProfile | referenced | src/app/api/employer/jobs/[id]/source-candidates/route.ts:8 — GET /api/employer/jobs/:id/source-candidates |
+| GET | /api/employer/jobs | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | referenced | src/app/api/employer/jobs/route.ts:30 — GET /api/employer/jobs |
+| POST | /api/employer/jobs | prisma.jobListing, prisma.employerProfile, prisma.idempotencyRecord | referenced | src/app/api/employer/jobs/route.ts:54 — POST /api/employer/jobs |
 | POST | /api/employer/managed-hiring/join | prisma.employerProfile, prisma.application, prisma.pphPlacement | referenced | src/app/api/employer/managed-hiring/join/route.ts:18 — POST /api/employer/managed-hiring/join |
 | GET | /api/employer/managed-hiring/join | prisma.employerProfile, prisma.application, prisma.pphPlacement | referenced | src/app/api/employer/managed-hiring/join/route.ts:46 — GET /api/employer/managed-hiring/join |
 | PATCH | /api/employer/managed-hiring/join | prisma.employerProfile, prisma.application, prisma.pphPlacement | referenced | src/app/api/employer/managed-hiring/join/route.ts:62 — PATCH /api/employer/managed-hiring/join |
@@ -987,8 +989,8 @@ The complete 245-screen registry is in [production-wiring-inventory.json](./prod
 | GET | /api/internal/workflows/recover |  | referenced | src/app/api/internal/workflows/recover/route.ts:28 — GET /api/internal/workflows/recover |
 | GET | /api/interviews/room | prisma.interview, prisma.employerProfile, prisma.interviewSignal, prisma.interviewRoundProgress | referenced | src/app/api/interviews/room/route.ts:66 — GET /api/interviews/room |
 | POST | /api/interviews/room | prisma.interview, prisma.employerProfile, prisma.interviewSignal, prisma.interviewRoundProgress | referenced | src/app/api/interviews/room/route.ts:112 — POST /api/interviews/room |
-| GET | /api/jobs/search | prisma.jobListing | referenced | src/app/api/jobs/search/route.ts:5 — GET /api/jobs/search |
 | GET | /api/jobs/:id | prisma.jobListing | referenced | src/app/api/jobs/[id]/route.ts:5 — GET /api/jobs/:id |
+| GET | /api/jobs/search | prisma.jobListing | referenced | src/app/api/jobs/search/route.ts:5 — GET /api/jobs/search |
 | GET | /api/notifications | prisma.notification | referenced | src/app/api/notifications/route.ts:10 — GET /api/notifications |
 | PUT | /api/notifications | prisma.notification | referenced | src/app/api/notifications/route.ts:23 — PUT /api/notifications |
 | POST | /api/payments/checkout | prisma.employerProfile, prisma.paymentOrder, prisma.subscriptionPlan | referenced | src/app/api/payments/checkout/route.ts:165 — POST /api/payments/checkout |
@@ -1066,7 +1068,7 @@ Static ROS references were detected in the inventory. A source module existing i
 | HIGH | src/app/video-assessment/setup/page.tsx:1 | Assessment setup is rendered from a large embedded static HTML string. | Screen can look complete while actions and data are not connected. |
 | MEDIUM | src/lib/otp.ts:120 | Master OTP is accepted outside production only; this is safe only if environment classification is correct. | Environment misconfiguration weakens identity verification. |
 
-Static scanner summary: 24 records contain mock/fallback/static indicators. This is intentionally conservative; each RED record must be reviewed using its exact evidence row in the inventory.
+Inventory status summary: 0 inventory records are classified RED. The manual file-level findings above are outside the inventory record-status aggregation and are not included in that count.
 
 ## 12. SECURITY FINDINGS
 
@@ -1188,10 +1190,10 @@ Exact conditions: remove the authentication bypass and mock-user production fall
 
 - JSON: [production-wiring-inventory.json](./production-wiring-inventory.json)
 - CSV: [production-wiring-inventory.csv](./production-wiring-inventory.csv)
-- Records: 1682
+- Records: 1663
 - Screens: 263
-- User actions: 967
-- Frontend API calls: 220
+- User actions: 946
+- Frontend API calls: 222
 - API method records: 232
 - Server actions: 0
 - Records missing evidence: 0
@@ -1204,7 +1206,7 @@ Exact conditions: remove the authentication bypass and mock-user production fall
 | Every API route method has an endpoint record | PASS |
 | Every handler has evidence | PASS |
 | Frontend calls with no exact static endpoint match | See inventory notes; dynamic paths require contract verification |
-| RED records | 24 |
+| RED records | 0 |
 | BLACK records | 0 |
 
 The scanner is intentionally conservative. GREEN is not assigned by static source presence alone; runtime verification is required before any feature can be called production-ready.
