@@ -9,7 +9,7 @@ import crypto from "node:crypto";
 import { StripeGateway } from "../src/lib/payments/StripeGateway";
 import { PayUGateway } from "../src/lib/payments/PayUGateway";
 import { PaymentGatewayController } from "../src/lib/payments/PaymentGatewayController";
-import { isGateway, GatewayName, AmbiguousPaymentOrderError } from "../src/lib/payments/PaymentGatewayInterface";
+import { isGateway, AmbiguousPaymentOrderError } from "../src/lib/payments/PaymentGatewayInterface";
 
 interface TestCaseResult {
   name: string;

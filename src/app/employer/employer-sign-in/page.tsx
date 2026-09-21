@@ -17,9 +17,10 @@ function EmployerSignInContent() {
   // If role=admin in URL, redirect directly to Admin Control Console
   useEffect(() => {
     if (roleParam === "admin") {
-      window.location.href = "/admin/dashboard";
+      router.replace("/admin/dashboard");
+      router.refresh();
     }
-  }, [roleParam]);
+  }, [roleParam, router]);
 
   if (roleParam === "admin") {
     return (
@@ -58,11 +59,8 @@ function EmployerSignInContent() {
       }
 
       const userRole = result.user?.role;
-      if (userRole === "ADMIN") {
-        window.location.href = "/admin/dashboard";
-      } else {
-        window.location.href = "/employer/dashboard";
-      }
+      router.replace(userRole === "ADMIN" ? "/admin/dashboard" : "/employer/dashboard");
+      router.refresh();
     } catch {
       setError("Unable to sign in right now. Please try again.");
     } finally {
@@ -152,6 +150,7 @@ function EmployerSignInContent() {
               <div className="p-1 rounded-full flex items-center border border-outline bg-surface-container backdrop-blur-md">
                 <button
                   type="button"
+                  aria-pressed="false"
                   onClick={() => router.push("/login")}
                   className="px-4 py-1.5 rounded-full text-xs font-bold text-text-secondary hover:text-white transition-all"
                 >
@@ -159,6 +158,7 @@ function EmployerSignInContent() {
                 </button>
                 <button
                   type="button"
+                  aria-pressed="true"
                   className="px-4 py-1.5 rounded-full text-xs font-bold text-black bg-amber-400 shadow-sm transition-all"
                 >
                   Employer
@@ -178,14 +178,16 @@ function EmployerSignInContent() {
 
             {/* Form */}
             <form className="space-y-3" onSubmit={handleSignIn}>
-              {error && <p className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">{error}</p>}
+              {error && <p role="alert" className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">{error}</p>}
               {/* Corporate Email */}
               <div className="space-y-1">
-                <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
+                <label htmlFor="employer-email" className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
                   Corporate Email
                 </label>
                 <input
                   name="email"
+                  id="employer-email"
+                  autoComplete="email"
                   className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5"
                   placeholder="name@company.com"
                   type="email"
@@ -196,7 +198,7 @@ function EmployerSignInContent() {
               {/* Password */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between ml-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant">
+                  <label htmlFor="employer-password" className="font-label-md text-[11px] font-bold text-on-surface-variant">
                     Password
                   </label>
                   <Link
@@ -209,6 +211,8 @@ function EmployerSignInContent() {
                 <div className="relative">
                   <input
                     name="password"
+                    id="employer-password"
+                    autoComplete="current-password"
                     className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5 pr-9"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
@@ -216,8 +220,11 @@ function EmployerSignInContent() {
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-controls="employer-password"
+                    aria-pressed={showPassword}
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                   >
                     {showPassword ? (
                       <EyeOff className="w-4 h-4" />

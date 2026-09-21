@@ -43,7 +43,7 @@ HireGo AI uses a streamlined, two-provider payment architecture supporting only 
 
 ## Development Setup Instructions
 1. **Clone the repository** and install dependencies using `npm install`.
-2. **Environment Variables**: Copy `.env.example` to `.env.local` and fill in the required values (Database URL, NextAuth secrets, etc.).
+2. **Environment Variables**: Copy `.env.example` to `.env.local` and fill in the required database, custom JWT/session, Redis, storage, and provider values.
 3. **Database Setup**: Run `npx prisma migrate dev` to apply the latest database schema to your local PostgreSQL instance.
 4. **Start Development Server**: Run `npm run dev` and navigate to `http://localhost:3000`.
 
@@ -53,8 +53,12 @@ HireGo AI includes a comprehensive suite of tests to ensure production readiness
 - **Phase 5 Tests**: Run `npm run test:phase5` for integration testing of recent architectural phases.
 - Ensure all tests pass before proposing a pull request.
 
-## CI/CD Pipeline Description
-The repository utilizes GitHub Actions for automated integration and deployment:
+## CI and deployment
+The repository uses GitHub Actions for validation and security checks:
 - `phase5-verification.yml`: Runs the Phase 5 tests and type-checking on pull requests.
-- `security.yml`: Runs security audits, dependency checks, and lints.
-- `deploy.yml`: Automatically deploys the application to Vercel/Railway on merges to the `main` branch, given that all prior checks pass.
+- `security.yml`: Runs dependency review on pull requests plus CodeQL and secret scanning.
+- `deploy.yml`: Validates Prisma migrations against disposable PostgreSQL, typechecks, lints, tests, audits dependencies, and builds the application.
+
+The workflow does **not** deploy Vercel or Railway. Follow `DEPLOYMENT.md` and
+`DEPLOYMENT_CHECKLIST.md` for controlled deployment, provider verification,
+worker health, and release sign-off.

@@ -10,10 +10,10 @@ import { getSessionCompany } from "@/lib/routeAuthorization";
 // GET employer's subscription, credits, and available plans
 export async function GET(request: NextRequest) {
   try {
-    await enforceRateLimit(request, "employer_subscription_get", 60, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) throw new ApiError("Unauthorized", 401);
     if (session.role !== "EMPLOYER") throw new ApiError("Employer access required.", 403);
+    await enforceRateLimit(request, "employer_subscription_get", 60, 60_000);
     const companyId = (await getSessionCompany(session)).id;
 
     const [credits, activeSubscription, plans, services, gatewayConfig] = await Promise.all([
@@ -92,10 +92,10 @@ export async function GET(request: NextRequest) {
 // POST purchase/activate a plan is blocked to prevent payment bypass
 export async function POST(request: NextRequest) {
   try {
-    await enforceRateLimit(request, "employer_subscription_direct_activation", 10, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) throw new ApiError("Unauthorized", 401);
     if (session.role !== "EMPLOYER") throw new ApiError("Employer access required.", 403);
+    await enforceRateLimit(request, "employer_subscription_direct_activation", 10, 60_000);
     await getSessionCompany(session);
     return NextResponse.json(
     {

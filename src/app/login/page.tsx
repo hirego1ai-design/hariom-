@@ -55,15 +55,15 @@ function CandidateLoginContent() {
       }
 
       const userRole = result.user?.role;
-      if (userRole === "ADMIN") {
-        window.location.href = "/admin/dashboard";
-      } else if (userRole === "EMPLOYER" || userRole === "RECRUITER") {
-        window.location.href = "/employer/dashboard";
-      } else {
-        window.location.href = "/dashboard";
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to sign in. Please try again.");
+      const destination = userRole === "ADMIN"
+        ? "/admin/dashboard"
+        : userRole === "EMPLOYER" || userRole === "RECRUITER"
+          ? "/employer/dashboard"
+          : "/dashboard";
+      router.replace(destination);
+      router.refresh();
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to sign in. Please try again.");
       setIsSubmitting(false);
     }
   };
@@ -91,7 +91,7 @@ function CandidateLoginContent() {
 
           <div className="relative z-10 space-y-3 pl-1">
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">
+              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-black font-bold">
                 ✓
               </div>
               <div>
@@ -105,7 +105,7 @@ function CandidateLoginContent() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">
+              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-black font-bold">
                 ✓
               </div>
               <div>
@@ -119,7 +119,7 @@ function CandidateLoginContent() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">
+              <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-black font-bold">
                 ✓
               </div>
               <div>
@@ -142,12 +142,14 @@ function CandidateLoginContent() {
               <div className="p-1 rounded-full flex items-center border border-outline bg-surface-container backdrop-blur-md">
                 <button
                   type="button"
-                  className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-primary shadow-md transition-all"
+                  aria-pressed="true"
+                  className="px-4 py-1.5 rounded-full text-xs font-bold text-black bg-primary shadow-md transition-all"
                 >
                   Candidate
                 </button>
                 <button
                   type="button"
+                  aria-pressed="false"
                   onClick={() => router.push("/employer/employer-sign-in")}
                   className="px-4 py-1.5 rounded-full text-xs font-bold text-text-secondary hover:text-white transition-all"
                 >
@@ -166,7 +168,7 @@ function CandidateLoginContent() {
             </div>
 
             {errorMessage && (
-              <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
+              <div role="alert" className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[16px]">error</span>
                 <span>{errorMessage}</span>
               </div>
@@ -174,11 +176,13 @@ function CandidateLoginContent() {
 
             <form className="space-y-3" onSubmit={handleLogin}>
               <div className="space-y-1">
-                <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
+                <label htmlFor="candidate-email" className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
                   Email Address
                 </label>
                 <input
                   name="email"
+                  id="candidate-email"
+                  autoComplete="email"
                   className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5"
                   placeholder="name@company.com"
                   type="email"
@@ -188,7 +192,7 @@ function CandidateLoginContent() {
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between ml-1">
-                  <label className="font-label-md text-[11px] font-bold text-on-surface-variant">
+                  <label htmlFor="candidate-password" className="font-label-md text-[11px] font-bold text-on-surface-variant">
                     Password
                   </label>
                   <Link
@@ -201,6 +205,8 @@ function CandidateLoginContent() {
                 <div className="relative">
                   <input
                     name="password"
+                    id="candidate-password"
+                    autoComplete="current-password"
                     className="input-pill w-full h-[46px] text-sm text-text-primary px-3.5 pr-9"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
@@ -208,8 +214,11 @@ function CandidateLoginContent() {
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-controls="candidate-password"
+                    aria-pressed={showPassword}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {showPassword ? (
                       <EyeOff className="w-4 h-4" />

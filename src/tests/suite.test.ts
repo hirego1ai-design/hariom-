@@ -220,7 +220,7 @@ async function runIsolatedTests() {
   // model-selected consequential tools and agent-context spoofing fail closed.
   try {
     const { runPhase5AgentSecurityTests } = await import("./phase5-agent-security.test");
-    const phase5Security = await runPhase5AgentSecurityTests();
+    const phase5Security = await runPhase5AgentSecurityTests('database');
     results.push(...phase5Security.results);
   } catch (e: any) {
     results.push({ name: "Phase 5 agent security suite", category: "Phase 5 Agent Security", passed: false, message: e.message });
@@ -317,6 +317,5 @@ if (process.argv[1]?.includes("suite.test")) {
       process.exit(1);
     });
 }
-
 
 

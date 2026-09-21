@@ -39,6 +39,9 @@ test("production upload scanning fails closed when scanner configuration is miss
     const result = await scanUpload("00000000-0000-0000-0000-000000000000", Buffer.from("%PDF-1.7"));
     assert.equal(result.status, "ERROR");
   } finally {
-    for (const [key, value] of Object.entries(previous)) value === undefined ? delete env[key] : env[key] = value;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete env[key];
+      else env[key] = value;
+    }
   }
 });

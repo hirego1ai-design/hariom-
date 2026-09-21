@@ -9,7 +9,6 @@ const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   try {
-    await enforceRateLimit(req, "employer_candidates_get", 60, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) {
       return jsonError("Unauthorized access", 401);
@@ -17,6 +16,7 @@ export async function GET(req: NextRequest) {
     if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") {
       return jsonError("Employer, recruiter, or administrator access required.", 403);
     }
+    await enforceRateLimit(req, "employer_candidates_get", 60, 60_000);
 
     const { searchParams } = new URL(req.url);
     const requestedLimit = searchParams.get("limit");
