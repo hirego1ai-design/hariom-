@@ -109,6 +109,31 @@ async function runIsolatedTests() {
   results.push({ name: "OTP Engine - Live email delivery", category: "OTP", passed: false, skipped: true,
     message: "Requires an isolated mail transport; fixed OTP 123456 is not a valid cryptographic OTP assertion." });
 
+
+  try {
+    const fs = await import("node:fs");
+    const otpSource = fs.readFileSync(new URL("../lib/otp.ts", import.meta.url), "utf8");
+    const verifyRoute = fs.readFileSync(new URL("../app/api/auth/verify-otp/route.ts", import.meta.url), "utf8");
+    const resetRoute = fs.readFileSync(new URL("../app/api/auth/reset-password/route.ts", import.meta.url), "utf8");
+    const pass =
+      otpSource.includes("options?: { consume?: boolean }") &&
+      otpSource.includes("const consume = options?.consume ?? true") &&
+      verifyRoute.includes('body.type === "RESET_PASSWORD" ? { consume: false } : undefined') &&
+      resetRoute.includes('verifyOtpCode(body.email, body.otp, "RESET_PASSWORD")');
+    results.push({
+      name: "Password reset OTP is consumed only by the final reset",
+      category: "OTP",
+      passed: pass,
+    });
+  } catch (e: any) {
+    results.push({
+      name: "Password reset OTP consumption regression",
+      category: "OTP",
+      passed: false,
+      message: e.message,
+    });
+  }
+
   // 8. Referral Engine & Managed Hiring Auditor Tests
   try {
     const { runReferralTestSuite } = await import("./referrals.test");
