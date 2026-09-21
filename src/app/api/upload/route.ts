@@ -1,40 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
-import { persistScanResult, scanUpload, validateUploadFile, sanitizeAndGenerateObjectKey } from "@/lib/uploadSecurity";
+import {
+  assertDetectedTypeMatchesMime,
+  assertNoActiveDocumentContent,
+  detectUploadExtension,
+  normalizeUploadForStorage,
+  persistScanResult,
+  scanUpload,
+  sanitizeAndGenerateObjectKey,
+  validateUploadFile,
+} from "@/lib/uploadSecurity";
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
-const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "video/mp4",
-  "video/webm",
-  "audio/webm",
-];
-
-const MIME_TO_EXT_MAP: Record<string, string[]> = {
-  "application/pdf": ["pdf"],
-  "application/msword": ["docx", "doc"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
-  "image/png": ["png"],
-  "image/jpeg": ["jpg"],
-  "image/webp": ["webp"],
-  "video/mp4": ["mp4"],
-  "video/webm": ["webm"],
-  "audio/webm": ["webm"],
-};
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_MULTIPART_REQUEST_BYTES = MAX_FILE_SIZE_BYTES + 512 * 1024;
 
 export async function POST(req: NextRequest) {
   try {
     await enforceRateLimit(req, "private_upload", 20, 60_000);
     const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
+    if (!session) return jsonError("Unauthorized access", 401);
+
+    const contentLength = Number(req.headers.get("content-length") || "0");
+    if (Number.isFinite(contentLength) && contentLength > MAX_MULTIPART_REQUEST_BYTES) {
+      return jsonError("Upload request exceeds the maximum allowed size", 413);
     }
 
     const formData = await req.formData();
@@ -47,42 +38,42 @@ export async function POST(req: NextRequest) {
       RECRUITER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
       ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media"]),
     };
-    if (!allowedCategoriesByRole[session.role]?.has(category)) {
-      return jsonError("Invalid upload category", 400);
-    }
+    if (!allowedCategoriesByRole[session.role]?.has(category)) return jsonError("Invalid upload category", 400);
+    if (!file) return jsonError("No file uploaded", 400);
 
-    if (!file) {
-      return jsonError("No file uploaded", 400);
-    }
-
-    const { valid, error: validationError } = validateUploadFile(file.type, file.size, MAX_FILE_SIZE_BYTES);
-    if (!valid) {
-      return jsonError(validationError || "Invalid file", 415);
-    }
-
-    const safeName = sanitizeAndGenerateObjectKey(file.name);
+    const validation = validateUploadFile(file.type, file.size, MAX_FILE_SIZE_BYTES);
+    if (!validation.valid) return jsonError(validation.error || "Invalid file", 415);
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const originalBuffer = Buffer.from(bytes);
+    const detectedExtension = detectUploadExtension(originalBuffer);
+    if (!detectedExtension) return jsonError("Invalid file signature", 415);
 
-    const header = buffer.subarray(0, 16).toString("hex").toUpperCase();
-    const headerAscii = buffer.subarray(0, 16).toString("ascii");
-    let serverExt = "";
-    if (headerAscii.startsWith("%PDF")) serverExt = "pdf";
-    else if (header.startsWith("89504E47")) serverExt = "png";
-    else if (header.startsWith("FFD8FF")) serverExt = "jpg";
-    else if (headerAscii.startsWith("RIFF") && headerAscii.substring(8, 12) === "WEBP") serverExt = "webp";
-    else if (headerAscii.includes("ftyp")) serverExt = "mp4";
-    else if (header.startsWith("1A45DFA3")) serverExt = "webm";
-    else if (header.startsWith("504B0304") || header.startsWith("D0CF")) serverExt = "docx";
-    else {
-      return jsonError("Invalid file signature", 415);
+    try {
+      assertDetectedTypeMatchesMime(file.type, detectedExtension);
+      assertNoActiveDocumentContent(originalBuffer, file.type);
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : "Unsafe file content", 415);
     }
 
-    // Verify claimed MIME type matches detected signature
-    const validExtensions = MIME_TO_EXT_MAP[file.type] || [];
-    if (!validExtensions.includes(serverExt)) {
-      return jsonError("File content does not match claimed MIME type", 415);
+    // Scan the exact original bytes before any local decoder/parser is invoked.
+    // Production scanner failure is fail-closed and no object is persisted.
+    const preflightId = `preflight-${crypto.randomUUID()}`;
+    const scanResult = await scanUpload(preflightId, originalBuffer);
+    if (scanResult.status !== "CLEAN") {
+      throw new ApiError(
+        scanResult.status === "INFECTED"
+          ? "Upload rejected by malware scanning."
+          : "Upload security scanning is temporarily unavailable.",
+        scanResult.status === "INFECTED" ? 422 : 503,
+      );
+    }
+
+    let normalized;
+    try {
+      normalized = await normalizeUploadForStorage(originalBuffer, file.type, detectedExtension);
+    } catch {
+      throw new ApiError("Upload could not be decoded safely.", 415);
     }
 
     const profile = (session.role === "EMPLOYER" || session.role === "RECRUITER")
@@ -91,28 +82,28 @@ export async function POST(req: NextRequest) {
     if ((session.role === "EMPLOYER" || session.role === "RECRUITER") && !profile?.companyId) {
       throw new ApiError("Employer company membership is required for this upload.", 403);
     }
+
+    const safeName = sanitizeAndGenerateObjectKey(file.name);
     const storedFile = await createStoredFile({
       ownerId: session.id,
       companyId: profile?.companyId,
       category,
       originalName: safeName,
-      mimeType: file.type,
-      data: buffer,
-      extension: serverExt,
+      mimeType: normalized.mimeType,
+      data: normalized.data,
+      extension: normalized.extension,
     });
 
-    const scanResult = await scanUpload(storedFile.id, buffer);
-    await persistScanResult(storedFile.id, scanResult);
-    if (scanResult.status !== "CLEAN") {
-      throw new ApiError(scanResult.status === "INFECTED" ? "Upload rejected by malware scanning." : "Upload is quarantined pending a successful malware scan.", 422);
-    }
+    // The stored bytes are either the scanned original (documents/media) or a
+    // decoded/re-encoded raster image derived from the scanned original.
+    await persistScanResult(storedFile.id, { status: "CLEAN", detail: scanResult.detail || "Pre-storage malware scan passed." });
 
     return NextResponse.json({
       success: true,
       file: {
         name: safeName,
-        size: file.size,
-        type: file.type,
+        size: normalized.data.byteLength,
+        type: normalized.mimeType,
         id: storedFile.id,
         url: `/api/files/${storedFile.id}`,
         uploadedAt: new Date().toISOString(),
