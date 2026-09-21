@@ -148,9 +148,9 @@ Those runtime and operational checks must remain separate release gates.
 
 ## Generated artifacts
 
-- `production-wiring-inventory.json`
-- `production-wiring-inventory.csv`
-- `PRODUCTION_WIRING_AUDIT_REPORT.md`
+- production-wiring-inventory.json
+- production-wiring-inventory.csv
+- PRODUCTION_WIRING_AUDIT_REPORT.md
 
 The CI pipeline regenerates these files and fails when committed artifacts drift from current source, preventing this report from becoming silently stale.
 `;
