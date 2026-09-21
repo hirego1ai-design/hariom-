@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
-import { persistScanResult, scanUpload } from "@/lib/uploadSecurity";
+import { persistScanResult, scanUpload, validateUploadFile, sanitizeAndGenerateObjectKey } from "@/lib/uploadSecurity";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
 const ALLOWED_MIME_TYPES = [
@@ -55,17 +55,12 @@ export async function POST(req: NextRequest) {
       return jsonError("No file uploaded", 400);
     }
 
-    if (file.size <= 0) {
-      return jsonError("Uploaded file is empty", 400);
+    const { valid, error: validationError } = validateUploadFile(file.type, file.size, MAX_FILE_SIZE_BYTES);
+    if (!valid) {
+      return jsonError(validationError || "Invalid file", 415);
     }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return jsonError("File size exceeds 10MB limit", 413);
-    }
-
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return jsonError("Invalid file type. Supported formats: PDF, DOCX, PNG, JPEG, MP4, WebM audio/video", 415);
-    }
+    const safeName = sanitizeAndGenerateObjectKey(file.name);
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -100,7 +95,7 @@ export async function POST(req: NextRequest) {
       ownerId: session.id,
       companyId: profile?.companyId,
       category,
-      originalName: file.name,
+      originalName: safeName,
       mimeType: file.type,
       data: buffer,
       extension: serverExt,
@@ -115,7 +110,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       file: {
-        name: file.name,
+        name: safeName,
         size: file.size,
         type: file.type,
         id: storedFile.id,

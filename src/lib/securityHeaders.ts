@@ -11,6 +11,7 @@ export const BASE_SECURITY_HEADERS: Record<string, string> = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-origin",
   "X-DNS-Prefetch-Control": "on",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
 };
 
 /**
