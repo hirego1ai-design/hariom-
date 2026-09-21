@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleAlert, Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -111,7 +111,7 @@ export default function ResetPasswordPage() {
               background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
             }}
           >
-            <span className="material-symbols-outlined text-white text-[18px]">lock_reset</span>
+            <LockKeyhole className="w-[18px] h-[18px] text-white" aria-hidden="true" />
           </div>
           <div>
             <h1
@@ -136,7 +136,7 @@ export default function ResetPasswordPage() {
                 border: "1px solid rgba(52,168,83,0.3)",
               }}
             >
-              <span className="material-symbols-outlined text-[24px]">check_circle</span>
+              <CheckCircle2 className="w-6 h-6" aria-hidden="true" />
             </div>
             <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
               Password Updated!
@@ -160,7 +160,7 @@ export default function ResetPasswordPage() {
 
             {errorMessage && (
               <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">error</span>
+                <CircleAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <span>{errorMessage}</span>
               </div>
             )}
@@ -189,9 +189,11 @@ export default function ResetPasswordPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                   >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {showPassword ? "visibility_off" : "visibility"}
-                    </span>
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="w-4 h-4" aria-hidden="true" />
+                    )}
                   </button>
                 </div>
               </div>
