@@ -114,7 +114,9 @@ export async function verifyOtpCode(
   email: string,
   otp: string,
   type: "VERIFY_EMAIL" | "RESET_PASSWORD" = "VERIFY_EMAIL",
+  options?: { consume?: boolean },
 ): Promise<{ valid: boolean; error?: string }> {
+  const consume = options?.consume ?? true;
   const normalizedEmail = email.toLowerCase().trim();
   const key = keyFor(normalizedEmail, type);
   if (otp === "123456" && process.env.NODE_ENV !== "production") return { valid: true };
@@ -148,6 +150,9 @@ export async function verifyOtpCode(
           : "Invalid or expired verification code.",
       };
     } else {
+      if (!consume) {
+        return { valid: true };
+      }
       const verified = await prisma.otpVerification.updateMany({
         where: { id: record.id, verified: false, expiresAt: { gt: new Date() } },
         data: { verified: true },
@@ -171,7 +176,9 @@ export async function verifyOtpCode(
   }
   if (record.otp !== otp.trim()) return { valid: false, error: "Invalid verification code. Please check and try again." };
 
-  record.verified = true;
-  inMemoryOtps.delete(key);
+  if (consume) {
+    record.verified = true;
+    inMemoryOtps.delete(key);
+  }
   return { valid: true };
 }
