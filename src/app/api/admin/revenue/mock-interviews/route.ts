@@ -1,101 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
 import { enforceRateLimit } from "@/lib/apiSecurity";
-
-export const mockInterviewSummary = {
-  totalRevenue: 520000,
-  totalRevenueFormatted: "₹5.2 Lakhs",
-  totalTestsConducted: 4280,
-  videoInterviews: 1840,
-  codingTests: 1220,
-  aiInterviews: 890,
-  practiceSessions: 330,
-  grossSales: 545000,
-  totalRefunds: 9980,
-  couponsDiscounted: 15020,
-  activeTokenPackages: 1840,
-  averageCandidateScore: 84.6,
-  packages: [
-    { name: "Single Mock Test", price: "₹499", sold: 360, revenue: "₹1,79,640", features: "1 Full AI Technical Interview + Scorecard" },
-    { name: "Standard Pack (3 Tests)", price: "₹1,299", sold: 120, revenue: "₹1,55,880", features: "3 Sessions with System Design + Coding Sandbox" },
-    { name: "Mastery Bundle (5 Tests)", price: "₹1,999", sold: 88, revenue: "₹1,75,912", features: "5 Sessions + Voice/Vision AI + DNA Certificate" },
-    { name: "College Enterprise Pass", price: "₹9,999", sold: 1, revenue: "₹9,999", features: "Unlimited 30-Day Batch Access" },
-  ],
-};
-
-export const mockInterviewLogs = [
-  {
-    id: "MOCK-TXN-401",
-    candidateName: "Aarav Sharma",
-    candidateEmail: "aarav.sharma@example.com",
-    packageType: "Mastery Bundle (5 Sessions)",
-    amount: 1999,
-    amountFormatted: "₹1,999",
-    purchaseDate: "2026-07-14 16:40",
-    sessionDuration: "45 mins",
-    targetRole: "Full Stack Engineer (MERN)",
-    aiScore: 92,
-    aiReportViewed: true,
-    certificateDownloaded: true,
-    status: "Completed",
-  },
-  {
-    id: "MOCK-TXN-402",
-    candidateName: "Priya Patel",
-    candidateEmail: "priya.p@tech.io",
-    packageType: "Single Mock Test",
-    amount: 499,
-    amountFormatted: "₹499",
-    purchaseDate: "2026-07-05 20:01",
-    sessionDuration: "35 mins",
-    targetRole: "Cloud Solutions Architect",
-    aiScore: 98,
-    aiReportViewed: true,
-    certificateDownloaded: true,
-    status: "Completed",
-  },
-  {
-    id: "MOCK-TXN-403",
-    candidateName: "Karan Mehta",
-    candidateEmail: "karan.mehta@gmail.com",
-    packageType: "Standard Pack (3 Tests)",
-    amount: 1299,
-    amountFormatted: "₹1,299",
-    purchaseDate: "2026-07-18 11:20",
-    sessionDuration: "40 mins",
-    targetRole: "Data Engineer",
-    aiScore: 78,
-    aiReportViewed: true,
-    certificateDownloaded: false,
-    status: "Active (2 Credits Left)",
-  },
-  {
-    id: "MOCK-TXN-404",
-    candidateName: "Divya Nambiar",
-    candidateEmail: "divya.nambiar@yahoo.com",
-    packageType: "Single Mock Test",
-    amount: 499,
-    amountFormatted: "₹499",
-    purchaseDate: "2026-07-25 19:10",
-    sessionDuration: "30 mins",
-    targetRole: "Frontend UI/UX Developer",
-    aiScore: 88,
-    aiReportViewed: true,
-    certificateDownloaded: true,
-    status: "Completed",
-  },
-];
+import { prisma } from "@/lib/prisma";
+import { formatMoney, loadRevenueTransactions, revenueUnavailable } from "../_shared";
 
 export async function GET(req: NextRequest) {
-  await requireAdminSession(req);
-  await enforceRateLimit(req, "admin_revenue_mock_interviews", 60, 60_000);
-  if (!allowRevenueFixtures) {
-    return revenueUnavailable(new Error("Mock interview revenue has no persisted reporting source."), "Mock interview revenue");
+  try {
+    await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_revenue_mock_interviews", 60, 60_000);
+
+    const [allTransactions, sessions] = await Promise.all([
+      loadRevenueTransactions(),
+      prisma.mockInterviewSession.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: {
+          id: true,
+          roleTarget: true,
+          status: true,
+          totalQuestions: true,
+          currentQuestionIndex: true,
+          overallScore: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+    const transactions = allTransactions.filter((transaction) => transaction.revenueSource === "Mock Interview");
+    const successful = transactions.filter((transaction) => transaction.status === "Success");
+    const scoredSessions = sessions.filter((session) => typeof session.overallScore === "number");
+    const totalRevenue = successful.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const averageScore = scoredSessions.length
+      ? scoredSessions.reduce((sum, session) => sum + (session.overallScore ?? 0), 0) / scoredSessions.length
+      : null;
+
+    return NextResponse.json({
+      success: true,
+      source: "database",
+      summary: {
+        totalRevenue,
+        totalRevenueFormatted: formatMoney(totalRevenue),
+        totalPurchases: transactions.length,
+        successfulPurchases: successful.length,
+        totalSessions: sessions.length,
+        completedSessions: sessions.filter((session) => session.status === "COMPLETED").length,
+        activeSessions: sessions.filter((session) => session.status === "IN_PROGRESS").length,
+        averageCandidateScore: averageScore === null ? null : Number(averageScore.toFixed(2)),
+      },
+      data: transactions,
+      sessions: sessions.map((session) => ({
+        ...session,
+        createdAt: session.createdAt.toISOString(),
+        updatedAt: session.updatedAt.toISOString(),
+      })),
+    });
+  } catch (error) {
+    return revenueUnavailable(error, "Mock interview revenue");
   }
-  return NextResponse.json({
-    success: true,
-    summary: mockInterviewSummary,
-    data: mockInterviewLogs,
-  });
 }
