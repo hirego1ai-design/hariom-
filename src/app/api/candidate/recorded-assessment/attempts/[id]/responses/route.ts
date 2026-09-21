@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (body.durationSeconds > question.answerDurationSeconds) throw new ApiError("Recorded answer exceeds the configured question duration.", 400);
 
     const file = await prisma.storedFile.findFirst({
-      where: { id: body.storedFileId, ownerId: session.id, category: "assessment-media", deletedAt: null },
+      where: { id: body.storedFileId, ownerId: session.id, category: "assessment-media", deletedAt: null, scanStatus: "CLEAN" },
       select: { id: true, mimeType: true },
     });
     if (!file) throw new ApiError("Assessment media file not found.", 404);
