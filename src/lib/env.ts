@@ -80,3 +80,9 @@ export function requireMalwareScannerEnv() {
   }
   return { url, token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
 }
+
+export function buildPublicAppUrl(path: string): string {
+  const host = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  return new URL(path, host).toString();
+}
+
