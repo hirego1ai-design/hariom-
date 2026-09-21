@@ -1,5 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
 const secret = process.env.CRON_SECRET?.trim();
 const endpoint = new URL('/api/cron/recorded-assessment-analysis', process.env.APP_URL || '');
 
@@ -16,63 +14,34 @@ if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && interna
   throw new Error('APP_URL must use HTTPS outside the private local app network.');
 }
 
-const intervalMs = 5 * 60_000;
-let stopping = false;
-let activeController;
-let delayController;
-
-function stop() {
-  stopping = true;
-  activeController?.abort();
-  delayController?.abort();
-}
-process.on('SIGTERM', stop);
-process.on('SIGINT', stop);
-
-while (!stopping) {
-  const startedAt = Date.now();
-  try {
-    activeController = new AbortController();
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${secret}` },
-      redirect: 'error',
-      signal: AbortSignal.any([activeController.signal, AbortSignal.timeout(90_000)]),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.success !== true) {
-      throw new Error(`Recorded assessment recovery tick failed with HTTP ${response.status}`);
-    }
-    console.log(JSON.stringify({
-      worker: 'recorded-assessment-analysis-recovery',
-      at: new Date().toISOString(),
-      status: 'completed',
-      scanned: result.scanned ?? null,
-      staleProcessingMinutes: result.staleProcessingMinutes ?? null,
-    }));
-  } catch (error) {
-    if (!stopping) {
-      console.error(JSON.stringify({
-        worker: 'recorded-assessment-analysis-recovery',
-        at: new Date().toISOString(),
-        status: 'failed',
-        message: error instanceof Error ? error.message : 'Request failed',
-      }));
-    }
-  } finally {
-    activeController = undefined;
+const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 90_000);
+try {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+    redirect: 'error',
+    signal: controller.signal,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.success !== true) {
+    throw new Error(`Recorded assessment recovery tick failed with HTTP ${response.status}`);
   }
-
-  if (!stopping) {
-    const elapsed = Date.now() - startedAt;
-    const waitMs = Math.max(1_000, intervalMs - elapsed);
-    delayController = new AbortController();
-    try {
-      await delay(waitMs, undefined, { signal: delayController.signal });
-    } catch (error) {
-      if (!stopping) throw error;
-    } finally {
-      delayController = undefined;
-    }
-  }
+  console.log(JSON.stringify({
+    worker: 'recorded-assessment-analysis-recovery',
+    at: new Date().toISOString(),
+    status: 'completed',
+    scanned: result.scanned ?? null,
+    staleProcessingMinutes: result.staleProcessingMinutes ?? null,
+  }));
+} catch (error) {
+  console.error(JSON.stringify({
+    worker: 'recorded-assessment-analysis-recovery',
+    at: new Date().toISOString(),
+    status: 'failed',
+    message: error instanceof Error ? error.message : 'Request failed',
+  }));
+  process.exitCode = 1;
+} finally {
+  clearTimeout(timeout);
 }
