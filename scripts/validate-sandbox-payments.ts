@@ -39,7 +39,7 @@ async function runStripeTests() {
   console.log("=========================================");
 
   const stripe = new StripeGateway();
-  const testSecret = "whsec_test_secret_1234567890abcdef1234567890abcdef";
+  const testSecret = "mock_webhook_secret_for_validation_only";
   process.env.STRIPE_WEBHOOK_SECRET = testSecret;
 
   // 1. Missing credentials in production
@@ -204,8 +204,8 @@ async function runPayUTests() {
   console.log("=========================================");
 
   const payu = new PayUGateway();
-  const testKey = "gtKFFx";
-  const testSalt = "eCwWELxi";
+  const testKey = "mock_payu_merchant_key";
+  const testSalt = "mock_payu_merchant_salt";
   process.env.PAYU_MERCHANT_KEY = testKey;
   process.env.PAYU_MERCHANT_SALT = testSalt;
 

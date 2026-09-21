@@ -16,7 +16,7 @@ test("Payment architecture accepts only STRIPE and PAYU, rejecting RAZORPAY and 
 
 test("Stripe webhook verification validates official v1 signatures and enforces replay tolerance", async () => {
   const stripe = new StripeGateway();
-  const testSecret = "whsec_test_secret_stripe_audit_regressions";
+  const testSecret = "mock_webhook_secret_stripe_audit_regressions";
   process.env.STRIPE_WEBHOOK_SECRET = testSecret;
 
   const nowSeconds = Math.floor(Date.now() / 1000);
