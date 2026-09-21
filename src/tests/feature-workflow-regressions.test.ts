@@ -233,7 +233,8 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
   assert(scheduler.includes("process.env.CRON_SECRET"));
   assert(scheduler.includes("Authorization"));
   assert(scheduler.includes("Bearer"));
-  assert(scheduler.includes("5 * 60_000"));
+  assert(!scheduler.includes("while ("));
+  assert(scheduler.includes("AbortController"));
   assert(!scheduler.includes("DATABASE_URL"));
   assert(!scheduler.includes("VIDEO_ANALYSIS_INTERNAL_TOKEN"));
   assert(dockerfile.includes("USER node"));
