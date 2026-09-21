@@ -1,0 +1,39 @@
+title = "HireGo AI Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# These allowlists are intentionally narrow and cover only synthetic values
+# that were previously committed in test/CI/developer-fixture contexts.
+# Do not broaden these paths or regexes. Any real credential finding must be
+# rotated/revoked rather than allowlisted.
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Synthetic WhatsApp app secret used only by the WhatsApp validation test"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^src/tests/whatsapp\.test\.ts$''']
+  regexes = ['''^valid_secret_123456$''']
+
+  [[rules.allowlists]]
+  description = "Synthetic CI-only JWT/internal API values from the deployment workflow history"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^\.github/workflows/deploy\.yml$''']
+  regexes = [
+    '''^ci_cd_test_jwt_secret_key_32chars_2026$''',
+    '''^ci_cd_test_internal_api_key_32chars$''',
+  ]
+
+[[rules]]
+id = "jwt"
+
+  [[rules.allowlists]]
+  description = "Unsigned developer mock JWT from removed historical bypass code"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^src/proxy\.ts$''']
+  regexes = ['''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpZCI6InVzZXItYWRtaW4tMSIsImVtYWlsIjoiYWRtaW5AaGlyZWdvLmFpIiwicm9sZSI6IkFETUlOIiwibmFtZSI6IkRldmVsb3BlciBCeXBhc3MifQ\.mockSignature$''']
