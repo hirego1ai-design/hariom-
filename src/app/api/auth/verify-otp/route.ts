@@ -17,7 +17,12 @@ export async function POST(request: Request) {
     await enforceRateLimit(request, "auth_verify_otp");
     const body = await readValidatedJson(request, verifyOtpSchema);
 
-    const verification = await verifyOtpCode(body.email, body.otp, body.type);
+    const verification = await verifyOtpCode(
+      body.email,
+      body.otp,
+      body.type,
+      body.type === "RESET_PASSWORD" ? { consume: false } : undefined,
+    );
     if (!verification.valid) {
       return NextResponse.json(
         { success: false, error: verification.error || "Invalid or expired verification code." },
