@@ -401,6 +401,7 @@ const json = {
     server_action_records: inventory.filter((r) => r.record_type === "server_action").length,
     records_missing_evidence: inventory.filter((r) => !r.evidence).length,
     red_records: inventory.filter((r) => r.status === "RED").length,
+    yellow_records: inventory.filter((r) => r.status === "YELLOW").length,
     black_records: inventory.filter((r) => r.status === "BLACK").length,
   },
 };

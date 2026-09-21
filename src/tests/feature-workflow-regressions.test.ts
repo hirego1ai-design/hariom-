@@ -387,3 +387,80 @@ test("production wiring inventory preserves router action names", () => {
   assert.equal(llmUsageCall?.method, "GET");
   assert.equal(llmUsageCall?.user_action, "fetch GET /api/admin/llm-usage");
 });
+
+test("previously yellow production endpoints are backed by real sources or explicit tombstones", () => {
+  const inventory = JSON.parse(
+    fs.readFileSync(new URL("../../production-wiring-inventory.json", import.meta.url), "utf8")
+  ) as {
+    records: Array<{ record_type: string; api_endpoint?: string; method?: string; status: string }>;
+    reconciliation?: { yellow_records?: number };
+  };
+
+  const expected = new Map([
+    ["GET /api/admin/revenue/audit-logs", "GREEN"],
+    ["GET /api/admin/revenue/job-boost", "GREEN"],
+    ["GET /api/admin/revenue/mock-interviews", "GREEN"],
+    ["GET /api/admin/revenue/subscriptions", "GREEN"],
+    ["GET /api/auth/me", "GREEN"],
+    ["GET /api/employer/interviews/:id/calendar", "GREEN"],
+    ["POST /api/whatsapp/onboard", "GREEN"],
+    ["GET /api/whatsapp/onboard", "GREEN"],
+  ]);
+
+  for (const [key, status] of expected) {
+    const [method, endpoint] = key.split(" ", 2);
+    const record = inventory.records.find(
+      (item) =>
+        item.record_type === "api_endpoint" &&
+        item.method === method &&
+        item.api_endpoint === endpoint
+    );
+    assert(record, `Missing inventory record for ${key}`);
+    assert.equal(record.status, status, `${key} must be GREEN`);
+  }
+
+  assert.equal(inventory.reconciliation?.yellow_records, 0);
+
+  const jobBoost = fs.readFileSync(
+    new URL("../app/api/admin/revenue/job-boost/route.ts", import.meta.url),
+    "utf8"
+  );
+  const mockInterviews = fs.readFileSync(
+    new URL("../app/api/admin/revenue/mock-interviews/route.ts", import.meta.url),
+    "utf8"
+  );
+  const subscriptions = fs.readFileSync(
+    new URL("../app/api/admin/revenue/subscriptions/route.ts", import.meta.url),
+    "utf8"
+  );
+  const calendar = fs.readFileSync(
+    new URL("../app/api/employer/interviews/[id]/calendar/route.ts", import.meta.url),
+    "utf8"
+  );
+  const whatsappTombstone = fs.readFileSync(
+    new URL("../app/api/whatsapp/onboard/route.ts", import.meta.url),
+    "utf8"
+  );
+
+  assert(jobBoost.includes("loadRevenueTransactions"));
+  assert(!jobBoost.includes("jobBoostSummary"));
+  assert(!jobBoost.includes("allowRevenueFixtures"));
+
+  assert(mockInterviews.includes("prisma.mockInterviewSession.findMany"));
+  assert(mockInterviews.includes("loadRevenueTransactions"));
+  assert(!mockInterviews.includes("mockInterviewSummary"));
+  assert(!mockInterviews.includes("allowRevenueFixtures"));
+
+  assert(subscriptions.includes("prisma.subscriptionPlan.findMany"));
+  assert(subscriptions.includes("prisma.paymentTransaction.findMany"));
+  assert(!subscriptions.includes("subscriptionPlans:"));
+
+  assert(calendar.includes("escapeIcsText"));
+  assert(calendar.includes("Cache-Control"));
+  assert(calendar.includes("handleApiError"));
+
+  assert(whatsappTombstone.includes("jsonError"));
+  assert(whatsappTombstone.includes("410"));
+  assert(whatsappTombstone.includes("/api/whatsapp/webhook"));
+});
+
