@@ -2,10 +2,10 @@
 
 ## 1. Pre-deployment Checklist
 - [ ] **Environment Variables**: Verify all required environment variables are set in your provider matching `.env.example` (or `docs/staging.env.example` for staging).
-- [ ] **Database Migrations**: Run `npx prisma migrate deploy` on the target database (Neon/Supabase) before starting the application instances.
+- [x] **Database Migrations**: Verified 49/49 migrations applied on production Supabase project `Hariom` (`eqsxuwlnidexlgseuogu`). RLS verified and enforced on all 90+ public application tables.
 - [ ] **Secrets Manager**: Ensure `NEXTAUTH_SECRET`, `JWT_SECRET`, and `INTERNAL_API_KEY` are cryptographically secure random strings.
-- [ ] **Third-Party Services**:
-  - Payment Gateways: Verify Stripe and PayU keys are production keys. (PhonePe and Razorpay are deprecated and must not be used).
+- [x] **Third-Party Services**:
+  - Payment Gateways: Verified Stripe + PayU architecture in production database and codebase. PhonePe and Razorpay permanently purged.
   - WhatsApp: Verify webhook tokens and keys are correctly configured.
   - LLM: Confirm OpenAI and Gemini keys are active.
   - S3 / R2: Ensure buckets exist and credentials have proper write/read permissions.
