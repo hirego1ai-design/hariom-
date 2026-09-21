@@ -220,3 +220,21 @@ test("deployment templates document production-critical runtime settings", () =>
     }
   }
 });
+
+
+test("recorded assessment recovery is scheduled outside Vercel with a dedicated least-privilege worker", () => {
+  const vercel = JSON.parse(fs.readFileSync(new URL("../../vercel.json", import.meta.url), "utf8")) as { crons?: Array<{ path: string; schedule: string }> };
+  const scheduler = fs.readFileSync(new URL("../../scripts/run-recorded-assessment-scheduler.mjs", import.meta.url), "utf8");
+  const dockerfile = fs.readFileSync(new URL("../../Dockerfile.recorded-assessment-scheduler", import.meta.url), "utf8");
+
+  assert.deepEqual(vercel.crons, [{ path: "/api/cron/referrals-reconciliation", schedule: "0 2 * * *" }]);
+  assert(!JSON.stringify(vercel).includes("/api/cron/recorded-assessment-analysis"));
+  assert(scheduler.includes("'/api/cron/recorded-assessment-analysis'"));
+  assert(scheduler.includes("process.env.CRON_SECRET"));
+  assert(scheduler.includes("Authorization"));
+  assert(scheduler.includes("Bearer"));
+  assert(scheduler.includes("5 * 60_000"));
+  assert(!scheduler.includes("DATABASE_URL"));
+  assert(!scheduler.includes("VIDEO_ANALYSIS_INTERNAL_TOKEN"));
+  assert(dockerfile.includes("USER node"));
+});
