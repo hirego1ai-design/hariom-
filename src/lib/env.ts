@@ -1,3 +1,5 @@
+import { assertSafeOutboundServiceUrl, parseAllowedHosts } from "@/lib/security/outboundUrl";
+
 const PLACEHOLDER = /placeholder|your[-_ ]|change[-_ ]me|set-a-long/i;
 
 export function requireProductionEnv(name: string): string {
@@ -41,10 +43,11 @@ export function getVideoAnalysisConfig() {
   if (enabled && process.env.NODE_ENV === "production") {
     workerUrl = requireProductionEnv("VIDEO_ANALYSIS_WORKER_URL");
     internalToken = requireProductionEnv("VIDEO_ANALYSIS_INTERNAL_TOKEN");
-    const parsedWorkerUrl = new URL(workerUrl);
-    if (parsedWorkerUrl.protocol !== "https:" || parsedWorkerUrl.username || parsedWorkerUrl.password) {
-      throw new Error("VIDEO_ANALYSIS_WORKER_URL must be a credential-free HTTPS URL in production.");
-    }
+    assertSafeOutboundServiceUrl(workerUrl, {
+      label: "VIDEO_ANALYSIS_WORKER_URL",
+      requireHttps: true,
+      allowedHosts: parseAllowedHosts(process.env.VIDEO_ANALYSIS_ALLOWED_HOSTS),
+    });
     if (internalToken.length < 32) {
       throw new Error("VIDEO_ANALYSIS_INTERNAL_TOKEN must contain at least 32 characters in production.");
     }
@@ -74,10 +77,11 @@ export function getVideoAnalysisConfig() {
 
 export function requireMalwareScannerEnv() {
   const url = requireProductionEnv("MALWARE_SCANNER_URL");
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-    throw new Error("MALWARE_SCANNER_URL must be a credential-free HTTPS URL in production.");
-  }
+  assertSafeOutboundServiceUrl(url, {
+    label: "MALWARE_SCANNER_URL",
+    requireHttps: true,
+    allowedHosts: parseAllowedHosts(process.env.MALWARE_SCANNER_ALLOWED_HOSTS),
+  });
   return { url, token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
 }
 
