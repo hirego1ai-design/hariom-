@@ -17,27 +17,22 @@ export async function POST(req: NextRequest) {
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
     const requestedProvider = req.nextUrl.searchParams.get("provider")?.toUpperCase();
-    if (requestedProvider && !["RAZORPAY", "STRIPE", "PAYU"].includes(requestedProvider)) {
+    if (requestedProvider && !["STRIPE", "PAYU"].includes(requestedProvider)) {
       throw new ApiError("Unsupported payment webhook provider", 400);
     }
-    const providerParam = ["RAZORPAY", "STRIPE", "PAYU"].includes(requestedProvider || "")
+    const providerParam = ["STRIPE", "PAYU"].includes(requestedProvider || "")
       ? (requestedProvider as GatewayName)
       : null;
-    const razorpaySignature = req.headers.get("x-razorpay-signature");
     const stripeSignature = req.headers.get("stripe-signature");
     const payuSignature = req.headers.get("x-payu-signature") || body?.hash;
     const providerHeader =
       providerParam ||
-      (razorpaySignature
-        ? "RAZORPAY"
-        : stripeSignature
+      (stripeSignature
         ? "STRIPE"
         : payuSignature
-        ? "PAYU"
-        : "RAZORPAY");
+        ? "PAYU" : "STRIPE");
 
     const signature =
-      razorpaySignature ||
       stripeSignature ||
       payuSignature ||
       body?.hash ||
@@ -446,3 +441,4 @@ export async function POST(req: NextRequest) {
     return handleApiError(error);
   }
 }
+

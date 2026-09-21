@@ -104,6 +104,8 @@ export async function getPrivateObject(objectKey: string): Promise<Buffer> {
   return readFile(devObjectPath(objectKey));
 }
 
+
+
 export async function readPrivateObjectForSecurityScan(objectKey: string): Promise<Buffer> {
   if (!isProduction()) return readFile(devObjectPath(objectKey));
   const { client, bucket } = s3Client();
@@ -112,14 +114,13 @@ export async function readPrivateObjectForSecurityScan(objectKey: string): Promi
   const bytes = await response.Body.transformToByteArray();
   return Buffer.from(bytes);
 }
-
-export async function getPrivateDownloadUrl(objectKey: string, fileName: string) {
+export async function getPrivateDownloadUrl(objectKey: string, fileName: string, disposition: "attachment" | "inline" = "attachment") {
   if (!isProduction()) return null;
   const { client, bucket } = s3Client();
   return getSignedUrl(client, new GetObjectCommand({
     Bucket: bucket,
     Key: objectKey,
-    ResponseContentDisposition: `attachment; filename="${fileName.replace(/[\\\r\n\"]/g, "_")}"`,
+    ResponseContentDisposition: `${disposition}; filename="${fileName.replace(/[\\\r\n\"]/g, "_")}"`,
   }), {
     expiresIn: Number(process.env.S3_SIGNED_URL_TTL_SECONDS || 300),
   });
@@ -152,3 +153,8 @@ export async function deleteObject(objectKey: string) {
   }
   await unlink(devObjectPath(objectKey));
 }
+
+
+
+
+

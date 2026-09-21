@@ -697,14 +697,14 @@ function CandidateCard({
           >
             <span className="material-symbols-outlined text-[14px]">compare_arrows</span>
           </Link>
-          {candidate.hasVideoResume && (
-            <button
-              onClick={() => alert(`Launching video resume presentation for ${candidate.name}`)}
+          {candidate.videoResumeId && (
+            <Link
+              href={`/employer/video-resume/${encodeURIComponent(candidate.videoResumeId)}`}
               className="w-7 h-7 rounded-lg bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 flex items-center justify-center text-secondary transition-all"
-              title="Watch Video Resume"
+              title={`Review ${candidate.name}'s video resume`}
             >
               <span className="material-symbols-outlined text-[14px]">videocam</span>
-            </button>
+            </Link>
           )}
           <Link
             href={`/employer/full-candidate-profile-employer-view?id=${candidate.id}`}

@@ -20,7 +20,7 @@ export const options = {
   },
 };
 
-export default function () {
+export default function stagedSmoke() {
   const response = http.get(`${baseUrl}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
     tags: { endpoint: "auth_me" },

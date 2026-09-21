@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     });
 
     if (!videoResume) return jsonError("Video resume not found", 404);
+    if (videoResume.retentionExpiresAt && videoResume.retentionExpiresAt <= new Date() && session.role !== "ADMIN" && videoResume.candidateProfile.userId !== session.id) {
+      return jsonError("Video resume is no longer available", 404);
+    }
 
     // Authorization checks
     if (session.role === "CANDIDATE") {
@@ -56,15 +59,8 @@ export async function GET(request: NextRequest) {
       videoId: videoResume.id,
       analysisStatus: videoResume.analysisStatus,
       durationSeconds: videoResume.durationSeconds,
+      videoUrl: videoResume.videoUrl,
       transcript: videoResume.transcript,
-      scores: {
-        communicationScore: videoResume.communicationScore,
-        clarityScore: videoResume.clarityScore,
-        confidenceScore: videoResume.confidenceScore,
-        professionalism: videoResume.professionalism,
-        speechDeliveryScore: videoResume.speechDeliveryScore,
-        contentStructureScore: videoResume.contentStructureScore,
-      },
       metrics: {
         detectedLanguage: videoResume.detectedLanguage,
         wordsPerMinute: videoResume.wordsPerMinute,
@@ -73,20 +69,6 @@ export async function GET(request: NextRequest) {
         transcriptConfidence: videoResume.transcriptConfidence,
         lowConfidence: videoResume.lowConfidence,
         audioQuality: videoResume.audioQuality,
-        facePresenceRatio: videoResume.facePresenceRatio,
-        cameraFacingRatioEstimate: videoResume.cameraFacingRatioEstimate,
-        headPoseIndicators: videoResume.headPoseIndicators,
-        postureIndicators: videoResume.postureIndicators,
-      },
-      insights: {
-        strengths: videoResume.strengths,
-        improvementSuggestions: videoResume.improvementSuggestions,
-      },
-      modelInfo: {
-        analysisVersion: videoResume.analysisVersion,
-        workerVersion: videoResume.workerVersion,
-        modelName: videoResume.modelName,
-        modelVersion: videoResume.modelVersion,
       },
       job: latestJob
         ? {

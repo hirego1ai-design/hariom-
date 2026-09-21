@@ -124,3 +124,52 @@ export async function POST(req: NextRequest) {
     return handleApiError(error);
   }
 }
+
+
+const withdrawSchema = z.object({
+  applicationId: z.string().uuid(),
+}).strict();
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getCurrentSession(req.headers);
+    if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
+    const { applicationId } = await readValidatedJson(req, withdrawSchema);
+    const candidate = await prisma.candidateProfile.findUnique({ where: { userId: session.id }, select: { id: true } });
+    if (!candidate) return jsonError("Candidate profile not found", 404);
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${applicationId} FOR UPDATE`;
+      const application = await tx.application.findUnique({
+        where: { id: applicationId },
+        include: { pphPlacement: { select: { id: true, status: true, invoiceId: true } } },
+      });
+      if (!application || application.candidateProfileId !== candidate.id) throw new ApiError("Application not found", 404);
+      if (application.status === "WITHDRAWN") return { duplicate: true };
+      const liveRound = await tx.interviewRoundProgress.findFirst({
+        where: { applicationId, status: "LIVE" },
+        select: { id: true },
+      });
+      if (liveRound) {
+        throw new ApiError("An interview is currently live. End the active interview before withdrawing this application.", 409);
+      }
+      if (application.status === "HIRED" || application.pphPlacement) {
+        throw new ApiError("This application has entered the joining or placement workflow and cannot be withdrawn here. Contact HireGo support for reconciliation.", 409);
+      }
+      await tx.application.update({ where: { id: applicationId }, data: { status: "WITHDRAWN" } });
+      await tx.interview.updateMany({
+        where: { applicationId, status: { in: ["SCHEDULED", "RESCHEDULED"] } },
+        data: { status: "CANCELLED" },
+      });
+      await tx.interviewRoundProgress.updateMany({
+        where: { applicationId, status: "SCHEDULED" },
+        data: { status: "CANCELLED" },
+      });
+      return { duplicate: false };
+    });
+    return NextResponse.json({ success: true, applicationId, status: "WITHDRAWN", duplicate: result.duplicate });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

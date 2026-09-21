@@ -10,6 +10,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx src/tests/suite.test.ts",
     "test": "tsx src/tests/suite.test.ts && npx tsx src/tests/communication-template-regression.test.ts",
     "test:audit": "node scripts/audit-regressions.mjs",
     "test:phase5": "tsx src/tests/run-phase5-tests.ts && tsx --test src/tests/workflow-engine-regression.test.ts && tsx --test src/tests/hiring-pipeline-contract.test.ts",
@@ -65,5 +66,7 @@
     "sharp": "0.35.4",
     "minimatch@>=10": "10.2.5",
     "minimatch@<10": "3.1.5"
+
   }
 }
+

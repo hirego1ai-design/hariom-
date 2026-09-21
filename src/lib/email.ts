@@ -16,6 +16,7 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
 }
 
+
 class EmailProviderDispatchError extends Error {
   constructor(message: string, readonly canFailover: boolean) {
     super(message);

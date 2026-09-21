@@ -128,17 +128,14 @@ export default function VideoResumePage() {
           const status = data.analysisStatus;
           if (status === "COMPLETED") {
             clearInterval(interval);
-            // Render actual scores from server only if non-null
             setAnalysisResult({
-              communicationScore: data.scores.communicationScore,
-              clarityScore: data.scores.clarityScore,
-              confidenceScore: data.scores.confidenceScore,
-              professionalismScore: data.scores.professionalism,
-              speechDeliveryScore: data.scores.speechDeliveryScore,
-              contentStructureScore: data.scores.contentStructureScore,
               transcript: data.transcript,
-              strengths: data.insights?.strengths || [],
-              improvements: data.insights?.improvementSuggestions || [],
+              detectedLanguage: data.metrics?.detectedLanguage,
+              wordsPerMinute: data.metrics?.wordsPerMinute,
+              pauseRatio: data.metrics?.pauseRatio,
+              fillerWordCount: data.metrics?.fillerWordCount,
+              audioQuality: data.metrics?.audioQuality,
+              transcriptConfidence: data.metrics?.transcriptConfidence,
               lowConfidence: data.metrics?.lowConfidence,
             });
             setMode("complete");
@@ -194,7 +191,7 @@ export default function VideoResumePage() {
       updateState({ videoRecorded: true, videoAnalysis: null });
       markStepComplete(8);
 
-      if (saveJson.videoId && saveJson.analysisStatus === "PENDING") {
+      if (saveJson.videoId && !["COMPLETED", "FAILED", "BLOCKED_INFRA"].includes(saveJson.analysisStatus)) {
         pollStatus(saveJson.videoId);
       } else if (saveJson.analysisStatus === "BLOCKED_INFRA") {
         setMode("failed");
@@ -435,7 +432,7 @@ export default function VideoResumePage() {
                 <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--outline)" }}>
                   <span className="font-extrabold text-xs uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--primary)" }}>
                     <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                    Local Speech & Presentation Metrics
+                    Video Presentation Report
                   </span>
                   {analysisResult.lowConfidence && (
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-600">
@@ -444,12 +441,11 @@ export default function VideoResumePage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {[
-                    { label: "Communication", score: analysisResult.communicationScore },
-                    { label: "Speech Clarity", score: analysisResult.clarityScore },
-                    { label: "Confidence", score: analysisResult.confidenceScore },
-                    { label: "Professionalism", score: analysisResult.professionalismScore },
+                    { label: "Detected language", value: analysisResult.detectedLanguage },
+                    { label: "Speech pace", value: analysisResult.wordsPerMinute ? `${Math.round(analysisResult.wordsPerMinute)} words/min` : null },
+                    { label: "Audio quality", value: analysisResult.audioQuality },
                   ].map((m) => (
                     <div
                       key={m.label}
@@ -460,7 +456,7 @@ export default function VideoResumePage() {
                       }}
                     >
                       <span className="text-lg font-extrabold font-mono block" style={{ color: "var(--primary)" }}>
-                        {m.score !== null && m.score !== undefined ? `${m.score}%` : "N/A"}
+                        {m.value !== null && m.value !== undefined ? m.value : "N/A"}
                       </span>
                       <span className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
                         {m.label}
@@ -471,7 +467,7 @@ export default function VideoResumePage() {
 
                 {analysisResult.transcript && (
                   <div className="p-3 rounded-xl border bg-white/5 space-y-1 text-xs">
-                    <span className="font-bold block text-text-primary">Transcript (Whisper small):</span>
+                  <span className="font-bold block text-text-primary">Transcript:</span>
                     <p className="text-text-muted italic">"{analysisResult.transcript}"</p>
                   </div>
                 )}

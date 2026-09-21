@@ -8,18 +8,38 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 function EmployerLiveInterviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const interviewId = searchParams.get("interviewId") || "";
+  const requestedInterviewId = searchParams.get("interviewId") || "";
+  const requestedRoomId = searchParams.get("roomId") || "";
+  const [resolvedInterviewId, setResolvedInterviewId] = useState(requestedInterviewId);
 
   const [loading, setLoading] = useState(true);
   const [interviewDetails, setInterviewDetails] = useState<any>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!searchParams.get("interviewId")) {
-      setLoading(false);
-      return;
+    let cancelled = false;
+    async function load() {
+      try {
+        let id = requestedInterviewId;
+        if (!id && requestedRoomId) {
+          const roomRes = await fetch(`/api/interviews/room?roomId=${encodeURIComponent(requestedRoomId)}`, { cache: "no-store" });
+          const roomData = await roomRes.json();
+          if (!roomRes.ok || !roomData.success || !roomData.room?.interviewId) throw new Error(roomData.error || "Interview room could not be resolved.");
+          id = roomData.room.interviewId;
+        }
+        if (!id) { if (!cancelled) setLoading(false); return; }
+        if (!cancelled) setResolvedInterviewId(id);
+        const res = await fetch(`/api/employer/interviews/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load interview room details.");
+        const data = await res.json();
+        if (!cancelled && data.success) setInterviewDetails(data.interview);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load interview.");
+      } finally { if (!cancelled) setLoading(false); }
     }
-
+    void load();
+    return () => { cancelled = true; };
+    /*
     fetch(`/api/employer/interviews/${searchParams.get("interviewId")}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load interview room details.");
@@ -31,8 +51,8 @@ function EmployerLiveInterviewContent() {
         }
       })
 .catch((err) => setError(err instanceof Error ? err.message : "Unable to load interview."))
-      .finally(() => setLoading(false));
-  }, [searchParams]);
+      .finally(() => setLoading(false)); */
+  }, [requestedInterviewId, requestedRoomId]);
 
   if (loading) {
     return (
@@ -44,9 +64,9 @@ function EmployerLiveInterviewContent() {
     );
   }
 
-  if (!interviewId || error || !interviewDetails) return <PageContainer><div className="mx-auto max-w-xl px-4 py-16 text-center"><h1 className="text-2xl font-bold text-text-primary">Interview unavailable</h1><p className="mt-3 text-sm text-text-secondary">{error || "Open the room from a scheduled interview. No demo interview is used in production."}</p></div></PageContainer>;
+  if (!resolvedInterviewId || error || !interviewDetails) return <PageContainer><div className="mx-auto max-w-xl px-4 py-16 text-center"><h1 className="text-2xl font-bold text-text-primary">Interview unavailable</h1><p className="mt-3 text-sm text-text-secondary">{error || "Open the room from a scheduled interview. No demo interview is used in production."}</p></div></PageContainer>;
 
-  const roomId = interviewDetails.id;
+  const roomId = requestedRoomId || interviewDetails.roomId || interviewDetails.id;
   const roundTitle = interviewDetails.round;
   const candidateName = interviewDetails.candidateName;
   const jobTitle = interviewDetails.jobTitle;

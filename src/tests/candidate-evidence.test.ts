@@ -7,7 +7,11 @@ const application = {
   createdAt: new Date("2026-09-01T12:00:00Z"), updatedAt: new Date("2026-09-05T13:00:00Z"),
   candidateProfile: { id: "candidate-a", headline: "Engineer", bio: "Candidate supplied bio", location: "Delhi",
     experienceYears: 8.75, user: { name: "Candidate A" }, resumeUrl: "/private/resume.pdf", videoResumes: [] as { id: string }[],
-    availabilityStatus: "RECONFIRMATION_REQUIRED", lastAvailabilityConfirmedAt: null, readinessRecords: [] as { roleTitle: string; seniority: string; score: number | null; validUntil: Date | null }[] },
+
+    availabilityStatus: "ACTIVE_CONFIRMED", lastAvailabilityConfirmedAt: new Date("2026-09-05T12:00:00Z"), readinessRecords: [] as { roleTitle: string; seniority: string; status: string; score: number | null; validUntil: Date | null }[] },
+
+
+
   job: { title: "Engineer" },
 };
 
@@ -20,9 +24,11 @@ test("application match is not fabricated into assessment or interview results",
 
 test("document resume alone does not indicate a video resume", () => {
   assert.equal(toEmployerCandidate(application).hasVideoResume, false);
-  assert.equal(toEmployerCandidate({ ...application, candidateProfile: {
+  const withVideo = toEmployerCandidate({ ...application, candidateProfile: {
     ...application.candidateProfile, videoResumes: [{ id: "actual-video-row" }],
-  } }).hasVideoResume, true);
+  } });
+  assert.equal(withVideo.hasVideoResume, true);
+  assert.equal(withVideo.videoResumeId, "actual-video-row");
 });
 
 test("candidate supplied biography is separate from recruiter notes and salary/source are not invented", () => {

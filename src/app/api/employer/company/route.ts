@@ -21,17 +21,12 @@ export async function GET(req: NextRequest) {
     await enforceRateLimit(req, "employer_company_get", 60, 60_000);
     const session = await requireEmployerOrAdminSession(req);
     if (session.role === "ADMIN") throw new ApiError("Administrator access requires an explicitly scoped company endpoint.", 400);
-    const employerProfile = await prisma.employerProfile.findUnique({
-      where: { userId: session.id },
-      include: { company: true },
-    });
+    const company = await getSessionCompany(session);
+    const employerProfile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { id: true, designation: true } });
     if (!employerProfile) throw new ApiError("Employer profile not found.", 404);
-    if (!employerProfile.company) throw new ApiError("Company not found.", 404);
-    return NextResponse.json({
-      success: true,
-      company: employerProfile.company,
-      employer: { id: employerProfile.id, designation: employerProfile.designation },
-    });
+    const record = await prisma.company.findUnique({ where: { id: company.id } });
+    if (!record) throw new ApiError("Company not found.", 404);
+    return NextResponse.json({ success: true, company: record, employer: employerProfile });
   } catch (error) { return handleApiError(error); }
 }
 

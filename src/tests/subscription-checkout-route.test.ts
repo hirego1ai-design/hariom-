@@ -45,7 +45,7 @@ test("checkout rejects nonexistent and archived plans in every environment", asy
   prisma.$transaction = (async () => { transactions++; throw new Error("transaction must not run"); }) as unknown as typeof originalTransaction;
   PaymentGatewayController.createOrder = async () => { providerCalls++; throw new Error("provider must not run"); };
 
-  const missing = await POST(checkoutRequest({ planId: "missing-plan", paymentMethod: "RAZORPAY" }));
+  const missing = await POST(checkoutRequest({ planId: "missing-plan", paymentMethod: "STRIPE" }));
   assert.equal(missing.status, 404);
   plan = {
     id: "archived-plan", name: "Archived", description: "Archived plan", price: 100,
@@ -53,7 +53,7 @@ test("checkout rejects nonexistent and archived plans in every environment", asy
     applicationsQuota: 1, resumeDownloadsQuota: 1, backgroundVerificationsQuota: 1,
     featuresAllowed: [], validityMonths: 1, isArchived: true, createdAt: new Date(), updatedAt: new Date(),
   };
-  const archived = await POST(checkoutRequest({ planId: "archived-plan", paymentMethod: "RAZORPAY" }));
+  const archived = await POST(checkoutRequest({ planId: "archived-plan", paymentMethod: "STRIPE" }));
   assert.equal(archived.status, 400);
   assert.equal(transactions, 0);
   assert.equal(providerCalls, 0);
@@ -100,10 +100,10 @@ test("zero-price and full-discount checkout never creates a payment order or cal
   })) as unknown as typeof originalTransaction;
   PaymentGatewayController.createOrder = async () => { providerCalls++; throw new Error("provider must not run"); };
 
-  const zeroPrice = await POST(checkoutRequest({ planId: "plan", paymentMethod: "RAZORPAY" }));
+  const zeroPrice = await POST(checkoutRequest({ planId: "plan", paymentMethod: "STRIPE" }));
   assert.equal(zeroPrice.status, 400);
   price = 100;
-  const fullDiscount = await POST(checkoutRequest({ planId: "plan", paymentMethod: "RAZORPAY", promoCode: "FREE" }));
+  const fullDiscount = await POST(checkoutRequest({ planId: "plan", paymentMethod: "STRIPE", promoCode: "FREE" }));
   assert.equal(fullDiscount.status, 400);
   assert.equal(promoUpdates, 0);
   assert.equal(orderCreates, 0);
@@ -154,7 +154,7 @@ test("a retry with the same key reuses the created provider order without anothe
   const existing = {
     id: "db-order", orderId: "deterministic-order", companyId: "company", planId: "plan",
     planSnapshot: createPurchasedPlanSnapshot(plan), originalAmount: 100, discountAmount: 0,
-    expectedAmount: 100, gateway: "RAZORPAY", gatewayOrderId: "provider-order",
+    expectedAmount: 100, gateway: "STRIPE", gatewayOrderId: "provider-order",
     gatewayTxId: null, promoCode: null, promoReservationState: null, status: "CREATED",
     createdAt: new Date(), updatedAt: new Date(),
   };
@@ -173,7 +173,7 @@ test("a retry with the same key reuses the created provider order without anothe
   prisma.paymentOrder.findUnique = (async () => existing) as unknown as typeof originalFindOrder;
   PaymentGatewayController.createOrder = async () => { providerCalls++; throw new Error("must not call provider"); };
 
-  const response = await POST(checkoutRequest({ planId: "plan", paymentMethod: "RAZORPAY" }));
+  const response = await POST(checkoutRequest({ planId: "plan", paymentMethod: "STRIPE" }));
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.duplicate, true);

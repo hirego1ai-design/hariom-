@@ -3,15 +3,32 @@ import { enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "
 import { prisma } from "@/lib/prisma";
 import { getPrivateDownloadUrl, getPrivateObject } from "@/lib/storage";
 
-async function canAccessFile(userId: string, role: string, file: { ownerId: string; companyId: string | null }) {
+async function canAccessFile(userId: string, role: string, file: { id: string; ownerId: string; companyId: string | null; category: string }) {
   if (role === "ADMIN" || file.ownerId === userId) return true;
-  if (!file.companyId || (role !== "EMPLOYER" && role !== "RECRUITER")) return false;
+  if (role !== "EMPLOYER" && role !== "RECRUITER") return false;
 
   const profile = await prisma.employerProfile.findUnique({
     where: { userId },
     select: { companyId: true },
   });
-  return profile?.companyId === file.companyId;
+  if (!profile?.companyId) return false;
+  if (file.category === "video-resumes") {
+    // A candidate upload has no companyId. Allow only an employer with an
+    // application from this candidate, and only for an active video record.
+    const video = await prisma.videoResume.findFirst({
+      where: {
+        videoUrl: `/api/files/${file.id}`,
+        candidateProfile: {
+          userId: file.ownerId,
+          applications: { some: { job: { companyId: profile.companyId } } },
+        },
+        OR: [{ retentionExpiresAt: null }, { retentionExpiresAt: { gt: new Date() } }],
+      },
+      select: { id: true },
+    });
+    return Boolean(video);
+  }
+  return Boolean(file.companyId && profile.companyId === file.companyId);
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +47,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (!(await canAccessFile(session.id, session.role, file))) return jsonError("Forbidden", 403);
 
-    const signedUrl = await getPrivateDownloadUrl(file.objectKey, file.originalName);
+    const disposition = file.category === "video-resumes" ? "inline" : "attachment";
+    const signedUrl = await getPrivateDownloadUrl(file.objectKey, file.originalName, disposition);
     if (signedUrl) return NextResponse.redirect(signedUrl, { status: 307 });
 
     const content = await getPrivateObject(file.objectKey);
@@ -39,7 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       headers: {
         "Content-Type": file.mimeType,
         "Content-Length": String(file.sizeBytes),
-        "Content-Disposition": `attachment; filename="${file.originalName.replace(/[\\\r\n\"]/g, "_")}"`,
+        "Content-Disposition": `${disposition}; filename="${file.originalName.replace(/[\\\r\n\"]/g, "_")}"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

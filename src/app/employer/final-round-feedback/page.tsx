@@ -31,6 +31,7 @@ export default function InterviewFeedbackPage() {
       .then(async r => { const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||"Unable to load feedback."); return d; })
       .then(d => {
         setPolicy(d.policy || null);
+        setRoundComplete(Boolean(d.roundComplete));
         if (d.feedback) {
           setRecommendation(d.feedback.recommendation || "");
           const internal = d.feedback.internalFeedback || {};

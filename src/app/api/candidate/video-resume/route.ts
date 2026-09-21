@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrl } from "@/lib/storage";
 import crypto from "crypto";
+import { claimVideoAnalysisJob, releaseVideoAnalysisClaimForRetry } from "@/lib/videoAnalysisQueue";
 
 const videoResumeSubmissionSchema = z.object({
   videoUrl: z.string().regex(/^\/api\/files\/[0-9a-f-]{36}$/i, "Video must be an uploaded HireGo file."),
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
         durationSeconds: body.durationSeconds,
         workerUrl: config.workerUrl,
         token: config.internalToken,
+        callbackOrigin: request.nextUrl.origin,
       });
     }
 
@@ -137,9 +139,21 @@ async function dispatchWorkerJob(params: {
   durationSeconds: number;
   workerUrl: string;
   token: string;
+  callbackOrigin: string;
 }) {
   try {
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/internal/video-analysis/callback`;
+    const claim = await claimVideoAnalysisJob(params.jobId);
+    if (!claim) return;
+    const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
+      || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
+      || params.callbackOrigin.replace(/\/$/, "");
+    if (process.env.NODE_ENV === "production") {
+      const parsedOrigin = new URL(appOrigin);
+      if (parsedOrigin.protocol !== "https:" || parsedOrigin.username || parsedOrigin.password) {
+        throw new Error("VIDEO_ANALYSIS_CALLBACK_ORIGIN (or NEXT_PUBLIC_APP_URL) must be a credential-free HTTPS origin in production.");
+      }
+    }
+    const callbackUrl = `${appOrigin}/api/internal/video-analysis/callback`;
     const res = await fetch(`${params.workerUrl.replace(/\/$/, "")}/analyze`, {
       method: "POST",
       headers: {
@@ -154,45 +168,29 @@ async function dispatchWorkerJob(params: {
         downloadUrl: params.downloadUrl,
         claimedDurationSeconds: params.durationSeconds,
         callbackUrl,
+        claimToken: claim.claimToken,
       }),
     });
     if (!res.ok) {
       console.error(`Video analysis worker rejected dispatch with HTTP ${res.status}.`);
-      await prisma.$transaction([
-        prisma.videoAnalysisJob.updateMany({
-          where: { id: params.jobId, status: "PENDING" },
-          data: { status: "BLOCKED_INFRA", error: `Worker rejected dispatch with HTTP ${res.status}.`, completedAt: new Date() },
-        }),
-        prisma.videoResume.updateMany({
-          where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-          data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service returned error" },
-        }),
-      ]);
+      await releaseVideoAnalysisClaimForRetry({
+        jobId: params.jobId,
+        claimToken: claim.claimToken,
+        reason: `Worker rejected dispatch with HTTP ${res.status}.`,
+      });
       return;
     }
-    // A very fast callback may already have completed the job. The conditional
-    // update cannot regress that terminal result back to PROCESSING.
-    await prisma.$transaction([
-      prisma.videoAnalysisJob.updateMany({
-        where: { id: params.jobId, status: "PENDING" },
-        data: { status: "PROCESSING", startedAt: new Date(), attempts: { increment: 1 } },
-      }),
-      prisma.videoResume.updateMany({
-        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-        data: { analysisStatus: "PROCESSING", startedAt: new Date() },
-      }),
-    ]);
+    await prisma.videoResume.updateMany({
+      where: { id: params.videoResumeId, analysisStatus: "PENDING" },
+      data: { analysisStatus: "PROCESSING", startedAt: new Date(), analysisError: null },
+    });
   } catch (e) {
     console.error("Failed to reach video-analysis-worker.");
-    await prisma.$transaction([
-      prisma.videoAnalysisJob.updateMany({
-        where: { id: params.jobId, status: "PENDING" },
-        data: { status: "BLOCKED_INFRA", error: "Worker connection failed", completedAt: new Date() },
-      }),
-      prisma.videoResume.updateMany({
-        where: { id: params.videoResumeId, analysisStatus: "PENDING" },
-        data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Worker service unavailable" },
-      }),
-    ]);
+    const current = await prisma.videoAnalysisJob.findUnique({ where: { id: params.jobId }, select: { claimToken: true } });
+    if (current?.claimToken) await releaseVideoAnalysisClaimForRetry({
+      jobId: params.jobId,
+      claimToken: current.claimToken,
+      reason: "Worker connection failed",
+    });
   }
 }

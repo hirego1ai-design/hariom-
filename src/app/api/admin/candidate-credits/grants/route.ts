@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { logAuditEvent } from "@/lib/auditLogger";
 
 const grantSchema = z.object({
   candidateProfileId: z.string().uuid(),
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireAdmin(request);
     await enforceRateLimit(request, "admin_candidate_credit_grants", 10, 60_000);
-    const data = await readValidatedJson(request, grantSchema, 8 * 1024);
+    const data = await readValidatedJson(request, grantSchema);
     const ledger = await prisma.$transaction(async (tx) => {
       const prior = await tx.candidateCreditLedger.findUnique({ where: { idempotencyKey: data.idempotencyKey } });
       if (prior) {
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         create: { candidateProfileId: data.candidateProfileId, balance: data.amount },
         update: { balance: { increment: data.amount } },
       });
-      const ledger = await tx.candidateCreditLedger.create({
+      return tx.candidateCreditLedger.create({
         data: {
           candidateProfileId: data.candidateProfileId,
           type: data.type,
@@ -47,17 +47,8 @@ export async function POST(request: NextRequest) {
           reference: data.reference,
         },
       });
-      const auditLog = await tx.auditLog.create({
-        data: {
-          userId: session.id,
-          action: "GRANT_CANDIDATE_CREDITS",
-          resource: `CandidateCreditLedger:${ledger.id}`,
-          details: `amount:${ledger.amount}; reference:${ledger.reference}`,
-        },
-      });
-      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
-      return ledger;
     });
+    await logAuditEvent({ userId: session.id, action: "GRANT_CANDIDATE_CREDITS", resource: `CandidateCreditLedger:${ledger.id}`, details: `amount:${ledger.amount}; reference:${ledger.reference}` });
     return NextResponse.json({ success: true, ledger }, { status: 201 });
   } catch (error) {
     return handleApiError(error);

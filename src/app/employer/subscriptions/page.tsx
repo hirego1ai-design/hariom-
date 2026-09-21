@@ -19,7 +19,7 @@ export default function EmployerSubscriptionsStorePage() {
   const checkoutInFlight = useRef(false);
   const [gatewayConfig, setGatewayConfig] = useState<any>({
     mode: "AUTO",
-    primaryGateway: "RAZORPAY",
+    primaryGateway: "STRIPE",
     allowEmployerSelection: true,
     gatewaysStatus: {
       RAZORPAY: "HEALTHY",
@@ -27,7 +27,7 @@ export default function EmployerSubscriptionsStorePage() {
       PHONEPE: "HEALTHY",
     },
   });
-  const [selectedGateway, setSelectedGateway] = useState<string>("RAZORPAY");
+  const [selectedGateway, setSelectedGateway] = useState<string>("STRIPE");
 
   // Promo Code state
   const [couponCode, setCouponCode] = useState("");
@@ -127,7 +127,7 @@ export default function EmployerSubscriptionsStorePage() {
 
       const order = data.order;
 
-      if (order.gateway === "RAZORPAY") {
+      if (order.gateway === "STRIPE") {
         const loaded = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
         if (!loaded) {
           throw new Error("Unable to load Razorpay Checkout SDK. Please check your internet connection.");
@@ -151,7 +151,7 @@ export default function EmployerSubscriptionsStorePage() {
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
         setCheckoutPlan(null);
-      } else if (order.gateway === "PHONEPE") {
+      } else if (order.gateway === "PAYU") {
         if (order.checkoutUrl) {
           window.location.href = order.checkoutUrl;
         } else {
@@ -587,7 +587,7 @@ export default function EmployerSubscriptionsStorePage() {
 
               {gatewayConfig.allowEmployerSelection ? (
                 <div className="grid grid-cols-3 gap-2 text-xs">
-                  {["RAZORPAY", "PAYU", "PHONEPE"]
+                  {["STRIPE", "PAYU", "PAYU"]
                     .filter((gw) => gatewayConfig.gatewaysStatus?.[gw] !== "DISABLED")
                     .map((gw) => (
                       <button
@@ -601,7 +601,7 @@ export default function EmployerSubscriptionsStorePage() {
                         }`}
                       >
                         <span className="material-symbols-outlined text-[18px]">
-                          {gw === "RAZORPAY" ? "payments" : gw === "PHONEPE" ? "qr_code" : "account_balance"}
+                          {gw === "STRIPE" ? "payments" : gw === "PAYU" ? "qr_code" : "account_balance"}
                         </span>
                         <span className="font-mono text-[11px]">{gw}</span>
                       </button>

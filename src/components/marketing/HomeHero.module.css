@@ -36,7 +36,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: url('/marketing/images/earth-night-texture.png') 31% 34% / 420% auto;
+  background: url('/marketing/images/earth-night-nasa.jpg') 31% 34% / 420% auto;
   filter: grayscale(1) brightness(2.8) contrast(1.15);
   opacity: .8;
 }

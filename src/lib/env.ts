@@ -81,20 +81,8 @@ export function requireMalwareScannerEnv() {
   return { url, token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
 }
 
-
-export function getPublicAppOrigin(): string {
-  const raw = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").trim();
-  if (!raw) {
-    if (process.env.NODE_ENV === "production") throw new Error("APP_URL or NEXT_PUBLIC_APP_URL is required for public links in production.");
-    return "http://localhost:3000";
-  }
-  const parsed = new URL(raw);
-  if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") throw new Error("Public application URL must use HTTPS in production.");
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error("Public application URL must be a credential-free origin.");
-  return parsed.origin;
+export function buildPublicAppUrl(path: string): string {
+  const host = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+  return new URL(path, host).toString();
 }
 
-export function buildPublicAppUrl(pathname: string): string {
-  if (!pathname.startsWith("/") || pathname.startsWith("//")) throw new Error("Public application links require an absolute application path.");
-  return new URL(pathname, getPublicAppOrigin()).toString();
-}

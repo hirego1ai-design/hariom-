@@ -3,13 +3,14 @@ import { z } from "zod";
 import { handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { canApplyVideoAnalysisCallback, VIDEO_ANALYSIS_TERMINAL_STATUSES } from "@/lib/videoAnalysisState";
+import { canApplyVideoAnalysisCallback } from "@/lib/videoAnalysisState";
 import { Prisma } from "@prisma/client";
 import { timingSafeEqual } from "node:crypto";
 
 const callbackSchema = z.object({
   jobId: z.string().uuid(),
   videoResumeId: z.string().uuid(),
+  claimToken: z.string().uuid(),
   status: z.enum(["COMPLETED", "FAILED", "BLOCKED_INFRA"]),
   error: z.string().nullable().optional(),
   modelName: z.string().optional(),
@@ -26,18 +27,6 @@ const callbackSchema = z.object({
       transcriptConfidence: z.number().finite().min(0).max(1).optional(),
       lowConfidence: z.boolean().optional(),
       audioQuality: z.string().max(500).optional(),
-      facePresenceRatio: z.number().finite().min(0).max(1).nullable().optional(),
-      cameraFacingRatioEstimate: z.number().finite().min(0).max(1).nullable().optional(),
-      headPoseIndicators: z.unknown().nullable().optional(),
-      postureIndicators: z.unknown().nullable().optional(),
-      communicationScore: z.number().int().min(0).max(100).nullable().optional(),
-      clarityScore: z.number().int().min(0).max(100).nullable().optional(),
-      confidenceScore: z.number().int().min(0).max(100).nullable().optional(),
-      professionalism: z.number().int().min(0).max(100).nullable().optional(),
-      speechDeliveryScore: z.number().int().min(0).max(100).nullable().optional(),
-      contentStructureScore: z.number().int().min(0).max(100).nullable().optional(),
-      strengths: z.array(z.string().trim().min(1).max(500)).max(25).optional(),
-      improvementSuggestions: z.array(z.string().trim().min(1).max(500)).max(25).optional(),
       actualDurationSeconds: z.number().finite().min(0).max(121).optional(),
     })
     .optional(),
@@ -86,11 +75,16 @@ export async function POST(request: NextRequest) {
       const res = body.result;
       const applied = await prisma.$transaction(async (tx) => {
         const claim = await tx.videoAnalysisJob.updateMany({
-          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
           data: {
             status: "COMPLETED",
-            result: body.result as Prisma.InputJsonValue,
+            // Zod strips legacy appearance and personality scores sent by an
+            // older worker before the result is retained in the job record.
+            result: res as Prisma.InputJsonValue,
             completedAt: now,
+            claimToken: null,
+            claimedAt: null,
+            leaseExpiresAt: null,
           },
         });
         if (claim.count !== 1) return false;
@@ -106,18 +100,18 @@ export async function POST(request: NextRequest) {
             transcriptConfidence: res.transcriptConfidence ?? null,
             lowConfidence: res.lowConfidence ?? false,
             audioQuality: res.audioQuality ?? null,
-            facePresenceRatio: res.facePresenceRatio ?? null,
-            cameraFacingRatioEstimate: res.cameraFacingRatioEstimate ?? null,
-            headPoseIndicators: res.headPoseIndicators === undefined ? undefined : res.headPoseIndicators as Prisma.InputJsonValue,
-            postureIndicators: res.postureIndicators === undefined ? undefined : res.postureIndicators as Prisma.InputJsonValue,
-            communicationScore: res.communicationScore ?? null,
-            clarityScore: res.clarityScore ?? null,
-            confidenceScore: res.confidenceScore ?? null,
-            professionalism: res.professionalism ?? null,
-            speechDeliveryScore: res.speechDeliveryScore ?? null,
-            contentStructureScore: res.contentStructureScore ?? null,
-            strengths: res.strengths ?? undefined,
-            improvementSuggestions: res.improvementSuggestions ?? undefined,
+            facePresenceRatio: null,
+            cameraFacingRatioEstimate: null,
+            headPoseIndicators: Prisma.JsonNull,
+            postureIndicators: Prisma.JsonNull,
+            communicationScore: null,
+            clarityScore: null,
+            confidenceScore: null,
+            professionalism: null,
+            speechDeliveryScore: null,
+            contentStructureScore: null,
+            strengths: Prisma.JsonNull,
+            improvementSuggestions: res.lowConfidence ? ["The transcript may be inaccurate. Review the recording directly."] : [],
             modelName: body.modelName || "whisper-small",
             modelVersion: body.modelVersion || "1.0.0",
             workerVersion: body.workerVersion || "1.0.0",
@@ -132,11 +126,14 @@ export async function POST(request: NextRequest) {
     } else {
       const applied = await prisma.$transaction(async (tx) => {
         const claim = await tx.videoAnalysisJob.updateMany({
-          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: { notIn: [...VIDEO_ANALYSIS_TERMINAL_STATUSES] } },
+          where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
           data: {
             status: body.status,
             error: body.error || "Analysis failed",
             completedAt: now,
+            claimToken: null,
+            claimedAt: null,
+            leaseExpiresAt: null,
           },
         });
         if (claim.count !== 1) return false;

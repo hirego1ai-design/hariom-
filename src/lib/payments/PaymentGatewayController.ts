@@ -8,7 +8,7 @@ import {
   VerifyWebhookResult,
   AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
-import { RazorpayGateway } from "./RazorpayGateway";
+
 import { PayUGateway } from "./PayUGateway";
 import { StripeGateway } from "./StripeGateway";
 
@@ -23,7 +23,7 @@ export interface GatewayConfigState {
 
 // Production safety invariant: Incomplete providers CANNOT be enabled in production
 // under any circumstances (even if DB config marks them as healthy) to prevent risk.
-const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "STRIPE"]);
+const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>();
 
 // Providers remain blocked until the release gate explicitly enables them after
 // credentials, webhook secrets, reconciliation, and staging payment tests pass.
@@ -31,7 +31,7 @@ const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>(["PAYU", "STRIPE"]);
 
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
-    RAZORPAY: new RazorpayGateway(),
+    
     PAYU: new PayUGateway(),
     STRIPE: new StripeGateway(),
   };
@@ -62,10 +62,10 @@ export class PaymentGatewayController {
     const suppliedPriorities = Array.isArray(raw.priorities) ? raw.priorities.filter(isGateway) : [];
     const priorities = [...new Set(suppliedPriorities), ...providerNames.filter((gw) => !suppliedPriorities.includes(gw))];
     const active = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
-    if (active.length === 0) gatewaysStatus.RAZORPAY = "HEALTHY";
+    if (active.length === 0) gatewaysStatus.STRIPE = "HEALTHY";
 
     const activeAfterFallback = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
-    let primaryGateway = isGateway(raw.primaryGateway) ? raw.primaryGateway : "RAZORPAY";
+    let primaryGateway = isGateway(raw.primaryGateway) ? raw.primaryGateway : "STRIPE";
     if (gatewaysStatus[primaryGateway] === "DISABLED") primaryGateway = activeAfterFallback[0];
 
     return {
@@ -114,15 +114,15 @@ export class PaymentGatewayController {
     const isProduction = process.env.NODE_ENV === "production";
     const defaultConfig: GatewayConfigState = {
       mode: "AUTO",
-      primaryGateway: "RAZORPAY",
+      primaryGateway: "STRIPE",
       autoFailover: true,
       allowEmployerSelection: true,
       gatewaysStatus: {
-        RAZORPAY: "HEALTHY",
+        
         PAYU: isProduction ? "DISABLED" : "HEALTHY",
         STRIPE: isProduction ? "DISABLED" : "HEALTHY",
       },
-      priorities: isProduction ? ["RAZORPAY"] : ["RAZORPAY", "PAYU", "STRIPE"],
+      priorities: ["STRIPE", "PAYU"],
     };
 
     if (isProduction) {

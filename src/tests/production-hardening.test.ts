@@ -197,7 +197,7 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     const checkoutRequest = (key: string) => new Request("https://hirego.test/api/payments/checkout", {
       method: "POST",
       headers: { authorization: `Bearer ${employerToken}`, "content-type": "application/json", "idempotency-key": key },
-      body: JSON.stringify({ planId: plan.id, paymentMethod: "RAZORPAY", promoCode: promo.code }),
+      body: JSON.stringify({ planId: plan.id, paymentMethod: "STRIPE", promoCode: promo.code }),
     });
     const checkoutResponses = await Promise.all([
       checkout(checkoutRequest(`promo-a-${promoSuffix}`) as any),

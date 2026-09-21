@@ -69,6 +69,7 @@ class AnalyzeRequest(BaseModel):
     objectKey: str
     claimedDurationSeconds: int
     callbackUrl: str
+    claimToken: str
     downloadUrl: Optional[str] = None
 
 @app.get("/health")
@@ -115,7 +116,7 @@ def validate_callback_url(callback_url: str):
     parsed = urlparse(callback_url)
     if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password:
         raise HTTPException(status_code=400, detail="Invalid callback URL")
-    if parsed.path != "/api/internal/video-analysis/callback":
+    if parsed.path not in {"/api/internal/video-analysis/callback", "/api/internal/recorded-assessment-analysis/callback"}:
         raise HTTPException(status_code=400, detail="Invalid callback path")
     if ENVIRONMENT == "production" and not callback_url.startswith(f"{CALLBACK_ORIGIN}/"):
         raise HTTPException(status_code=400, detail="Callback origin is not allowed")
@@ -157,7 +158,8 @@ def process_job(req: AnalyzeRequest):
             else:
                 send_callback(
                     req.callbackUrl, req.jobId, req.videoResumeId, "BLOCKED_INFRA",
-                    f"Media storage target unavailable: {req.objectKey}"
+                    f"Media storage target unavailable: {req.objectKey}",
+                    claim_token=req.claimToken
                 )
                 return
 
@@ -172,7 +174,8 @@ def process_job(req: AnalyzeRequest):
         if res.returncode != 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Corrupt or unsupported media file: {res.stderr}"
+                f"Corrupt or unsupported media file: {res.stderr}",
+                claim_token=req.claimToken
             )
             return
 
@@ -181,14 +184,16 @@ def process_job(req: AnalyzeRequest):
         except ValueError:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                "Malformed duration metadata in media container"
+                "Malformed duration metadata in media container",
+                claim_token=req.claimToken
             )
             return
 
         if actual_duration > MAX_SECONDS + 1.0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Actual media duration ({actual_duration:.1f}s) exceeds strict maximum allowed limit of {int(MAX_SECONDS)}s."
+                f"Actual media duration ({actual_duration:.1f}s) exceeds strict maximum allowed limit of {int(MAX_SECONDS)}s.",
+                claim_token=req.claimToken
             )
             return
 
@@ -198,11 +203,12 @@ def process_job(req: AnalyzeRequest):
             "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
             audio_path
         ]
-        ffmpeg_res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=30)
+        ffmpeg_res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=max(45, int(min(MAX_SECONDS, actual_duration) * 1.5)))
         if ffmpeg_res.returncode != 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                f"Audio extraction failed: {ffmpeg_res.stderr}"
+                f"Audio extraction failed: {ffmpeg_res.stderr}",
+                claim_token=req.claimToken
             )
             return
 
@@ -211,7 +217,8 @@ def process_job(req: AnalyzeRequest):
         if model is None:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "BLOCKED_INFRA",
-                "Whisper speech recognition model unavailable on worker"
+                "Whisper speech recognition model unavailable on worker",
+                claim_token=req.claimToken
             )
             return
 
@@ -238,112 +245,20 @@ def process_job(req: AnalyzeRequest):
         if seg_count == 0 or len(transcript_text.strip()) == 0:
             send_callback(
                 req.callbackUrl, req.jobId, req.videoResumeId, "FAILED",
-                "No audible speech or transcript extracted from audio stream"
+                "No audible speech or transcript extracted from audio stream",
+                claim_token=req.claimToken
             )
             return
 
         confidence_avg = max(0.4, min(0.99, 1.0 + (total_prob / seg_count) / 2.0))
 
-        # Step 5: MediaPipe Tasks APIs Frame Analysis
-        face_presence = None
-        camera_facing = None
-        head_pose = None
-        posture_ind = None
-
-        try:
-            import cv2
-            import mediapipe as mp
-            from mediapipe.tasks import python as mp_python
-            from mediapipe.tasks.python import vision as mp_vision
-
-            face_task_path = os.path.join(MODEL_DIR, "face_landmarker.task")
-            pose_task_path = os.path.join(MODEL_DIR, "pose_landmarker.task")
-
-            cap = cv2.VideoCapture(video_path)
-            fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
-            frame_sample_step = int(fps / 2) # 2 fps sampling
-            total_sampled = 0
-            faces_detected_count = 0
-            pose_detected_count = 0
-
-            # Initialize MediaPipe Tasks Landmarkers if model tasks present
-            face_landmarker = None
-            pose_landmarker = None
-
-            if os.path.exists(face_task_path):
-                base_options = mp_python.BaseOptions(model_asset_path=face_task_path)
-                options = mp_vision.FaceLandmarkerOptions(base_options=base_options, num_faces=2)
-                face_landmarker = mp_vision.FaceLandmarker.create_from_options(options)
-
-            if os.path.exists(pose_task_path):
-                base_options_pose = mp_python.BaseOptions(model_asset_path=pose_task_path)
-                options_pose = mp_vision.PoseLandmarkerOptions(base_options=base_options_pose)
-                pose_landmarker = mp_vision.PoseLandmarker.create_from_options(options_pose)
-
-            count = 0
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if count % frame_sample_step == 0:
-                    total_sampled += 1
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-
-                    if face_landmarker:
-                        face_res = face_landmarker.detect(mp_image)
-                        if face_res.face_landmarks:
-                            faces_detected_count += 1
-
-                    if pose_landmarker:
-                        pose_res = pose_landmarker.detect(mp_image)
-                        if pose_res.pose_landmarks:
-                            pose_detected_count += 1
-
-                count += 1
-            cap.release()
-
-            if total_sampled > 0:
-                face_presence = round(faces_detected_count / total_sampled, 2)
-                camera_facing = round(min(1.0, face_presence * 0.95), 2)
-                head_pose = {"facingRatio": camera_facing, "measuredFrames": total_sampled}
-                posture_ind = {"uprightRatio": round(pose_detected_count / total_sampled, 2)}
-
-        except Exception as mp_err:
-            print(f"MediaPipe Tasks processing warning: {mp_err}")
-            # Keep MediaPipe indicators null if frame analysis unavailable; do NOT insert fake 0.95 defaults!
-
-        # Step 6: Objective Signal Aggregation
+        # Step 5: Transcription metrics. Do not infer personality, confidence,
+        # professionalism or job suitability from appearance or speech style.
+        # Frame and pose analysis is intentionally omitted.
         duration_mins = max(0.1, actual_duration / 60.0)
         wpm = round(words_count / duration_mins, 1)
         pause_ratio = round(max(0.0, min(0.5, 1.0 - (words_count / (duration_mins * 150)))), 2)
-
-        comm_score = min(100, max(40, int(80 + (wpm - 120) * 0.2 - fillers_count * 2)))
-        clarity_score = min(100, max(50, int(confidence_avg * 100)))
-        delivery_score = min(100, max(40, int(face_presence * 70 + camera_facing * 30))) if (face_presence is not None and camera_facing is not None) else None
-        structure_score = min(100, max(50, int(85 - pause_ratio * 50)))
-        confidence_score = min(100, max(40, int((comm_score + (delivery_score or comm_score)) / 2)))
-        professionalism = min(100, max(50, int((clarity_score + structure_score) / 2)))
-
-        strengths = []
-        improvements = []
-
-        if 110 <= wpm <= 160:
-            strengths.append("Optimal speaking pace and clear speech rhythm.")
-        elif wpm < 110:
-            improvements.append("Speaking rate is slow; consider slight pacing increase.")
-        else:
-            improvements.append("Fast speaking pace; consider pausing between key points.")
-
-        if fillers_count == 0:
-            strengths.append("Fluent speech delivery with minimal filler word usage.")
-        else:
-            improvements.append(f"Detected {fillers_count} filler words (um/uh/like); practice smooth transitions.")
-
-        if face_presence is not None and face_presence >= 0.8:
-            strengths.append("Consistent camera framing and visibility.")
-        elif face_presence is not None:
-            improvements.append("Ensure consistent central camera framing.")
+        improvements = ["The transcript may be inaccurate. Review the recording directly."] if confidence_avg < 0.65 else []
 
         result_payload = {
             "transcript": transcript_text,
@@ -354,17 +269,17 @@ def process_job(req: AnalyzeRequest):
             "transcriptConfidence": round(confidence_avg, 2),
             "lowConfidence": confidence_avg < 0.65,
             "audioQuality": "16kHz mono audio stream",
-            "facePresenceRatio": face_presence,
-            "cameraFacingRatioEstimate": camera_facing,
-            "headPoseIndicators": head_pose,
-            "postureIndicators": posture_ind,
-            "communicationScore": comm_score,
-            "clarityScore": clarity_score,
-            "confidenceScore": confidence_score,
-            "professionalism": professionalism,
-            "speechDeliveryScore": delivery_score,
-            "contentStructureScore": structure_score,
-            "strengths": strengths,
+            "facePresenceRatio": None,
+            "cameraFacingRatioEstimate": None,
+            "headPoseIndicators": None,
+            "postureIndicators": None,
+            "communicationScore": None,
+            "clarityScore": None,
+            "confidenceScore": None,
+            "professionalism": None,
+            "speechDeliveryScore": None,
+            "contentStructureScore": None,
+            "strengths": [],
             "improvementSuggestions": improvements,
             "actualDurationSeconds": round(actual_duration, 1),
         }
@@ -375,12 +290,13 @@ def process_job(req: AnalyzeRequest):
             model_name=f"whisper-{MODEL_SIZE}",
             model_version="1.0.0",
             worker_version="1.0.0",
-            analysis_version="v1"
+            analysis_version="v1",
+            claim_token=req.claimToken
         )
 
     except Exception as e:
         print(f"Job processing exception: {e}", file=sys.stderr)
-        send_callback(req.callbackUrl, req.jobId, req.videoResumeId, "FAILED", str(e))
+        send_callback(req.callbackUrl, req.jobId, req.videoResumeId, "FAILED", str(e), claim_token=req.claimToken)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -388,6 +304,7 @@ def send_callback(callback_url: str, job_id: str, video_resume_id: str, status: 
     payload = {
         "jobId": job_id,
         "videoResumeId": video_resume_id,
+        "claimToken": kwargs.get("claim_token"),
         "status": status,
         "error": error,
         "result": result,

@@ -5,7 +5,7 @@ HireGo 3.0 enforces strict privacy rules and bias-mitigation safeguards for cand
 ## Strict Privacy Guarantees
 
 1. **Zero External AI Transmissions:** Raw video, audio streams, extracted frames, and transcript text are NEVER transmitted to external third-party AI APIs (such as OpenAI, Google Gemini, or Anthropic).
-2. **Self-Hosted Processing:** All speech recognition (Whisper `small`) and facial landmarking (Google MediaPipe) execute inside isolated local worker infrastructure owned by HireGo.
+2. **Self-Hosted Processing:** Speech recognition (Whisper `small`) executes inside isolated worker infrastructure operated for HireGo. Frame, facial landmark and pose analysis are not used for video resume reports.
 3. **Short-Lived Signed URLs:** Storage objects are held in private Cloudflare R2 / S3 buckets and accessed strictly via ephemeral, server-generated signed URLs.
 
 ## Prohibited Evaluation Dimensions
@@ -26,7 +26,8 @@ Only job-relevant, observable signals are measured:
 
 - **Speech Pacing:** Words per minute (WPM)
 - **Speech Fluency:** Pause frequency and filler word count
-- **Framing & Visibility:** Camera-facing ratio estimate & central framing
 - **Audio Quality:** Clarity and background noise level
+
+The worker records transcript reliability and descriptive speech metrics. It does not generate a candidate confidence, professionalism, character or job suitability score. Employers review the original recording and application evidence themselves.
 
 AI analysis outputs serve exclusively as auxiliary insights for human recruiters and are never used as an automated rejection mechanism.
