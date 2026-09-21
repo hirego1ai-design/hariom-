@@ -29,8 +29,9 @@ for (const [path, expected] of cases) {
       assert.match(location.pathname, /login|sign-in/);
     }
     if (path === '/login') {
-      const csp = response.headers.get('content-security-policy');
-      assert.ok(csp?.includes('https://js.stripe.com'));
+      const csp = response.headers.get('content-security-policy') ?? '';
+      const cspTokens = csp.split(/\s+/);
+      assert.ok(cspTokens.includes('https://js.stripe.com'));
       assert.ok(!csp.includes("'unsafe-eval'"));
     }
     await response.body?.cancel();
