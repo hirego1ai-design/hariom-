@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const applicationSchema = z.object({
   jobId: z.string().uuid(),
@@ -135,6 +136,7 @@ export async function PATCH(req: NextRequest) {
     const session = await getCurrentSession(req.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
+    await enforceRateLimit(req, "candidate_application_withdraw", 12, 60_000);
     const { applicationId } = await readValidatedJson(req, withdrawSchema);
     const candidate = await prisma.candidateProfile.findUnique({ where: { userId: session.id }, select: { id: true } });
     if (!candidate) return jsonError("Candidate profile not found", 404);
@@ -166,6 +168,15 @@ export async function PATCH(req: NextRequest) {
         where: { applicationId, status: "SCHEDULED" },
         data: { status: "CANCELLED" },
       });
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          action: "APPLICATION_WITHDRAWN",
+          resource: `Application:${applicationId}`,
+          details: "Candidate withdrew their own application.",
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
       return { duplicate: false };
     });
     return NextResponse.json({ success: true, applicationId, status: "WITHDRAWN", duplicate: result.duplicate });

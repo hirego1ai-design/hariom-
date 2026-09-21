@@ -99,6 +99,7 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       status: "ACTIVE",
     },
   });
+  let submittedApplicationId: string | undefined;
 
   try {
     const { POST } = await import("@/app/api/applications/route");
@@ -108,12 +109,49 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       POST(authorizedRequest(token, job.id) as any),
     ]);
     const statuses = responses.map((response) => response.status).sort((a, b) => a - b);
-    const count = await prisma.application.count({ where: { jobId: job.id, candidateProfileId: candidate.id } });
+    const submittedApplication = await prisma.application.findUnique({
+      where: { candidateProfileId_jobId: { candidateProfileId: candidate.id, jobId: job.id } },
+    });
+    submittedApplicationId = submittedApplication?.id;
+    const count = submittedApplication ? 1 : 0;
     results.push(result(
       "Concurrent application submission creates exactly one row",
       statuses[0] === 201 && statuses[1] === 409 && count === 1,
       `statuses=${statuses.join(",")}, applicationRows=${count}`,
     ));
+
+    try {
+      if (!submittedApplication) throw new Error("Submitted application was not persisted.");
+      const { PATCH } = await import("@/app/api/applications/route");
+      const withdrawalResponse = await PATCH(new Request("https://hirego.test/api/applications", {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ applicationId: submittedApplication.id }),
+      }) as any);
+      const [withdrawnApplication, auditLog] = await Promise.all([
+        prisma.application.findUnique({ where: { id: submittedApplication.id } }),
+        prisma.auditLog.findFirst({
+          where: {
+            userId: user.id,
+            action: "APPLICATION_WITHDRAWN",
+            resource: `Application:${submittedApplication.id}`,
+          },
+          include: { siemEvent: true },
+        }),
+      ]);
+      results.push(result(
+        "Candidate withdrawal persists the owned transition and durable audit event",
+        withdrawalResponse.status === 200 &&
+          withdrawnApplication?.status === "WITHDRAWN" &&
+          auditLog?.siemEvent?.status === "PENDING",
+      ));
+    } catch (error) {
+      results.push(result(
+        "Candidate withdrawal persists the owned transition and durable audit event",
+        false,
+        error instanceof Error ? error.message : String(error),
+      ));
+    }
 
     const { POST: submitVideo } = await import("@/app/api/candidate/video-resume/route");
     const videoFile = await prisma.storedFile.create({
@@ -151,6 +189,18 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
     await prisma.videoAnalysisJob.deleteMany({ where: { videoResume: { candidateProfileId: candidate.id } } }).catch(() => undefined);
     await prisma.videoResume.deleteMany({ where: { candidateProfileId: candidate.id } }).catch(() => undefined);
     await prisma.storedFile.deleteMany({ where: { ownerId: user.id, category: "video-resumes" } }).catch(() => undefined);
+    if (submittedApplicationId) {
+      const withdrawalAudits = await prisma.auditLog.findMany({
+        where: { resource: `Application:${submittedApplicationId}` },
+        select: { id: true },
+      }).catch(() => []);
+      await prisma.securityAuditOutboxEvent.deleteMany({
+        where: { auditLogId: { in: withdrawalAudits.map((audit) => audit.id) } },
+      }).catch(() => undefined);
+      await prisma.auditLog.deleteMany({
+        where: { id: { in: withdrawalAudits.map((audit) => audit.id) } },
+      }).catch(() => undefined);
+    }
     await prisma.jobListing.delete({ where: { id: job.id } }).catch(() => undefined);
     await prisma.candidateProfile.delete({ where: { id: candidate.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
