@@ -1,20 +1,286 @@
 "use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
-import React from "react";
-import parse from "html-react-parser";
-import { useRouter } from "next/navigation";
 
-const rawHtml = "\n<!-- Persistent Background Assets -->\n<div className=\"fixed inset-0 grid-bg pointer-events-none\"></div>\n<div className=\"fixed -bottom-1/4 -left-1/4 w-1/2 h-1/2 glow-red blur-3xl pointer-events-none\"></div>\n<div className=\"fixed -top-1/4 -right-1/4 w-1/2 h-1/2 glow-blue blur-3xl pointer-events-none\"></div>\n<!-- Main Content Background (Mocking the page behind the modal) -->\n<main className=\"container-max mx-auto px-margin-desktop opacity-20 transition-opacity duration-700 blur-sm\">\n<div className=\"flex flex-col gap-stack-lg\">\n<header className=\"flex justify-between items-center py-6\">\n<div className=\"font-display-lg text-primary font-bold tracking-tight\">HireGo AI</div>\n</header>\n<div className=\"grid grid-cols-12 gap-gutter\">\n<div className=\"col-span-8 bg-surface-container rounded-lg h-96\"></div>\n<div className=\"col-span-4 bg-surface-container rounded-lg h-96\"></div>\n</div>\n</div>\n</main>\n<!-- Overlay Backrop -->\n<div className=\"fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[60]\"></div>\n<!-- C33: WITHDRAW CONFIRMATION MODAL -->\n<div className=\"relative z-[70] w-full max-w-[480px] mx-margin-mobile\">\n<div className=\"glass-panel p-stack-lg rounded-lg shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in duration-300\">\n<!-- Warning Icon Section -->\n<div className=\"w-20 h-20 rounded-full bg-yellow/10 flex items-center justify-center mb-stack-lg border border-yellow/20\">\n<span className=\"material-symbols-outlined text-[48px] text-yellow\" style=\"font-variation-settings: 'FILL' 0;\">warning</span>\n</div>\n<!-- Typography Content -->\n<h2 className=\"font-headline-md text-headline-md text-on-background mb-stack-sm tracking-tight\">Withdraw Application?</h2>\n<p className=\"font-body-md text-on-surface-variant mb-stack-lg px-4 leading-relaxed\">\n                You are about to withdraw your application for <span className=\"text-primary font-bold\">Senior Product Designer</span> at <span className=\"text-on-background font-bold\">Lumina Tech</span>. This action cannot be undone and you will lose all progress.\n            </p>\n<!-- Metadata Box -->\n<div className=\"w-full bg-surface-container-highest/40 rounded-lg p-stack-md border border-white/5 mb-stack-lg text-left flex items-center gap-stack-md\">\n<div className=\"w-12 h-12 rounded-full overflow-hidden bg-surface-variant flex-shrink-0\">\n<img className=\"w-full h-full object-cover\" data-alt=\"A professional corporate logo for a technology company named Lumina Tech. The logo features a minimalist geometric icon with clean sans-serif typography. The style is modern, high-tech, and high-trust, utilizing a sophisticated dark-mode aesthetic with subtle red and blue accents to maintain brand consistency with HireGo AI.\" src=\"https://lh3.googleusercontent.com/aida-public/AB6AXuBuKfV_02jATLWKR9hzVNsfuTlrrooEb_SS3zAMBS3wlnoqRR7wnolBwWPVaYCS2rC0iFHmC2fpq0j9QC_71fpwiBslZQukwIG6yFqmIpZUDPa-Xs5zF7y4KuHrNxRRTK0BMM644F8J2wgJTR98jGDhDQaEgG8JNnply2fQptn7Xg_PBaf_dS7DRh0XjaPHbERCMB9wcPEFGKHqWnZZZwUUwqDKmB2sfxjnY7sGNH8cmYHIkzCKgejlml6DSTzI6E9XUr1avP14mgk\">\n</div>\n<div>\n<div className=\"font-label-md text-on-background\">Lumina Tech</div>\n<div className=\"font-body-md text-on-surface-variant text-sm\">Applied on Oct 24, 2023</div>\n</div>\n</div>\n<!-- Action Buttons -->\n<div className=\"w-full flex flex-col gap-stack-md\">\n<button className=\"btn-primary-red w-full h-[50px] rounded-full text-on-background font-bold font-body-md tracking-wide transition-all active:scale-95 flex items-center justify-center\">\n                    Yes Withdraw\n                </button>\n<button className=\"btn-ghost w-full h-[50px] rounded-full text-on-surface font-body-md tracking-wide transition-all hover:bg-white/5 active:scale-95\">\n                    Keep Application\n                </button>\n</div>\n</div>\n<!-- Decorative Glow beneath Modal -->\n<div className=\"absolute -bottom-10 left-1/2 -translate-x-1/2 w-[80%] h-20 bg-primary/20 blur-[80px] -z-10 rounded-full\"></div>\n</div>\n<!-- UI Micro-interactions -->\n\n<div className=\"fixed bg-white rounded-full opacity-10 pointer-events-none\" style=\"width: 2.53668px; height: 2.53668px; left: 3.95964vw; top: 74.6993vh;\"></div>";
+type ApplicationStatus =
+  | "APPLIED"
+  | "SCREENING"
+  | "AI_INTERVIEW"
+  | "ASSESSMENT"
+  | "SHORTLISTED"
+  | "HIRED"
+  | "REJECTED"
+  | "WITHDRAWN";
 
-export default function C43Page() {
-  const router = useRouter();
+interface ApplicationRecord {
+  id: string;
+  status: ApplicationStatus;
+  createdAt: string;
+  job?: {
+    title?: string | null;
+    location?: string | null;
+    company?: {
+      name?: string | null;
+    } | null;
+  } | null;
+}
+
+interface ApplicationsResponse {
+  success?: boolean;
+  applications?: ApplicationRecord[];
+  error?: string;
+}
+
+interface WithdrawalResponse {
+  success?: boolean;
+  applicationId?: string;
+  status?: "WITHDRAWN";
+  error?: string;
+}
+
+const WITHDRAWABLE_STATUSES = new Set<ApplicationStatus>([
+  "APPLIED",
+  "SCREENING",
+  "AI_INTERVIEW",
+  "ASSESSMENT",
+  "SHORTLISTED",
+]);
+
+async function readJson<T>(response: Response): Promise<T> {
+  return response.json() as Promise<T>;
+}
+
+export default function WithdrawApplicationPage() {
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [withdrawnId, setWithdrawnId] = useState<string | null>(null);
+
+  const loadApplications = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const response = await fetch("/api/applications", {
+        method: "GET",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      const body = await readJson<ApplicationsResponse>(response);
+      if (!response.ok || !body.success || !Array.isArray(body.applications)) {
+        throw new Error(body.error || "Your applications could not be loaded.");
+      }
+      setApplications(body.applications);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Your applications could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadApplications();
+  }, [loadApplications]);
+
+  async function withdrawApplication(applicationId: string) {
+    if (submittingId) return;
+
+    setSubmittingId(applicationId);
+    setActionError("");
+    setWithdrawnId(null);
+
+    try {
+      const response = await fetch("/api/applications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ applicationId }),
+      });
+      const body = await readJson<WithdrawalResponse>(response);
+      if (!response.ok || !body.success || body.status !== "WITHDRAWN") {
+        throw new Error(body.error || "The application could not be withdrawn.");
+      }
+
+      setApplications((current) =>
+        current.map((application) =>
+          application.id === applicationId
+            ? { ...application, status: "WITHDRAWN" }
+            : application
+        )
+      );
+      setConfirmingId(null);
+      setWithdrawnId(applicationId);
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "The application could not be withdrawn."
+      );
+    } finally {
+      setSubmittingId(null);
+    }
+  }
+
+  const activeApplications = applications.filter((application) =>
+    WITHDRAWABLE_STATUSES.has(application.status) || application.id === withdrawnId
+  );
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}
+    >
       <CandidateSidebar />
-      <div className="w-full min-h-screen">
-      {parse(rawHtml)}
+      <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-10 md:ml-[116px] md:px-8">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              Applications
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight">Withdraw an application</h1>
+            <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
+              Only active applications from your HireGo account are shown. A confirmed
+              withdrawal is saved immediately and may cancel scheduled interview activity.
+            </p>
+          </div>
+          <Link
+            href="/applications"
+            className="inline-flex w-fit items-center rounded-full border px-4 py-2 text-sm font-bold"
+            style={{ borderColor: "var(--outline)", color: "var(--text-primary)" }}
+          >
+            Back to applications
+          </Link>
+        </div>
+
+        {loadError && (
+          <div
+            role="alert"
+            className="mb-5 rounded-xl border p-4 text-sm"
+            style={{ borderColor: "var(--primary)", backgroundColor: "var(--bg-card)" }}
+          >
+            <p>{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void loadApplications()}
+              className="mt-3 font-bold text-primary"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {actionError && (
+          <div
+            role="alert"
+            className="mb-5 rounded-xl border p-4 text-sm"
+            style={{ borderColor: "var(--primary)", backgroundColor: "var(--bg-card)" }}
+          >
+            {actionError}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="rounded-2xl border p-8 text-sm" style={{ borderColor: "var(--outline)" }}>
+            Loading your applications…
+          </div>
+        ) : activeApplications.length === 0 ? (
+          <div
+            className="rounded-2xl border p-8"
+            style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}
+          >
+            <h2 className="text-lg font-bold">No applications are eligible for withdrawal</h2>
+            <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+              Withdrawn, rejected, hired, or placement-linked applications are not offered
+              here. Their status remains available in your application tracker.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {activeApplications.map((application) => {
+              const isConfirming = confirmingId === application.id;
+              const isSubmitting = submittingId === application.id;
+              const wasWithdrawn = withdrawnId === application.id;
+
+              return (
+                <article
+                  key={application.id}
+                  className="rounded-2xl border p-5"
+                  style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}
+                >
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold">
+                        {application.job?.title || "Job application"}
+                      </h2>
+                      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                        {application.job?.company?.name || "Company unavailable"}
+                        {application.job?.location ? ` · ${application.job.location}` : ""}
+                      </p>
+                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        Applied {new Date(application.createdAt).toLocaleDateString()} ·{" "}
+                        {application.status}
+                      </p>
+                    </div>
+
+                    {wasWithdrawn ? (
+                      <span className="rounded-full border border-green-600 px-4 py-2 text-sm font-bold text-green-600">
+                        Withdrawn
+                      </span>
+                    ) : isConfirming ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => void withdrawApplication(application.id)}
+                          className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSubmitting ? "Withdrawing…" : "Confirm withdrawal"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setConfirmingId(null);
+                            setActionError("");
+                          }}
+                          className="rounded-full border px-4 py-2 text-sm font-bold disabled:opacity-60"
+                          style={{ borderColor: "var(--outline)" }}
+                        >
+                          Keep application
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmingId(application.id);
+                          setActionError("");
+                          setWithdrawnId(null);
+                        }}
+                        className="rounded-full border px-4 py-2 text-sm font-bold text-primary"
+                        style={{ borderColor: "var(--primary)" }}
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </div>
+
+                  {wasWithdrawn && (
+                    <p className="mt-4 text-sm font-semibold text-green-600" role="status">
+                      This application was withdrawn and the change was saved.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </main>
     </div>
-    </div>
-);
+  );
 }

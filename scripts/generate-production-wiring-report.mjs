@@ -4,6 +4,85 @@ import path from "node:path";
 const root = process.cwd();
 const inventory = JSON.parse(fs.readFileSync(path.join(root, "production-wiring-inventory.json"), "utf8"));
 const records = inventory.records;
+const csvText = fs.readFileSync(path.join(root, "production-wiring-inventory.csv"), "utf8");
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (inQuotes) {
+      if (character === '"') {
+        if (text[index + 1] === '"') {
+          field += '"';
+          index += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += character;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      if (field.length > 0) throw new Error("Unexpected quote in unquoted CSV field");
+      inQuotes = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (character !== "\r") {
+      field += character;
+    }
+  }
+
+  if (inQuotes) throw new Error("Unterminated quoted CSV field");
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+const csvComparableValue = (value) => {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.join(" | ");
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+};
+
+let csvRows = [];
+let csvError = "";
+try {
+  csvRows = parseCsv(csvText);
+} catch (error) {
+  csvError = error instanceof Error ? error.message : String(error);
+}
+const csvFields = records.length > 0 ? Object.keys(records[0]) : [];
+const csvHeader = csvRows[0] || [];
+const csvDataRows = csvRows.slice(1);
+const csvMatchesInventory =
+  !csvError &&
+  csvHeader.length === csvFields.length &&
+  csvHeader.every((field, index) => field === csvFields[index]) &&
+  csvDataRows.length === records.length &&
+  csvDataRows.every(
+    (row, rowIndex) =>
+      row.length === csvFields.length &&
+      row.every((value, columnIndex) =>
+        value === csvComparableValue(records[rowIndex][csvFields[columnIndex]])
+      )
+  );
+const csvReconciliationEvidence = csvMatchesInventory
+  ? `${records.length.toLocaleString()} JSON records and ${csvDataRows.length.toLocaleString()} valid matching CSV data rows; ${inventory.reconciliation.records_missing_evidence} missing evidence`
+  : `JSON records: ${records.length.toLocaleString()}; CSV data rows: ${csvDataRows.length.toLocaleString()}; ${csvError || "header or record content mismatch"}; ${inventory.reconciliation.records_missing_evidence} missing evidence`;
 const screens = records.filter((r) => r.record_type === "screen");
 const actions = records.filter((r) => r.record_type === "user_action");
 const calls = records.filter((r) => r.record_type === "frontend_api_call");
@@ -65,7 +144,7 @@ const report = `# HIREGO AI — COMPLETE PORTAL PRODUCTION WIRING AUDIT
 
 Generated: ${inventory.generated_at}
 Repository: ${inventory.repository}
-Audit mode: read-only static source audit plus route/build checks. Application code was not modified for this audit.
+Audit mode: static source wiring audit. Type, lint, test, and build checks run separately.
 
 ## 1. EXECUTIVE VERDICT
 
@@ -79,13 +158,13 @@ ${table(["Artifact", "Count"], [["Screen/page files", inventory.source_counts.sc
 
 ### Repository verification checks
 
-${table(["Check", "Result", "Evidence"], [["Inventory generator syntax", "PASS", "node --check scripts/generate-production-wiring-inventory.mjs"], ["Report generator syntax", "PASS", "node --check scripts/generate-production-wiring-report.mjs"], ["JSON/CSV reconciliation", "PASS", "1,531 JSON records and 1,531 CSV data rows; 0 missing evidence"], ["TypeScript", "NOT EVALUATED", "WhatsApp-related failure excluded from this non-WhatsApp remediation pass"], ["Full ESLint", "FAIL", "40 errors and 4 warnings across repository source/scripts"], ["Production build", "NOT YET VERIFIED", "Run after resolving type/lint blockers"]])}
+${table(["Check", "Result", "Evidence"], [["Inventory generator syntax", "PASS", "node --check scripts/generate-production-wiring-inventory.mjs"], ["Report generator syntax", "PASS", "node --check scripts/generate-production-wiring-report.mjs"], ["JSON/CSV reconciliation", csvMatchesInventory ? "PASS" : "FAIL", csvReconciliationEvidence], ["TypeScript", "NOT RUN BY GENERATOR", "Run npx tsc --noEmit separately"], ["Full ESLint", "NOT RUN BY GENERATOR", "Run npm run lint separately"], ["Production build", "NOT RUN BY GENERATOR", "Run npm run build separately"]])}
 
 The audit does not treat a passing static inventory generator as an application build pass. TypeScript and lint failures block release independently of feature wiring.
 
 ## 2. COMPLETE SCREEN INVENTORY
 
-The complete 245-screen registry is in [production-wiring-inventory.json](./production-wiring-inventory.json) and [production-wiring-inventory.csv](./production-wiring-inventory.csv). The following table is generated directly from every \`src/app/**/page.*\` file:
+The complete ${screens.length}-screen registry is in [production-wiring-inventory.json](./production-wiring-inventory.json) and [production-wiring-inventory.csv](./production-wiring-inventory.csv). The following table is generated directly from every \`src/app/**/page.*\` file:
 
 ${table(["Route", "Status", "Component", "Notes"], screenRows)}
 
@@ -141,7 +220,7 @@ ${table(["Area", "Required mode", "Finding", "Status"], [
 
 ${table(["Severity", "Evidence", "Finding", "Impact"], mockFindings)}
 
-Static scanner summary: ${inventory.reconciliation.red_records} records contain mock/fallback/static indicators. This is intentionally conservative; each RED record must be reviewed using its exact evidence row in the inventory.
+Inventory status summary: ${inventory.reconciliation.red_records} inventory records are classified RED. The manual file-level findings above are outside the inventory record-status aggregation and are not included in that count.
 
 ## 12. SECURITY FINDINGS
 

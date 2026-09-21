@@ -241,3 +241,149 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
   assert(!scheduler.includes("VIDEO_ANALYSIS_INTERNAL_TOKEN"));
   assert(dockerfile.includes("USER node"));
 });
+
+test("legacy production surfaces no longer render raw HTML prototypes", () => {
+  const targetPages = [
+    "applications/history",
+    "applications/withdraw",
+    "assessment/typing/setup",
+    "billing",
+    "jobs/alerts",
+    "jobs/filters",
+    "jobs/report",
+    "jobs/suggestions",
+    "jobs/[id]/ai-insights",
+    "messages",
+    "pricing/upgrade",
+    "profile/certificates",
+    "profile/completion",
+    "profile/resume/optimize",
+    "profile/resume",
+    "profile/resume/templates",
+    "profile/skills-management",
+    "profile/wizard/details",
+    "register/complete",
+    "settings/notifications",
+    "settings/security",
+    "subscriptions",
+  ];
+
+  for (const page of targetPages) {
+    const source = fs.readFileSync(new URL(`../app/${page}/page.tsx`, import.meta.url), "utf8");
+    assert(!source.includes("rawHtml"), `${page} must not contain rawHtml`);
+    assert(!source.includes("html-react-parser"), `${page} must not use html-react-parser`);
+  }
+});
+
+test("retired legacy routes redirect only to canonical production surfaces", () => {
+  const redirects = new Map([
+    ["applications/history", "/applications"],
+    ["assessment/typing/setup", "/assessment/typing/active"],
+    ["billing", "/employer/revenue-and-billing-management"],
+    ["jobs/alerts", "/notifications"],
+    ["jobs/filters", "/jobs"],
+    ["jobs/report", "/jobs"],
+    ["jobs/suggestions", "/jobs"],
+    ["messages", "/notifications"],
+    ["pricing/upgrade", "/employer/subscriptions"],
+    ["profile/certificates", "/profile"],
+    ["profile/completion", "/profile"],
+    ["profile/resume/optimize", "/profile"],
+    ["profile/resume", "/onboarding/resume-upload"],
+    ["profile/resume/templates", "/profile"],
+    ["profile/skills-management", "/profile"],
+    ["profile/wizard/details", "/profile"],
+    ["register/complete", "/otp"],
+    ["settings/notifications", "/notifications"],
+    ["settings/security", "/forgot-password"],
+    ["subscriptions", "/employer/subscriptions"],
+  ]);
+
+  for (const [page, destination] of redirects) {
+    const source = fs.readFileSync(new URL(`../app/${page}/page.tsx`, import.meta.url), "utf8");
+    assert(source.includes(`redirect("${destination}")`), `${page} must redirect to ${destination}`);
+  }
+
+  const aiInsights = fs.readFileSync(
+    new URL("../app/jobs/[id]/ai-insights/page.tsx", import.meta.url),
+    "utf8"
+  );
+  assert(aiInsights.includes("redirect(`/jobs/\${encodeURIComponent(id)}`)"));
+
+  for (const canonicalPage of [
+    "../app/applications/page.tsx",
+    "../app/assessment/typing/active/page.tsx",
+    "../app/employer/revenue-and-billing-management/page.tsx",
+    "../app/employer/subscriptions/page.tsx",
+    "../app/jobs/page.tsx",
+    "../app/notifications/page.tsx",
+    "../app/onboarding/resume-upload/page.tsx",
+    "../app/otp/page.tsx",
+    "../app/profile/page.tsx",
+  ]) {
+    assert(fs.existsSync(new URL(canonicalPage, import.meta.url)), `${canonicalPage} must exist`);
+  }
+});
+
+test("candidate withdrawal uses the authoritative owned application transition", () => {
+  const ui = fs.readFileSync(new URL("../app/applications/withdraw/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/applications/route.ts", import.meta.url), "utf8");
+  const proxy = fs.readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+
+  assert(ui.includes('fetch("/api/applications"'));
+  assert(ui.includes('method: "PATCH"'));
+  assert(ui.includes('body.status !== "WITHDRAWN"'));
+  assert(ui.includes("Confirm withdrawal"));
+  assert(!ui.includes("localStorage"));
+  assert(!ui.includes("sessionStorage"));
+
+  const authentication = route.indexOf("getCurrentSession(req.headers)", route.indexOf("export async function PATCH"));
+  const rateLimit = route.indexOf(
+    'enforceRateLimit(req, "candidate_application_withdraw", 12, 60_000)',
+    authentication
+  );
+  assert(authentication >= 0 && rateLimit > authentication);
+  assert(route.includes('session.role !== "CANDIDATE"'));
+  assert(route.includes("application.candidateProfileId !== candidate.id"));
+  assert(route.includes('SELECT id FROM "Application"'));
+  assert(route.includes('application.status === "HIRED" || application.pphPlacement'));
+  assert(route.includes('data: { status: "WITHDRAWN" }'));
+  assert(route.includes('action: "APPLICATION_WITHDRAWN"'));
+  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(proxy.includes('"/applications"'));
+});
+
+test("production wiring report derives reconciliation counts from the inventory", () => {
+  const generator = fs.readFileSync(
+    new URL("../../scripts/generate-production-wiring-report.mjs", import.meta.url),
+    "utf8"
+  );
+  assert(generator.includes("records.length.toLocaleString()"));
+  assert(generator.includes("parseCsv(csvText)"));
+  assert(generator.includes('csvMatchesInventory ? "PASS" : "FAIL"'));
+  assert(generator.includes("The complete ${screens.length}-screen registry"));
+  assert(!generator.includes("1,531 JSON records"));
+  assert(!generator.includes("complete 245-screen registry"));
+});
+
+test("production wiring inventory preserves router action names", () => {
+  const generator = fs.readFileSync(
+    new URL("../../scripts/generate-production-wiring-inventory.mjs", import.meta.url),
+    "utf8"
+  );
+  const inventory = JSON.parse(
+    fs.readFileSync(new URL("../../production-wiring-inventory.json", import.meta.url), "utf8")
+  ) as { records: Array<{ record_type: string; user_action: string }> };
+  assert(generator.includes("const eventName = event[1] || event[2]"));
+  assert(!inventory.records.some((record) => record.user_action === "undefined handler"));
+  assert(inventory.records.some(
+    (record) => record.record_type === "user_action" && record.user_action === "router.push handler"
+  ));
+  const llmUsageCall = inventory.records.find(
+    (record) =>
+      record.record_type === "frontend_api_call" &&
+      (record as { api_endpoint?: string }).api_endpoint === "/api/admin/llm-usage"
+  ) as { method?: string; user_action?: string } | undefined;
+  assert.equal(llmUsageCall?.method, "GET");
+  assert.equal(llmUsageCall?.user_action, "fetch GET /api/admin/llm-usage");
+});
