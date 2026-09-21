@@ -231,8 +231,10 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
   assert(!JSON.stringify(vercel).includes("/api/cron/recorded-assessment-analysis"));
   assert(scheduler.includes("'/api/cron/recorded-assessment-analysis'"));
   assert(scheduler.includes("process.env.CRON_SECRET"));
+  assert(scheduler.includes("process.env.VERCEL_AUTOMATION_BYPASS_SECRET"));
   assert(scheduler.includes("Authorization"));
   assert(scheduler.includes("Bearer"));
+  assert(scheduler.includes("x-vercel-protection-bypass"));
   assert(!scheduler.includes("while ("));
   assert(scheduler.includes("AbortController"));
   assert(!scheduler.includes("DATABASE_URL"));

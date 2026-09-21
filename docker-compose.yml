@@ -73,6 +73,7 @@ services:
       APP_URL: http://app:3000
       ALLOW_INTERNAL_HTTP: "1"
       CRON_SECRET: ${CRON_SECRET:-}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${VERCEL_AUTOMATION_BYPASS_SECRET:-}
     volumes:
       - ./scripts/run-recorded-assessment-scheduler.mjs:/app/run-recorded-assessment-scheduler.mjs:ro
     command: ["node", "/app/run-recorded-assessment-scheduler.mjs"]

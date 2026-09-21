@@ -1,8 +1,12 @@
 const secret = process.env.CRON_SECRET?.trim();
+const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
 const endpoint = new URL('/api/cron/recorded-assessment-analysis', process.env.APP_URL || '');
 
 if (!secret || secret.length < 32) {
   throw new Error('Configure CRON_SECRET with at least 32 characters.');
+}
+if (vercelBypassSecret && vercelBypassSecret.length < 32) {
+  throw new Error('VERCEL_AUTOMATION_BYPASS_SECRET must be at least 32 characters when configured.');
 }
 if (endpoint.username || endpoint.password) {
   throw new Error('APP_URL must not contain credentials.');
@@ -14,12 +18,19 @@ if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && interna
   throw new Error('APP_URL must use HTTPS outside the private local app network.');
 }
 
+const headers = {
+  Authorization: `Bearer ${secret}`,
+};
+if (vercelBypassSecret) {
+  headers['x-vercel-protection-bypass'] = vercelBypassSecret;
+}
+
 const controller = new AbortController();
 const timeout = setTimeout(() => controller.abort(), 90_000);
 try {
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${secret}` },
+    headers,
     redirect: 'error',
     signal: controller.signal,
   });
