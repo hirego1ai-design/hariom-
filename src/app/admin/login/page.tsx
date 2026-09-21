@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, AtSign, CircleAlert, Eye, EyeOff, KeyRound, ShieldCheck } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -56,7 +56,7 @@ export default function AdminLoginPage() {
           {/* Brand Anchor */}
           <div className="mb-6 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-primary-light flex items-center justify-center shadow-2xl border border-outline mb-2">
-              <span className="material-symbols-outlined text-white text-[32px]">shield_person</span>
+              <ShieldCheck className="w-8 h-8 text-white" aria-hidden="true" />
             </div>
             <h1 className="font-display-lg text-2xl font-bold text-text-primary tracking-tight text-center">
               HireGo AI <span className="text-primary font-extrabold">Admin</span>
@@ -70,7 +70,7 @@ export default function AdminLoginPage() {
           <div className="glass-card w-full p-6 lg:p-8 rounded-2xl border border-outline shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
             {error && (
               <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">error</span>
+                <CircleAlert className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
                 {error}
               </div>
             )}
@@ -82,9 +82,7 @@ export default function AdminLoginPage() {
                   System Admin Email
                 </label>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors text-[18px]">
-                    alternate_email
-                  </span>
+                  <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-text-muted group-focus-within:text-primary transition-colors" aria-hidden="true" />
                   <input
                     className="w-full h-11 rounded-full bg-[#1E1E1E] border border-outline pl-11 pr-5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
                     id="email"
@@ -105,9 +103,7 @@ export default function AdminLoginPage() {
                   </label>
                 </div>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors text-[18px]">
-                    lock_reset
-                  </span>
+                  <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-text-muted group-focus-within:text-primary transition-colors" aria-hidden="true" />
                   <input
                     className="w-full h-11 rounded-full bg-[#1E1E1E] border border-outline pl-11 pr-11 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 transition-all duration-300"
                     id="password"
@@ -122,9 +118,11 @@ export default function AdminLoginPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {showPassword ? "visibility_off" : "visibility"}
-                    </span>
+                    {showPassword ? (
+                      <EyeOff className="w-[18px] h-[18px]" aria-hidden="true" />
+                    ) : (
+                      <Eye className="w-[18px] h-[18px]" aria-hidden="true" />
+                    )}
                   </button>
                 </div>
               </div>

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CircleAlert, Loader2, LockKeyhole, Mail } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -83,7 +83,7 @@ export default function ForgotPasswordPage() {
               boxShadow: "0 4px 12px rgba(255,82,82,0.3)",
             }}
           >
-            <span className="material-symbols-outlined text-white text-[18px]">lock_reset</span>
+            <LockKeyhole className="w-[18px] h-[18px] text-white" aria-hidden="true" />
           </div>
           <div>
             <h1
@@ -112,7 +112,7 @@ export default function ForgotPasswordPage() {
 
         {errorMessage && (
           <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px]">error</span>
+            <CircleAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{errorMessage}</span>
           </div>
         )}
@@ -123,12 +123,11 @@ export default function ForgotPasswordPage() {
               Email Address
             </label>
             <div className="relative">
-              <span
-                className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[16px] pointer-events-none"
+              <Mail
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
                 style={{ color: "var(--text-muted)" }}
-              >
-                mail
-              </span>
+                aria-hidden="true"
+              />
               <input
                 type="email"
                 required
@@ -181,7 +180,7 @@ export default function ForgotPasswordPage() {
                 color: "var(--text-primary)",
               }}
             >
-              <span className="material-symbols-outlined text-[14px]">arrow_back</span>
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Back to Sign In</span>
             </Link>
           </div>
