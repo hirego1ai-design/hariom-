@@ -30,8 +30,8 @@ for (const [path, expected] of cases) {
     }
     if (path === '/login') {
       const csp = response.headers.get('content-security-policy') ?? '';
-      const cspTokens = csp.split(/\s+/);
-      assert.ok(cspTokens.includes('https://js.stripe.com'));
+      const hasStripeOrigin = csp.split(/\s+/).some((token) => token === 'https://js.stripe.com');
+      assert.ok(hasStripeOrigin);
       assert.ok(!csp.includes("'unsafe-eval'"));
     }
     await response.body?.cancel();
