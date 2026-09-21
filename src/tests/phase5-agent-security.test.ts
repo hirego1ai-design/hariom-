@@ -6,11 +6,17 @@ import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 export interface Phase5SecurityResult { name: string; category: string; passed: boolean; message?: string; }
+export type Phase5FixtureMode = 'database' | 'synthetic-offline';
 
-export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5SecurityResult[] }> {
+export async function runPhase5AgentSecurityTests(fixtureMode: Phase5FixtureMode): Promise<{ results: Phase5SecurityResult[]; fixtureMode: Phase5FixtureMode }> {
   const results: Phase5SecurityResult[] = [];
   const registry = new ToolRegistry();
   let handlerCalls = 0;
+  let databaseFixtureFailed = false;
+
+  if ((fixtureMode === 'synthetic-offline') !== (process.env.MOCK_DB === 'true')) {
+    throw new Error('Phase 5 fixture mode does not match the initialized Prisma client mode.');
+  }
 
   registry.register({
     name: 'sendOffer',
@@ -33,29 +39,33 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
   let companyId = 'company-a';
   let userId = 'user-a';
 
-  try {
-    const testCompany = await prisma.company.create({
-      data: { name: `Phase 5 Test Company ${Date.now()}` },
-      select: { id: true },
-    });
-    companyId = testCompany.id;
+  if (fixtureMode === 'database') {
+    try {
+      const testCompany = await prisma.company.create({
+        data: { name: `Phase 5 Test Company ${Date.now()}` },
+        select: { id: true },
+      });
+      companyId = testCompany.id;
 
-    const testUser = await prisma.user.create({
-      data: {
-        email: `phase5-test-${Date.now()}-${Math.random().toString(36).slice(2)}@hirego.ai`,
-        passwordHash: '$2b$10$phase5testfixturehash1234567890abcdef',
-        name: 'Phase 5 Test Employer',
-        role: Role.EMPLOYER,
-      },
-      select: { id: true },
-    });
-    userId = testUser.id;
-  } catch {
-    // Falls back to synthetic identifiers if running in disconnected offline mode
-    process.env.MOCK_DB = 'true';
+      const testUser = await prisma.user.create({
+        data: {
+          email: `phase5-test-${Date.now()}-${Math.random().toString(36).slice(2)}@hirego.ai`,
+          passwordHash: '$2b$10$phase5testfixturehash1234567890abcdef',
+          name: 'Phase 5 Test Employer',
+          role: Role.EMPLOYER,
+        },
+        select: { id: true },
+      });
+      userId = testUser.id;
+    } catch {
+      databaseFixtureFailed = true;
+    }
   }
 
   try {
+    if (databaseFixtureFailed) {
+      throw new Error('Phase 5 requested a disposable database fixture, but fixture creation failed. Synthetic fallback is disabled.');
+    }
     const context = {
       tenantContext: createTenantContext(companyId, userId, Role.EMPLOYER),
       correlationId: 'corr-phase5',
@@ -170,6 +180,5 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
     }
   }
 
-  return { results };
+  return { results, fixtureMode };
 }
-

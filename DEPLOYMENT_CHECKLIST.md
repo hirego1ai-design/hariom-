@@ -4,7 +4,7 @@
 - [ ] **Environment Variables**: Verify all required environment variables are set in your provider matching `.env.example` (or `docs/staging.env.example` for staging).
 - [x] **Database Migrations**: Verified 49/49 migrations applied on production Supabase project `Hariom` (`eqsxuwlnidexlgseuogu`). RLS verified and enforced on all 90+ public application tables.
 - [ ] **Secrets Manager**: Ensure `NEXTAUTH_SECRET`, `JWT_SECRET`, and `INTERNAL_API_KEY` are cryptographically secure random strings.
-- [x] **Third-Party Services**:
+- [ ] **Third-Party Services**:
   - Payment Gateways: Verified Stripe + PayU architecture in production database and codebase. PhonePe and Razorpay permanently purged.
   - WhatsApp: Verify webhook tokens and keys are correctly configured.
   - LLM: Confirm OpenAI and Gemini keys are active.
@@ -28,9 +28,11 @@
 ## 3. Post-deployment Verification Steps
 - [ ] **Authentication**: Log in as an Admin and an Employer. Verify session creation.
 - [ ] **Payments**: Process a test transaction (if possible in the environment) or verify the checkout page loads correctly with Stripe/PayU.
-- [ ] **Webhooks**: Check Stripe webhook dashboard for successful delivery to the `/api/webhooks/stripe` endpoint.
+- [ ] **Webhooks**: Check Stripe and PayU dashboards for successful signed delivery to `/api/payments/webhook` and verify replay/idempotency behavior.
 - [ ] **Emails**: Trigger a password reset to verify SendGrid/ZeptoMail integration.
 - [ ] **File Upload**: Upload a test document/resume to verify S3 integration.
+- [ ] **Malware Scanning**: Confirm a clean staging file leaves quarantine and scanner outage/infected content stays unavailable.
+- [ ] **Workers**: Verify recovery/video worker heartbeats, retries, queue age, and DLQ state.
 
 ## 4. Rollback Procedures
 - **Application Code Reversion**: In Vercel, navigate to the **Deployments** tab, select the last known good deployment, and click **Promote to Production** / **Rollback**.
@@ -48,3 +50,11 @@ Use the following endpoints to monitor system vitals:
 - **Application Health**: `GET /api/admin/system-health` (requires auth or internal token)
 - **Database Status**: Monitors connections and query latency.
 - **Release Status**: `GET /api/admin/release/status`
+
+## 7. Release Sign-off
+
+- Keep `RELEASE_SIGNED_OFF=false` until CI, migrations, authenticated staging
+  journeys, provider callbacks, backup restore, monitoring, and rollback checks
+  have evidence attached to the release.
+- Set the flag only as a reflection of that immutable evidence. The flag does
+  not validate or deploy the application.

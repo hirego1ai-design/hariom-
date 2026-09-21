@@ -88,7 +88,9 @@ test("interview rejection remains a persisted two-step consequential action", ()
 
 test("employer subscription endpoint stays tenant scoped and rate limited", () => {
   const source = fs.readFileSync(new URL("../app/api/employer/subscribe/route.ts", import.meta.url), "utf8");
-  assert(source.includes('enforceRateLimit(request, "employer_subscription_get", 60, 60_000)'));
+  const authentication = source.indexOf("getCurrentSession(request.headers)");
+  const rateLimit = source.indexOf('enforceRateLimit(request, "employer_subscription_get", 60, 60_000)');
+  assert(authentication >= 0 && rateLimit > authentication, "authentication must reject anonymous requests before Redis-backed rate limiting");
   assert(source.includes('session.role !== "EMPLOYER"'));
   assert(source.includes("getSessionCompany(session)"));
   assert(!source.includes('session.role !== "EMPLOYER" && session.role !== "ADMIN"'));
@@ -170,7 +172,9 @@ test("candidate pipeline and profile endpoints remain explicitly scoped and boun
   const profile = fs.readFileSync(new URL("../app/api/candidate/profile/route.ts", import.meta.url), "utf8");
   const readiness = fs.readFileSync(new URL("../app/api/candidate/readiness/route.ts", import.meta.url), "utf8");
   const videoStatus = fs.readFileSync(new URL("../app/api/candidate/video-resume/status/route.ts", import.meta.url), "utf8");
-  assert(pipeline.includes('enforceRateLimit(req, "employer_candidates_get", 60, 60_000)'));
+  const authentication = pipeline.indexOf("getCurrentSession(req.headers)");
+  const rateLimit = pipeline.indexOf('enforceRateLimit(req, "employer_candidates_get", 60, 60_000)');
+  assert(authentication >= 0 && rateLimit > authentication, "authentication must reject anonymous requests before Redis-backed rate limiting");
   assert(pipeline.includes('companyId query parameter is required for administrators.'));
   assert(profile.includes("readValidatedJson(request, profileUpdateSchema, 64 * 1024)"));
   assert(readiness.includes("readValidatedJson(request, selectReadinessSchema, 4 * 1024)"));
@@ -184,4 +188,35 @@ test("admin candidate service catalog mutations are bounded and atomically audit
   assert(create.includes("enqueueSecurityAuditEvent"));
   assert(update.includes("readValidatedJson(request, updateSchema, 8 * 1024)"));
   assert(update.includes("enqueueSecurityAuditEvent"));
+});
+
+test("Phase 5 database verification cannot silently fall back to synthetic fixtures", () => {
+  const suite = fs.readFileSync(new URL("phase5-agent-security.test.ts", import.meta.url), "utf8");
+  const runner = fs.readFileSync(new URL("run-phase5-tests.ts", import.meta.url), "utf8");
+  const fixtureSelection = runner.indexOf('const fixtureMode = selectFixtureMode()');
+  const suiteImport = runner.indexOf("await import('./phase5-agent-security.test')");
+  assert(fixtureSelection >= 0 && suiteImport > fixtureSelection, "fixture mode must be selected before Prisma-backed suite evaluation");
+  assert(runner.includes("process.env.HIREGO_TEST_DATABASE === '1'"));
+  assert(runner.includes("process.env.MOCK_DB === 'true'"));
+  assert(runner.includes("assertDisposableTestEnvironment()"));
+  assert(suite.includes("Synthetic fallback is disabled"));
+  assert(suite.includes("fixture mode does not match the initialized Prisma client mode"));
+  assert(runner.includes("Phase 5 fixture mode:"));
+});
+
+test("deployment templates document production-critical runtime settings", () => {
+  for (const file of ["../../.env.example", "../../docs/staging.env.example"]) {
+    const template = fs.readFileSync(new URL(file, import.meta.url), "utf8");
+    for (const key of [
+      "COMMUNICATION_HASH_SECRET",
+      "COMMUNICATION_TEST_RECIPIENT_ALLOWLIST",
+      "MALWARE_SCANNER_URL",
+      "MALWARE_SCANNER_TOKEN",
+      "PAYU_ENVIRONMENT",
+      "RELEASE_SIGNED_OFF",
+      "VIDEO_ANALYSIS_CALLBACK_ORIGIN",
+    ]) {
+      assert.match(template, new RegExp(`^${key}=`, "m"), `${file} must document ${key}`);
+    }
+  }
 });

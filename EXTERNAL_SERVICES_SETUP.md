@@ -93,6 +93,14 @@ The application uses Cloudflare R2 (or any S3-compatible object store) for priva
 4. **Cleanup**:
    - Delete the isolated test object from the R2 bucket and remove the test `StoredFile` database record.
 
+### Malware scanning
+
+Production uploads remain quarantined until the scanner returns an explicit
+clean result. Configure `MALWARE_SCANNER_URL` as a credential-free HTTPS URL
+and, when required by the scanner, set `MALWARE_SCANNER_TOKEN`. Verify clean,
+infected, malformed-response, timeout, and unavailable-scanner cases before
+enabling uploads for customers.
+
 ## 4. QStash
 
 Create an Upstash QStash project for durable WhatsApp background dispatch and retry triggering.
@@ -128,6 +136,21 @@ Coding IDE and code-execution routes have been removed from the application. Do 
 
 ## Common application secrets
 
-Add these separately for every production-like environment: `NEXTAUTH_SECRET`, `JWT_SECRET`, `INTERNAL_API_KEY`, `EMAIL_CONFIG_ENCRYPTION_KEY`, payment-provider credentials, email-provider credentials, `WHATSAPP_API_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, and `OPENAI_API_KEY` if AI features are enabled. All are secrets except provider identifiers such as a phone-number ID.
+Add these separately for every production-like environment: `NEXTAUTH_SECRET`,
+`JWT_SECRET`, `INTERNAL_API_KEY`, `EMAIL_CONFIG_ENCRYPTION_KEY`,
+`COMMUNICATION_HASH_SECRET`, payment-provider credentials, email-provider
+credentials, `WHATSAPP_API_TOKEN`, `WHATSAPP_APP_SECRET`,
+`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, and `OPENAI_API_KEY` if AI
+features are enabled. All are secrets except provider identifiers such as a
+phone-number ID.
 
-Set `NEXT_PUBLIC_APP_URL` to the public application URL. It is intentionally public and must contain no credential.
+Set `COMMUNICATION_TEST_RECIPIENT_ALLOWLIST` to synthetic, organization-owned
+test recipients before using the administrator test-delivery endpoint in
+production. Set `PAYU_ENVIRONMENT=production` for live PayU traffic and use
+`test` only in isolated staging. Keep `RELEASE_SIGNED_OFF=false` until the
+deployment checklist has immutable evidence.
+
+Set `NEXT_PUBLIC_APP_URL` to the public application URL. It is intentionally
+public and must contain no credential. If the video worker calls a different
+verified public origin, set `VIDEO_ANALYSIS_CALLBACK_ORIGIN` to that HTTPS
+origin; otherwise it falls back to `NEXT_PUBLIC_APP_URL`.
