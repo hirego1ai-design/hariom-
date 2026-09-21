@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { getWorkerDownloadUrl } from "@/lib/storage";
+import { getWorkerDownloadUrlForCleanStoredFile } from "@/lib/storage";
 import crypto from "crypto";
 import { claimVideoAnalysisJob, releaseVideoAnalysisClaimForRetry } from "@/lib/videoAnalysisQueue";
 
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     const fileId = body.videoUrl.slice("/api/files/".length);
     const file = await prisma.storedFile.findFirst({
-      where: { id: fileId, ownerId: session.id, category: "video-resumes", deletedAt: null, mimeType: { in: ["video/mp4", "video/webm"] } },
+      where: { id: fileId, ownerId: session.id, category: "video-resumes", deletedAt: null, scanStatus: "CLEAN", mimeType: { in: ["video/mp4", "video/webm"] } },
       select: { id: true, objectKey: true },
     });
     if (!file) return jsonError("Upload a valid video resume before saving.", 409);
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Generate secure worker download URL (signed R2/S3 URL in production)
-    const downloadUrl = await getWorkerDownloadUrl(file.objectKey);
+    const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile(file.id);
 
     // Await acceptance before returning. Detached promises are not durable in
     // a serverless runtime and can be terminated when the response completes.
@@ -170,6 +170,9 @@ async function dispatchWorkerJob(params: {
         callbackUrl,
         claimToken: claim.claimToken,
       }),
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      cache: "no-store",
     });
     if (!res.ok) {
       console.error(`Video analysis worker rejected dispatch with HTTP ${res.status}.`);
