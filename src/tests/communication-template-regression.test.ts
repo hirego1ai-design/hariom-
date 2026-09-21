@@ -128,3 +128,25 @@ test("admin invoices route dispatches consequential notifications using dispatch
   assert(invoicesSource.includes('eventKey: "INVOICE_GENERATED"'));
 });
 
+
+
+test("approved ZeptoMail email catalogue stays complete and disabled", () => {
+  const templates = JSON.parse(fs.readFileSync(new URL("../../config/approved-email-templates.json", import.meta.url), "utf8")) as Array<{
+    eventKey: string; channel: string; audience: string; status: string; provider: string; providerAlias: string;
+    subject: string; body: string; enabled: boolean; version: number;
+  }>;
+  assert.equal(templates.length, 84);
+  assert.equal(new Set(templates.map((template) => template.providerAlias)).size, 84);
+  assert.equal(new Set(templates.map((template) => template.eventKey)).size, 49);
+  for (const template of templates) {
+    assert.equal(template.channel, "EMAIL");
+    assert.equal(template.provider, "ZEPTOMAIL");
+    assert.equal(template.status, "DRAFT");
+    assert.equal(template.enabled, false);
+    assert.equal(template.version, 1);
+    assert(template.body.includes("hirego-logo-hd.png"));
+    assert(template.body.includes("This is a transactional email"));
+    const check = validateTemplateVariables(template.eventKey as any, template.subject, template.body);
+    assert.equal(check.valid, true, `${template.providerAlias}: ${JSON.stringify(check)}`);
+  }
+});
