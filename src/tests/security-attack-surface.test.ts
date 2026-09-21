@@ -102,7 +102,7 @@ test("Supabase-facing public schema remains protected by RLS", () => {
   const publicRls = read("prisma/migrations/20260908093000_enable_public_table_rls/migration.sql");
   const metadataRls = read("prisma/migrations/20260921170500_supabase_rls_fk_index_hardening/migration.sql");
   assert.match(publicRls, /ENABLE ROW LEVEL SECURITY/);
-  assert.match(metadataRls, /_prisma_migrations.*ENABLE ROW LEVEL SECURITY/s);
+  assert.match(metadataRls, /_prisma_migrations[\s\S]*ENABLE ROW LEVEL SECURITY/);
 });
 
 test("CI continuously scans dependencies, secrets and code", () => {
