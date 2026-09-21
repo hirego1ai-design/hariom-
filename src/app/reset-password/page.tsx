@@ -28,6 +28,11 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!email || !/^\d{6}$/.test(otp)) {
+      setErrorMessage("Your password reset verification is missing or expired. Please request a new verification code.");
+      return;
+    }
+
     if (!newPassword || !confirmPassword) {
       setErrorMessage("Please enter and confirm your new password.");
       return;
@@ -52,7 +57,7 @@ export default function ResetPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          otp: otp || "123456",
+          otp,
           newPassword,
         }),
       });
@@ -65,6 +70,8 @@ export default function ResetPasswordPage() {
         return;
       }
 
+      sessionStorage.removeItem("reset_email");
+      sessionStorage.removeItem("reset_otp");
       setIsSuccess(true);
       setIsLoading(false);
     } catch (err: any) {
