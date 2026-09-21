@@ -240,6 +240,7 @@ model CompanyInvitation {
 
   @@index([companyId, email])
   @@index([companyId, status])
+  @@index([invitedById])
 }
 
 model EmployerProfile {
@@ -252,6 +253,7 @@ model EmployerProfile {
   documents   DocumentVerification[]
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
+  @@index([companyId])
 }
 
 model JobListing {
@@ -284,6 +286,7 @@ model JobListing {
   recordedAssessmentAttempts RecordedAssessmentAttempt[]
   interviewProcess           JobInterviewProcess?
   sourcingRelationships      CandidateSourcingRelationship[]
+  @@index([companyId])
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -315,6 +318,7 @@ model RoleSkillMapping {
 
   @@unique([roleTitle, skillId])
   @@index([roleTitle, industry, department])
+  @@index([skillId])
 }
 
 model CustomSkillRequest {
@@ -331,6 +335,7 @@ model CustomSkillRequest {
 
   @@index([status, createdAt])
   @@index([normalizedName])
+  @@index([requestedById])
 }
 
 model SavedJob {
@@ -342,6 +347,7 @@ model SavedJob {
   createdAt DateTime   @default(now())
 
   @@unique([userId, jobId])
+  @@index([jobId])
 }
 
 model OtpVerification {
@@ -387,6 +393,7 @@ model CandidateSourcingRelationship {
   @@unique([jobId, candidateProfileId])
   @@index([companyId, status])
   @@index([candidateProfileId, status])
+  @@index([sourcedById])
 }
 
 model Application {
@@ -409,6 +416,7 @@ model Application {
   employerTags  EmployerCandidateTag[]
 
   @@unique([candidateProfileId, jobId])
+  @@index([jobId])
 }
 
 model EmployerCandidateNote {
@@ -425,6 +433,7 @@ model EmployerCandidateNote {
 
   @@index([applicationId, createdAt])
   @@index([companyId])
+  @@index([authorId])
 }
 
 model EmployerCandidateTag {
@@ -440,6 +449,7 @@ model EmployerCandidateTag {
 
   @@unique([applicationId, label])
   @@index([companyId])
+  @@index([createdById])
 }
 
 model EmployerCandidateCollection {
@@ -455,6 +465,7 @@ model EmployerCandidateCollection {
 
   @@unique([companyId, name])
   @@index([companyId])
+  @@index([createdById])
 }
 
 model VideoResume {
@@ -497,6 +508,7 @@ model VideoResume {
   updatedAt                 DateTime         @updatedAt
 
   analysisJobs VideoAnalysisJob[]
+  @@index([candidateProfileId])
 }
 
 model VideoAnalysisJob {
@@ -540,6 +552,7 @@ model Interview {
   roundProgress    InterviewRoundProgress?
   feedbacks        InterviewFeedback[]
   createdAt        DateTime                @default(now())
+  @@index([applicationId])
 }
 
 // Short-lived, database-backed WebRTC signaling. This deliberately replaces
@@ -582,6 +595,7 @@ model Notification {
   isRead    Boolean  @default(false)
   type      String   @default("INFO")
   createdAt DateTime @default(now())
+  @@index([userId])
 }
 
 model AuditLog {
@@ -598,6 +612,7 @@ model AuditLog {
   siemEvent SecurityAuditOutboxEvent?
 
   @@index([companyId, createdAt])
+  @@index([userId])
 }
 
 // Every persisted audit record gets exactly one immutable delivery envelope.
@@ -665,6 +680,7 @@ model AiUsage {
   tokensUsed    Int      @default(0)
   estimatedCost Float    @default(0.0)
   createdAt     DateTime @default(now())
+  @@index([userId])
 }
 
 enum RequirementStatus {
@@ -791,6 +807,7 @@ model CommercialAgreement {
   placements PphPlacement[]
 
   @@index([companyId])
+  @@index([requirementId])
 }
 
 model AgreementEvent {
@@ -801,6 +818,7 @@ model AgreementEvent {
   performedBy String
   notes       String?
   createdAt   DateTime            @default(now())
+  @@index([agreementId])
 }
 
 enum PaymentStatus {
@@ -982,6 +1000,7 @@ model CommunicationDelivery {
   @@index([status, createdAt])
   @@index([status, retryable, nextAttemptAt])
   @@index([providerMessageId])
+  @@index([templateId])
 }
 
 model AiExecutionLog {
@@ -1032,6 +1051,8 @@ model CompanySubscription {
   paymentId           String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+  @@index([companyId])
+  @@index([planId])
 }
 
 model CompanyCredits {
@@ -1489,6 +1510,7 @@ model InterviewRoundProgress {
 
   @@unique([applicationId, roundId])
   @@index([applicationId, status])
+  @@index([roundId])
 }
 
 model InterviewFeedback {
@@ -1806,6 +1828,8 @@ model ReferralLedgerEntry {
   @@index([correlationId])
   @@index([entryType])
   @@index([createdAt])
+  @@index([payoutId])
+  @@index([rewardId])
 }
 
 model ReferralProgramConfig {
@@ -2115,6 +2139,7 @@ model RecordedAssessmentRestriction {
   @@index([userId, status])
   @@index([status, createdAt])
   @@index([suspendedUntil])
+  @@index([reviewedById])
 }
 
 model RecordedAssessmentProctoringEvent {
@@ -2205,6 +2230,7 @@ model McqAttempt {
 
   @@index([candidateProfileId, assessmentId])
   @@index([candidateProfileId, startedAt])
+  @@index([assessmentId])
 }
 
 model McqCandidateAnswer {
@@ -2217,6 +2243,8 @@ model McqCandidateAnswer {
   selectedOption   McqOption   @relation(fields: [selectedOptionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
+  @@index([questionId])
+  @@index([selectedOptionId])
 }
 
 model CandidateReadiness {
@@ -2237,6 +2265,7 @@ model CandidateReadiness {
   @@unique([candidateProfileId, roleTitle, seniority])
   @@index([candidateProfileId, status])
   @@index([roleTitle, seniority, status])
+  @@index([assessmentId])
 }
 
 model CandidateCreditWallet {
@@ -2291,6 +2320,7 @@ model CandidateServiceUsage {
   updatedAt          DateTime                    @updatedAt
 
   @@index([candidateProfileId, status, createdAt])
+  @@index([serviceId])
 }
 
 // ── Assessment Engine: Typing Speed ───────────────────────────────────────────
