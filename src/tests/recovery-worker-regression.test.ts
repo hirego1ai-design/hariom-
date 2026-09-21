@@ -116,6 +116,7 @@ test('recovery scans are bounded and a concurrently advanced workflow is not fai
     return { count: 0 };
   });
   stubMethod(t, prisma.deadLetterJob, 'create', async () => { throw new Error('must not dead-letter a changed workflow'); });
+  stubMethod(t, prisma.videoAnalysisJob, 'findMany', async () => []);
   stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
   const result = await FailureRecoveryRunner.runRecoveryPass();
   assert.equal(result.failedWorkflowsEnqueued, 0);

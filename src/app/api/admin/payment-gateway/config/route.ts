@@ -17,7 +17,7 @@ const gatewayConfigSchema = z.object({
     PAYU: gatewayStatusSchema.optional(),
     STRIPE: gatewayStatusSchema.optional(),
   }).strict().optional(),
-  priorities: z.array(gatewayNameSchema).min(1).max(3).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
+  priorities: z.array(gatewayNameSchema).min(1).max(2).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
 }).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {

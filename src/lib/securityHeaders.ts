@@ -20,7 +20,7 @@ export const BASE_SECURITY_HEADERS: Record<string, string> = {
  * is limited to local development for the dev tooling.
  */
 export function contentSecurityPolicy(isDevelopment = false): string {
-  const scriptSources = ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"];
+  const scriptSources = ["'self'", "'unsafe-inline'", "https://js.stripe.com"];
   if (isDevelopment) scriptSources.push("'unsafe-eval'");
 
   return [
@@ -32,10 +32,10 @@ export function contentSecurityPolicy(isDevelopment = false): string {
     "connect-src 'self' https: wss:",
     "media-src 'self' blob: https:",
     "worker-src 'self' blob:",
-    "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
+    "frame-src 'self' https://js.stripe.com https://checkout.stripe.com",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    "form-action 'self' https://secure.payu.in https://test.payu.in",
     "frame-ancestors 'none'",
     ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");

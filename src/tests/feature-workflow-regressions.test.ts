@@ -2,7 +2,8 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fetchEmployerCandidates, pipelineStageLabels, pipelineStageStatus } from "../lib/employerCandidates";
-import { razorpayCheckoutFields, subscriptionCredits } from "../lib/payments/subscriptionCredits";
+import { subscriptionCredits } from "../lib/payments/subscriptionCredits";
+import { isGateway, GatewayName } from "../lib/payments/PaymentGatewayInterface";
 
 test("pipeline fetch includes applications beyond the first 100 and preserves duplicate candidate applications", async () => {
   const original = globalThis.fetch;
@@ -57,16 +58,12 @@ test("corrupt negative plan quotas cannot reduce credits on purchase", () => {
     applicationsQuota: 4, resumeDownloadsQuota: 5, backgroundVerificationsQuota: 6 }), /invalid credit quotas/);
 });
 
-test("Razorpay uses server issued key, order amount and currency", () => {
-  assert.deepEqual(razorpayCheckoutFields({ keyId: "rzp_test_verified", gatewayOrderId: "order_verified",
-    finalAmount: 123.45, currency: "INR" }), {
-    key: "rzp_test_verified", order_id: "order_verified", amount: 12345, currency: "INR",
-  });
-});
-
-test("Razorpay refuses missing configuration and invalid amounts rather than using a fabricated key", () => {
-  assert.throws(() => razorpayCheckoutFields({ gatewayOrderId: "order", finalAmount: 1, currency: "INR" }), /incomplete/);
-  assert.throws(() => razorpayCheckoutFields({ keyId: "key", gatewayOrderId: "order", finalAmount: Number.NaN, currency: "INR" }), /incomplete/);
+test("Payment gateway contract strictly enforces STRIPE and PAYU while rejecting RAZORPAY and PHONEPE", () => {
+  assert.equal(isGateway("STRIPE"), true);
+  assert.equal(isGateway("PAYU"), true);
+  assert.equal(isGateway("RAZORPAY"), false);
+  assert.equal(isGateway("PHONEPE"), false);
+  assert.equal(isGateway("UNKNOWN"), false);
 });
 
 

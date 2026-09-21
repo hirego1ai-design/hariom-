@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { razorpayCheckoutFields } from "@/lib/payments/subscriptionCredits";
-
 export default function EmployerSubscriptionsStorePage() {
   const router = useRouter();
   const [plans, setPlans] = useState<any[]>([]);
@@ -22,9 +20,8 @@ export default function EmployerSubscriptionsStorePage() {
     primaryGateway: "STRIPE",
     allowEmployerSelection: true,
     gatewaysStatus: {
-      RAZORPAY: "HEALTHY",
+      STRIPE: "HEALTHY",
       PAYU: "HEALTHY",
-      PHONEPE: "HEALTHY",
     },
   });
   const [selectedGateway, setSelectedGateway] = useState<string>("STRIPE");
@@ -67,20 +64,6 @@ export default function EmployerSubscriptionsStorePage() {
   useEffect(() => {
     fetchBillingData();
   }, []);
-
-  const loadScript = (src: string) => {
-    return new Promise((resolve) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        resolve(true);
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = src;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim() || !checkoutPlan) return;
@@ -128,40 +111,31 @@ export default function EmployerSubscriptionsStorePage() {
       const order = data.order;
 
       if (order.gateway === "STRIPE") {
-        const loaded = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-        if (!loaded) {
-          throw new Error("Unable to load Razorpay Checkout SDK. Please check your internet connection.");
+        if (!order.checkoutUrl || !order.checkoutUrl.startsWith("http")) {
+          throw new Error("Stripe checkout failed to generate an authoritative session URL.");
         }
-
-        const options = {
-          ...razorpayCheckoutFields(order),
-          name: "HireGo AI",
-          description: `Subscription for ${checkoutPlan.name}`,
-          handler: function (response: any) {
-            router.push(`/payment/status?orderId=${order.orderId}&gatewayOrderId=${response.razorpay_payment_id || order.gatewayOrderId}&gateway=RAZORPAY`);
-          },
-          modal: {
-            ondismiss: function () {
-              router.push(`/payment/status?orderId=${order.orderId}&gateway=RAZORPAY&status=CANCELLED`);
-            },
-          },
-          theme: { color: "#FF5252" },
-        };
-
-        const rzp = new (window as any).Razorpay(options);
-        rzp.open();
-        setCheckoutPlan(null);
+        window.location.href = order.checkoutUrl;
       } else if (order.gateway === "PAYU") {
-        if (order.checkoutUrl) {
-          window.location.href = order.checkoutUrl;
-        } else {
-          router.push(`/payment/status?orderId=${order.orderId}&gatewayOrderId=${order.gatewayOrderId}&gateway=PHONEPE`);
+        if (!order.checkoutUrl || !order.checkoutUrl.startsWith("http")) {
+          throw new Error("PayU checkout failed to generate an authoritative gateway initiation URL.");
         }
-      } else if (order.gateway === "PAYU") {
-        if (order.checkoutUrl && order.checkoutUrl.startsWith("http")) {
-          window.location.href = order.checkoutUrl;
+        if (order.checkoutParams && typeof order.checkoutParams === "object") {
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = order.checkoutUrl;
+          Object.entries(order.checkoutParams).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              const input = document.createElement("input");
+              input.type = "hidden";
+              input.name = key;
+              input.value = String(value);
+              form.appendChild(input);
+            }
+          });
+          document.body.appendChild(form);
+          form.submit();
         } else {
-          router.push(`/payment/status?orderId=${order.orderId}&gatewayOrderId=${order.gatewayOrderId}&gateway=PAYU`);
+          window.location.href = order.checkoutUrl;
         }
       } else {
         throw new Error("This payment provider is not supported by this checkout screen.");
@@ -586,8 +560,8 @@ export default function EmployerSubscriptionsStorePage() {
               </div>
 
               {gatewayConfig.allowEmployerSelection ? (
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  {["STRIPE", "PAYU", "PAYU"]
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {["STRIPE", "PAYU"]
                     .filter((gw) => gatewayConfig.gatewaysStatus?.[gw] !== "DISABLED")
                     .map((gw) => (
                       <button
@@ -601,7 +575,7 @@ export default function EmployerSubscriptionsStorePage() {
                         }`}
                       >
                         <span className="material-symbols-outlined text-[18px]">
-                          {gw === "STRIPE" ? "payments" : gw === "PAYU" ? "qr_code" : "account_balance"}
+                          {gw === "STRIPE" ? "credit_card" : "account_balance"}
                         </span>
                         <span className="font-mono text-[11px]">{gw}</span>
                       </button>

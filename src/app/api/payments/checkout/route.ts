@@ -273,6 +273,7 @@ export async function POST(req: NextRequest) {
         paymentMethod: gatewayResult.gateway,
         status: "CREATED",
         checkoutUrl: gatewayResult.checkoutUrl || `/payment/status?orderId=${orderId}&amount=${reservation.finalPrice}`,
+        checkoutParams: gatewayResult.checkoutParams,
       },
     });
   } catch (error) {

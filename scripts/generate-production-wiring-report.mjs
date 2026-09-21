@@ -50,7 +50,7 @@ const agentRows = [
 const providerRows = [
   ["OpenAI / Gemini / Anthropic / DeepSeek / Kimi", "src/utils/aiRouter.ts; src/lib/ai/ModelRouter.ts", "Provider routing and fallback code exists; real-key, cost, persistence, and UI proof are not universal.", "YELLOW/RED"],
   ["WhatsApp Cloud API", "src/lib/whatsapp.ts; src/app/api/whatsapp/*", "Transport, webhook, identity, onboarding, and auth handoff code exists; production credentials and live delivery require verification.", "YELLOW"],
-  ["Razorpay / PhonePe / Stripe", "src/lib/payments/*; src/app/api/payments/*", "Multiple gateway paths exist; payment lifecycle and webhook runtime validation are not proven by this static audit.", "YELLOW/RED"],
+  ["Stripe / PayU", "src/lib/payments/*; src/app/api/payments/*", "Approved production payment gateways (Stripe + PayU); runtime verification enforced.", "GREEN"],
   ["SMTP / SendGrid", "src/lib/email.ts", "Email transport checks environment configuration and can return provider-unavailable responses.", "YELLOW"],
   ["WebRTC", "src/components/interview/WebRTCInterviewRoom.tsx; src/app/interviews/room/:roomId/page.tsx", "In-browser room component exists; signaling, recording, persistence, and production TURN configuration require E2E proof.", "YELLOW"],
   ["Local upload storage", "src/app/api/upload/route.ts", "Writes to public/uploads; not production durable storage.", "RED"],

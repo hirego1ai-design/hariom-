@@ -61,8 +61,7 @@ function detectProvider(text) {
   if (/deepseek/i.test(text)) providers.push("DeepSeek");
   if (/kimi|moonshot/i.test(text)) providers.push("Kimi/Moonshot");
   if (/whatsapp/i.test(text)) providers.push("WhatsApp Cloud API");
-  if (/razorpay/i.test(text)) providers.push("Razorpay");
-  if (/phonepe/i.test(text)) providers.push("PhonePe");
+  if (/payu/i.test(text)) providers.push("PayU");
   if (/stripe/i.test(text)) providers.push("Stripe");
   if (/sendgrid|smtp/i.test(text)) providers.push("SMTP/SendGrid");
   if (/webrtc|mediasoup/i.test(text)) providers.push("WebRTC");

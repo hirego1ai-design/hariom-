@@ -10,8 +10,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx src/tests/suite.test.ts",
-    "test": "tsx src/tests/suite.test.ts && npx tsx src/tests/communication-template-regression.test.ts",
+    "test": "tsx src/tests/suite.test.ts && tsx src/tests/communication-template-regression.test.ts",
     "test:audit": "node scripts/audit-regressions.mjs",
     "test:phase5": "tsx src/tests/run-phase5-tests.ts && tsx --test src/tests/workflow-engine-regression.test.ts && tsx --test src/tests/hiring-pipeline-contract.test.ts",
     "verify:phase5": "prisma validate && prisma generate && tsc --noEmit && eslint src/lib/workflows/WorkflowEngine.ts src/lib/tools/ToolRegistry.ts src/lib/agents/OperationalAgents.ts src/tests/phase5-agent-security.test.ts src/tests/run-phase5-tests.ts src/tests/workflow-engine-regression.test.ts src/tests/hiring-pipeline-contract.test.ts && npm run test:phase5"

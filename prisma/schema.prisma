@@ -870,7 +870,7 @@ model PaymentTransaction {
   amount       Float    @default(0.0)
   currency     String   @default("INR")
   status       String   @default("PENDING") // PENDING | SUCCESS | FAILED | REJECTED
-  provider     String   @default("RAZORPAY") // RAZORPAY | STRIPE
+  provider     String   @default("STRIPE") // STRIPE | PAYU
   rawPayload   Json?
   errorMessage String?
   createdAt    DateTime @default(now())
@@ -897,11 +897,11 @@ model IdempotencyRecord {
 model PaymentGatewayConfig {
   id                     String   @id @default("global-gateway-config")
   mode                   String   @default("AUTO") // AUTO | MANUAL
-  primaryGateway         String   @default("RAZORPAY") // RAZORPAY | PAYU | PHONEPE
+  primaryGateway         String   @default("STRIPE") // STRIPE | PAYU
   autoFailover           Boolean  @default(true)
   allowEmployerSelection Boolean  @default(true)
-  gatewaysStatus         Json // { RAZORPAY: "HEALTHY", PAYU: "HEALTHY", PHONEPE: "HEALTHY" }
-  priorities             Json // ["RAZORPAY", "PAYU", "PHONEPE"]
+  gatewaysStatus         Json // { STRIPE: "HEALTHY", PAYU: "HEALTHY" }
+  priorities             Json // ["STRIPE", "PAYU"]
   updatedAt              DateTime @updatedAt
 }
 
@@ -2361,5 +2361,3 @@ model MockInterviewTurn {
 
   @@unique([sessionId, questionIndex])
 }
-
-
