@@ -1,6 +1,37 @@
 import { prisma } from "@/lib/prisma";
 import { requireMalwareScannerEnv } from "@/lib/env";
 import { deleteObject, readPrivateObjectForSecurityScan } from "@/lib/storage";
+import crypto from "crypto";
+
+export const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "video/mp4",
+  "video/webm",
+]);
+
+export const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
+export function validateUploadFile(mimeType: string, sizeBytes: number, maxSize = MAX_UPLOAD_SIZE_BYTES): { valid: boolean; error?: string } {
+  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+    return { valid: false, error: "Unsupported file type." };
+  }
+  if (sizeBytes > maxSize) {
+    return { valid: false, error: "File exceeds the maximum allowed size." };
+  }
+  return { valid: true };
+}
+
+export function sanitizeAndGenerateObjectKey(originalFilename: string): string {
+  // Prevent path traversal and enforce safe characters by generating a UUID key
+  const safeFilename = originalFilename.replace(/^.*[\\\/]/, "").replace(/\.\./g, "");
+  const extension = safeFilename.includes(".") ? `.${safeFilename.split(".").pop()}` : "";
+  return `${crypto.randomUUID()}${extension}`;
+}
+
 
 export type UploadScanResult = { status: "CLEAN" | "INFECTED" | "ERROR"; detail?: string };
 
