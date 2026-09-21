@@ -155,6 +155,10 @@ export async function runPhase5AgentSecurityTests(): Promise<{ results: Phase5Se
   } finally {
     try {
       if (userId !== 'user-a') {
+        const auditRows = await prisma.auditLog.findMany({ where: { companyId }, select: { id: true } }).catch(() => []);
+        if (auditRows && auditRows.length > 0) {
+          await prisma.securityAuditOutboxEvent.deleteMany({ where: { auditLogId: { in: auditRows.map((r: { id: string }) => r.id) } } }).catch(() => undefined);
+        }
         await prisma.auditLog.deleteMany({ where: { companyId } }).catch(() => undefined);
         await prisma.user.delete({ where: { id: userId } }).catch(() => undefined);
       }
