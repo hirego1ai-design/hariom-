@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
+import { AI_TRUST_BOUNDARY_SYSTEM_PROMPT } from "../lib/security/untrustedContent";
 
 export type LlmProvider = "openai" | "gemini" | "claude" | "deepseek";
 
@@ -134,7 +135,10 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     try {
       const response = await openaiClient.chat.completions.create({
         model: modelMap.openai,
-        messages: [{ role: "user", content: request.prompt }],
+        messages: [
+          { role: "system", content: AI_TRUST_BOUNDARY_SYSTEM_PROMPT },
+          { role: "user", content: request.prompt },
+        ],
         temperature: request.temperature || 0.7,
         max_tokens: request.maxTokens || 500,
       });
