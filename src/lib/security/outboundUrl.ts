@@ -104,7 +104,7 @@ export async function assertSafeOutboundNetworkTarget(
   const host = normalizeHost(parsed.hostname);
   if (isIP(host)) return parsed;
 
-  let addresses: Awaited<ReturnType<typeof lookup>>;
+  let addresses: Array<{ address: string; family: number }>;
   try {
     addresses = await lookup(host, { all: true, verbatim: true });
   } catch {
