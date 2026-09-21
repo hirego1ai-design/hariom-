@@ -353,17 +353,21 @@ test("candidate withdrawal uses the authoritative owned application transition",
   assert(proxy.includes('"/applications"'));
 });
 
-test("production wiring report derives reconciliation counts from the inventory", () => {
+test("production wiring report is generated from current inventory without stale manual verdicts", () => {
   const generator = fs.readFileSync(
     new URL("../../scripts/generate-production-wiring-report.mjs", import.meta.url),
     "utf8"
   );
-  assert(generator.includes("records.length.toLocaleString()"));
   assert(generator.includes("parseCsv(csvText)"));
-  assert(generator.includes('csvMatchesInventory ? "PASS" : "FAIL"'));
-  assert(generator.includes("The complete ${screens.length}-screen registry"));
-  assert(!generator.includes("1,531 JSON records"));
+  assert(generator.includes("statusCounts"));
+  assert(generator.includes("issueRows"));
+  assert(generator.includes("STATIC WIRING AUDIT: GREEN"));
+  assert(generator.includes("Runtime readiness is verified separately"));
+  assert(generator.includes("generated wiring inventory contains no RED or YELLOW records"));
+  assert(!generator.includes("simulated AI output"));
+  assert(!generator.includes("local upload persistence"));
   assert(!generator.includes("complete 245-screen registry"));
+  assert(!generator.includes("1,531 JSON records"));
 });
 
 test("production wiring inventory preserves router action names", () => {

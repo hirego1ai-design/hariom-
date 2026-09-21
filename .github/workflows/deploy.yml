@@ -66,6 +66,19 @@ jobs:
       - name: Run Offline Audit Regressions
         run: npm run test:audit
 
+      - name: Upload Production Wiring Audit Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-wiring-audit
+          path: |
+            production-wiring-inventory.json
+            production-wiring-inventory.csv
+            PRODUCTION_WIRING_AUDIT_REPORT.md
+          if-no-files-found: error
+          retention-days: 30
+
+
       - name: Audit Production Dependencies
         run: npm audit --omit=dev --audit-level=high
 
