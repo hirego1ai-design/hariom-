@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { dispatchAiTask } from '@/utils/aiRouter';
 import { validateTenantAccess, TenantAccessError } from '../security/TenantContext';
 import { z } from 'zod';
+import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
 
 const resumeEvaluationSchema = z.object({
   score: z.number().int().min(0).max(100),
@@ -85,7 +86,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     const candidateSkills = Array.isArray(profileData.skills) ? profileData.skills.filter((v): v is string => typeof v === 'string').slice(0, 100).map((v) => v.slice(0, 200)) : [];
     const jobRequirements = Array.isArray(jobData.requirements) ? jobData.requirements.filter((v): v is string => typeof v === 'string').slice(0, 100).map((v) => v.slice(0, 500)) : [];
     const headline = typeof profileData.headline === 'string' ? profileData.headline.slice(0, 1000) : '';
-    const untrustedCandidateData = JSON.stringify({ headline, skills: candidateSkills, jobRequirements });
+    const untrustedCandidateData = wrapUntrustedContent({ headline, skills: candidateSkills, jobRequirements }, "resume-evaluation-data");
 
     let actualCostMinorUnits: number | null = null;
     // Execute LLM via ModelRouter with multi-provider fallback
