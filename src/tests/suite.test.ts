@@ -249,6 +249,43 @@ async function runIsolatedTests() {
     results.push({ name: "Workflow approval behavioral regressions", category: "Phase 5 Workflow Reliability", passed: false, message: e.message });
   }
 
+  // 20. Payment Architecture & Gateway Security (Stripe + PayU only)
+  try {
+    const { isGateway } = await import("../lib/payments/PaymentGatewayInterface");
+    const { PaymentGatewayController } = await import("../lib/payments/PaymentGatewayController");
+    const { StripeGateway } = await import("../lib/payments/StripeGateway");
+    const { PayUGateway } = await import("../lib/payments/PayUGateway");
+
+    const approvedOnly = isGateway("STRIPE") && isGateway("PAYU") && !isGateway("RAZORPAY") && !isGateway("PHONEPE");
+    results.push({
+      name: "Payment Gateway Contract - Exactly STRIPE and PAYU supported",
+      category: "Payments",
+      passed: approvedOnly,
+    });
+
+    const unapprovedReject = await PaymentGatewayController.verifyWebhook({
+      rawBody: "{}",
+      signature: "sig",
+      provider: "PHONEPE" as any,
+      headers: {},
+    });
+    results.push({
+      name: "Payment Gateway Security - Unsupported provider webhooks rejected",
+      category: "Payments",
+      passed: unapprovedReject.isValid === false && unapprovedReject.status === "REJECTED",
+    });
+
+    const stripe = new StripeGateway();
+    const payu = new PayUGateway();
+    results.push({
+      name: "Payment Gateways - Stripe and PayU instances initialized",
+      category: "Payments",
+      passed: stripe.name === "STRIPE" && payu.name === "PAYU",
+    });
+  } catch (e: any) {
+    results.push({ name: "Payment Architecture & Gateway Security", category: "Payments", passed: false, message: e.message });
+  }
+
   const passedCount = results.filter((r) => r.passed).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const failedCount = results.length - passedCount - skippedCount;

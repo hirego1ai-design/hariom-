@@ -29,8 +29,9 @@ for (const [path, expected] of cases) {
       assert.match(location.pathname, /login|sign-in/);
     }
     if (path === '/login') {
-      const csp = response.headers.get('content-security-policy');
-      assert.ok(csp?.includes('https://checkout.razorpay.com'));
+      const csp = response.headers.get('content-security-policy') ?? '';
+      const hasStripeOrigin = csp.split(/\s+/).some((token) => token === 'https://js.stripe.com');
+      assert.ok(hasStripeOrigin);
       assert.ok(!csp.includes("'unsafe-eval'"));
     }
     await response.body?.cancel();

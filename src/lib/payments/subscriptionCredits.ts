@@ -34,13 +34,3 @@ export function subscriptionCredits(plan: PlanQuotas) {
   return credits;
 }
 
-export function razorpayCheckoutFields(order: {
-  keyId?: string; gatewayOrderId?: string; finalAmount?: number; currency?: string;
-}) {
-  if (!order.keyId || !order.gatewayOrderId || !order.currency ||
-      !Number.isFinite(order.finalAmount) || (order.finalAmount ?? 0) <= 0) {
-    throw new Error("Checkout returned incomplete Razorpay configuration");
-  }
-  return { key: order.keyId, order_id: order.gatewayOrderId,
-    amount: Math.round(order.finalAmount! * 100), currency: order.currency };
-}

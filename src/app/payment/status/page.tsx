@@ -23,7 +23,12 @@ function PaymentStatusContent() {
   const orderId = searchParams.get("orderId") || "";
   const gatewayOrderId = searchParams.get("gatewayOrderId") || "";
   const txId = searchParams.get("txId") || "";
-  const gateway = searchParams.get("gateway") || "RAZORPAY";
+  const rawGateway = searchParams.get("gateway")?.toUpperCase();
+  const displayGateway =
+    paymentData?.transaction?.provider === "PAYU" || rawGateway === "PAYU"
+      ? "PayU"
+      : "Stripe";
+
 
   useEffect(() => {
     let isMounted = true;
@@ -102,7 +107,7 @@ function PaymentStatusContent() {
                 Verifying Payment...
               </h2>
               <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
-                Securely confirming transaction with {gateway} and awaiting authoritative webhook receipt.
+                Securely confirming transaction with {displayGateway} and awaiting authoritative webhook receipt.
               </p>
             </div>
             <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">

@@ -935,7 +935,7 @@ export default function ManagedHiringSettingsPage() {
               <h4 className="font-bold text-xs uppercase tracking-wider text-text-muted">Settlement Rail Status</h4>
               <div className="space-y-3 text-xs">
                 <div className="p-3 rounded-xl bg-white/5 flex justify-between items-center">
-                  <span className="text-text-muted">Razorpay Instant Settlements</span>
+                  <span className="text-text-muted">PayU / Stripe Automated Settlements</span>
                   <span className="text-green font-bold">Connected (T+1)</span>
                 </div>
                 <div className="p-3 rounded-xl bg-white/5 flex justify-between items-center">

@@ -274,10 +274,8 @@ export class PaymentGatewayController {
    */
   static async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {
     // Runtime input reaches this boundary from HTTP headers/query parameters;
-    // do not let an unknown name inherit Razorpay's verifier. Production-
-    // blocked adapters are incomplete and therefore may not authorize any
-    // financial side effect, even if stale database configuration references
-    // one of them.
+    // do not let an unknown provider name authorize webhook verification.
+    // Only approved production providers (STRIPE and PAYU) are accepted.
     if (!Object.prototype.hasOwnProperty.call(this.providers, params.provider) ||
         (process.env.NODE_ENV === "production" && PRODUCTION_BLOCKED_GATEWAYS.has(params.provider))) {
       return {

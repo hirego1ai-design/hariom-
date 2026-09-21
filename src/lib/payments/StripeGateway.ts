@@ -49,8 +49,8 @@ export class StripeGateway implements PaymentGateway {
       };
     }
 
-    const signature = params.signature || params.headers?.["stripe-signature"] || "";
-    if (!signature) {
+    const signatureHeader = params.signature || params.headers?.["stripe-signature"] || "";
+    if (!signatureHeader) {
       return {
         isValid: false,
         gatewayTxId: "",
@@ -60,65 +60,90 @@ export class StripeGateway implements PaymentGateway {
       };
     }
 
-    let isVerified = false;
-    let eventPayload: any = null;
+    // Official Stripe webhook signature verification specification:
+    // Header format: t=<timestamp>,v1=<signature>,v1=<signature2>...
+    const elements = signatureHeader.split(",");
+    let timestampStr: string | null = null;
+    const v1Signatures: string[] = [];
 
-    try {
-      if (secret && signature) {
-        // Parse Stripe signature header components: t=timestamp,v1=signature,v0=...
-        const items = signature.split(",").reduce((acc: Record<string, string>, item: string) => {
-          const [k, ...v] = item.trim().split("=");
-          if (k && v.length > 0) acc[k] = v.join("=");
-          return acc;
-        }, {});
-
-        const timestamp = items["t"];
-        const signatureHash = items["v1"] || items["v0"];
-
-        if (timestamp && signatureHash) {
-          const payloadToSign = `${timestamp}.${params.rawBody}`;
-          const expectedSig = crypto
-            .createHmac("sha256", secret)
-            .update(payloadToSign)
-            .digest("hex");
-
-          try {
-            const sigBuf = Buffer.from(signatureHash, "utf-8");
-            const expBuf = Buffer.from(expectedSig, "utf-8");
-            if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
-              isVerified = true;
-            }
-          } catch {
-            isVerified = false;
-          }
-        } else {
-          // Direct HMAC signature comparison fallback
-          const expectedSig = crypto
-            .createHmac("sha256", secret)
-            .update(params.rawBody)
-            .digest("hex");
-          
-          try {
-            const sigBuf = Buffer.from(signature, "utf-8");
-            const expBuf = Buffer.from(expectedSig, "utf-8");
-            if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
-              isVerified = true;
-            }
-          } catch {
-            isVerified = false;
-          }
-        }
-
-        if (!isVerified) {
-          return {
-            isValid: false,
-            gatewayTxId: "",
-            status: "REJECTED",
-            rawPayload: {},
-            error: "Invalid Stripe signature",
-          };
-        }
+    for (const element of elements) {
+      const [key, ...rest] = element.trim().split("=");
+      const value = rest.join("=");
+      if (key === "t") {
+        timestampStr = value;
+      } else if (key === "v1") {
+        v1Signatures.push(value);
       }
+    }
+
+    if (!timestampStr || v1Signatures.length === 0) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Malformed Stripe signature header: missing timestamp or v1 signature",
+      };
+    }
+
+    const timestamp = parseInt(timestampStr, 10);
+    if (isNaN(timestamp) || timestamp <= 0) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Invalid timestamp in Stripe signature header",
+      };
+    }
+
+    // Enforce 5-minute (300 seconds) replay tolerance window
+    const TOLERANCE_SECONDS = 300;
+    const currentEpochSeconds = Math.floor(Date.now() / 1000);
+    if (Math.abs(currentEpochSeconds - timestamp) > TOLERANCE_SECONDS) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Stripe webhook timestamp outside tolerance window (possible replay attack)",
+      };
+    }
+
+    // Exact raw request body binding
+    const signedPayload = `${timestamp}.${params.rawBody}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(signedPayload)
+      .digest("hex");
+
+    const expectedBuf = Buffer.from(expectedSignature, "utf-8");
+    let isValid = false;
+
+    for (const v1Sig of v1Signatures) {
+      try {
+        const sigBuf = Buffer.from(v1Sig, "utf-8");
+        if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+          isValid = true;
+          break;
+        }
+      } catch {
+        // Continue checking next signature
+      }
+    }
+
+    if (!isValid) {
+      return {
+        isValid: false,
+        gatewayTxId: "",
+        status: "REJECTED",
+        rawPayload: {},
+        error: "Invalid Stripe cryptographic signature",
+      };
+    }
+
+    let eventPayload: any = null;
+    try {
       eventPayload = typeof params.rawBody === "string" ? JSON.parse(params.rawBody) : params.rawBody;
     } catch (err: any) {
       return {
@@ -126,7 +151,7 @@ export class StripeGateway implements PaymentGateway {
         gatewayTxId: "",
         status: "REJECTED",
         rawPayload: {},
-        error: `Stripe verification failed: ${err.message}`,
+        error: `Failed to parse verified Stripe event payload: ${err.message}`,
       };
     }
 
@@ -141,7 +166,11 @@ export class StripeGateway implements PaymentGateway {
       dataObj?.status === "paid" ||
       dataObj?.payment_status === "paid";
 
-    const isFailure = eventType === "payment_intent.payment_failed" || eventType === "checkout.session.expired" || dataObj?.status === "failed";
+    const isFailure =
+      eventType === "payment_intent.payment_failed" ||
+      eventType === "checkout.session.expired" ||
+      dataObj?.status === "failed";
+
     const status: VerifyWebhookResult["status"] = isSuccess ? "SUCCESS" : isFailure ? "FAILED" : "PENDING";
     const session = eventPayload?.data?.object;
     const gatewayOrderId = session?.id || session?.payment_intent || eventPayload?.id;
@@ -152,8 +181,9 @@ export class StripeGateway implements PaymentGateway {
       gatewayOrderId,
       companyId: dataObj?.metadata?.companyId || dataObj?.client_reference_id,
       planId: dataObj?.metadata?.planId,
-      amount: dataObj?.amount ? dataObj.amount / 100 : dataObj?.amount_total ? dataObj.amount_total / 100 : undefined,
-      currency: (dataObj?.currency || "inr").toUpperCase(),
+      orderId: dataObj?.metadata?.orderId || dataObj?.client_reference_id,
+      amount: dataObj?.amount_total ? dataObj.amount_total / 100 : dataObj?.amount ? dataObj.amount / 100 : undefined,
+      currency: (dataObj?.currency || "INR").toUpperCase(),
       status,
       rawPayload: eventPayload,
     };

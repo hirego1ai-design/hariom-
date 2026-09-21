@@ -1,6 +1,6 @@
 /**
  * HireGo Referral Engine — Payment Gateway Qualification & Refund Hook
- * Invoked by verified payment webhooks (Razorpay / Stripe) to trigger qualifying rewards or process reversals.
+ * Invoked by verified payment webhooks (Stripe / PayU) to trigger qualifying rewards or process reversals.
  */
 
 import { ReferralProductType, ReferralReward, ReferralStatus } from "@/types/referral";

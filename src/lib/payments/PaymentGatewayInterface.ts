@@ -1,5 +1,11 @@
 export type GatewayName = "PAYU" | "STRIPE";
 
+export const APPROVED_GATEWAYS: readonly GatewayName[] = ["STRIPE", "PAYU"] as const;
+
+export function isGateway(value: unknown): value is GatewayName {
+  return typeof value === "string" && (value === "STRIPE" || value === "PAYU");
+}
+
 export class AmbiguousPaymentOrderError extends Error {
   constructor(message: string, public readonly provider: GatewayName) {
     super(message);
@@ -24,6 +30,7 @@ export interface CreateOrderResult {
   amount: number;
   currency: string;
   checkoutUrl?: string;
+  checkoutParams?: Record<string, any>;
   rawPayload?: any;
   error?: string;
 }
@@ -39,6 +46,7 @@ export interface VerifyWebhookResult {
   isValid: boolean;
   gatewayTxId: string;
   gatewayOrderId?: string;
+  orderId?: string;
   companyId?: string;
   planId?: string;
   amount?: number;

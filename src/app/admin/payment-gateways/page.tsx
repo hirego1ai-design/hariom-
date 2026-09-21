@@ -2,23 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 
-type GatewayName = "RAZORPAY" | "PAYU" | "STRIPE";
+type GatewayName = "STRIPE" | "PAYU";
 type GatewayStatus = "HEALTHY" | "DEGRADED" | "DISABLED";
 type GatewayConfig = { mode: "AUTO" | "MANUAL"; primaryGateway: GatewayName; autoFailover: boolean; allowEmployerSelection: boolean; gatewaysStatus: Record<GatewayName, GatewayStatus>; priorities: GatewayName[] };
-const GATEWAYS: GatewayName[] = ["RAZORPAY", "PAYU", "STRIPE"];
+const GATEWAYS: GatewayName[] = ["STRIPE", "PAYU"];
 
 export default function AdminPaymentGatewaysPage() {
   const [config, setConfig] = useState<GatewayConfig>({
     mode: "AUTO",
-    primaryGateway: "RAZORPAY",
+    primaryGateway: "STRIPE",
     autoFailover: true,
     allowEmployerSelection: true,
     gatewaysStatus: {
-      RAZORPAY: "HEALTHY",
-      PAYU: "HEALTHY",
       STRIPE: "HEALTHY",
+      PAYU: "HEALTHY",
     },
-    priorities: ["RAZORPAY", "PAYU", "STRIPE"],
+    priorities: ["STRIPE", "PAYU"],
   });
 
   const [loading, setLoading] = useState(true);
@@ -99,7 +98,7 @@ export default function AdminPaymentGatewaysPage() {
               </h1>
             </div>
             <p className="text-sm text-slate-400">
-              Admin Controller for Razorpay, PayU, and Stripe with Safe Failover and Health Monitoring
+              Admin Controller for Stripe and PayU with Safe Failover and Health Monitoring
             </p>
           </div>
 

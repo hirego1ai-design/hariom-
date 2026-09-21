@@ -85,9 +85,9 @@ test("consequential deliveries are never marked automatically retryable", () => 
 
 test("communication retry Prisma fields remain in schema", () => {
   const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
-  assert(schema.includes("nextAttemptAt     DateTime?"));
-  assert(schema.includes("maxAttempts       Int      @default(3)"));
-  assert(schema.includes("retryable         Boolean  @default(false)"));
+  assert(/\bnextAttemptAt\s+DateTime\?/.test(schema));
+  assert(/\bmaxAttempts\s+Int\s+@default\(3\)/.test(schema));
+  assert(/\bretryable\s+Boolean\s+@default\(false\)/.test(schema));
   assert(schema.includes("@@index([status, retryable, nextAttemptAt])"));
 });
 
