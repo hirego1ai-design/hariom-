@@ -7,27 +7,29 @@ The recorded-assessment recovery endpoint is intentionally no longer scheduled b
 Deploy a dedicated Railway service from this repository using:
 
 - Dockerfile: `Dockerfile.recorded-assessment-scheduler`
+- Cron schedule: `*/5 * * * *`
 - Environment:
   - `APP_URL=https://<your-production-app-origin>`
   - `CRON_SECRET=<same secret configured on the Next.js app>`
 - No database, storage, AI-provider, or payment credentials are required by this scheduler.
 - Do not put `CRON_SECRET` in the URL. The scheduler sends it in the `Authorization: Bearer ...` header.
 
-The scheduler calls:
+Railway starts the container every five minutes. Each run performs one authenticated request to:
 
 `POST /api/cron/recorded-assessment-analysis`
 
-approximately every five minutes. It never overlaps its own requests and uses a 90-second request timeout. The endpoint itself performs bounded recovery, retry/backoff, stale-processing recovery, and worker dispatch.
+and then exits. The endpoint itself performs bounded recovery, retry/backoff, stale-processing recovery, and worker dispatch.
 
 ## Verification
 
 After deploying the Railway scheduler:
 
 1. Confirm the Next.js app has the same `CRON_SECRET`.
-2. Confirm Railway logs show two consecutive successful records with:
+2. Confirm Railway cron is exactly `*/5 * * * *`.
+3. Confirm Railway logs show two consecutive successful records with:
    - `worker: recorded-assessment-analysis-recovery`
    - `status: completed`
-3. Confirm unauthorized requests to the endpoint return HTTP 401.
-4. Confirm Vercel deploys successfully with only the daily referral cron in `vercel.json`.
+4. Confirm unauthorized requests to the endpoint return HTTP 401.
+5. Confirm Vercel deploys successfully with only the daily referral cron in `vercel.json`.
 
 Repository wiring prepares the scheduler, but does not create or configure the Railway service automatically.
