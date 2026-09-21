@@ -112,6 +112,30 @@ async function runIsolatedTests() {
 
   try {
     const fs = await import("node:fs");
+    const criticalAuthUi = [
+      "src/app/forgot-password/page.tsx",
+      "src/app/forgot-password/otp/page.tsx",
+      "src/app/reset-password/page.tsx",
+      "src/app/admin/login/page.tsx",
+    ];
+    const sources = criticalAuthUi.map((path) => fs.readFileSync(path, "utf8"));
+    results.push({
+      name: "Critical auth UI uses bundled icons instead of external Material Symbols",
+      category: "Security UI",
+      passed: sources.every((source) => !source.includes("material-symbols-outlined")),
+    });
+  } catch (e: any) {
+    results.push({
+      name: "Critical auth bundled-icon regression",
+      category: "Security UI",
+      passed: false,
+      message: e.message,
+    });
+  }
+
+
+  try {
+    const fs = await import("node:fs");
     const otpSource = fs.readFileSync(new URL("../lib/otp.ts", import.meta.url), "utf8");
     const verifyRoute = fs.readFileSync(new URL("../app/api/auth/verify-otp/route.ts", import.meta.url), "utf8");
     const resetRoute = fs.readFileSync(new URL("../app/api/auth/reset-password/route.ts", import.meta.url), "utf8");
