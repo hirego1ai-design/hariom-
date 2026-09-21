@@ -1,86 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { allowRevenueFixtures, revenueUnavailable } from "../_shared";
 import { enforceRateLimit } from "@/lib/apiSecurity";
-
-export const jobBoostSummary = {
-  totalRevenue: 320000,
-  totalRevenueFormatted: "₹3.2 Lakhs",
-  totalAdsSold: 168,
-  activeAds: 128,
-  expiredAds: 40,
-  averageCTR: "6.42%",
-  totalAdImpressions: 485000,
-  totalClicks: 31137,
-  totalCandidateApplications: 4120,
-  categories: [
-    { type: "7-Day Featured Job", price: "₹15,000", sold: 80, revenue: "₹1,20,000", badge: "Featured Gold" },
-    { type: "30-Day Urgent Hiring Boost", price: "₹25,000", sold: 50, revenue: "₹1,25,000", badge: "Urgent Hiring" },
-    { type: "Top Search Sponsored Listing", price: "₹10,000", sold: 30, revenue: "₹30,000", badge: "Sponsored" },
-    { type: "WhatsApp Candidate Push Campaign", price: "₹15,000", sold: 8, revenue: "₹45,000", badge: "Direct WA Blast" },
-  ],
-};
-
-export const jobBoostLogs = [
-  {
-    id: "BOOST-901",
-    company: "HyperScale Analytics",
-    jobTitle: "Senior Principal Data Scientist",
-    packageType: "7-Day Premium Multi-Channel Boost",
-    duration: "7 Days",
-    amount: 15000,
-    amountFormatted: "₹15,000",
-    views: 18450,
-    clicks: 1420,
-    applications: 215,
-    ctr: "7.7%",
-    status: "Active (3 Days Remaining)",
-    startDate: "2026-07-28",
-    endDate: "2026-08-04",
-  },
-  {
-    id: "BOOST-902",
-    company: "Apex Cybernetics",
-    jobTitle: "Rust & C++ High Frequency Developer",
-    packageType: "30-Day Urgent Hiring Boost",
-    duration: "30 Days",
-    amount: 25000,
-    amountFormatted: "₹25,000",
-    views: 42100,
-    clicks: 2980,
-    applications: 380,
-    ctr: "7.07%",
-    status: "Active (18 Days Remaining)",
-    startDate: "2026-07-15",
-    endDate: "2026-08-14",
-  },
-  {
-    id: "BOOST-903",
-    company: "GlobalTech Solutions",
-    jobTitle: "Enterprise Java Solutions Architect",
-    packageType: "Top Search Sponsored Listing",
-    duration: "14 Days",
-    amount: 10000,
-    amountFormatted: "₹10,000",
-    views: 12400,
-    clicks: 650,
-    applications: 94,
-    ctr: "5.24%",
-    status: "Expired",
-    startDate: "2026-07-01",
-    endDate: "2026-07-15",
-  },
-];
+import { formatMoney, loadRevenueTransactions, revenueUnavailable } from "../_shared";
 
 export async function GET(req: NextRequest) {
-  await requireAdminSession(req);
-  await enforceRateLimit(req, "admin_revenue_job_boost", 60, 60_000);
-  if (!allowRevenueFixtures) {
-    return revenueUnavailable(new Error("Job boost revenue has no persisted reporting source."), "Job boost revenue");
+  try {
+    await requireAdminSession(req);
+    await enforceRateLimit(req, "admin_revenue_job_boost", 60, 60_000);
+
+    const allTransactions = await loadRevenueTransactions();
+    const transactions = allTransactions.filter((transaction) => transaction.revenueSource === "Job Boost");
+    const successful = transactions.filter((transaction) => transaction.status === "Success");
+    const pending = transactions.filter((transaction) => transaction.status === "Pending");
+    const refunded = transactions.filter((transaction) => transaction.status === "Refunded");
+    const failed = transactions.filter((transaction) => transaction.status === "Failed");
+
+    const totalRevenue = successful.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const byPackage = new Map<string, { sold: number; revenue: number }>();
+    for (const transaction of successful) {
+      const name = transaction.planPurchased || "Job Boost";
+      const current = byPackage.get(name) || { sold: 0, revenue: 0 };
+      current.sold += 1;
+      current.revenue += transaction.amount;
+      byPackage.set(name, current);
+    }
+
+    return NextResponse.json({
+      success: true,
+      source: "database",
+      summary: {
+        totalRevenue,
+        totalRevenueFormatted: formatMoney(totalRevenue),
+        totalTransactions: transactions.length,
+        successfulTransactions: successful.length,
+        pendingTransactions: pending.length,
+        refundedTransactions: refunded.length,
+        failedTransactions: failed.length,
+        categories: [...byPackage.entries()].map(([name, value]) => ({
+          name,
+          sold: value.sold,
+          revenue: value.revenue,
+          revenueFormatted: formatMoney(value.revenue),
+        })),
+      },
+      data: transactions,
+    });
+  } catch (error) {
+    return revenueUnavailable(error, "Job boost revenue");
   }
-  return NextResponse.json({
-    success: true,
-    summary: jobBoostSummary,
-    data: jobBoostLogs,
-  });
 }
