@@ -319,3 +319,15 @@ if (process.argv[1]?.includes("suite.test")) {
 }
 
 
+
+
+test("password reset OTP is only consumed by the final reset", () => {
+  const otpSource = fs.readFileSync(new URL("../lib/otp.ts", import.meta.url), "utf8");
+  const verifyRoute = fs.readFileSync(new URL("../app/api/auth/verify-otp/route.ts", import.meta.url), "utf8");
+  const resetRoute = fs.readFileSync(new URL("../app/api/auth/reset-password/route.ts", import.meta.url), "utf8");
+
+  assert(otpSource.includes("options?: { consume?: boolean }"));
+  assert(otpSource.includes("const consume = options?.consume ?? true"));
+  assert(verifyRoute.includes('body.type === "RESET_PASSWORD" ? { consume: false } : undefined'));
+  assert(resetRoute.includes('verifyOtpCode(body.email, body.otp, "RESET_PASSWORD")'));
+});
