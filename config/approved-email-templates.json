@@ -1,0 +1,1804 @@
+[
+  {
+    "eventKey": "AUTH_VERIFY_OTP",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Auth Verify Otp — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_verify_otp_candidate_en_v1",
+    "subject": "Your HireGo AI verification code",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Candidate</div>\n        <h2>Verify your account</h2>\n        <p>Hi {{name}},</p>\n        <p>Use the verification code below to continue with HireGo AI. This code expires in {{expires_minutes}} minutes.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Verification code</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{otp}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request this code, you can ignore this email.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "otp",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_VERIFY_OTP",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Auth Verify Otp — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_verify_otp_employer_en_v1",
+    "subject": "Your HireGo AI verification code",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Employer</div>\n        <h2>Verify your account</h2>\n        <p>Hi {{name}},</p>\n        <p>Use the verification code below to continue with HireGo AI. This code expires in {{expires_minutes}} minutes.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Verification code</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{otp}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request this code, you can ignore this email.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "otp",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_VERIFY_OTP",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Auth Verify Otp — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_verify_otp_recruiter_en_v1",
+    "subject": "Your HireGo AI verification code",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Recruiter</div>\n        <h2>Verify your account</h2>\n        <p>Hi {{name}},</p>\n        <p>Use the verification code below to continue with HireGo AI. This code expires in {{expires_minutes}} minutes.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Verification code</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{otp}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request this code, you can ignore this email.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "otp",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_VERIFY_OTP",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Auth Verify Otp — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_verify_otp_admin_en_v1",
+    "subject": "Your HireGo AI verification code",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · HireGo Admin</div>\n        <h2>Verify your account</h2>\n        <p>Hi {{name}},</p>\n        <p>Use the verification code below to continue with HireGo AI. This code expires in {{expires_minutes}} minutes.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Verification code</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{otp}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request this code, you can ignore this email.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "otp",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_PASSWORD_RESET",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Auth Password Reset — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_password_reset_candidate_en_v1",
+    "subject": "Reset your HireGo AI password",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Candidate</div>\n        <h2>Password reset requested</h2>\n        <p>Hi {{name}},</p>\n        <p>We received a request to reset your HireGo AI password. The reset link expires in {{expires_minutes}} minutes.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{reset_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Reset password</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request a password reset, do not use the link.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "reset_link",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_PASSWORD_RESET",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Auth Password Reset — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_password_reset_employer_en_v1",
+    "subject": "Reset your HireGo AI password",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Employer</div>\n        <h2>Password reset requested</h2>\n        <p>Hi {{name}},</p>\n        <p>We received a request to reset your HireGo AI password. The reset link expires in {{expires_minutes}} minutes.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{reset_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Reset password</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request a password reset, do not use the link.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "reset_link",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_PASSWORD_RESET",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Auth Password Reset — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_password_reset_recruiter_en_v1",
+    "subject": "Reset your HireGo AI password",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Recruiter</div>\n        <h2>Password reset requested</h2>\n        <p>Hi {{name}},</p>\n        <p>We received a request to reset your HireGo AI password. The reset link expires in {{expires_minutes}} minutes.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{reset_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Reset password</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request a password reset, do not use the link.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "reset_link",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_PASSWORD_RESET",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Auth Password Reset — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_password_reset_admin_en_v1",
+    "subject": "Reset your HireGo AI password",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · HireGo Admin</div>\n        <h2>Password reset requested</h2>\n        <p>Hi {{name}},</p>\n        <p>We received a request to reset your HireGo AI password. The reset link expires in {{expires_minutes}} minutes.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{reset_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Reset password</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you did not request a password reset, do not use the link.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "reset_link",
+        "expires_minutes"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_SECURITY_ALERT",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Auth Security Alert — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_security_alert_candidate_en_v1",
+    "subject": "Security alert: {{event}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Candidate</div>\n        <h2>Security activity detected</h2>\n        <p>Hi {{name}},</p>\n        <p>We recorded the following security event on your HireGo AI account: {{event}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{time}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you do not recognize this activity, secure your account immediately.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "event",
+        "time"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_SECURITY_ALERT",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Auth Security Alert — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_security_alert_employer_en_v1",
+    "subject": "Security alert: {{event}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Employer</div>\n        <h2>Security activity detected</h2>\n        <p>Hi {{name}},</p>\n        <p>We recorded the following security event on your HireGo AI account: {{event}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{time}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you do not recognize this activity, secure your account immediately.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "event",
+        "time"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_SECURITY_ALERT",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Auth Security Alert — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_security_alert_recruiter_en_v1",
+    "subject": "Security alert: {{event}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · Recruiter</div>\n        <h2>Security activity detected</h2>\n        <p>Hi {{name}},</p>\n        <p>We recorded the following security event on your HireGo AI account: {{event}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{time}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you do not recognize this activity, secure your account immediately.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "event",
+        "time"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AUTH_SECURITY_ALERT",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Auth Security Alert — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_auth_security_alert_admin_en_v1",
+    "subject": "Security alert: {{event}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Authentication · HireGo Admin</div>\n        <h2>Security activity detected</h2>\n        <p>Hi {{name}},</p>\n        <p>We recorded the following security event on your HireGo AI account: {{event}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{time}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If you do not recognize this activity, secure your account immediately.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "event",
+        "time"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ACCOUNT_WELCOME",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Account Welcome — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_account_welcome_candidate_en_v1",
+    "subject": "Welcome to HireGo AI",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Onboarding · Candidate</div>\n        <h2>Welcome to HireGo AI</h2>\n        <p>Hi {{name}},</p>\n        <p>Your HireGo AI candidate account is ready. You can now access the workflows and tools available for your role.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{dashboard_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open HireGo AI</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">This is an account onboarding message.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "dashboard_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ACCOUNT_WELCOME",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Account Welcome — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_account_welcome_employer_en_v1",
+    "subject": "Welcome to HireGo AI",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Onboarding · Employer</div>\n        <h2>Welcome to HireGo AI</h2>\n        <p>Hi {{name}},</p>\n        <p>Your HireGo AI employer account is ready. You can now access the workflows and tools available for your role.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{dashboard_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open HireGo AI</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">This is an account onboarding message.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "dashboard_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ACCOUNT_WELCOME",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Account Welcome — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_account_welcome_recruiter_en_v1",
+    "subject": "Welcome to HireGo AI",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Onboarding · Recruiter</div>\n        <h2>Welcome to HireGo AI</h2>\n        <p>Hi {{name}},</p>\n        <p>Your HireGo AI recruiter account is ready. You can now access the workflows and tools available for your role.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{dashboard_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open HireGo AI</a>\n        </div><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">This is an account onboarding message.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "dashboard_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_PROFILE_INCOMPLETE",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Profile Incomplete — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_profile_incomplete_candidate_en_v1",
+    "subject": "Complete your HireGo AI profile",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate · Candidate</div>\n        <h2>Your profile needs a few more details</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your HireGo AI profile is not yet complete. Completing it helps employers and hiring workflows work with accurate information.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{profile_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Complete profile</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "profile_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_AVAILABILITY_RECONFIRM",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Availability Reconfirm — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_availability_reconfirm_candidate_en_v1",
+    "subject": "Please reconfirm your interview availability",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate · Candidate</div>\n        <h2>Confirm your availability</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Please reconfirm your current availability so interview scheduling can use the latest information.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{availability_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Update availability</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "availability_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "VIDEO_RESUME_PROCESSING_COMPLETE",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Video Resume Processing Complete — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_video_resume_processing_complete_candidate_en_v1",
+    "subject": "Your video resume analysis is ready",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate · Candidate</div>\n        <h2>Video resume processing complete</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your video resume has finished processing.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{video_resume_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View video resume</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "video_resume_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOB_OPPORTUNITY",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Job Opportunity — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_job_opportunity_candidate_en_v1",
+    "subject": "Job opportunity: {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Acquisition · Candidate</div>\n        <h2>A job opportunity for you</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>HireGo AI identified a job opportunity for {{job_title}} at {{company_name}} in {{location}}. This is an opportunity notification, not a guarantee of selection.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{job_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View job</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "location",
+        "job_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOB_APPLICATION_RECEIVED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Job Application Received — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_job_application_received_candidate_en_v1",
+    "subject": "Application received - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Application · Candidate</div>\n        <h2>Your application was received</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your application for {{job_title}} at {{company_name}} has been recorded successfully. We will notify you when the status changes.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOB_APPLICATION_RECEIVED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Job Application Received — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_job_application_received_employer_en_v1",
+    "subject": "New application received - {{job_title}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Application · Employer</div>\n        <h2>A candidate applied</h2>\n        <p>{{candidate_name}} submitted an application for {{job_title}} at {{company_name}}.</p>\n        <p>The application is now available in the employer hiring workflow for review.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "APPLICATION_SCREENING_STARTED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Application Screening Started — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_application_screening_started_candidate_en_v1",
+    "subject": "Screening started - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Application · Candidate</div>\n        <h2>Your application is under review</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Screening has started for your application to {{job_title}} at {{company_name}}. No action is required right now.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "APPLICATION_SHORTLISTED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Application Shortlisted — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_application_shortlisted_candidate_en_v1",
+    "subject": "You&#x27;ve been shortlisted - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Application · Candidate</div>\n        <h2>You&#x27;ve moved to the next stage</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your application for {{job_title}} at {{company_name}} has been shortlisted.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Next step</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{next_step}}</td></tr></table>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "next_step"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "APPLICATION_REJECTED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Application Rejected — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_application_rejected_candidate_en_v1",
+    "subject": "Application update - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Application · Candidate</div>\n        <h2>An update on your application</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Thank you for your interest in {{job_title}} at {{company_name}}. Your application will not move forward in this hiring process.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">This message communicates the hiring outcome only and does not imply a broader assessment of your capabilities.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_SCHEDULE_REQUEST",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Schedule Request — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_schedule_request_candidate_en_v1",
+    "subject": "Choose an interview time - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Interview scheduling request</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Please choose an available interview time for {{job_title}} at {{company_name}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{scheduling_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Choose a time</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "scheduling_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_SCHEDULED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Scheduled — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_scheduled_candidate_en_v1",
+    "subject": "Interview scheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Interview scheduled</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>The interview for {{job_title}} at {{company_name}} is confirmed.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Mode</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_mode}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_mode",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_SCHEDULED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Interview Scheduled — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_scheduled_employer_en_v1",
+    "subject": "Interview scheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Employer</div>\n        <h2>Interview scheduled</h2>\n        <p>{{candidate_name}}&#x27;s interview has been scheduled.</p>\n        <p>The interview for {{job_title}} at {{company_name}} is confirmed.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Mode</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_mode}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_mode",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_SCHEDULED",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Interview Scheduled — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_scheduled_recruiter_en_v1",
+    "subject": "Interview scheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Recruiter</div>\n        <h2>Interview scheduled</h2>\n        <p>{{candidate_name}}&#x27;s interview has been scheduled.</p>\n        <p>The interview for {{job_title}} at {{company_name}} is confirmed.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Mode</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_mode}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_mode",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_REMINDER",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Reminder — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_reminder_candidate_en_v1",
+    "subject": "Interview reminder - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Upcoming interview reminder</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>The interview for {{job_title}} at {{company_name}} is coming up.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_REMINDER",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Interview Reminder — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_reminder_employer_en_v1",
+    "subject": "Interview reminder - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Employer</div>\n        <h2>Upcoming interview reminder</h2>\n        <p>Reminder for {{candidate_name}}&#x27;s interview.</p>\n        <p>The interview for {{job_title}} at {{company_name}} is coming up.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_REMINDER",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Interview Reminder — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_reminder_recruiter_en_v1",
+    "subject": "Interview reminder - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Recruiter</div>\n        <h2>Upcoming interview reminder</h2>\n        <p>Reminder for {{candidate_name}}&#x27;s interview.</p>\n        <p>The interview for {{job_title}} at {{company_name}} is coming up.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Open interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone",
+        "interview_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_RESCHEDULED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Rescheduled — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_rescheduled_candidate_en_v1",
+    "subject": "Interview rescheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Interview time updated</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been rescheduled.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please use the latest interview details shown in HireGo AI.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_RESCHEDULED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Interview Rescheduled — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_rescheduled_employer_en_v1",
+    "subject": "Interview rescheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Employer</div>\n        <h2>Interview time updated</h2>\n        <p>{{candidate_name}}&#x27;s interview has been updated.</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been rescheduled.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please use the latest interview details shown in HireGo AI.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_RESCHEDULED",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Interview Rescheduled — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_rescheduled_recruiter_en_v1",
+    "subject": "Interview rescheduled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Recruiter</div>\n        <h2>Interview time updated</h2>\n        <p>{{candidate_name}}&#x27;s interview has been updated.</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been rescheduled.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">New time</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{interview_time}} {{timezone}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please use the latest interview details shown in HireGo AI.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "interview_date",
+        "interview_time",
+        "timezone"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_CANCELLED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Cancelled — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_cancelled_candidate_en_v1",
+    "subject": "Interview cancelled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Interview cancelled</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been cancelled.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If a new interview is scheduled, HireGo AI will send updated details.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_CANCELLED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Interview Cancelled — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_cancelled_employer_en_v1",
+    "subject": "Interview cancelled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Employer</div>\n        <h2>Interview cancelled</h2>\n        <p>Update for {{candidate_name}}.</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been cancelled.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If a new interview is scheduled, HireGo AI will send updated details.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_CANCELLED",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Interview Cancelled — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_cancelled_recruiter_en_v1",
+    "subject": "Interview cancelled - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Recruiter</div>\n        <h2>Interview cancelled</h2>\n        <p>Update for {{candidate_name}}.</p>\n        <p>The interview for {{job_title}} at {{company_name}} has been cancelled.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">If a new interview is scheduled, HireGo AI will send updated details.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "VIRTUAL_INTERVIEW_READY",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Virtual Interview Ready — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_virtual_interview_ready_candidate_en_v1",
+    "subject": "Your virtual interview is ready - {{job_title}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>Virtual interview ready</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your virtual interview for {{job_title}} is ready. The access link is available until {{expires_at}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{interview_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Start interview</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "job_title",
+        "interview_link",
+        "expires_at"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_FEEDBACK_REQUEST",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Interview Feedback Request — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_feedback_request_employer_en_v1",
+    "subject": "Feedback required - {{candidate_name}} / {{job_title}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Employer</div>\n        <h2>Interview feedback requested</h2>\n        <p>Please submit your interview feedback for {{candidate_name}} for the {{job_title}} role.</p>\n        <p>Saving feedback is required to keep the hiring workflow accurate and allow the next permitted step.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{feedback_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Submit feedback</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "job_title",
+        "feedback_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_FEEDBACK_REQUEST",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Interview Feedback Request — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_feedback_request_recruiter_en_v1",
+    "subject": "Feedback required - {{candidate_name}} / {{job_title}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Recruiter</div>\n        <h2>Interview feedback requested</h2>\n        <p>Please submit your interview feedback for {{candidate_name}} for the {{job_title}} role.</p>\n        <p>Saving feedback is required to keep the hiring workflow accurate and allow the next permitted step.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{feedback_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Submit feedback</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "job_title",
+        "feedback_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INTERVIEW_NEXT_ROUND",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Interview Next Round — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_interview_next_round_candidate_en_v1",
+    "subject": "Next interview round - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Interview · Candidate</div>\n        <h2>You&#x27;ve progressed to the next round</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>You have progressed to the next interview stage for {{job_title}} at {{company_name}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Next round</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{next_round}}</td></tr></table>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "next_round"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_SELECTED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Selected — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_selected_candidate_en_v1",
+    "subject": "Selection update - {{job_title}} at {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Selection · Candidate</div>\n        <h2>You&#x27;ve been selected</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>You have been selected for {{job_title}} at {{company_name}}.</p>\n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Next step</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{next_step}}</td></tr></table><p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Follow the next-step instructions provided through the verified hiring workflow.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "job_title",
+        "next_step"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_DOCUMENTS_REQUIRED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Joining Documents Required — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_documents_required_candidate_en_v1",
+    "subject": "Joining documents required - {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Candidate</div>\n        <h2>Complete your joining documents</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Please provide the required joining documents for {{company_name}} through the secure HireGo AI workflow.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{documents_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Upload documents</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "documents_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_CONFIRMATION",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Joining Confirmation — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_confirmation_candidate_en_v1",
+    "subject": "Joining confirmed - {{company_name}} on {{joining_date}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Candidate</div>\n        <h2>Your joining date is confirmed</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your joining with {{company_name}} is confirmed for {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_CONFIRMATION",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Joining Confirmation — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_confirmation_employer_en_v1",
+    "subject": "Candidate joining confirmed - {{candidate_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Employer</div>\n        <h2>Joining confirmed</h2>\n        <p>{{candidate_name}}&#x27;s joining with {{company_name}} is confirmed.</p>\n        <p>Joining date: {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_REMINDER",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Joining Reminder — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_reminder_candidate_en_v1",
+    "subject": "Joining reminder - {{company_name}} on {{joining_date}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Candidate</div>\n        <h2>Joining reminder</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>This is a reminder that your joining date with {{company_name}} is {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_REMINDER",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Joining Reminder — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_reminder_employer_en_v1",
+    "subject": "Joining reminder - {{candidate_name}} on {{joining_date}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Employer</div>\n        <h2>Candidate joining reminder</h2>\n        <p>{{candidate_name}} is scheduled to join {{company_name}} on {{joining_date}}.</p>\n        <p>Please keep the hiring workflow updated if anything changes.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Joining Completed — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_completed_candidate_en_v1",
+    "subject": "Joining completed - {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Candidate</div>\n        <h2>Joining completed</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your joining with {{company_name}} has been recorded as completed on {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Joining Completed — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_completed_employer_en_v1",
+    "subject": "Joining completed - {{candidate_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · Employer</div>\n        <h2>Candidate joining completed</h2>\n        <p>{{candidate_name}}&#x27;s joining with {{company_name}} has been recorded as completed.</p>\n        <p>Recorded joining date: {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "JOINING_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Joining Completed — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_joining_completed_admin_en_v1",
+    "subject": "Joining completed - {{candidate_name}} / {{company_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Joining · HireGo Admin</div>\n        <h2>Joining completion recorded</h2>\n        <p>Joining has been marked complete for {{candidate_name}} at {{company_name}}.</p>\n        <p>Joining date: {{joining_date}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "company_name",
+        "joining_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "HIRING_REQUIREMENT_RECEIVED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Hiring Requirement Received — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_hiring_requirement_received_employer_en_v1",
+    "subject": "Hiring requirement received - {{reference_code}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Managed Hiring · Employer</div>\n        <h2>Requirement received</h2>\n        <p>Your hiring requirement for {{company_name}} has been received.</p>\n        <p>Reference code: {{reference_code}}. Keep this code for future updates.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "reference_code"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "HIRING_REQUIREMENT_RECEIVED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Hiring Requirement Received — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_hiring_requirement_received_admin_en_v1",
+    "subject": "New managed hiring requirement - {{reference_code}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Managed Hiring · HireGo Admin</div>\n        <h2>Managed hiring requirement received</h2>\n        <p>A new requirement has been submitted for {{company_name}}.</p>\n        <p>Reference code: {{reference_code}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "reference_code"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "MANAGED_HIRING_SOURCING_STARTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Managed Hiring Sourcing Started — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_managed_hiring_sourcing_started_employer_en_v1",
+    "subject": "Sourcing started - {{job_title}} / {{reference_code}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Managed Hiring · Employer</div>\n        <h2>Candidate sourcing has started</h2>\n        <p>Candidate sourcing has started for {{job_title}} at {{company_name}}.</p>\n        <p>Managed hiring reference: {{reference_code}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "job_title",
+        "reference_code"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "MANAGED_HIRING_CANDIDATE_SUBMITTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Managed Hiring Candidate Submitted — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_managed_hiring_candidate_submitted_employer_en_v1",
+    "subject": "Candidate submitted - {{candidate_name}} for {{job_title}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Managed Hiring · Employer</div>\n        <h2>A candidate is ready for review</h2>\n        <p>HireGo AI has submitted {{candidate_name}} for {{job_title}} at {{company_name}}.</p>\n        <p>Review the candidate profile and continue through the managed hiring workflow.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{candidate_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Review candidate</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "candidate_name",
+        "job_title",
+        "candidate_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_APPROVAL_REQUESTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Agreement Approval Requested — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_approval_requested_employer_en_v1",
+    "subject": "Agreement approval requested - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · Employer</div>\n        <h2>Agreement approval required</h2>\n        <p>An agreement for {{company_name}} is ready for your review.</p>\n        <p>Agreement reference: {{agreement_reference}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{agreement_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Review agreement</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference",
+        "agreement_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_APPROVAL_REQUESTED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Agreement Approval Requested — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_approval_requested_admin_en_v1",
+    "subject": "Agreement approval requested - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · HireGo Admin</div>\n        <h2>Agreement approval required</h2>\n        <p>Agreement approval is pending for {{company_name}}.</p>\n        <p>Agreement reference: {{agreement_reference}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{agreement_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Review agreement</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference",
+        "agreement_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_SENT",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Agreement Sent — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_sent_employer_en_v1",
+    "subject": "Agreement sent - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · Employer</div>\n        <h2>Your agreement is ready</h2>\n        <p>The agreement for {{company_name}} has been sent for review.</p>\n        <p>Agreement reference: {{agreement_reference}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{agreement_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View agreement</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference",
+        "agreement_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_ACCEPTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Agreement Accepted — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_accepted_employer_en_v1",
+    "subject": "Agreement accepted - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · Employer</div>\n        <h2>Agreement accepted</h2>\n        <p>The agreement for {{company_name}} has been accepted.</p>\n        <p>Agreement reference: {{agreement_reference}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_ACCEPTED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Agreement Accepted — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_accepted_admin_en_v1",
+    "subject": "Agreement accepted - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · HireGo Admin</div>\n        <h2>Agreement accepted</h2>\n        <p>The agreement for {{company_name}} has been accepted.</p>\n        <p>Agreement reference: {{agreement_reference}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_REJECTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Agreement Rejected — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_rejected_employer_en_v1",
+    "subject": "Agreement rejected - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · Employer</div>\n        <h2>Agreement status updated</h2>\n        <p>The agreement for {{company_name}} was rejected.</p>\n        <p>Agreement reference: {{agreement_reference}}. Review the agreement workflow for the recorded status and next action.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_REJECTED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Agreement Rejected — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_rejected_admin_en_v1",
+    "subject": "Agreement rejected - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · HireGo Admin</div>\n        <h2>Agreement status updated</h2>\n        <p>The agreement for {{company_name}} was rejected.</p>\n        <p>Agreement reference: {{agreement_reference}}. Review the agreement workflow for the recorded status and next action.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_EXPIRED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Agreement Expired — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_expired_employer_en_v1",
+    "subject": "Agreement expired - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · Employer</div>\n        <h2>Agreement expired</h2>\n        <p>The agreement for {{company_name}} has expired.</p>\n        <p>Agreement reference: {{agreement_reference}}. A new agreement or extension may be required.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "AGREEMENT_EXPIRED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Agreement Expired — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_agreement_expired_admin_en_v1",
+    "subject": "Agreement expired - {{agreement_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Agreement · HireGo Admin</div>\n        <h2>Agreement expired</h2>\n        <p>The agreement for {{company_name}} has expired.</p>\n        <p>Agreement reference: {{agreement_reference}}. A new agreement or extension may be required.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "agreement_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INVOICE_GENERATED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Invoice Generated — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_invoice_generated_employer_en_v1",
+    "subject": "Invoice {{invoice_number}} - {{amount}} {{currency}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Billing · Employer</div>\n        <h2>Invoice generated</h2>\n        <p>An invoice has been generated for {{company_name}}.</p>\n        \n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Invoice</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{invoice_number}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Amount</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{amount}} {{currency}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Due date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{due_date}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{invoice_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View invoice</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "invoice_number",
+        "amount",
+        "currency",
+        "due_date",
+        "invoice_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INVOICE_DUE_REMINDER",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Invoice Due Reminder — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_invoice_due_reminder_employer_en_v1",
+    "subject": "Invoice reminder - {{invoice_number}} due {{due_date}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Billing · Employer</div>\n        <h2>Invoice due reminder</h2>\n        <p>This is a reminder for {{company_name}} regarding invoice {{invoice_number}}.</p>\n        \n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Amount</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{amount}} {{currency}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Due date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{due_date}}</td></tr></table>\n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{invoice_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View invoice</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "invoice_number",
+        "amount",
+        "currency",
+        "due_date",
+        "invoice_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INVOICE_RECEIPT_SUBMITTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Invoice Receipt Submitted — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_invoice_receipt_submitted_employer_en_v1",
+    "subject": "Payment receipt submitted - {{invoice_number}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Billing · Employer</div>\n        <h2>Payment receipt submitted</h2>\n        <p>Your payment receipt for {{company_name}} has been submitted.</p>\n        <p>Invoice reference: {{invoice_number}}. Verification status will be updated through HireGo AI.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "invoice_number"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INVOICE_RECEIPT_SUBMITTED",
+    "channel": "EMAIL",
+    "audience": "ADMIN",
+    "name": "Invoice Receipt Submitted — HireGo Admin",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_invoice_receipt_submitted_admin_en_v1",
+    "subject": "Payment receipt submitted - {{invoice_number}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Billing · HireGo Admin</div>\n        <h2>Payment receipt submitted</h2>\n        <p>A payment receipt has been submitted by {{company_name}}.</p>\n        <p>Invoice reference: {{invoice_number}}. Verification status will be updated through HireGo AI.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "invoice_number"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "INVOICE_PAYMENT_VERIFIED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Invoice Payment Verified — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_invoice_payment_verified_employer_en_v1",
+    "subject": "Payment verified - {{invoice_number}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Billing · Employer</div>\n        <h2>Payment verified</h2>\n        <p>Payment for {{company_name}} has been verified.</p>\n        \n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Invoice</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{invoice_number}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Amount</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{amount}} {{currency}}</td></tr></table>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "invoice_number",
+        "amount",
+        "currency"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUBSCRIPTION_PURCHASED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Subscription Purchased — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_subscription_purchased_employer_en_v1",
+    "subject": "Subscription confirmed - {{plan_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Subscription · Employer</div>\n        <h2>Subscription activated</h2>\n        <p>The {{plan_name}} subscription for {{company_name}} has been recorded.</p>\n        \n        <table role=\"presentation\" width=\"100%\" style=\"margin:18px 0;background:#f7f8fa;border:1px solid #eaecf0;border-radius:12px;padding:10px 16px\"><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">Start date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{start_date}}</td></tr><tr><td style=\"padding:8px 0;color:#667085;font-size:13px;width:120px\">End date</td><td style=\"padding:8px 0;color:#101828;font-size:14px;font-weight:600\">{{end_date}}</td></tr></table>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "plan_name",
+        "start_date",
+        "end_date"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUBSCRIPTION_RENEWAL_REMINDER",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Subscription Renewal Reminder — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_subscription_renewal_reminder_employer_en_v1",
+    "subject": "Subscription renewal reminder - {{plan_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Subscription · Employer</div>\n        <h2>Your subscription is nearing renewal</h2>\n        <p>The {{plan_name}} subscription for {{company_name}} is scheduled to end on {{end_date}}.</p>\n        \n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{renewal_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Review renewal</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "plan_name",
+        "end_date",
+        "renewal_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUBSCRIPTION_EXPIRED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Subscription Expired — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_subscription_expired_employer_en_v1",
+    "subject": "Subscription expired - {{plan_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Subscription · Employer</div>\n        <h2>Subscription expired</h2>\n        <p>The {{plan_name}} subscription for {{company_name}} has expired.</p>\n        <p>Some subscription-dependent features may no longer be available until a valid plan is active.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{renewal_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View plans</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "plan_name",
+        "renewal_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CREDITS_LOW",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Credits Low — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_credits_low_employer_en_v1",
+    "subject": "{{credit_type}} credits are running low",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Subscription · Employer</div>\n        <h2>Credits running low</h2>\n        <p>{{company_name}} has {{remaining}} {{credit_type}} credits remaining.</p>\n        <p>Review your current plan or available credit options before the balance reaches zero.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{plans_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View plans</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "credit_type",
+        "remaining",
+        "plans_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CREDITS_EXHAUSTED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Credits Exhausted — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_credits_exhausted_employer_en_v1",
+    "subject": "{{credit_type}} credits exhausted",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Subscription · Employer</div>\n        <h2>Credits exhausted</h2>\n        <p>{{company_name}} has no remaining {{credit_type}} credits.</p>\n        <p>Actions that require these credits may remain unavailable until credits are replenished.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{plans_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">View plans</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "company_name",
+        "credit_type",
+        "plans_link"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ASSESSMENT_INVITATION",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Assessment Invitation — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_assessment_invitation_candidate_en_v1",
+    "subject": "Assessment invitation - {{assessment_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Assessment · Candidate</div>\n        <h2>You have a new assessment</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>You have been invited to complete {{assessment_name}}. The assessment is available until {{expires_at}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{assessment_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Start assessment</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "assessment_name",
+        "assessment_link",
+        "expires_at"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ASSESSMENT_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Assessment Completed — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_assessment_completed_candidate_en_v1",
+    "subject": "Assessment completed - {{assessment_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Assessment · Candidate</div>\n        <h2>Assessment submitted</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your {{assessment_name}} assessment has been recorded as completed.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "assessment_name"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "ASSESSMENT_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Assessment Completed — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_assessment_completed_employer_en_v1",
+    "subject": "Assessment completed - {{candidate_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Assessment · Employer</div>\n        <h2>Candidate assessment completed</h2>\n        <p>{{candidate_name}} has completed {{assessment_name}}.</p>\n        <p>The completion status is now available in the hiring workflow.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "assessment_name"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_SERVICE_SCHEDULED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Service Scheduled — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_service_scheduled_candidate_en_v1",
+    "subject": "{{service_name}} scheduled",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate Service · Candidate</div>\n        <h2>Candidate service scheduled</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your {{service_name}} service is scheduled for {{scheduled_at}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "service_name",
+        "scheduled_at"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_SERVICE_COMPLETED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Service Completed — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_service_completed_candidate_en_v1",
+    "subject": "{{service_name}} completed",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate Service · Candidate</div>\n        <h2>Candidate service completed</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>Your {{service_name}} service has been recorded as completed.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "service_name"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "CANDIDATE_SERVICE_REFUNDED",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Candidate Service Refunded — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_candidate_service_refunded_candidate_en_v1",
+    "subject": "Refund processed - {{service_name}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Candidate Service · Candidate</div>\n        <h2>Service refund recorded</h2>\n        <p>Hi {{candidate_name}},</p>\n        <p>A refund of {{amount}} {{currency}} has been recorded for {{service_name}}.</p>\n        \n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "candidate_name",
+        "service_name",
+        "amount",
+        "currency"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "TEAM_INVITATION",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Team Invitation — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_team_invitation_employer_en_v1",
+    "subject": "You&#x27;re invited to join {{company_name}} on HireGo AI",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Employer · Employer</div>\n        <h2>Team invitation</h2>\n        <p>Hi {{name}},</p>\n        <p>{{inviter_name}} invited you to join the employer team for {{company_name}}. This invitation expires at {{expires_at}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{invitation_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Accept invitation</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "company_name",
+        "inviter_name",
+        "invitation_link",
+        "expires_at"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "TEAM_INVITATION",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Team Invitation — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_team_invitation_recruiter_en_v1",
+    "subject": "You&#x27;re invited to join {{company_name}} on HireGo AI",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Employer · Recruiter</div>\n        <h2>Team invitation</h2>\n        <p>Hi {{name}},</p>\n        <p>{{inviter_name}} invited you to join the recruiter team for {{company_name}}. This invitation expires at {{expires_at}}.</p>\n        \n        <div style=\"margin:26px 0 8px\">\n          <a href=\"{{invitation_link}}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 20px;border-radius:10px;font-size:14px;font-weight:700\">Accept invitation</a>\n        </div>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "company_name",
+        "inviter_name",
+        "invitation_link",
+        "expires_at"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUPPORT_ACKNOWLEDGEMENT",
+    "channel": "EMAIL",
+    "audience": "CANDIDATE",
+    "name": "Support Acknowledgement — Candidate",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_support_acknowledgement_candidate_en_v1",
+    "subject": "Support request received - {{ticket_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Support · Candidate</div>\n        <h2>We&#x27;ve received your support request</h2>\n        <p>Hi {{name}},</p>\n        <p>HireGo AI Support has received your request. Your reference is {{ticket_reference}}.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please keep the reference code for follow-up.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "ticket_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUPPORT_ACKNOWLEDGEMENT",
+    "channel": "EMAIL",
+    "audience": "EMPLOYER",
+    "name": "Support Acknowledgement — Employer",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_support_acknowledgement_employer_en_v1",
+    "subject": "Support request received - {{ticket_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Support · Employer</div>\n        <h2>We&#x27;ve received your support request</h2>\n        <p>Hi {{name}},</p>\n        <p>HireGo AI Support has received your request. Your reference is {{ticket_reference}}.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please keep the reference code for follow-up.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "ticket_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  },
+  {
+    "eventKey": "SUPPORT_ACKNOWLEDGEMENT",
+    "channel": "EMAIL",
+    "audience": "RECRUITER",
+    "name": "Support Acknowledgement — Recruiter",
+    "locale": "en",
+    "status": "DRAFT",
+    "provider": "ZEPTOMAIL",
+    "providerAlias": "hg_support_acknowledgement_recruiter_en_v1",
+    "subject": "Support request received - {{ticket_reference}}",
+    "body": "<div class=\"email-shell\">\n      <div class=\"email-card\">\n        <div class=\"email-logo\"><img src=\"https://hariom-mu.vercel.app/marketing/hirego-logo-hd.png\" alt=\"HireGo AI\" /></div>\n        <div class=\"eyebrow\">Support · Recruiter</div>\n        <h2>We&#x27;ve received your support request</h2>\n        <p>Hi {{name}},</p>\n        <p>HireGo AI Support has received your request. Your reference is {{ticket_reference}}.</p>\n        <p style=\"margin:18px 0 0;color:#667085;font-size:12px;line-height:1.6\">Please keep the reference code for follow-up.</p>\n        <div class=\"email-footer\">\n          <strong>HireGo AI</strong><br>\n          This is a transactional email related to your HireGo AI account, application, hiring workflow, billing, assessment, or service activity.<br>\n          <span>hiregoai.com</span>\n        </div>\n      </div>\n    </div>",
+    "variableSchema": {
+      "allowed": [
+        "name",
+        "ticket_reference"
+      ]
+    },
+    "enabled": false,
+    "version": 1
+  }
+]
