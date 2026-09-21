@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, ArrowRight, CircleAlert, MailCheck } from "lucide-react";
 
 export default function ForgotPasswordOtpPage() {
   const router = useRouter();
@@ -140,7 +141,7 @@ export default function ForgotPasswordOtpPage() {
               background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
             }}
           >
-            <span className="material-symbols-outlined text-white text-[24px]">mark_email_read</span>
+            <MailCheck className="w-6 h-6 text-white" aria-hidden="true" />
           </div>
           <h1
             className="text-lg font-extrabold"
@@ -156,7 +157,7 @@ export default function ForgotPasswordOtpPage() {
 
         {errorMessage && (
           <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-400 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px]">error</span>
+            <CircleAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{errorMessage}</span>
           </div>
         )}
@@ -206,7 +207,7 @@ export default function ForgotPasswordOtpPage() {
             ) : (
               <>
                 <span>Verify Code</span>
-                <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </>
             )}
           </button>
@@ -216,7 +217,7 @@ export default function ForgotPasswordOtpPage() {
               href="/forgot-password"
               className="text-text-muted hover:underline flex items-center gap-1"
             >
-              <span className="material-symbols-outlined text-[13px]">arrow_back</span>
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Change Email</span>
             </Link>
             <button
