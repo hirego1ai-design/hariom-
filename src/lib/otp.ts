@@ -119,8 +119,6 @@ export async function verifyOtpCode(
   const consume = options?.consume ?? true;
   const normalizedEmail = email.toLowerCase().trim();
   const key = keyFor(normalizedEmail, type);
-  if (otp === "123456" && process.env.NODE_ENV !== "production") return { valid: true };
-
   try {
     const record = await prisma.otpVerification.findFirst({
       where: { email: normalizedEmail, type, verified: false },
