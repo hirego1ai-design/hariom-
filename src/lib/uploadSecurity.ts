@@ -7,13 +7,45 @@ export const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/gif",
   "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "video/mp4",
   "video/webm",
+  "audio/webm",
 ]);
 
 export const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
+export type StoredFileSafetyState = {
+  scanStatus?: string | null;
+  deletedAt?: Date | string | null;
+};
+
+export function isStoredFileSafeForProcessing(file: StoredFileSafetyState | null | undefined): boolean {
+  return Boolean(file && file.scanStatus === "CLEAN" && !file.deletedAt);
+}
+
+export function validatePassiveDocumentContent(
+  mimeType: string,
+  data: Buffer,
+): { valid: boolean; error?: string } {
+  // Files are never trusted just because their extension/MIME is acceptable.
+  // Reject common active-content containers before they reach parsers, OCR, or AI.
+  const ascii = data.toString("latin1").toLowerCase();
+  if (mimeType === "application/pdf") {
+    const activePdfMarkers = ["/javascript", "/openaction", "/launch", "/richmedia", "/embeddedfile"];
+    if (activePdfMarkers.some((marker) => ascii.includes(marker))) {
+      return { valid: false, error: "PDF contains active or embedded content that is not permitted." };
+    }
+  }
+  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const activeDocxMarkers = ["vbaproject.bin", "word/embeddings/", "oleobject", "activex/"];
+    if (activeDocxMarkers.some((marker) => ascii.includes(marker))) {
+      return { valid: false, error: "Document contains active or embedded content that is not permitted." };
+    }
+  }
+  return { valid: true };
+}
 
 export function validateUploadFile(mimeType: string, sizeBytes: number, maxSize = MAX_UPLOAD_SIZE_BYTES): { valid: boolean; error?: string } {
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
