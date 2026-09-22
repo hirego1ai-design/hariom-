@@ -53,10 +53,17 @@ export async function POST(request: NextRequest) {
 
     const fileId = body.videoUrl.slice("/api/files/".length);
     const file = await prisma.storedFile.findFirst({
-      where: { id: fileId, ownerId: session.id, category: "video-resumes", deletedAt: null, mimeType: { in: ["video/mp4", "video/webm"] } },
+      where: {
+        id: fileId,
+        ownerId: session.id,
+        category: "video-resumes",
+        deletedAt: null,
+        scanStatus: "CLEAN",
+        mimeType: { in: ["video/mp4", "video/webm"] },
+      },
       select: { id: true, objectKey: true },
     });
-    if (!file) return jsonError("Upload a valid video resume before saving.", 409);
+    if (!file) return jsonError("Video resume is unavailable until its security scan is CLEAN.", 423);
 
     const profile = await prisma.candidateProfile.upsert({
       where: { userId: session.id },
@@ -72,7 +79,9 @@ export async function POST(request: NextRequest) {
         candidateProfileId: profile.id,
         videoUrl: body.videoUrl,
         durationSeconds: body.durationSeconds,
-        transcript: body.transcript ?? null,
+        // Client-supplied transcripts are never authoritative. The isolated
+        // worker may populate a transcript after processing CLEAN media.
+        transcript: null,
         analysisStatus: initialStatus,
         communicationScore: null,
         clarityScore: null,
@@ -96,9 +105,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Generate secure worker download URL (signed R2/S3 URL in production)
-    const downloadUrl = await getWorkerDownloadUrl(file.objectKey);
-
     // Await acceptance before returning. Detached promises are not durable in
     // a serverless runtime and can be terminated when the response completes.
     if (config.enabled && config.workerUrl) {
@@ -107,7 +113,6 @@ export async function POST(request: NextRequest) {
         videoResumeId: saved.id,
         fileId: file.id,
         objectKey: file.objectKey,
-        downloadUrl,
         durationSeconds: body.durationSeconds,
         workerUrl: config.workerUrl,
         token: config.internalToken,
@@ -135,15 +140,38 @@ async function dispatchWorkerJob(params: {
   videoResumeId: string;
   fileId: string;
   objectKey: string;
-  downloadUrl: string | null;
   durationSeconds: number;
   workerUrl: string;
   token: string;
   callbackOrigin: string;
 }) {
   try {
+    // Re-check the file immediately before issuing any worker URL. A stale
+    // request or rescan must fail closed even if the initial POST saw CLEAN.
+    const safeFile = await prisma.storedFile.findFirst({
+      where: {
+        id: params.fileId,
+        objectKey: params.objectKey,
+        deletedAt: null,
+        scanStatus: "CLEAN",
+      },
+      select: { objectKey: true },
+    });
+    if (!safeFile) {
+      await prisma.videoAnalysisJob.updateMany({
+        where: { id: params.jobId, status: { in: ["PENDING", "PROCESSING"] } },
+        data: { status: "BLOCKED_INFRA", error: "Security scan has not produced a CLEAN file.", completedAt: new Date(), claimToken: null, leaseExpiresAt: null },
+      });
+      await prisma.videoResume.updateMany({
+        where: { id: params.videoResumeId, analysisStatus: { in: ["PENDING", "PROCESSING"] } },
+        data: { analysisStatus: "BLOCKED_INFRA", analysisError: "Video blocked by upload security gate." },
+      });
+      return;
+    }
+
     const claim = await claimVideoAnalysisJob(params.jobId);
     if (!claim) return;
+    const downloadUrl = await getWorkerDownloadUrl(safeFile.objectKey);
     const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
       || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
       || params.callbackOrigin.replace(/\/$/, "");
@@ -160,12 +188,14 @@ async function dispatchWorkerJob(params: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${params.token}`,
       },
+      signal: AbortSignal.timeout(60_000),
+      redirect: "error",
       body: JSON.stringify({
         jobId: params.jobId,
         videoResumeId: params.videoResumeId,
         fileId: params.fileId,
         objectKey: params.objectKey,
-        downloadUrl: params.downloadUrl,
+        downloadUrl,
         claimedDurationSeconds: params.durationSeconds,
         callbackUrl,
         claimToken: claim.claimToken,
