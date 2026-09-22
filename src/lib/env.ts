@@ -13,6 +13,30 @@ export function getOptionalEnv(name: string): string | undefined {
   return value || undefined;
 }
 
+function assertSafeHttpsServiceUrl(name: string, value: string): string {
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error(`${name} must be a credential-free HTTPS URL in production.`);
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const blocked =
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    host === "metadata.google.internal" ||
+    host.endsWith(".local") ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  if (blocked) {
+    throw new Error(`${name} must not target localhost, link-local, metadata, or private-network hosts.`);
+  }
+  return parsed.toString().replace(/\/$/, "");
+}
+
 export function requireRedisEnv() {
   return {
     url: requireProductionEnv("UPSTASH_REDIS_REST_URL"),
@@ -41,10 +65,7 @@ export function getVideoAnalysisConfig() {
   if (enabled && process.env.NODE_ENV === "production") {
     workerUrl = requireProductionEnv("VIDEO_ANALYSIS_WORKER_URL");
     internalToken = requireProductionEnv("VIDEO_ANALYSIS_INTERNAL_TOKEN");
-    const parsedWorkerUrl = new URL(workerUrl);
-    if (parsedWorkerUrl.protocol !== "https:" || parsedWorkerUrl.username || parsedWorkerUrl.password) {
-      throw new Error("VIDEO_ANALYSIS_WORKER_URL must be a credential-free HTTPS URL in production.");
-    }
+    workerUrl = assertSafeHttpsServiceUrl("VIDEO_ANALYSIS_WORKER_URL", workerUrl);
     if (internalToken.length < 32) {
       throw new Error("VIDEO_ANALYSIS_INTERNAL_TOKEN must contain at least 32 characters in production.");
     }
@@ -74,11 +95,7 @@ export function getVideoAnalysisConfig() {
 
 export function requireMalwareScannerEnv() {
   const url = requireProductionEnv("MALWARE_SCANNER_URL");
-  const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-    throw new Error("MALWARE_SCANNER_URL must be a credential-free HTTPS URL in production.");
-  }
-  return { url, token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
+  return { url: assertSafeHttpsServiceUrl("MALWARE_SCANNER_URL", url), token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
 }
 
 export function buildPublicAppUrl(path: string): string {
