@@ -61,7 +61,7 @@ test("critical candidate/admin render surfaces do not use raw HTML sinks", () =>
 test("outbound service configuration blocks obvious SSRF targets", () => {
   const env = read("src/lib/env.ts");
   for (const marker of ["localhost", "metadata.google.internal", "169\\.254", "192\\.168", "172\\."]) {
-    assert.match(env, new RegExp(marker));
+    assert.ok(env.includes(marker), `missing SSRF deny marker: ${marker}`);
   }
   assert.match(env, /assertSafeHttpsServiceUrl\("VIDEO_ANALYSIS_WORKER_URL"/);
   assert.match(env, /assertSafeHttpsServiceUrl\("MALWARE_SCANNER_URL"/);
