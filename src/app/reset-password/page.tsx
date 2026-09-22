@@ -20,13 +20,22 @@ export default function ResetPasswordPage() {
     if (typeof window !== "undefined") {
       const storedEmail = sessionStorage.getItem("reset_email");
       const storedOtp = sessionStorage.getItem("reset_otp");
-      if (storedEmail) setEmail(storedEmail);
-      if (storedOtp) setOtp(storedOtp);
+      if (!storedEmail || !storedOtp) {
+        setErrorMessage("Your password-reset verification has expired. Request a new code.");
+        return;
+      }
+      setEmail(storedEmail);
+      setOtp(storedOtp);
     }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!email || !otp) {
+      setErrorMessage("A verified password-reset code is required. Request a new code and try again.");
+      return;
+    }
 
     if (!newPassword || !confirmPassword) {
       setErrorMessage("Please enter and confirm your new password.");
@@ -52,7 +61,7 @@ export default function ResetPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          otp: otp || "123456",
+          otp,
           newPassword,
         }),
       });
