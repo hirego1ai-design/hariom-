@@ -162,6 +162,8 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
         originalName: "test.mp4",
         mimeType: "video/mp4",
         sizeBytes: 1024,
+        scanStatus: "CLEAN",
+        scanCheckedAt: new Date(),
       },
     });
     const videoResponse = await submitVideo(new Request("https://hirego.test/api/candidate/video-resume", {
