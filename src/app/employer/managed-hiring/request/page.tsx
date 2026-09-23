@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmployerHeader from "@/components/employer/EmployerHeader";
 import EmployerSidebar from "@/components/employer/EmployerSidebar";
@@ -33,79 +33,101 @@ export default function ManagedHiringRequirementWizard() {
   const [loading, setLoading] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
 
-  // Form State
+  // Form state starts blank. Authenticated company/user facts are loaded
+  // from server-side tenant-scoped APIs below; requirement details are never
+  // populated with demo employers, people, roles, salaries, or skills.
   const [formData, setFormData] = useState({
-    // Step 1: Company
-    companyName: "Acme Technologies",
-    industry: "Information Technology",
-    website: "https://acme.example.com",
-    contactPerson: "Rahul Verma",
-    email: "rahul@acme.example.com",
-    primaryMobile: "+91 98765 43210",
+    companyName: "",
+    industry: "",
+    website: "",
+    contactPerson: "",
+    email: "",
+    primaryMobile: "",
     alternatePhone: "",
     gstin: "",
     pan: "",
-    billingAddress: "Bengaluru, KA, India",
+    billingAddress: "",
 
-    // Step 2: Requirement
-    numberOfPositions: "3",
+    numberOfPositions: "1",
     multipleRoles: false,
-    jobTitles: "Senior AI Fullstack Developer, Frontend Architect",
-    department: "Engineering",
-    experienceYears: "3-5 Years",
+    jobTitles: "",
+    department: "",
+    experienceYears: "",
     employmentType: "Full-time",
-    workMode: "Hybrid",
-    location: "Bengaluru",
-    shift: "Day Shift",
-    noticePeriod: "Immediate to 30 Days",
-    joiningTimeline: "Within 30 Days",
+    workMode: "On-site",
+    location: "",
+    shift: "",
+    noticePeriod: "",
+    joiningTimeline: "",
 
-    // Step 3: Skills
-    mandatorySkills: ["React", "Node.js", "TypeScript", "Next.js"],
+    mandatorySkills: [] as string[],
     newMandatorySkill: "",
-    preferredSkills: ["Python", "GraphQL", "Tailwind CSS"],
+    preferredSkills: [] as string[],
     newPreferredSkill: "",
-    education: "B.Tech / B.E. in Computer Science or related field",
-    certifications: "AWS Certified Developer (Optional)",
-    languages: "English (Fluent), Hindi",
-    tools: "Git, JIRA, Docker, Figma",
+    education: "",
+    certifications: "",
+    languages: "",
+    tools: "",
 
-    // Step 4: Salary
-    budgetMin: "2000000",
-    budgetMax: "3500000",
+    budgetMin: "",
+    budgetMax: "",
     currency: "INR",
-    variableComponent: "10% Performance Bonus",
-    bonusIncentives: "Annual Health & ESOP Package",
-    benefits: ["Health Insurance", "Remote Allowance", "Flexible Working Hours"],
+    variableComponent: "",
+    bonusIncentives: "",
+    benefits: [] as string[],
 
-    // Step 5: Priority
-    hiringPriority: "Urgent",
-    replacementExpectation: "90 Days",
+    hiringPriority: "Standard",
+    replacementExpectation: "",
 
-    // Step 6: Attachments & Notes
-    additionalNotes: "Looking for proactive engineers with startup background and strong product ownership.",
+    additionalNotes: "",
     jdFileName: "",
   });
 
-  // Dynamic Positions state for Step 2
   const [positions, setPositions] = useState<any[]>([
     {
       id: 1,
-      jobTitle: "Senior AI Fullstack Developer",
-      numberOfPositions: "2",
-      experienceYears: "3-5 Years",
-      workMode: "Hybrid",
-      location: "Bengaluru"
-    },
-    {
-      id: 2,
-      jobTitle: "Frontend Architect",
+      jobTitle: "",
       numberOfPositions: "1",
-      experienceYears: "5-8 Years",
-      workMode: "Hybrid",
-      location: "Bengaluru"
-    }
+      experienceYears: "",
+      workMode: "On-site",
+      location: "",
+    },
   ]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetch("/api/employer/company", { cache: "no-store" }).then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load company profile.");
+        return payload;
+      }),
+      fetch("/api/auth/me", { cache: "no-store" }).then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load account profile.");
+        return payload;
+      }),
+    ])
+      .then(([companyPayload, accountPayload]) => {
+        if (!active) return;
+        const company = companyPayload.company || {};
+        const user = accountPayload.user || {};
+        setFormData((previous) => ({
+          ...previous,
+          companyName: typeof company.name === "string" ? company.name : "",
+          industry: typeof company.industry === "string" ? company.industry : "",
+          website: typeof company.website === "string" ? company.website : "",
+          billingAddress: typeof company.location === "string" ? company.location : "",
+          contactPerson: typeof user.name === "string" ? user.name : "",
+          email: typeof user.email === "string" ? user.email : "",
+        }));
+      })
+      .catch(() => {
+        // The form remains blank if profile prefill is unavailable. Submission
+        // validation/server authorization remains authoritative.
+      });
+    return () => { active = false; };
+  }, []);
 
   const addPositionItem = () => {
     setPositions((prev) => [
@@ -183,10 +205,10 @@ export default function ManagedHiringRequirementWizard() {
       const payload = {
         ...formData,
         numberOfPositions: totalPositions || 1,
-        jobTitles: allJobTitles || "Software Engineer",
-        experienceYears: allExperiences || "3-5 Years",
-        workMode: allWorkModes || "Hybrid",
-        location: allLocations || "Remote",
+        jobTitles: allJobTitles,
+        experienceYears: allExperiences,
+        workMode: allWorkModes,
+        location: allLocations,
         salaryRangeMin: parseFloat(formData.budgetMin) || 0,
         salaryRangeMax: parseFloat(formData.budgetMax) || 0,
       };
@@ -199,7 +221,7 @@ export default function ManagedHiringRequirementWizard() {
 
       const data = await res.json();
       if (data.success) {
-        setSubmittedRef(data.referenceCode || "REQ-2026-ACTIVE");
+        setSubmittedRef(data.referenceCode || data.id || "Submitted");
       } else {
         alert(data.error || "Submission failed");
       }

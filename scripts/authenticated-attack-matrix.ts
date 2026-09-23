@@ -143,7 +143,7 @@ async function runAttackMatrix() {
   const employerPrivEscAttacks = [
     { id: "ATK-12", path: "/api/admin/system/queues", method: "GET", expected: [401, 403], desc: "Employer -> Admin Queues" },
     { id: "ATK-13", path: "/api/admin/security/status", method: "GET", expected: [401, 403], desc: "Employer -> Security Status" },
-    { id: "ATK-14", path: "/api/admin/communications", method: "GET", expected: [401, 403], desc: "Employer -> Admin Communications" },
+    { id: "ATK-14", path: "/api/admin/analytics", method: "GET", expected: [401, 403], desc: "Employer -> Admin Analytics" },
   ];
 
   for (const atk of employerPrivEscAttacks) {
@@ -175,12 +175,12 @@ async function runAttackMatrix() {
         role: "ADMIN",
       }),
     });
-    const defended = res.status === 200 || res.status === 400 || res.status === 403;
+    const defended = [400, 403, 422].includes(res.status);
     recordAttack(
       "ATK-15",
       "Role Injection",
       "Register with spoofed role: ADMIN",
-      [200, 400, 403],
+      [400, 403, 422],
       res.status,
       defended,
       "Ensures server ignores or rejects unvetted privilege escalation"

@@ -240,24 +240,22 @@ export default function HiringPipelinePage() {
               <span className="material-symbols-outlined text-[16px]">list</span>
               <span>List</span>
             </button>
-            <button
-              onClick={() => setViewMode("table")}
-              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed"
-              title="Table View (Coming Soon)"
-              disabled
+            <Link
+              href="/employer/candidate-user-management"
+              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5"
+              title="Open candidate table"
             >
               <span className="material-symbols-outlined text-[16px]">table_chart</span>
               <span>Table</span>
-            </button>
-            <button
-              onClick={() => setViewMode("analytics")}
-              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed"
-              title="Analytics View (Coming Soon)"
-              disabled
+            </Link>
+            <Link
+              href="/employer/employer-analytics-dashboard"
+              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5"
+              title="Open recruiting analytics"
             >
               <span className="material-symbols-outlined text-[16px]">analytics</span>
               <span>Analytics</span>
-            </button>
+            </Link>
           </div>
 
           {/* Collapsible Action buttons */}
@@ -511,60 +509,36 @@ export default function HiringPipelinePage() {
           </div>
         )}
 
-        {/* Collapsible Right Side Insights panel */}
+        {/* Collapsible Right Side Evidence panel */}
         {isInsightsOpen && (
           <aside className="w-[320px] flex-shrink-0 glass-card p-5 rounded-2xl border border-white/10 bg-[#141418]/90 flex flex-col gap-5 sticky top-60">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="material-symbols-outlined text-secondary text-lg">auto_awesome</span>
-                <h3 className="font-bold text-sm text-white">AI Hiring Insights</h3>
+                <span className="material-symbols-outlined text-secondary text-lg">fact_check</span>
+                <h3 className="font-bold text-sm text-white">Pipeline Evidence</h3>
               </div>
-              <p className="text-[11px] text-text-muted">Active evaluations and urgent pipeline priorities.</p>
+              <p className="text-[11px] text-text-muted">Recorded candidate and job data only. No inferred health scores or simulated alerts.</p>
             </div>
 
-            <div className="p-3 bg-secondary-container-bg rounded-xl border border-secondary/20 flex flex-col gap-1">
-              <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">Hiring Health Score</span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-display text-white">92</span>
-                <span className="text-xs text-green font-bold">Excellent (+3.4%)</span>
-              </div>
-              <p className="text-[10px] text-text-muted mt-1 leading-normal">Your response rate and scheduling speeds exceed industry benchmarks for tech roles.</p>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-[11px] text-text-muted uppercase font-bold tracking-wider">Top AI Recommendations</h4>
-              {candidates
-                .filter((c) => c.recommendation === "Highly Recommended")
-                .slice(0, 2)
-                .map((c) => (
-                  <div key={c.applicationId} className="p-3 bg-white/5 border border-white/5 rounded-xl flex items-center gap-3">
-                    <img src={c.avatar} alt={c.name} className="w-8 h-8 rounded-full object-cover" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{c.name}</p>
-                      <p className="text-[10px] text-text-muted truncate">{c.currentRole}</p>
-                    </div>
-                    <span className="text-xs font-bold text-green font-mono">{c.matchScore}%</span>
-                  </div>
-                ))}
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-[11px] text-text-muted uppercase font-bold tracking-wider">Urgent Alerts</h4>
-              <div className="p-3 bg-red-deep/10 border border-red-light/20 rounded-xl flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-white">
-                  <span className="material-symbols-outlined text-[14px] text-red-light">error</span>
-                  <span>Review Candidate</span>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ["Visible candidates", filteredCandidates.length],
+                ["Active jobs", jobs.filter((job) => String(job.status).toUpperCase() === "ACTIVE").length],
+                ["Job-ready", candidates.filter((candidate) => candidate.jobReady).length],
+                ["Video resumes", candidates.filter((candidate) => candidate.hasVideoResume).length],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-text-muted">{label}</p>
+                  <p className="mt-1 text-xl font-bold text-white">{String(value)}</p>
                 </div>
-                <p className="text-[10px] text-text-muted">Jordan S. has been in "Applied" stage for over 4 days. AI match is 98%.</p>
-              </div>
-              
-              <div className="p-3 bg-yellow/5 border border-yellow/20 rounded-xl flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-white">
-                  <span className="material-symbols-outlined text-[14px] text-yellow">schedule</span>
-                  <span>Interviews Setup Pending</span>
-                </div>
-                <p className="text-[10px] text-text-muted">Aarav Sharma completed the coding assessment. Score: 96%.</p>
-              </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Recorded recommendations</p>
+              <p className="mt-2 text-xs text-text-secondary">
+                Recommendations appear only when persisted evidence exists for the application. Unassessed candidates are not ranked or labeled.
+              </p>
             </div>
           </aside>
         )}

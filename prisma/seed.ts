@@ -1,5 +1,5 @@
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/hirego_prod?schema=public";
+  throw new Error("DATABASE_URL is required for seeding. Refusing to guess or target a local production-named database.");
 }
 
 import { PrismaClient } from "@prisma/client";
@@ -90,22 +90,7 @@ async function main() {
 
   console.log("Seeded AI Service Costs");
 
-  // Seed sample company & admin
-  const sampleCompany = await prisma.company.upsert({
-    where: { id: "company-hirego" },
-    update: {},
-    create: {
-      id: "company-hirego",
-      name: "HireGo AI Technologies",
-      website: "https://hirego.ai",
-      description: "Next-gen Autonomous AI Recruitment Platform",
-      industry: "Human Resources / AI",
-      size: "50-200",
-      location: "Bangalore, India",
-    },
-  });
-
-  console.log("Seeded Sample Company:", sampleCompany.name);
+  // Do not seed sample companies, users, candidates, or jobs into application databases.
   console.log("Database seeding completed successfully!");
 }
 

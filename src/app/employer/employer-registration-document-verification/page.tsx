@@ -141,8 +141,8 @@ export default function EmployerDocumentVerificationPage() {
               <div className="absolute inset-0 bg-primary/20 blur-[70px] rounded-full scale-75 animate-pulse" />
               <img
                 className="relative z-10 w-full h-full object-contain"
-                alt="3D Security Verification Graphic"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsxYV2aREJbeHmmorT35Kdd3Eyo3rEUnfqu8PxRQPv0VH8ujIhTLUb8DQRPXGOCON7Jwd8NgixwTtLgaXkPhyMiUFjnUPR_Xt_UFZkAUA7_YcFL6ppfQidkwR4fvvv_DpkvKSi9rWtHPc786GaIniskb5aoPGXRxexpW3BRhU7rhLu9tuFb_g8rJnv2P6R85J5SHixzoAHz333EDBu_GZ0tXCx7VDmUODACmisj7nxoRoR4uwDrQ6YZyGkmWBNnnOoeY6KghM9vyE"
+                alt="HireGo AI"
+                src="/marketing/hirego-logo.png"
               />
             </div>
           </div>

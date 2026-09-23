@@ -16,6 +16,11 @@ export interface DispatchJobCreationParams {
   salaryRange: string;
   location: string;
   type: string;
+  department?: string;
+  requirements?: string[];
+  screeningQuestions?: string[];
+  aiFocusAreas?: string;
+  skillRequirements?: Array<{ name: string; priority: 'required' | 'preferred' }>;
   matchingConfig?: {
     weightExperience: number;
     weightEducation: number;
@@ -54,7 +59,7 @@ export class RosGateway {
     generatedJd: Record<string, unknown>;
   }> {
     const tenantContext = createTenantContext(params.companyId, params.userId, params.userRole);
-    RbacGuard.assertRole(tenantContext, [Role.EMPLOYER, Role.ADMIN]);
+    RbacGuard.assertRole(tenantContext, [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN]);
     await this.killSwitchManager.assertNotKilled(KillSwitchType.AGENT, 'jd-generator');
 
     const correlationId = crypto.randomUUID();
@@ -91,7 +96,13 @@ export class RosGateway {
         type: params.type,
         salaryRange: params.salaryRange,
         description: (generatedJd.jobDescription as string) || `Job listing for ${params.jobTitle}`,
-        requirements: (generatedJd.targetKeywords as string[]) || ['AI Architecture', 'TypeScript'],
+        department: params.department,
+        requirements: params.requirements?.length
+          ? params.requirements
+          : ((generatedJd.targetKeywords as string[]) || []),
+        screeningQuestions: params.screeningQuestions || [],
+        aiFocusAreas: params.aiFocusAreas,
+        skillRequirements: params.skillRequirements,
         matchingConfig: params.matchingConfig,
         status: 'ACTIVE',
       },

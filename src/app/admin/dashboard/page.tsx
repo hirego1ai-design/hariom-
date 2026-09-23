@@ -14,7 +14,6 @@ const sections = [
       ["Job Listings", "/admin/jobs", "work"],
       ["New Signups", "/admin/signups", "person_add"],
       ["KYC Review", "/admin/document-verification", "verified_user"],
-      ["Roles & Permissions", "/admin/roles", "admin_panel_settings"],
     ],
   },
   {
@@ -36,7 +35,6 @@ const sections = [
       ["Revenue", "/admin/revenue", "payments"],
       ["Invoices", "/admin/invoices", "receipt_long"],
       ["Subscriptions", "/admin/subscriptions", "autorenew"],
-      ["Plan Management", "/admin/settings/plan-management", "inventory_2"],
       ["Pricing Engine", "/admin/pricing-engine", "sell"],
       ["Payment Gateways", "/admin/payment-gateways", "account_balance"],
       ["Referrals", "/admin/referrals", "share"],
@@ -48,10 +46,7 @@ const sections = [
     items: [
       ["System Health", "/admin/system-health", "monitoring"],
       ["AI Command Centre", "/admin/ai-command-centre-dashboard", "smart_toy"],
-      ["Proctoring Control", "/admin/proctoring-control-panel", "security"],
       ["Infrastructure", "/admin/system/infrastructure", "router"],
-      ["Backup & Recovery", "/admin/system/backup-recovery", "cloud_download"],
-      ["Security Inspector", "/admin/security/vulnerability-inspector", "bug_report"],
       ["Audit Logs", "/admin/settings/audit-log", "history"],
       ["Admin Settings", "/admin/settings/hub", "settings"],
     ],

@@ -1,26 +1,43 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
-import { PageContainer } from "@/components/employer/LayoutSystem";
-
-const rounds = [
-  ["1", "HR screening", "Motivation, availability, compensation, and communication"],
-  ["2", "Technical assessment", "Role skills, coding/design evaluation, and AI-assisted scorecard"],
-  ["3", "Operations / leadership", "Ownership, execution, collaboration, and stakeholder management"],
-  ["4", "Final employer interview", "Hiring manager decision and final recommendation"],
-];
+import { PageContainer, PageHeader } from "@/components/employer/LayoutSystem";
 
 export default function ManagedHiringServicePlanPage() {
-  const [mode, setMode] = useState<"ONLINE" | "OFFLINE">("ONLINE");
-  const [channels, setChannels] = useState({ app: true, email: true, whatsapp: false });
-  return <PageContainer><div className="max-w-6xl mx-auto py-8 px-4 space-y-7">
-    <div><p className="text-yellow text-xs font-bold uppercase tracking-[0.2em] mb-2">HireGo Managed Hiring™</p><h1 className="text-3xl font-bold text-white">End-to-end hiring service plan</h1><p className="text-text-secondary text-sm mt-2 max-w-3xl">HireGo agents handle sourcing, screening, shortlisting, interview coordination, scorecards, and placement billing. Your team makes the final hiring decision.</p></div>
-    <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5">
-      <section className="glass-card rounded-2xl p-6"><div className="flex items-center justify-between mb-5"><h2 className="font-bold text-white">Managed hiring workflow</h2><span className="text-[10px] px-2 py-1 rounded-full bg-indigo-400/10 text-indigo-300 border border-indigo-400/20">Agent orchestration enabled</span></div><div className="space-y-3">{[["1", "Requirement review", "HireGo team validates the role, salary, location, and success criteria."],["2", "AI sourcing and screening", "Resume evaluator and matchmaker agents rank candidates against the requirement."],["3", "Shortlist and assessments", "Candidates complete screening, technical assessment, and integrity checks."],["4", "Interview scheduling", "Employer selects online or offline mode, round, date, time, and notification channels."],["5", "Final decision", "Panel scorecards are combined and employer submits the final recommendation."],["6", "Joining and invoice", "Candidate joining triggers the placement invoice and replacement-warranty tracking."]].map(([n,title,desc]) => <div key={n} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><span className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold shrink-0">{n}</span><div><p className="text-sm text-white font-bold">{title}</p><p className="text-xs text-text-secondary mt-1">{desc}</p></div></div>)}</div></section>
-      <section className="glass-card rounded-2xl p-6"><h2 className="font-bold text-white mb-5">Interview logistics</h2><div className="flex gap-2 mb-5">{(["ONLINE", "OFFLINE"] as const).map(option => <button type="button" key={option} onClick={() => setMode(option)} className={`flex-1 rounded-xl border px-3 py-3 text-xs font-bold ${mode === option ? "bg-primary text-white border-primary" : "border-white/10 text-text-secondary"}`}>{option === "ONLINE" ? "Online · HireGo portal" : "Offline · In person"}</button>)}</div><div className="space-y-3 text-sm">{mode === "ONLINE" ? <div className="p-4 rounded-xl bg-emerald-400/10 border border-emerald-400/20 text-emerald-200">The candidate receives a secure HireGo portal link. Camera/microphone access, screen sharing, transcript, and interview scorecard are supported.</div> : <div className="p-4 rounded-xl bg-yellow/10 border border-yellow/20 text-yellow-100">The invite includes the office address, meeting date/time, HireGo coordinator contact number, and cancellation instructions.</div>}<p className="text-xs text-text-secondary">Default rounds: HR → Technical → Operations/Leadership → Final employer round. HireGo can reduce or add rounds per requirement.</p></div><h3 className="text-sm text-white font-bold mt-6 mb-3">Notification channels</h3><div className="space-y-3">{[["app", "In-app notification"],["email", "Email invite and reminder"],["whatsapp", "WhatsApp reminder"]].map(([key,label]) => <label key={key} className="flex items-center justify-between text-xs text-text-secondary"><span>{label}</span><input type="checkbox" checked={channels[key as keyof typeof channels]} onChange={e => setChannels({ ...channels, [key]: e.target.checked })} /></label>)}</div></section>
-    </div>
-    <section className="glass-card rounded-2xl p-6"><h2 className="font-bold text-white mb-4">Round plan</h2><div className="grid md:grid-cols-4 gap-3">{rounds.map(([n,title,desc]) => <div key={n} className="rounded-xl border border-white/10 p-4"><p className="text-primary text-xs font-bold">ROUND {n}</p><p className="text-white font-bold mt-2">{title}</p><p className="text-xs text-text-secondary mt-2 leading-relaxed">{desc}</p></div>)}</div></section>
-    <section className="glass-card rounded-2xl p-6"><div className="flex flex-col md:flex-row md:items-center justify-between gap-4"><div><h2 className="font-bold text-white">Candidate and billing tracking</h2><p className="text-xs text-text-secondary mt-1">Track sourced → screened → shortlisted → interviews → selected → joined. Invoice is generated automatically on joining according to the signed agreement.</p></div><div className="flex gap-3"><Link href="/employer/managed-hiring/candidate-tracking" className="h-11 px-5 rounded-full border border-white/10 text-text-secondary flex items-center text-xs font-bold">Open candidate tracker</Link><Link href="/employer/managed-hiring/request" className="h-11 px-5 rounded-full btn-primary-red text-white flex items-center text-xs font-bold">Start requirement</Link></div></div></section>
-  </div></PageContainer>;
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Managed Hiring Service Workflow"
+        subtitle="Reference information only. Requirement status, interview rounds, candidate movement, notifications, and billing are authoritative only when recorded in their corresponding workflows."
+      />
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-white/10 bg-[#121215] p-6">
+          <h2 className="text-lg font-bold text-white">Typical workflow</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              ["Requirement", "Submit the role, location, compensation and success criteria."],
+              ["Sourcing & screening", "Candidates enter the recorded managed-hiring pipeline."],
+              ["Assessments", "Assigned assessments and evidence are stored against candidate applications."],
+              ["Interview coordination", "Use the scheduler and recorded interview-round configuration."],
+              ["Employer decision", "Hiring decisions and feedback are submitted through protected workflows."],
+              ["Joining & billing", "Placement billing follows persisted agreement and joining records."],
+            ].map(([title, description]) => (
+              <article key={title} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                <h3 className="font-bold text-white">{title}</h3>
+                <p className="mt-2 text-xs leading-relaxed text-text-muted">{description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 text-xs text-text-muted">
+          This page does not claim that agent orchestration, WhatsApp delivery, video capability, a specific round count, or a billing event is active unless the relevant backend record exists.
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          <Link href="/employer/managed-hiring/request" className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white">Start requirement</Link>
+          <Link href="/employer/managed-hiring/candidate-tracking" className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white">Open candidate tracking</Link>
+          <Link href="/employer/upcoming-interviews-list" className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white">Open interviews</Link>
+        </div>
+      </div>
+    </PageContainer>
+  );
 }

@@ -90,7 +90,8 @@ export default function EmployerReferralsPage() {
   }, []);
 
   const handleCopy = () => {
-    const link = stats?.referralLink ?? "https://hirego.ai/register?ref=ENTERPRISE2026";
+    const link = stats?.referralLink;
+    if (!link) return;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
@@ -183,7 +184,7 @@ export default function EmployerReferralsPage() {
       } else {
         setInviteMsg({
           type: "success",
-          text: `Invite registered for ${inviteEmail}. Once they join and post a job, your reward will be triggered.`,
+          text: `Invite registered for ${inviteEmail}. Their eligibility will be evaluated under the current referral rules.`,
         });
         setInviteEmail("");
         setInviteName("");
@@ -220,7 +221,7 @@ export default function EmployerReferralsPage() {
             Corporate Referral & Partner Rewards
           </h1>
           <p className="text-text-secondary mt-1 text-xs md:text-sm">
-            Refer partner companies, startups, and hiring teams. Earn up to ₹7,000 per referred company.
+            Refer partner companies, startups, and hiring teams. Reward eligibility and value follow the current server-side referral program rules.
           </p>
         </div>
         <Link
@@ -241,7 +242,7 @@ export default function EmployerReferralsPage() {
           <h3 className="font-bold text-3xl text-white font-mono">
             {stats?.totalAttributions ?? 0} Companies
           </h3>
-          <p className="text-primary text-xs font-bold">Unlimited Referral Cap Active</p>
+          <p className="text-primary text-xs font-bold">Referral activity recorded</p>
         </div>
 
         <div className="glass-card p-6 rounded-3xl border border-green-500/30 bg-green-500/5 space-y-2">
@@ -251,7 +252,7 @@ export default function EmployerReferralsPage() {
           <h3 className="font-bold text-3xl text-green-400 font-mono">
             {formatINR(availableBalance)}
           </h3>
-          <p className="text-xs text-text-muted">Instant Withdrawal via UPI or Bank Transfer</p>
+          <p className="text-xs text-text-muted">Withdrawal availability follows current payout rules</p>
         </div>
 
         <div className="glass-card p-6 rounded-3xl border border-yellow-500/30 bg-yellow-500/5 space-y-2">
@@ -261,7 +262,7 @@ export default function EmployerReferralsPage() {
           <h3 className="font-bold text-3xl text-yellow-400 font-mono">
             {formatINR(lockedBalance)}
           </h3>
-          <p className="text-xs text-text-muted">Releases on 45–90d SLA completion</p>
+          <p className="text-xs text-text-muted">Release timing follows recorded reward eligibility</p>
         </div>
       </div>
 
@@ -282,13 +283,13 @@ export default function EmployerReferralsPage() {
           Your Company's Partner Invite Link
         </h3>
         <p className="text-xs text-text-muted">
-          Share this with HR leaders, founders, and recruitment teams. They get priority onboarding; you earn rewards on their first 2 job posts and first Managed Hiring™ placement.
+          Share this with HR leaders, founders, and recruitment teams. Reward eligibility is determined only by the current server-side referral program rules.
         </p>
         <div className="flex gap-2 max-w-2xl">
           <input
             type="text"
             readOnly
-            value={stats?.referralLink ?? "https://hirego.ai/register?ref=ENTERPRISE2026"}
+            value={stats?.referralLink ?? ""}
             className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
           />
           <button
@@ -310,7 +311,7 @@ export default function EmployerReferralsPage() {
             Invite a Partner Company
           </h3>
           <p className="text-xs text-text-muted">
-            Register an email invite. Once they sign up and post a job, your reward is automatically triggered.
+            Register an email invite. Any future reward is evaluated by the current server-side referral qualification rules.
           </p>
           <form onSubmit={handleInviteSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -654,8 +655,8 @@ export default function EmployerReferralsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             { step: 1, color: "primary", icon: "share", title: "Share Partner Link", desc: "Invite partner companies to hire on HireGo AI with priority talent matching." },
-            { step: 2, color: "yellow-400", icon: "payments", title: "₹1,000 on Job Posts (Max 2)", desc: "Earn ₹1,000 for each of the first 2 job posting orders placed by the referred company." },
-            { step: 3, color: "green-400", icon: "handshake", title: "₹5,000 on First Managed Hiring™", desc: "₹5,000 bonus when their first Managed Hiring™ candidate is placed." },
+            { step: 2, color: "yellow-400", icon: "payments", title: "Qualified activity", desc: "Eligible referred-company activity is evaluated by the current server-side referral rules." },
+            { step: 3, color: "green-400", icon: "handshake", title: "Reward eligibility", desc: "Any reward amount and release condition comes from the recorded referral reward and payout workflow." },
           ].map(({ step, color, icon, title, desc }) => (
             <div key={step} className="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-2">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold bg-${color}/20 text-${color}`}>

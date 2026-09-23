@@ -21,7 +21,7 @@ export default function JobRequirementsPage() {
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary">
       <div className="max-w-5xl mx-auto p-6 lg:p-10">
         <div className="mb-8">
-          <button onClick={() => router.push("/employer/create-job-ai-jd-writing")} className="material-symbols-outlined hover:bg-white/10 rounded-full p-1 transition-colors text-primary">arrow_back</button>
+          <button onClick={() => router.push("/employer/create-job-basic-info")} className="material-symbols-outlined hover:bg-white/10 rounded-full p-1 transition-colors text-primary">arrow_back</button>
           <p className="font-label-md text-label-md uppercase tracking-widest opacity-60 text-primary mt-3">Job requirements</p>
           <h1 className="font-display-lg text-display-lg text-primary mt-2">Choose the right skills</h1>
           <p className="text-text-secondary font-body-md mt-2 max-w-2xl">Role-based suggestions are shown first. Mark each selected skill as required or preferred so matching stays accurate.</p>
@@ -41,11 +41,11 @@ export default function JobRequirementsPage() {
         )}
 
         <div className="flex items-center justify-between pt-8">
-          <button onClick={() => router.push("/employer/create-job-ai-jd-writing")} className="btn-ghost h-[50px] px-8 rounded-full text-on-surface font-bold flex items-center gap-2 group hover:bg-white/5">
+          <button onClick={() => router.push("/employer/create-job-basic-info")} className="btn-ghost h-[50px] px-8 rounded-full text-on-surface font-bold flex items-center gap-2 group hover:bg-white/5">
             <span className="material-symbols-outlined">chevron_left</span>Back
           </button>
-          <button onClick={() => router.push("/employer/job-listings-management")} disabled={!role} className="btn-primary-red h-[50px] px-10 rounded-full text-white font-bold flex items-center gap-2 disabled:opacity-50">
-            Publish Job<span className="material-symbols-outlined">rocket_launch</span>
+          <button onClick={() => router.push("/employer/create-job-matching-config")} disabled={!role} className="btn-primary-red h-[50px] px-10 rounded-full text-white font-bold flex items-center gap-2 disabled:opacity-50">
+            Continue<span className="material-symbols-outlined">rocket_launch</span>
           </button>
         </div>
       </div>

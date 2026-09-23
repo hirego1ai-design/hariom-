@@ -1,180 +1,74 @@
 import { PrismaClient } from "@prisma/client";
-import { hashPassword } from "./auth";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const isProduction = process.env.NODE_ENV === "production";
-if (isProduction && process.env.MOCK_DB === "true") {
-  throw new Error("FATAL: MOCK_DB cannot be enabled in production. This is a critical configuration error.");
+if (process.env.MOCK_DB === "true") {
+  throw new Error("FATAL: MOCK_DB is not supported by the application runtime. Use isolated test fixtures instead.");
 }
-// Mock persistence is opt-in only. CI and normal development use the configured
-// PostgreSQL database, so a missing database cannot make verification appear to pass.
-const allowMockFallbacks = process.env.MOCK_DB === "true";
 
-const createMockPrisma = () => {
-  return new Proxy({}, {
-    get(target, prop) {
-      if (prop === '$connect' || prop === '$disconnect' || prop === '$transaction') {
-        return async () => { throw new Error('Mock DB Offline'); };
-      }
-      return new Proxy({}, {
-        get(target2, prop2) {
-          return async () => {
-            throw new Error(`Mock DB Offline: ${String(prop)}.${String(prop2)}`);
-          };
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    datasources: process.env.DATABASE_URL
+      ? {
+          db: {
+            url: process.env.DATABASE_URL,
+          },
         }
-      });
-    }
-  }) as unknown as PrismaClient;
-};
+      : undefined,
+  });
 
-export const prisma = process.env.MOCK_DB === "true" 
-  ? createMockPrisma()
-  : (globalForPrisma.prisma ??
-    new PrismaClient({
-      log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
-      datasources: process.env.DATABASE_URL
-        ? {
-            db: {
-              url: process.env.DATABASE_URL,
-            },
-          }
-        : undefined,
-    }));
-
-if (process.env.NODE_ENV !== "production" && process.env.MOCK_DB !== "true") {
+if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-// Seed Mock Users
-const mockUsers = [
-  {
-    id: "user-admin-1",
-    email: "admin@hirego.ai",
-    name: "HireGo Admin",
-    passwordHash: hashPassword("Admin123!@#"),
-    role: "ADMIN" as const,
-  },
-  {
-    id: "user-employer-1",
-    email: "employer@company.com",
-    name: "Acme Corp Recruiter",
-    passwordHash: hashPassword("Employer123!@#"),
-    role: "EMPLOYER" as const,
-  },
-  {
-    id: "user-candidate-1",
-    email: "candidate@gmail.com",
-    name: "Rohit Kumar",
-    passwordHash: hashPassword("Candidate123!@#"),
-    role: "CANDIDATE" as const,
-  },
-];
-
-// Seed Mock Jobs
-const mockJobs: any[] = [
-  {
-    id: "job-101",
-    title: "Senior Full Stack AI Engineer",
-    company: "Acme Corporation",
-    location: "Bangalore / Remote",
-    type: "Full-time",
-    salary: "₹25L - ₹35L",
-    status: "ACTIVE",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "job-102",
-    title: "Lead Prompt & LLM Architect",
-    company: "HireGo Enterprise",
-    location: "Mumbai",
-    type: "Full-time",
-    salary: "₹30L - ₹45L",
-    status: "ACTIVE",
-    createdAt: new Date().toISOString(),
-  },
-];
-
+/**
+ * Compatibility wrapper used by existing route handlers.
+ * All methods are authoritative database operations: there are no mock users,
+ * jobs, passwords, or in-memory persistence fallbacks in application code.
+ */
 export const db = {
-  async findUserByEmail(email: string) {
-    try {
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (user) return user;
-    } catch (error) {
-      if (allowMockFallbacks) {
-        return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
-      }
-      throw error;
-    }
-    if (allowMockFallbacks) {
-      return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
-    }
-    return null;
+  findUserByEmail(email: string) {
+    return prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
   },
 
-  async createUser(data: { email: string; name: string; passwordHash: string; role: any }) {
-    try {
-      const user = await prisma.user.create({ data });
-      return user;
-    } catch (error) {
-      if (!allowMockFallbacks) {
-        throw error;
-      }
-      const newUser = {
-        id: `user-${Date.now()}`,
-        email: data.email,
-        name: data.name,
-        passwordHash: data.passwordHash,
-        role: data.role,
-      };
-      mockUsers.push(newUser);
-      return newUser;
-    }
-  },
-
-  async getJobs() {
-    try {
-      const jobs = await prisma.jobListing.findMany();
-      if (jobs && jobs.length > 0) return jobs;
-      if (allowMockFallbacks) return mockJobs;
-      return jobs ?? [];
-    } catch (error) {
-      if (allowMockFallbacks) {
-        return mockJobs;
-      }
-      throw error;
-    }
-  },
-
-  async createJob(data: { title: string; company: string; location: string; type: string; salary: string; status: string; companyId: string }) {
-    try {
-      const job = await prisma.jobListing.create({
-        data: {
-          title: data.title,
-          companyId: data.companyId,
-          location: data.location,
-          type: data.type,
-          salaryRange: data.salary,
-          description: `Job listing for ${data.title} at ${data.company}`,
-          status: data.status as any,
-          requirements: ["TypeScript", "Next.js", "AI Integrations"],
-        },
-      });
-      return job;
-    } catch (error) {
-      if (isProduction) {
-        throw error;
-      }
-      const newJob = {
-        id: `job-${Date.now()}`,
+  createUser(data: { email: string; name: string; passwordHash: string; role: any }) {
+    return prisma.user.create({
+      data: {
         ...data,
-        createdAt: new Date().toISOString(),
-      };
-      mockJobs.unshift(newJob);
-      return newJob;
-    }
+        email: data.email.toLowerCase().trim(),
+      },
+    });
+  },
+
+  getJobs() {
+    return prisma.jobListing.findMany();
+  },
+
+  createJob(data: {
+    title: string;
+    company: string;
+    location: string;
+    type: string;
+    salary: string;
+    status: string;
+    companyId: string;
+  }) {
+    return prisma.jobListing.create({
+      data: {
+        title: data.title,
+        companyId: data.companyId,
+        location: data.location,
+        type: data.type,
+        salaryRange: data.salary,
+        description: `Job listing for ${data.title} at ${data.company}`,
+        status: data.status as any,
+        requirements: [],
+      },
+    });
   },
 };
 

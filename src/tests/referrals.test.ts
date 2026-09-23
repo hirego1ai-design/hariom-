@@ -58,6 +58,7 @@ export async function runReferralTestSuite(): Promise<{
       email: "alpha.referrer@example.com",
       phone: "+919876543210",
     });
+    referralDb.registerReferralCodeForUser(referrerAlphaId, "ALPHA2026");
 
     // ================================================================
     // SECTION 1: CANONICAL COMPANY IDENTITY (Cases A, B, C)
