@@ -1,8 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 const read = (path: string) => readFileSync(path, "utf8");
+
+function filesUnder(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory() ? filesUnder(path) : [path];
+  });
+}
 
 test("runtime persistence contains no mock identities, passwords, or jobs", () => {
   const prisma = read("src/lib/prisma.ts");
@@ -31,6 +38,46 @@ test("audited production UI surfaces do not present fabricated people or metrics
       assert.doesNotMatch(source, pattern, `${path} contains a fabricated production marker: ${pattern}`);
     }
   }
+});
+
+
+test("employer production routes contain no legacy prototype markers or demo datasets", () => {
+  const employerPages = filesUnder("src/app/employer").filter((path) => path.endsWith("/page.tsx"));
+  const forbidden = [
+    /This is an auto-generated component/i,
+    /In Phase 4, we will manually hook up/i,
+    /MOCK_PARSED_JOBS/,
+    /Acme Technologies/,
+    /rahul@acme\.example\.com/i,
+    /GlobalTech Solutions/,
+    /Apex Cybernetics/,
+  ];
+  for (const path of employerPages) {
+    const source = read(path);
+    for (const pattern of forbidden) {
+      assert.doesNotMatch(source, pattern, `${path} contains legacy prototype/demo marker: ${pattern}`);
+    }
+  }
+});
+
+test("job creation follows the authoritative persisted workflow", () => {
+  const basic = read("src/app/employer/create-job-basic-info/page.tsx");
+  const requirements = read("src/app/employer/create-job-requirements/page.tsx");
+  const matching = read("src/app/employer/create-job-matching-config/page.tsx");
+  const route = read("src/app/api/employer/jobs/route.ts");
+  const ros = read("src/lib/ros/RosGateway.ts");
+
+  assert.match(basic, /\/employer\/create-job-requirements/);
+  assert.doesNotMatch(basic, /\/employer\/create-job-ai-jd-writing/);
+  assert.match(requirements, /\/employer\/create-job-matching-config/);
+  assert.match(matching, /idempotency-key/i);
+  assert.match(matching, /\/api\/employer\/jobs/);
+  assert.doesNotMatch(matching, /company:\s*["']/);
+  assert.doesNotMatch(route, /company:\s*z\.string/);
+  assert.match(route, /skillRequirements/);
+  assert.match(route, /screeningQuestions/);
+  assert.match(ros, /agentId:\s*['"]jd-generator['"]/);
+  assert.match(ros, /department:\s*params\.department/);
 });
 
 test("production UI uses authoritative APIs and working destinations", () => {
