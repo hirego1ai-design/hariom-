@@ -20,7 +20,6 @@ const documentSubmissionSchema = z.object({
   docType: z.enum(DOCUMENT_TYPES),
   fileUrl: z.string().trim().url().max(2048),
   fileName: z.string().trim().min(1).max(255),
-  companyName: z.string().trim().max(255).optional(),
   employerId: z.string().trim().min(1).max(191).optional(),
 }).strict();
 
@@ -136,7 +135,7 @@ export async function POST(req: NextRequest) {
     await enforceRateLimit(req, "document_verification_submit", 20, 60_000);
     const parsed = documentSubmissionSchema.safeParse(await req.json());
     if (!parsed.success) return jsonError("Invalid document submission", 400);
-    const { docType, fileUrl, fileName, companyName, employerId: requestedEmployerId } = parsed.data;
+    const { docType, fileUrl, fileName, employerId: requestedEmployerId } = parsed.data;
 
     // Employers may submit only for their own account. Admins may submit on behalf
     // of an employer when an employerId is explicitly provided.
