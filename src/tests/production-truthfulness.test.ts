@@ -21,9 +21,11 @@ test("runtime persistence contains no mock identities, passwords, or jobs", () =
   assert.equal(existsSync("src/lib/document-verification-store.ts"), false, "document verification must not use a process-local runtime store");
 });
 
-test("production runtime has no environment-switched mock database paths", () => {
+test("production runtime has no environment-switched mock database fallbacks", () => {
   const runtimeFiles = filesUnder("src").filter((path) =>
-    !path.startsWith("src/tests/") && /\.(?:ts|tsx|js|jsx)$/.test(path)
+    path !== "src/lib/prisma.ts" &&
+    !path.startsWith("src/tests/") &&
+    /\.(?:ts|tsx|js|jsx)$/.test(path)
   );
 
   for (const path of runtimeFiles) {
@@ -33,6 +35,26 @@ test("production runtime has no environment-switched mock database paths", () =>
       /process\.env\.MOCK_DB/,
       `${path} contains a production runtime MOCK_DB branch`,
     );
+  }
+
+  const prismaSource = read("src/lib/prisma.ts");
+  assert.match(prismaSource, /FATAL: MOCK_DB is not supported by the application runtime/);
+});
+
+test("subscription persistence has no in-memory commercial datasets or fallbacks", () => {
+  const source = read("src/lib/subscriptions-db.ts");
+  for (const pattern of [
+    /defaultPlans/,
+    /defaultPromoCodes/,
+    /defaultAiServices/,
+    /inMemoryPlans/,
+    /inMemoryCredits/,
+    /inMemorySubs/,
+    /inMemoryPromos/,
+    /inMemoryAiServices/,
+    /process\.env\.MOCK_DB/,
+  ]) {
+    assert.doesNotMatch(source, pattern);
   }
 });
 
