@@ -283,13 +283,13 @@ export default function EmployerReferralsPage() {
           Your Company's Partner Invite Link
         </h3>
         <p className="text-xs text-text-muted">
-          Share this with HR leaders, founders, and recruitment teams. They get priority onboarding; you earn rewards on their first 2 job posts and first Managed Hiring™ placement.
+          Share this with HR leaders, founders, and recruitment teams. Reward eligibility is determined only by the current server-side referral program rules.
         </p>
         <div className="flex gap-2 max-w-2xl">
           <input
             type="text"
             readOnly
-            value={stats?.referralLink ?? "https://hirego.ai/register?ref=ENTERPRISE2026"}
+            value={stats?.referralLink ?? ""}
             className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
           />
           <button
@@ -311,7 +311,7 @@ export default function EmployerReferralsPage() {
             Invite a Partner Company
           </h3>
           <p className="text-xs text-text-muted">
-            Register an email invite. Once they sign up and post a job, your reward is automatically triggered.
+            Register an email invite. Any future reward is evaluated by the current server-side referral qualification rules.
           </p>
           <form onSubmit={handleInviteSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
