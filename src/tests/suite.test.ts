@@ -45,12 +45,38 @@ async function runIsolatedTests() {
   }
 
   // 2. Agreements Engine Tests
+  let disposableRequirementId: string | undefined;
   try {
+    const created = await agreementsDb.createRequirement({
+      companyName: "Disposable agreement test company",
+      contactPerson: "CI Test Contact",
+      email: "agreement-test@hirego.test",
+      primaryMobile: "+910000000000",
+      industry: "Software",
+      numberOfPositions: 1,
+      jobTitles: ["Test Engineer"],
+      experienceYears: "1+ Years",
+      skillsRequired: ["TypeScript"],
+      education: "Any",
+      salaryRangeMin: 100000,
+      salaryRangeMax: 200000,
+      currency: "INR",
+      workMode: "Remote",
+      location: "Test",
+      joiningTimeline: "30 Days",
+      hiringPriority: "Standard",
+      replacementExpectation: "30 Days",
+    });
+    disposableRequirementId = created.id;
     const reqs = await agreementsDb.getRequirements();
-    const pass3 = Array.isArray(reqs) && reqs.length >= 1;
-    results.push({ name: "Agreements Engine - Requirement Fetching", category: "Agreements", passed: pass3 });
+    const pass3 = Array.isArray(reqs) && reqs.some((requirement) => requirement.id === created.id);
+    results.push({ name: "Agreements Engine - Authoritative Requirement Fetching", category: "Agreements", passed: pass3 });
   } catch (e: any) {
     results.push({ name: "Agreements Engine - Requirement Fetching", category: "Agreements", passed: false, message: e.message });
+  } finally {
+    if (disposableRequirementId) {
+      await prisma.hiringRequirement.deleteMany({ where: { id: disposableRequirementId } }).catch(() => undefined);
+    }
   }
 
   // 3. Invoice receipt state helpers (database transitions are covered by the
