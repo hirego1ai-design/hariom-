@@ -15,11 +15,11 @@ export interface NavRailItem {
 
 const mainNavItems: NavRailItem[] = [
   { id: "dashboard", label: "System Overview", href: "/admin/dashboard", icon: "dashboard" },
-  { id: "users", label: "Candidate Users", href: "/admin/users", icon: "group", badge: "12.4k" },
-  { id: "employers", label: "Employers & Companies", href: "/admin/employers", icon: "domain", badge: "2.4k" },
+  { id: "users", label: "Candidate Users", href: "/admin/users", icon: "group" },
+  { id: "employers", label: "Employers & Companies", href: "/admin/employers", icon: "domain" },
   { id: "jobs", label: "Job Listings", href: "/admin/jobs", icon: "work" },
   { id: "signups", label: "New Signups", href: "/admin/signups", icon: "person_add" },
-  { id: "document-verification", label: "KYC Document Review", href: "/admin/document-verification", icon: "verified_user", badge: "Review" },
+  { id: "document-verification", label: "KYC Document Review", href: "/admin/document-verification", icon: "verified_user" },
   { id: "revenue", label: "Revenue & Billing", href: "/admin/revenue", icon: "payments" },
   { id: "invoices", label: "Invoices", href: "/admin/invoices", icon: "receipt_long" },
   { id: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: "autorenew" },
@@ -34,7 +34,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "roles", label: "Roles & Permissions", href: "/admin/roles", icon: "admin_panel_settings" },
   { id: "communications", label: "Communications", href: "/admin/communications", icon: "forum" },
   { id: "settings", label: "Admin Settings Hub", href: "/admin/settings/hub", icon: "settings" },
-  { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring", badge: "Live", badgeColor: "bg-green text-black" },
+  { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring" },
 ];
 
 const infrastructureItems: NavRailItem[] = [
