@@ -367,7 +367,7 @@ export default function EmployerPageE6() {
   const handleNext = () => {
     setIsSubmitting(true);
     if (validateForm()) {
-      router.push("/employer/create-job-ai-jd-writing");
+      router.push("/employer/create-job-requirements");
     }
   };
 
