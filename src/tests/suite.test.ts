@@ -3,6 +3,7 @@ import { agreementsDb } from "@/lib/agreements-db";
 import { receiptDownloadUrl, receiptNotes, rejectionStatus } from "@/lib/invoiceReceiptState";
 import { validatePasswordStrength, hasRoleAccess, sanitizeUserInput } from "@/lib/auth";
 import { assertDisposableTestEnvironment, withBlockedProviderNetwork } from "./test-safety";
+import { prisma } from "@/lib/prisma";
 
 export interface TestResult {
   name: string;
@@ -44,12 +45,38 @@ async function runIsolatedTests() {
   }
 
   // 2. Agreements Engine Tests
+  let disposableRequirementId: string | undefined;
   try {
+    const created = await agreementsDb.createRequirement({
+      companyName: "Disposable agreement test company",
+      contactPerson: "CI Test Contact",
+      email: "agreement-test@hirego.test",
+      primaryMobile: "+910000000000",
+      industry: "Software",
+      numberOfPositions: 1,
+      jobTitles: ["Test Engineer"],
+      experienceYears: "1+ Years",
+      skillsRequired: ["TypeScript"],
+      education: "Any",
+      salaryRangeMin: 100000,
+      salaryRangeMax: 200000,
+      currency: "INR",
+      workMode: "Remote",
+      location: "Test",
+      joiningTimeline: "30 Days",
+      hiringPriority: "Standard",
+      replacementExpectation: "30 Days",
+    });
+    disposableRequirementId = created.id;
     const reqs = await agreementsDb.getRequirements();
-    const pass3 = Array.isArray(reqs) && reqs.length >= 1;
-    results.push({ name: "Agreements Engine - Requirement Fetching", category: "Agreements", passed: pass3 });
+    const pass3 = Array.isArray(reqs) && reqs.some((requirement) => requirement.id === created.id);
+    results.push({ name: "Agreements Engine - Authoritative Requirement Fetching", category: "Agreements", passed: pass3 });
   } catch (e: any) {
     results.push({ name: "Agreements Engine - Requirement Fetching", category: "Agreements", passed: false, message: e.message });
+  } finally {
+    if (disposableRequirementId) {
+      await prisma.hiringRequirement.deleteMany({ where: { id: disposableRequirementId } }).catch(() => undefined);
+    }
   }
 
   // 3. Invoice receipt state helpers (database transitions are covered by the
@@ -104,22 +131,52 @@ async function runIsolatedTests() {
   }
 
   // 6. Subscriptions & Credits Engine Tests
-  try {
-    const { subscriptionsDb } = await import("@/lib/subscriptions-db");
-    const plans = await subscriptionsDb.getSubscriptionPlans();
-    const pass9 = plans.length >= 3;
-    results.push({ name: "Subscriptions Engine - Plans Registration", category: "Subscriptions", passed: pass9 });
+  {
+    const suffix = Date.now().toString(36);
+    const companyId = `suite-company-${suffix}`;
+    const planId = `suite-plan-${suffix}`;
+    try {
+      const { subscriptionsDb } = await import("@/lib/subscriptions-db");
+      await prisma.company.create({ data: { id: companyId, name: "Disposable subscription test company" } });
+      await prisma.subscriptionPlan.create({
+        data: {
+          id: planId,
+          name: "Disposable subscription test plan",
+          description: "CI-only plan created by the isolated regression suite.",
+          price: 100,
+          currency: "INR",
+          jobPostsQuota: 1,
+          resumeUnlocksQuota: 5,
+          aiInterviewsQuota: 2,
+          applicationsQuota: 25,
+          resumeDownloadsQuota: 10,
+          backgroundVerificationsQuota: 1,
+          featuresAllowed: ["JOB_POSTING", "AI_SCREENING"],
+          validityMonths: 1,
+          isArchived: false,
+        },
+      });
 
-    const sub = await subscriptionsDb.subscribeCompanyToPlan("comp-test", "plan-daily");
-    const credits = await subscriptionsDb.getCompanyCredits("comp-test");
-    const pass10 = sub.status === "ACTIVE" && credits.jobPostsLeft === 1 && credits.resumeUnlocksLeft === 5;
-    results.push({ name: "Subscriptions Engine - Purchase & Credit Provisioning", category: "Subscriptions", passed: pass10 });
+      const plans = await subscriptionsDb.getSubscriptionPlans();
+      const pass9 = plans.some((plan) => plan.id === planId);
+      results.push({ name: "Subscriptions Engine - Authoritative Plan Read", category: "Subscriptions", passed: pass9 });
 
-    const updatedCredits = await subscriptionsDb.updateCompanyCredits("comp-test", -1, 0, 0);
-    const pass11 = updatedCredits.jobPostsLeft === 0;
-    results.push({ name: "Subscriptions Engine - Credit Quota Enforcement", category: "Subscriptions", passed: pass11 });
-  } catch (e: any) {
-    results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
+      const sub = await subscriptionsDb.subscribeCompanyToPlan(companyId, planId);
+      const credits = await subscriptionsDb.getCompanyCredits(companyId);
+      const pass10 = sub.status === "ACTIVE" && credits.jobPostsLeft === 1 && credits.resumeUnlocksLeft === 5;
+      results.push({ name: "Subscriptions Engine - Persisted Purchase & Credit Provisioning", category: "Subscriptions", passed: pass10 });
+
+      const updatedCredits = await subscriptionsDb.updateCompanyCredits(companyId, -1, 0, 0);
+      const pass11 = updatedCredits.jobPostsLeft === 0;
+      results.push({ name: "Subscriptions Engine - Persisted Credit Quota Enforcement", category: "Subscriptions", passed: pass11 });
+    } catch (e: any) {
+      results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
+    } finally {
+      await prisma.companySubscription.deleteMany({ where: { companyId } }).catch(() => undefined);
+      await prisma.companyCredits.deleteMany({ where: { companyId } }).catch(() => undefined);
+      await prisma.subscriptionPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
+      await prisma.company.deleteMany({ where: { id: companyId } }).catch(() => undefined);
+    }
   }
 
   try {

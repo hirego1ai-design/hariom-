@@ -5,20 +5,7 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
 export default function AdminManagedHiringSettingsPage() {
-  const [config, setConfig] = useState<any>({
-    managedHiringEnabled: true,
-    aiCopilotEnabled: true,
-    proctoringEnabled: true,
-    autoInvoicingEnabled: true,
-    replacementWarrantyEnabled: true,
-    slabPricingEnabled: true,
-    defaultPlacementFeePct: 8.33,
-    defaultReplacementDays: 60,
-    defaultCreditDays: 15,
-    taxRatePct: 18.0,
-    maxActiveRequirementsPerCompany: 10,
-    slaResponseHours: 24,
-  });
+  const [config, setConfig] = useState<any>({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

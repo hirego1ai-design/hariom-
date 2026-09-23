@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { AiCompanyBudget, BudgetReservation } from '@prisma/client';
-import { assertAndConsumeAiEntitlement, AiEntitlementError } from './AiEntitlements';
+import { assertAndConsumeAiEntitlement } from './AiEntitlements';
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
@@ -37,8 +37,7 @@ export class BudgetManager {
       throw new RangeError('Budget reservations require a non-negative amount and positive integer TTL');
     }
 
-    try {
-      return await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
         const budgets = await tx.$queryRaw<AiCompanyBudget[]>`
           SELECT * FROM "AiCompanyBudget" WHERE "companyId" = ${companyId} FOR UPDATE
         `;
@@ -88,32 +87,13 @@ export class BudgetManager {
 
         return reservation;
       });
-    } catch (err) {
-      if (err instanceof BudgetExceededError || err instanceof BudgetNotConfiguredError || err instanceof AiEntitlementError) throw err;
-      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw err;
-      // Development/test-only fallback. It is never available to production
-      // callers, where a failed budget reservation must fail closed.
-      return {
-        id: `res-${Date.now()}`,
-        companyId,
-        executionId,
-        correlationId,
-        reservedMinor: estimatedMinor,
-        actualMinor: null,
-        status: 'HELD',
-        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
-        reconciledAt: null,
-        createdAt: new Date(),
-      };
-    }
   }
 
   public static async reconcileBudget(params: { executionId: string; actualMinor: bigint }): Promise<void> {
     const { executionId, actualMinor } = params;
     if (actualMinor < BigInt(0)) throw new RangeError('Actual spend cannot be negative');
 
-    try {
-      await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
         const reservations = await tx.$queryRaw<BudgetReservation[]>`
           SELECT * FROM "BudgetReservation" WHERE "executionId" = ${executionId} AND "status" = 'HELD' FOR UPDATE
         `;
@@ -147,9 +127,6 @@ export class BudgetManager {
           });
         }
       });
-    } catch (error) {
-      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw error;
-    }
   }
 
   public static async releaseBudget(executionId: string, refundAiCredit = false): Promise<void> {

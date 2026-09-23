@@ -5,28 +5,6 @@ import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
-let platformConfig = {
-  // Feature Flags
-  managedHiringEnabled: true,
-  aiCopilotEnabled: true,
-  proctoringEnabled: true,
-  autoInvoicingEnabled: true,
-  replacementWarrantyEnabled: true,
-  slabPricingEnabled: true,
-
-  // Commercial Defaults
-  defaultPlacementFeePct: 8.33,
-  defaultReplacementDays: 60,
-  defaultCreditDays: 15,
-  taxRatePct: 18.0,
-  currency: "INR",
-
-  // SLA & Limits
-  maxActiveRequirementsPerCompany: 10,
-  slaResponseHours: 24,
-  lastUpdated: new Date().toISOString(),
-};
-
 const CONFIG_ID = "global-admin-config";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,10 +12,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function readPlatformConfig() {
-  if (process.env.MOCK_DB === "true") return platformConfig;
   const stored = await prisma.adminConfiguration.findUnique({ where: { id: CONFIG_ID } });
-  if (!stored || !isRecord(stored.platformConfig)) return platformConfig;
-  return { ...platformConfig, ...stored.platformConfig, lastUpdated: stored.updatedAt.toISOString() };
+  if (!stored || !isRecord(stored.platformConfig)) return {};
+  return { ...stored.platformConfig, lastUpdated: stored.updatedAt.toISOString() };
 }
 
 // Keep the admin-controlled surface closed: arbitrary keys must not be able to
@@ -65,7 +42,11 @@ export async function GET(req: NextRequest) {
     await requireAdminSession(req);
     await enforceRateLimit(req, "admin_platform_config_read", 30, 60_000);
     const config = await readPlatformConfig();
-    return NextResponse.json({ success: true, config });
+    return NextResponse.json({
+      success: true,
+      configured: Object.keys(config).length > 0,
+      config,
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -79,15 +60,12 @@ export async function POST(req: NextRequest) {
 
     const current = await readPlatformConfig();
     const nextConfig = { ...current, ...body, lastUpdated: new Date().toISOString() };
-    if (process.env.MOCK_DB === "true") {
-      platformConfig = nextConfig;
-    } else {
-      await prisma.adminConfiguration.upsert({
-        where: { id: CONFIG_ID },
-        create: { id: CONFIG_ID, platformConfig: nextConfig },
-        update: { platformConfig: nextConfig },
-      });
-    }
+
+    await prisma.adminConfiguration.upsert({
+      where: { id: CONFIG_ID },
+      create: { id: CONFIG_ID, platformConfig: nextConfig },
+      update: { platformConfig: nextConfig },
+    });
 
     await logAuditEvent({
       action: "ADMIN_CONFIG_UPDATED",

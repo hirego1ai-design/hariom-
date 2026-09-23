@@ -42,10 +42,6 @@ export async function assertAndConsumeAiEntitlement(companyId: string, agentId: 
   const requiredFeatures = BILLABLE_AGENT_FEATURES[agentId];
   if (!requiredFeatures) return;
 
-  // Local development may run without the billing tables. Production always
-  // goes through the transaction below and therefore fails closed.
-  if (process.env.NODE_ENV !== "production" && process.env.MOCK_DB === "true") return;
-
   const consume = async (tx: Prisma.TransactionClient) => {
     const subscription = await tx.companySubscription.findFirst({
       where: {

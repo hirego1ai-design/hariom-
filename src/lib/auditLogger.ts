@@ -12,8 +12,6 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
-const inMemoryAuditLogs: AuditLogEntry[] = [];
-
 export class AuditLogPersistenceError extends Error {
   constructor(action: string) {
     super(`Security audit event '${action}' could not be persisted.`);
@@ -23,21 +21,6 @@ export class AuditLogPersistenceError extends Error {
 
 /** PostgreSQL is the sole source of truth for security audit events. */
 export async function logAuditEvent(entry: Omit<AuditLogEntry, "id" | "timestamp">): Promise<AuditLogEntry | null> {
-  if (process.env.MOCK_DB === "true") {
-    const newEntry: AuditLogEntry = {
-      id: `audit-${Date.now()}-${Math.random()}`,
-      userId: entry.userId || undefined,
-      companyId: entry.companyId || undefined,
-      action: entry.action,
-      resource: entry.resource,
-      ipAddress: entry.ipAddress || "unknown",
-      details: entry.details || undefined,
-      timestamp: new Date().toISOString(),
-    };
-    inMemoryAuditLogs.unshift(newEntry);
-    return newEntry;
-  }
-
   try {
     // System/cron actors use synthetic IDs that aren't real User records.
     // Store them in details to avoid FK constraint violations.
@@ -103,10 +86,6 @@ export async function logCriticalAuditEvent(entry: Omit<AuditLogEntry, "id" | "t
 }
 
 export async function getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
-  if (process.env.MOCK_DB === "true") {
-    return inMemoryAuditLogs.slice(0, limit);
-  }
-
   try {
     const logs = await prisma.auditLog.findMany({
       take: Math.min(Math.max(limit, 1), 500),

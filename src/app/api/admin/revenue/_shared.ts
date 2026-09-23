@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export const allowRevenueFixtures =
-  process.env.NODE_ENV !== "production" && process.env.MOCK_DB === "true";
-
 export function revenueUnavailable(error: unknown, resource: string) {
   const detail = error instanceof Error ? error.message : "Database query failed";
   return NextResponse.json(
