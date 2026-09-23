@@ -3,9 +3,10 @@ import { z } from "zod";
 import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { getWorkerDownloadUrl } from "@/lib/storage";
+import { getWorkerDownloadUrlForCleanStoredFile } from "@/lib/storage";
 import crypto from "crypto";
 import { claimVideoAnalysisJob, releaseVideoAnalysisClaimForRetry } from "@/lib/videoAnalysisQueue";
+import { assertSafeOutboundNetworkTarget, parseAllowedHosts } from "@/lib/security/outboundUrl";
 
 const videoResumeSubmissionSchema = z.object({
   videoUrl: z.string().regex(/^\/api\/files\/[0-9a-f-]{36}$/i, "Video must be an uploaded HireGo file."),
@@ -171,7 +172,7 @@ async function dispatchWorkerJob(params: {
 
     const claim = await claimVideoAnalysisJob(params.jobId);
     if (!claim) return;
-    const downloadUrl = await getWorkerDownloadUrl(safeFile.objectKey);
+    const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile(safeFile.id);
     const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
       || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
       || params.callbackOrigin.replace(/\/$/, "");
@@ -182,6 +183,14 @@ async function dispatchWorkerJob(params: {
       }
     }
     const callbackUrl = `${appOrigin}/api/internal/video-analysis/callback`;
+    if (process.env.NODE_ENV === "production") {
+      await assertSafeOutboundNetworkTarget(params.workerUrl, {
+        label: "VIDEO_ANALYSIS_WORKER_URL",
+        requireHttps: true,
+        allowedHosts: parseAllowedHosts(process.env.VIDEO_ANALYSIS_ALLOWED_HOSTS),
+      });
+    }
+
     const res = await fetch(`${params.workerUrl.replace(/\/$/, "")}/analyze`, {
       method: "POST",
       headers: {
