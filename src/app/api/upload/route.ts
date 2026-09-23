@@ -2,24 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
-import { persistScanResult, scanUpload, validateUploadFile, sanitizeAndGenerateObjectKey } from "@/lib/uploadSecurity";
+import { persistScanResult, scanUpload, validateUploadFile, sanitizeAndGenerateObjectKey, validatePassiveDocumentContent } from "@/lib/uploadSecurity";
+import sharp from "sharp";
+import crypto from "crypto";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
-const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "video/mp4",
-  "video/webm",
-  "audio/webm",
-];
-
 const MIME_TO_EXT_MAP: Record<string, string[]> = {
   "application/pdf": ["pdf"],
-  "application/msword": ["docx", "doc"],
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
   "image/png": ["png"],
   "image/jpeg": ["jpg"],
@@ -63,7 +52,7 @@ export async function POST(req: NextRequest) {
     const safeName = sanitizeAndGenerateObjectKey(file.name);
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
 
     const header = buffer.subarray(0, 16).toString("hex").toUpperCase();
     const headerAscii = buffer.subarray(0, 16).toString("ascii");
@@ -74,15 +63,52 @@ export async function POST(req: NextRequest) {
     else if (headerAscii.startsWith("RIFF") && headerAscii.substring(8, 12) === "WEBP") serverExt = "webp";
     else if (headerAscii.includes("ftyp")) serverExt = "mp4";
     else if (header.startsWith("1A45DFA3")) serverExt = "webm";
-    else if (header.startsWith("504B0304") || header.startsWith("D0CF")) serverExt = "docx";
+    else if (header.startsWith("504B0304")) serverExt = "docx";
     else {
       return jsonError("Invalid file signature", 415);
     }
 
-    // Verify claimed MIME type matches detected signature
+    // Verify claimed MIME type matches detected signature.
     const validExtensions = MIME_TO_EXT_MAP[file.type] || [];
     if (!validExtensions.includes(serverExt)) {
       return jsonError("File content does not match claimed MIME type", 415);
+    }
+
+    const passiveDocument = validatePassiveDocumentContent(file.type, buffer);
+    if (!passiveDocument.valid) {
+      return jsonError(passiveDocument.error || "Active document content is not permitted.", 415);
+    }
+
+    // Scan the exact original bytes before any local decoder/parser is invoked.
+    // Production scanner failure is fail-closed and no object is persisted.
+    const preflightScan = await scanUpload(`preflight-${crypto.randomUUID()}`, buffer);
+    if (preflightScan.status !== "CLEAN") {
+      throw new ApiError(
+        preflightScan.status === "INFECTED"
+          ? "Upload rejected by malware scanning."
+          : "Upload security scanning is temporarily unavailable.",
+        preflightScan.status === "INFECTED" ? 422 : 503,
+      );
+    }
+
+    // Decode and re-encode raster images before persistence. This rejects
+    // malformed/decompression-bomb inputs and strips EXIF/XMP/embedded metadata.
+    if (["jpg", "png", "webp"].includes(serverExt)) {
+      try {
+        const image = sharp(buffer, {
+          failOn: "warning",
+          limitInputPixels: 25_000_000,
+          animated: false,
+        }).rotate();
+        if (serverExt === "jpg") buffer = await image.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+        else if (serverExt === "png") buffer = await image.png({ compressionLevel: 9 }).toBuffer();
+        else buffer = await image.webp({ quality: 90 }).toBuffer();
+      } catch {
+        return jsonError("Image could not be safely decoded and normalized.", 415);
+      }
+      if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
+        return jsonError("Normalized image exceeds the maximum allowed size.", 413);
+      }
     }
 
     const profile = (session.role === "EMPLOYER" || session.role === "RECRUITER")
@@ -101,17 +127,18 @@ export async function POST(req: NextRequest) {
       extension: serverExt,
     });
 
-    const scanResult = await scanUpload(storedFile.id, buffer);
-    await persistScanResult(storedFile.id, scanResult);
-    if (scanResult.status !== "CLEAN") {
-      throw new ApiError(scanResult.status === "INFECTED" ? "Upload rejected by malware scanning." : "Upload is quarantined pending a successful malware scan.", 422);
-    }
+    // The stored bytes are either the scanned original (documents/media) or a
+    // decoded/re-encoded raster image derived from the scanned original.
+    await persistScanResult(storedFile.id, {
+      status: "CLEAN",
+      detail: preflightScan.detail || "Pre-storage malware scan passed.",
+    });
 
     return NextResponse.json({
       success: true,
       file: {
         name: safeName,
-        size: file.size,
+        size: buffer.byteLength,
         type: file.type,
         id: storedFile.id,
         url: `/api/files/${storedFile.id}`,

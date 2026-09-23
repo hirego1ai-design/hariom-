@@ -2,22 +2,58 @@ import { prisma } from "@/lib/prisma";
 import { requireMalwareScannerEnv } from "@/lib/env";
 import { deleteObject, readPrivateObjectForSecurityScan } from "@/lib/storage";
 import crypto from "crypto";
+import { assertSafeOutboundNetworkTarget, parseAllowedHosts } from "@/lib/security/outboundUrl";
 
 export const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
-  "image/gif",
   "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "video/mp4",
   "video/webm",
+  "audio/webm",
 ]);
 
 export const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 
+export type StoredFileSafetyState = {
+  scanStatus?: string | null;
+  deletedAt?: Date | string | null;
+};
+
+export function isStoredFileSafeForProcessing(file: StoredFileSafetyState | null | undefined): boolean {
+  return Boolean(file && file.scanStatus === "CLEAN" && !file.deletedAt);
+}
+
+export function validatePassiveDocumentContent(
+  mimeType: string,
+  data: Buffer,
+): { valid: boolean; error?: string } {
+  // Files are never trusted just because their extension/MIME is acceptable.
+  // Reject common active-content containers before they reach parsers, OCR, or AI.
+  const ascii = data.toString("latin1").toLowerCase();
+  if (mimeType === "application/pdf") {
+    const activePdfMarkers = ["/javascript", "/js", "/openaction", "/aa", "/launch", "/richmedia", "/embeddedfile", "/xfa"];
+    if (activePdfMarkers.some((marker) => ascii.includes(marker))) {
+      return { valid: false, error: "PDF contains active or embedded content that is not permitted." };
+    }
+  }
+  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const activeDocxMarkers = ["vbaproject.bin", "word/embeddings/", "oleobject", "activex/", "word/externallinks/", "customui/"];
+    if (activeDocxMarkers.some((marker) => ascii.includes(marker))) {
+      return { valid: false, error: "Document contains active or embedded content that is not permitted." };
+    }
+  }
+  return { valid: true };
+}
+
 export function validateUploadFile(mimeType: string, sizeBytes: number, maxSize = MAX_UPLOAD_SIZE_BYTES): { valid: boolean; error?: string } {
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     return { valid: false, error: "Unsupported file type." };
+  }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return { valid: false, error: "Uploaded file is empty or invalid." };
   }
   if (sizeBytes > maxSize) {
     return { valid: false, error: "File exceeds the maximum allowed size." };
@@ -43,8 +79,13 @@ export async function scanUpload(fileId: string, data: Buffer): Promise<UploadSc
       const config = requireMalwareScannerEnv();
       endpoint = config.url;
       token = config.token;
+      await assertSafeOutboundNetworkTarget(endpoint, {
+        label: "MALWARE_SCANNER_URL",
+        requireHttps: true,
+        allowedHosts: parseAllowedHosts(process.env.MALWARE_SCANNER_ALLOWED_HOSTS),
+      });
     } catch (error) {
-      return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured." };
+      return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured safely." };
     }
   }
   if (!endpoint) return { status: "CLEAN", detail: "Development scan bypass." };

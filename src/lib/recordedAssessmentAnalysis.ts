@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
-import { getWorkerDownloadUrl } from "@/lib/storage";
+import { getWorkerDownloadUrlForCleanStoredFile } from "@/lib/storage";
+import { isStoredFileSafeForProcessing } from "@/lib/uploadSecurity";
+import { assertSafeOutboundNetworkTarget, parseAllowedHosts } from "@/lib/security/outboundUrl";
 
 export async function enqueueRecordedAssessmentAnalysis(responseId: string) {
   const response = await prisma.recordedAssessmentResponse.findUnique({ where: { id: responseId }, include: { storedFile: true } });
@@ -28,16 +30,46 @@ export async function dispatchRecordedAssessmentAnalysis(responseId: string) {
   const job = await enqueueRecordedAssessmentAnalysis(responseId);
   if (!job) return;
   if (["PROCESSING", "COMPLETED"].includes(job.status)) return;
-  const downloadUrl = await getWorkerDownloadUrl(response.storedFile.objectKey);
+
+  // Defense in depth: a quarantined, failed-scan, legacy, or deleted file must
+  // never receive a signed worker URL and must never reach transcription/AI.
+  if (!isStoredFileSafeForProcessing(response.storedFile)) {
+    await prisma.$transaction([
+      prisma.recordedAssessmentAnalysisJob.updateMany({
+        where: { id: job.id, status: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } },
+        data: {
+          status: "BLOCKED_INFRA",
+          error: "Security scan has not produced a CLEAN file.",
+          completedAt: null,
+        },
+      }),
+      prisma.recordedAssessmentResponse.updateMany({
+        where: { id: response.id, analysisStatus: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } },
+        data: { analysisStatus: "BLOCKED_INFRA" },
+      }),
+    ]);
+    return;
+  }
+
+  const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile(response.storedFile.id);
   try {
     const origin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "") || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
     if (process.env.NODE_ENV === "production") {
       const parsed = new URL(origin);
       if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error("Assessment callback origin must be credential-free HTTPS.");
     }
+    if (process.env.NODE_ENV === "production") {
+      await assertSafeOutboundNetworkTarget(config.workerUrl, {
+        label: "VIDEO_ANALYSIS_WORKER_URL",
+        requireHttps: true,
+        allowedHosts: parseAllowedHosts(process.env.VIDEO_ANALYSIS_ALLOWED_HOSTS),
+      });
+    }
     const result = await fetch(`${config.workerUrl.replace(/\/$/, "")}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.internalToken}` },
+      signal: AbortSignal.timeout(Math.min(config.timeoutSeconds * 1_000, 60_000)),
+      redirect: "error",
       body: JSON.stringify({
         jobId: job.id, videoResumeId: response.id, fileId: response.storedFile.id, objectKey: response.storedFile.objectKey,
         downloadUrl, claimedDurationSeconds: response.durationSeconds,

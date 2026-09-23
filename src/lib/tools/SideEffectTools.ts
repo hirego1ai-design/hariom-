@@ -69,16 +69,18 @@ export function registerSideEffectTools(registry: ToolRegistry): void {
       applicationId: z.string(),
       status: z.string(),
     }),
-    handler: async (params) => {
+    handler: async (params, context) => {
       const p = params as { idempotencyKey: string; applicationId: string; status: any };
-      try {
-        await prisma.application.update({
-          where: { id: p.applicationId },
-          data: { status: p.status },
-        });
-      } catch {
-        // Database fallback
-      }
+      const application = await prisma.application.findUnique({
+        where: { id: p.applicationId },
+        select: { id: true, job: { select: { companyId: true } } },
+      });
+      if (!application) throw new Error("Application not found.");
+      validateTenantAccess(context.tenantContext, application.job.companyId);
+      await prisma.application.update({
+        where: { id: p.applicationId },
+        data: { status: p.status },
+      });
       return {
         success: true,
         applicationId: p.applicationId,
@@ -102,28 +104,29 @@ export function registerSideEffectTools(registry: ToolRegistry): void {
       interviewId: z.string(),
       roomId: z.string(),
     }),
-    handler: async (params) => {
+    handler: async (params, context) => {
       const p = params as { idempotencyKey: string; applicationId: string; scheduledAt: string };
+      const application = await prisma.application.findUnique({
+        where: { id: p.applicationId },
+        select: { id: true, job: { select: { companyId: true } } },
+      });
+      if (!application) throw new Error("Application not found.");
+      validateTenantAccess(context.tenantContext, application.job.companyId);
+      const scheduledAt = new Date(p.scheduledAt);
+      if (!Number.isFinite(scheduledAt.getTime())) throw new Error("Invalid interview schedule.");
       const roomId = `room-${Date.now()}`;
-      let interviewId = `int-${Date.now()}`;
-
-      try {
-        const intRecord = await prisma.interview.create({
-          data: {
-            applicationId: p.applicationId,
-            scheduledAt: new Date(p.scheduledAt),
-            status: 'SCHEDULED',
-            roomUrl: `https://hirego.ai/interviews/room/${roomId}`,
-          },
-        });
-        interviewId = intRecord.id;
-      } catch {
-        // Fallback
-      }
+      const intRecord = await prisma.interview.create({
+        data: {
+          applicationId: p.applicationId,
+          scheduledAt,
+          status: 'SCHEDULED',
+          roomUrl: `https://hirego.ai/interviews/room/${roomId}`,
+        },
+      });
 
       return {
         success: true,
-        interviewId,
+        interviewId: intRecord.id,
         roomId,
       };
     },
@@ -154,24 +157,20 @@ export function registerSideEffectTools(registry: ToolRegistry): void {
 
       const invoiceId = `inv-${Date.now()}`;
 
-      try {
-        await prisma.invoice.create({
-          data: {
-            id: invoiceId,
-            invoiceNumber: `INV-${Date.now()}`,
-            agreementId: 'agr-default',
-            companyName: p.companyName || 'HireGo Enterprise Customer',
-            amount: p.amountMinorUnits / 100,
-            taxAmount: (p.amountMinorUnits / 100) * 0.18,
-            totalAmount: (p.amountMinorUnits / 100) * 1.18,
-            status: 'UNPAID',
-            dueDate: new Date(Date.now() + 15 * 86400 * 1000).toISOString(),
-            notes: p.description,
-          },
-        });
-      } catch {
-        // Fallback
-      }
+      await prisma.invoice.create({
+        data: {
+          id: invoiceId,
+          invoiceNumber: `INV-${Date.now()}`,
+          agreementId: 'agr-default',
+          companyName: p.companyName || 'HireGo Enterprise Customer',
+          amount: p.amountMinorUnits / 100,
+          taxAmount: (p.amountMinorUnits / 100) * 0.18,
+          totalAmount: (p.amountMinorUnits / 100) * 1.18,
+          status: 'UNPAID',
+          dueDate: new Date(Date.now() + 15 * 86400 * 1000).toISOString(),
+          notes: p.description,
+        },
+      });
 
       return {
         success: true,
