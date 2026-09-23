@@ -7,8 +7,9 @@ const read = (path: string) => readFileSync(path, "utf8");
 test("quarantined files cannot reach analysis workers", () => {
   const recorded = read("src/lib/recordedAssessmentAnalysis.ts");
   assert.match(recorded, /isStoredFileSafeForProcessing/);
+  assert.match(recorded, /getWorkerDownloadUrlForCleanStoredFile/);
   assert.ok(
-    recorded.indexOf("isStoredFileSafeForProcessing") < recorded.indexOf("getWorkerDownloadUrl(response.storedFile.objectKey)"),
+    recorded.indexOf("isStoredFileSafeForProcessing") < recorded.indexOf("getWorkerDownloadUrlForCleanStoredFile"),
     "recorded-assessment CLEAN gate must run before signed worker URL creation",
   );
 
@@ -65,6 +66,18 @@ test("outbound service configuration blocks obvious SSRF targets", () => {
   }
   assert.match(env, /assertSafeHttpsServiceUrl\("VIDEO_ANALYSIS_WORKER_URL"/);
   assert.match(env, /assertSafeHttpsServiceUrl\("MALWARE_SCANNER_URL"/);
+});
+
+test("DNS-resolved outbound targets fail closed before scanner or worker fetches", () => {
+  const outbound = read("src/lib/security/outboundUrl.ts");
+  const uploadSecurity = read("src/lib/uploadSecurity.ts");
+  const recorded = read("src/lib/recordedAssessmentAnalysis.ts");
+  const video = read("src/app/api/candidate/video-resume/route.ts");
+  assert.match(outbound, /lookup\(host, \{ all: true, verbatim: true \}\)/);
+  assert.match(outbound, /isPrivateOrReservedAddress/);
+  assert.match(uploadSecurity, /assertSafeOutboundNetworkTarget\(endpoint/);
+  assert.match(recorded, /assertSafeOutboundNetworkTarget\(config\.workerUrl/);
+  assert.match(video, /assertSafeOutboundNetworkTarget\(params\.workerUrl/);
 });
 
 test("tenant and privileged tool boundaries fail closed", () => {
