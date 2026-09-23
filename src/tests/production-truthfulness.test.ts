@@ -18,6 +18,7 @@ test("runtime persistence contains no mock identities, passwords, or jobs", () =
   }
   assert.equal(existsSync("src/lib/dev-employer-store.ts"), false, "development identity store must not exist in runtime source");
   assert.equal(existsSync("src/mocks/candidateProfileData.ts"), false, "obsolete mock candidate fixture must not exist in production source");
+  assert.equal(existsSync("src/lib/document-verification-store.ts"), false, "document verification must not use a process-local runtime store");
 });
 
 test("audited production UI surfaces do not present fabricated people or metrics", () => {
@@ -51,6 +52,7 @@ test("employer production routes contain no legacy prototype markers or demo dat
     /rahul@acme\.example\.com/i,
     /GlobalTech Solutions/,
     /Apex Cybernetics/,
+    /aida-public/,
   ];
   for (const path of employerPages) {
     const source = read(path);
