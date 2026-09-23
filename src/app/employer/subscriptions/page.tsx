@@ -149,28 +149,6 @@ export default function EmployerSubscriptionsStorePage() {
     }
   };
 
-  const handleActivateTrial = async (trialPlan: any) => {
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/employer/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: trialPlan.id }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Congratulations! Your ${trialPlan.name} is now active.`);
-        await fetchBillingData();
-      } else {
-        alert("Trial activation failed: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const trialPlan = plans.find(p => p.price === 0 && !p.isArchived);
   const paidPlans = plans.filter(p => p.price > 0 && !p.isArchived);
 
@@ -262,13 +240,13 @@ export default function EmployerSubscriptionsStorePage() {
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">Job Posts</span>
                   <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.jobPostsLeft ?? 0} / {quotas?.jobPosts?.total ?? 10}
+                    {credits?.jobPostsLeft ?? 0} / {quotas?.jobPosts?.total ?? 0}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-red rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.jobPostsLeft ?? 0) / (quotas?.jobPosts?.total || 10)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((credits?.jobPostsLeft ?? 0) / Math.max(1, quotas?.jobPosts?.total ?? 0)) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -277,13 +255,13 @@ export default function EmployerSubscriptionsStorePage() {
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">Candidate Unlocks</span>
                   <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.resumeUnlocksLeft ?? 0} / {quotas?.resumeUnlocks?.total ?? 100}
+                    {credits?.resumeUnlocksLeft ?? 0} / {quotas?.resumeUnlocks?.total ?? 0}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-blue rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.resumeUnlocksLeft ?? 0) / (quotas?.resumeUnlocks?.total || 100)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((credits?.resumeUnlocksLeft ?? 0) / Math.max(1, quotas?.resumeUnlocks?.total ?? 0)) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -292,40 +270,20 @@ export default function EmployerSubscriptionsStorePage() {
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">AI Interviews</span>
                   <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.aiInterviewsLeft ?? 0} / {quotas?.aiInterviews?.total ?? 40}
+                    {credits?.aiInterviewsLeft ?? 0} / {quotas?.aiInterviews?.total ?? 0}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-purple rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.aiInterviewsLeft ?? 0) / (quotas?.aiInterviews?.total || 40)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((credits?.aiInterviewsLeft ?? 0) / Math.max(1, quotas?.aiInterviews?.total ?? 0)) * 100)}%` }}
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Trial Promotion Banner */}
-          {trialPlan && !activePlan && (
-            <div className="glass-card rounded-2xl p-6 border border-amber-400/30 bg-[#1A140B] flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <span className="bg-amber-400 text-black text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-full mb-3 inline-block">
-                  Trial Campaign
-                </span>
-                <h3 className="font-headline-md text-lg text-white mb-1">Configure Free Trial In 1-Click</h3>
-                <p className="text-xs text-[#CBD5E1] max-w-xl">
-                  {trialPlan.description} Experience automatic proctoring filters with zero deposit required.
-                </p>
-              </div>
-              <button
-                onClick={() => handleActivateTrial(trialPlan)}
-                disabled={submitting}
-                className="btn-primary-blue px-6 py-2.5 rounded-full text-xs font-bold text-white shadow-lg whitespace-nowrap flex-shrink-0"
-              >
-                Activate Free Trial
-              </button>
-            </div>
-          )}
+          {/* Zero-price plans are displayed in the catalog but are not directly activated here; activation must use an audited server workflow. */}
 
           {/* Pricing Comparison Grid */}
           <div>
@@ -468,7 +426,7 @@ export default function EmployerSubscriptionsStorePage() {
         </div>
       )}
 
-      {/* Mock Payment Checkout Modal */}
+      {/* Payment checkout modal backed by /api/payments/checkout */}
       {checkoutPlan && (
         <div className="fixed inset-0 bg-[#000000]/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="glass-card bg-[#16161B] border border-white/10 rounded-3xl p-6 w-full max-w-md relative overflow-hidden animate-in fade-in-50 zoom-in-95 duration-200">
