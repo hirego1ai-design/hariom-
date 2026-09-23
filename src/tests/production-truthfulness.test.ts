@@ -167,6 +167,32 @@ test("production UI uses authoritative APIs and working destinations", () => {
   assert.match(pipeline, /\/employer\/employer-analytics-dashboard/);
 });
 
+test("subscription onboarding and referral UI do not invent commercial state", () => {
+  const planSelection = read("src/app/employer/employer-registration-plan-selection/page.tsx");
+  assert.match(planSelection, /\/api\/employer\/subscribe/);
+  assert.doesNotMatch(planSelection, /method:\s*["']POST["']/);
+  assert.doesNotMatch(planSelection, /handleSelectPlan/);
+  assert.match(planSelection, /does not activate a plan or bypass payment/i);
+
+  const subscriptions = read("src/app/employer/subscriptions/page.tsx");
+  assert.doesNotMatch(subscriptions, /handleActivateTrial/);
+  assert.doesNotMatch(subscriptions, /Mock Payment Checkout Modal/);
+  assert.doesNotMatch(subscriptions, /quotas\?\.jobPosts\?\.total \?\? 10/);
+  assert.doesNotMatch(subscriptions, /quotas\?\.resumeUnlocks\?\.total \?\? 100/);
+  assert.doesNotMatch(subscriptions, /quotas\?\.aiInterviews\?\.total \?\? 40/);
+
+  const referrals = read("src/app/employer/referrals/page.tsx");
+  for (const pattern of [/ENTERPRISE2026/, /Earn up to ₹7,000/i, /Unlimited Referral Cap Active/i, /Instant Withdrawal via UPI/i, /₹1,000 on Job Posts/i, /₹5,000 on First Managed Hiring/i]) {
+    assert.doesNotMatch(referrals, pattern);
+  }
+});
+
+test("shared employer state does not invent an authenticated identity", () => {
+  const context = read("src/context/EmployerContext.tsx");
+  assert.doesNotMatch(context, /name:\s*["']Employer["'],\s*role:\s*["']Admin["']/);
+  assert.match(context, /name:\s*["']["'],\s*role:\s*["']["']/);
+});
+
 test("privileged page guard, OTP hashing, and security headers remain enabled", () => {
   const proxy = read("proxy.ts");
   for (const marker of ["/admin/:path*", "/employer/:path*", "/candidate/:path*", "/dashboard"]) {
