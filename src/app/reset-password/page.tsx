@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !otp) {
+    if (!email || !/^\d{6}$/.test(otp)) {
       setErrorMessage("A verified password-reset code is required. Request a new code and try again.");
       return;
     }
@@ -74,6 +74,8 @@ export default function ResetPasswordPage() {
         return;
       }
 
+      sessionStorage.removeItem("reset_email");
+      sessionStorage.removeItem("reset_otp");
       setIsSuccess(true);
       setIsLoading(false);
     } catch (err: any) {
