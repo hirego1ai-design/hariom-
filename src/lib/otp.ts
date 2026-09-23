@@ -104,7 +104,7 @@ export async function generateAndSendOtp(
 
     inMemoryOtps.set(keyFor(normalizedEmail, type), {
       email: normalizedEmail,
-      otp,
+      otp: otpDigest(normalizedEmail, type, otp),
       type,
       expiresAt,
       verified: false,
@@ -196,7 +196,9 @@ export async function verifyOtpCode(
     inMemoryOtps.delete(key);
     return { valid: false, error: "No active verification code found for this email. Please request a new one." };
   }
-  if (record.otp !== otp.trim()) return { valid: false, error: "Invalid verification code. Please check and try again." };
+  if (!otpMatches(record.otp, otpDigest(normalizedEmail, type, otp))) {
+    return { valid: false, error: "Invalid verification code. Please check and try again." };
+  }
 
   if (consume) {
     record.verified = true;
