@@ -126,6 +126,17 @@ export async function getPrivateDownloadUrl(objectKey: string, fileName: string,
   });
 }
 
+export async function getWorkerDownloadUrlForCleanStoredFile(fileId: string): Promise<string | null> {
+  const file = await prisma.storedFile.findFirst({
+    where: { id: fileId, deletedAt: null, scanStatus: "CLEAN" },
+    select: { objectKey: true },
+  });
+  if (!file) {
+    throw new StorageUnavailableError("Stored file is not CLEAN and cannot be dispatched to a processing worker");
+  }
+  return getWorkerDownloadUrl(file.objectKey);
+}
+
 export async function getWorkerDownloadUrl(objectKey: string): Promise<string | null> {
   if (isProduction() || process.env.S3_BUCKET_NAME) {
     try {
