@@ -9,7 +9,7 @@ test("quarantined files cannot reach analysis workers", () => {
   assert.match(recorded, /isStoredFileSafeForProcessing/);
   assert.match(recorded, /getWorkerDownloadUrlForCleanStoredFile/);
   assert.ok(
-    recorded.indexOf("isStoredFileSafeForProcessing") < recorded.indexOf("getWorkerDownloadUrlForCleanStoredFile"),
+    recorded.indexOf("if (!isStoredFileSafeForProcessing") < recorded.indexOf("const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile"),
     "recorded-assessment CLEAN gate must run before signed worker URL creation",
   );
 
@@ -39,7 +39,8 @@ test("AI entry points enforce zero-trust prompt boundaries", () => {
   assert.match(router, /untrusted data/i);
 
   const interview = read("src/app/api/assessment/mock-interview/turn/route.ts");
-  assert.match(interview, /UNTRUSTED_CANDIDATE_DATA/);
+  assert.match(interview, /wrapUntrustedContent/);
+  assert.match(interview, /candidate-answer/);
   assert.match(interview, /nextQuestionSchema/);
 });
 
