@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createStoredFile } from "@/lib/storage";
 import { persistScanResult, scanUpload, validateUploadFile, sanitizeAndGenerateObjectKey, validatePassiveDocumentContent } from "@/lib/uploadSecurity";
 import sharp from "sharp";
+import crypto from "crypto";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit
 const MIME_TO_EXT_MAP: Record<string, string[]> = {
@@ -78,6 +79,18 @@ export async function POST(req: NextRequest) {
       return jsonError(passiveDocument.error || "Active document content is not permitted.", 415);
     }
 
+    // Scan the exact original bytes before any local decoder/parser is invoked.
+    // Production scanner failure is fail-closed and no object is persisted.
+    const preflightScan = await scanUpload(`preflight-${crypto.randomUUID()}`, buffer);
+    if (preflightScan.status !== "CLEAN") {
+      throw new ApiError(
+        preflightScan.status === "INFECTED"
+          ? "Upload rejected by malware scanning."
+          : "Upload security scanning is temporarily unavailable.",
+        preflightScan.status === "INFECTED" ? 422 : 503,
+      );
+    }
+
     // Decode and re-encode raster images before persistence. This rejects
     // malformed/decompression-bomb inputs and strips EXIF/XMP/embedded metadata.
     if (["jpg", "png", "webp"].includes(serverExt)) {
@@ -114,11 +127,12 @@ export async function POST(req: NextRequest) {
       extension: serverExt,
     });
 
-    const scanResult = await scanUpload(storedFile.id, buffer);
-    await persistScanResult(storedFile.id, scanResult);
-    if (scanResult.status !== "CLEAN") {
-      throw new ApiError(scanResult.status === "INFECTED" ? "Upload rejected by malware scanning." : "Upload is quarantined pending a successful malware scan.", 422);
-    }
+    // The stored bytes are either the scanned original (documents/media) or a
+    // decoded/re-encoded raster image derived from the scanned original.
+    await persistScanResult(storedFile.id, {
+      status: "CLEAN",
+      detail: preflightScan.detail || "Pre-storage malware scan passed.",
+    });
 
     return NextResponse.json({
       success: true,
