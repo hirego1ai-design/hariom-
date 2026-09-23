@@ -1,48 +1,75 @@
 "use client";
-import React, { useState } from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
+
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PageContainer } from "@/components/employer/LayoutSystem";
 import { useJobCreationStore, ProctoringLevel } from "@/store/useJobCreationStore";
 
-export default function EmployerPageE62() {
+export default function JobMatchingConfigPage() {
   const router = useRouter();
   const store = useJobCreationStore();
-
+  const idempotencyKey = useRef(`job-${crypto.randomUUID()}`);
   const [publishing, setPublishing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const totalWeight = store.weightExperience + store.weightEducation + store.weightSkills;
+  const salary = store.salaryMin && store.salaryMax
+    ? `${store.currency} ${store.salaryMin}-${store.salaryMax} ${store.salaryPeriod}`
+    : "Negotiable";
+
+  const requirements = useMemo(
+    () => (store.skillRequirements.length
+      ? store.skillRequirements
+      : store.skillTags.map((name) => ({ name, priority: "preferred" as const }))),
+    [store.skillRequirements, store.skillTags],
+  );
+
+  const canPublish = Boolean(
+    store.jobTitle.trim() &&
+    store.location.trim() &&
+    totalWeight === 100 &&
+    store.weightExperience + store.weightSkills > 0,
+  );
 
   const handlePublish = async () => {
+    if (!canPublish || publishing) return;
     setPublishing(true);
-    setError(null);
+    setError("");
     try {
-      const matchingConfig = {
-        weightExperience: store.weightExperience,
-        weightEducation: store.weightEducation,
-        weightSkills: store.weightSkills,
-        autoArchiveScore: store.autoArchiveScore,
-        autoInterviewLimit: store.autoInterviewLimit,
-        proctoringLevel: store.proctoringLevel,
-      };
-      
-      const res = await fetch('/api/employer/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/employer/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey.current,
+        },
         body: JSON.stringify({
-          title: store.jobTitle || 'Untitled Job',
-          company: 'Company Name', // Required by schema, API gets actual from profile
-          location: store.location || 'Remote',
-          type: store.jobType || 'Full-time',
-          salary: store.salaryMin && store.salaryMax ? `${store.currency} ${store.salaryMin}-${store.salaryMax}` : 'Negotiable',
-          status: 'ACTIVE',
-          matchingConfig,
-          autoInterview: store.autoInterview,
+          title: store.jobTitle.trim(),
+          department: store.department.trim() || undefined,
+          location: store.location.trim(),
+          type: store.jobType,
+          salary,
+          status: "ACTIVE",
+          requirements: requirements.map((item) => item.name),
+          skillRequirements: requirements,
+          screeningQuestions: store.screeningQuestions.map((question) => question.trim()).filter(Boolean),
+          aiFocusAreas: store.aiFocusAreas.trim() || undefined,
+          matchingConfig: {
+            weightExperience: store.weightExperience,
+            weightEducation: store.weightEducation,
+            weightSkills: store.weightSkills,
+            autoArchiveScore: store.autoArchiveScore,
+            autoInterviewLimit: store.autoInterviewLimit,
+            proctoringLevel: store.proctoringLevel,
+          },
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to publish job');
-      router.push('/employer/job-listings-management');
-    } catch (err: any) {
-      setError(err.message);
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to publish job.");
+      store.reset();
+      router.replace("/employer/job-listings-management");
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to publish job.");
     } finally {
       setPublishing(false);
     }
@@ -50,258 +77,94 @@ export default function EmployerPageE62() {
 
   return (
     <PageContainer>
-      {/*
-        This is an auto-generated component. 
-        In Phase 4, we will manually hook up the EmployerContext to interactive elements.
-      */}
+      <header className="mb-6">
+        <p className="text-xs font-bold uppercase tracking-wider text-primary">Final job configuration</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-white">Matching & Publish</h1>
+        <p className="mt-2 max-w-2xl text-sm text-text-muted">
+          These values are persisted with the job. The server derives your company and generates the final job description through the guarded JD agent during publish.
+        </p>
+      </header>
 
-<header className="mb-6">
-<h1 className="font-headline-md text-headline-md text-text-primary mb-2">Matching Configuration</h1>
-<p className="text-text-secondary font-body-md">Step 4 of 4: Fine-tune how the AI selects and prioritizes your future hires.</p>
-</header>
-<div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-{/*  Main Config Area  */}
-<div className="lg:col-span-8 space-y-gutter">
-{/*  Section 1: Hire Score  */}
-<section className="glass-card p-stack-lg rounded-lg">
-<div className="flex items-center justify-between mb-stack-md">
-<div className="flex items-center gap-3">
-<div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary">
-<span className="material-symbols-outlined">analytics</span>
-</div>
-<h2 className="font-body-lg text-body-lg font-bold">Minimum Hire Score</h2>
-</div>
-<div className="px-4 py-1 rounded-full bg-surface-container-highest text-primary font-data-md text-data-md" id="scoreValue">{store.autoArchiveScore}%</div>
-</div>
-<p className="text-text-secondary text-label-md mb-8">Candidates with an AI-calculated score below this threshold will be automatically archived.</p>
-<div className="relative py-4">
-<input 
-  className="w-full" 
-  max="100" 
-  min="0" 
-  type="range" 
-  value={store.autoArchiveScore} 
-  onChange={(e) => store.updateField('autoArchiveScore', parseInt(e.target.value))}
-/>
-<div className="flex justify-between mt-4 text-[12px] text-text-muted font-data-md">
-<span>0%</span>
-<span>25%</span>
-<span>50%</span>
-<span>75%</span>
-<span>100%</span>
-</div>
-</div>
-</section>
-{/*  Section 2: Auto-Shortlist  */}
-<section className="glass-card p-stack-lg rounded-lg">
-<div className="flex items-center justify-between mb-stack-md">
-<div className="flex items-center gap-3">
-<div className="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary">
-<span className="material-symbols-outlined">auto_awesome</span>
-</div>
-<h2 className="font-body-lg text-body-lg font-bold">Auto-Shortlist Engine</h2>
-</div>
-<label className="switch">
-<input 
-  type="checkbox" 
-  checked={store.autoInterview}
-  onChange={(e) => store.updateField('autoInterview', e.target.checked)}
-/>
-<span className="slider"></span>
-</label>
-</div>
-<div className={`grid grid-cols-1 md:grid-cols-2 gap-stack-lg mt-6 ${!store.autoInterview && 'opacity-50 pointer-events-none'}`}>
-<div className="space-y-4">
-<p className="text-text-secondary text-label-md">Instantly move top-tier candidates into the 'Interview Pending' stage.</p>
-<div className="flex items-center gap-3">
-<span className="text-label-md font-bold">Limit to:</span>
-<input 
-  className="pill-input w-24 text-center" 
-  max="100" 
-  min="1" 
-  type="number" 
-  value={store.autoInterviewLimit} 
-  onChange={(e) => store.updateField('autoInterviewLimit', parseInt(e.target.value))}
-/>
-<span className="text-label-md text-text-muted">candidates</span>
-</div>
-</div>
-<div className="bg-surface-container-lowest/50 p-4 rounded-lg border border-white/5 border-dashed">
-<div className="flex items-start gap-3">
-<span className="material-symbols-outlined text-secondary text-[20px]">info</span>
-<p className="text-[13px] leading-relaxed text-text-secondary italic">"The AI will prioritize diversity and skills-overlap when filling these slots."</p>
-</div>
-</div>
-</div>
-</section>
+      {!store.jobTitle.trim() ? (
+        <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6">
+          <h2 className="font-bold text-amber-200">Job basics are incomplete</h2>
+          <p className="mt-2 text-sm text-text-muted">Choose a role and location before publishing.</p>
+          <button onClick={() => router.push("/employer/create-job-basic-info")} className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">Return to basic info</button>
+        </section>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="space-y-5 xl:col-span-2">
+            <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-extrabold text-white">Matching weights</h2>
+                  <p className="mt-1 text-xs text-text-muted">The three persisted weights must total 100%.</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-bold ${totalWeight === 100 ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>
+                  {totalWeight}%
+                </span>
+              </div>
 
-{/*  Section 3: AI Proctoring & Weights  */}
-<section className="glass-card p-stack-lg rounded-lg">
-  <div className="flex items-center justify-between mb-stack-md">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 rounded-full bg-purple/20 flex items-center justify-center text-purple">
-        <span className="material-symbols-outlined">gavel</span>
-      </div>
-      <h2 className="font-body-lg text-body-lg font-bold">AI Proctoring & Matching Weights</h2>
-    </div>
-  </div>
-  
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-stack-lg mt-4">
-    <div className="space-y-4">
-      <label className="font-label-md text-label-md text-text-secondary block mb-2">Proctoring Level</label>
-      <select 
-        className="w-full h-12 bg-bg-elevated border border-white/10 rounded-xl px-4 font-body-md text-text-primary transition-all appearance-none focus:border-primary focus:outline-none"
-        value={store.proctoringLevel}
-        onChange={(e) => store.updateField('proctoringLevel', e.target.value)}
-      >
-        <option>Standard</option>
-        <option>High Security</option>
-      </select>
-      <p className="text-[12px] text-text-muted mt-2">Determines how strict the AI is about potential cheating in remote assessments.</p>
-    </div>
-    
-    <div className="space-y-4">
-      <label className="font-label-md text-label-md text-text-secondary block mb-2">Match Weighting</label>
-      <div className="space-y-2">
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-text-muted">Experience ({store.weightExperience}%)</span>
-          <input type="range" min="0" max="100" value={store.weightExperience} onChange={(e) => store.updateField('weightExperience', parseInt(e.target.value))} className="w-1/2" />
+              <div className="mt-5 space-y-5">
+                {[
+                  ["Experience", "weightExperience"],
+                  ["Education", "weightEducation"],
+                  ["Skills", "weightSkills"],
+                ].map(([label, field]) => {
+                  const value = store[field as "weightExperience" | "weightEducation" | "weightSkills"];
+                  return (
+                    <label key={field} className="block">
+                      <div className="mb-2 flex justify-between text-xs"><span className="font-bold text-text-secondary">{label}</span><span className="text-white">{value}%</span></div>
+                      <input type="range" min="0" max="100" value={value} onChange={(event) => store.updateField(field as any, Number(event.target.value))} className="w-full" />
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Recorded screening threshold</span>
+                <div className="mt-3 flex items-center gap-4">
+                  <input type="range" min="0" max="100" value={store.autoArchiveScore} onChange={(event) => store.updateField("autoArchiveScore", Number(event.target.value))} className="flex-1" />
+                  <strong className="text-white">{store.autoArchiveScore}%</strong>
+                </div>
+                <p className="mt-2 text-xs text-text-muted">Stored as matching configuration; this screen does not claim an automatic rejection action.</p>
+              </label>
+
+              <label className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Proctoring level</span>
+                <select value={store.proctoringLevel} onChange={(event) => store.updateField("proctoringLevel", event.target.value as ProctoringLevel)} className="mt-3 h-11 w-full rounded-xl border border-white/10 bg-bg-elevated px-3 text-sm text-white">
+                  <option value="Standard">Standard</option>
+                  <option value="High Security">High Security</option>
+                </select>
+                <p className="mt-2 text-xs text-text-muted">Applied to configured assessment/proctoring workflows.</p>
+              </label>
+            </section>
+
+            {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button onClick={() => router.push("/employer/create-job-requirements")} className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-white">Back to requirements</button>
+              <button onClick={handlePublish} disabled={!canPublish || publishing} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                {publishing ? "Publishing…" : "Publish Job"}
+              </button>
+            </div>
+          </div>
+
+          <aside className="rounded-2xl border border-white/10 bg-[#121215] p-5 xl:sticky xl:top-24 xl:self-start">
+            <h2 className="text-lg font-extrabold text-white">Draft Summary</h2>
+            <dl className="mt-4 space-y-4 text-sm">
+              <div><dt className="text-xs text-text-muted">Role</dt><dd className="mt-1 font-bold text-white">{store.jobTitle}</dd></div>
+              <div><dt className="text-xs text-text-muted">Department</dt><dd className="mt-1 text-text-secondary">{store.department || "Not specified"}</dd></div>
+              <div><dt className="text-xs text-text-muted">Location</dt><dd className="mt-1 text-text-secondary">{store.location}</dd></div>
+              <div><dt className="text-xs text-text-muted">Employment</dt><dd className="mt-1 text-text-secondary">{store.jobType} · {store.workMode}</dd></div>
+              <div><dt className="text-xs text-text-muted">Salary</dt><dd className="mt-1 text-text-secondary">{salary}</dd></div>
+              <div><dt className="text-xs text-text-muted">Selected skills</dt><dd className="mt-1 text-text-secondary">{requirements.length ? requirements.map((item) => item.name).join(", ") : "No skills selected"}</dd></div>
+            </dl>
+          </aside>
         </div>
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-text-muted">Education ({store.weightEducation}%)</span>
-          <input type="range" min="0" max="100" value={store.weightEducation} onChange={(e) => store.updateField('weightEducation', parseInt(e.target.value))} className="w-1/2" />
-        </div>
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-text-muted">Skills ({store.weightSkills}%)</span>
-          <input type="range" min="0" max="100" value={store.weightSkills} onChange={(e) => store.updateField('weightSkills', parseInt(e.target.value))} className="w-1/2" />
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-{/*  Section 4: Visibility & Notifications  */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-{/*  Visibility Boost  */}
-<div className="glass-card p-stack-lg rounded-lg flex flex-col justify-between">
-<div>
-<div className="flex items-center justify-between mb-4">
-<span className="material-symbols-outlined text-yellow">stars</span>
-<label className="switch">
-<input 
-  type="checkbox" 
-  checked={store.boostJob}
-  onChange={(e) => store.updateField('boostJob', e.target.checked)}
-/>
-<span className="slider"></span>
-</label>
-</div>
-<h3 className="font-body-md text-body-md font-bold mb-2">Featured Visibility</h3>
-<p className="text-text-secondary text-label-md">Boost your job to the top of candidate feeds for 48 hours. Uses 1 Credit.</p>
-</div>
-</div>
-{/*  Candidate Notify  */}
-<div className="glass-card p-stack-lg rounded-lg flex flex-col justify-between">
-<div>
-<div className="flex items-center justify-between mb-4">
-<span className="material-symbols-outlined text-green">mail</span>
-<label className="switch">
-<input 
-  type="checkbox" 
-  checked={store.notifyMatches}
-  onChange={(e) => store.updateField('notifyMatches', e.target.checked)}
-/>
-<span className="slider"></span>
-</label>
-</div>
-<h3 className="font-body-md text-body-md font-bold mb-2">Smart Notification</h3>
-<p className="text-text-secondary text-label-md">Notify candidates who are a 90%+ match as soon as you publish.</p>
-</div>
-</div>
-</div>
-{/*  Action Buttons  */}
-<div className="flex flex-col gap-4 pt-stack-md">
-{error && <div className="text-red-500 text-sm">{error}</div>}
-<div className="flex items-center justify-between">
-<button onClick={() => router.push("/employer/create-job-requirements")} className="btn-ghost h-[50px] px-8 rounded-full font-label-md text-label-md text-text-primary flex items-center gap-2">
-<span className="material-symbols-outlined">arrow_back</span>
-                        Back
-                    </button>
-<div className="flex gap-4">
-<button className="btn-ghost h-[50px] px-8 rounded-full font-label-md text-label-md text-text-primary">Save Draft</button>
-<button onClick={handlePublish} disabled={publishing} className="btn-primary-red h-[50px] px-10 rounded-full font-label-md text-label-md text-white flex items-center gap-2 disabled:opacity-50">
-                            {publishing ? 'Publishing...' : 'Publish Job'}
-                            {!publishing && <span className="material-symbols-outlined">rocket_launch</span>}
-</button>
-</div>
-</div>
-</div>
-</div>
-{/*  Side Summary Area  */}
-<div className="lg:col-span-4 space-y-gutter">
-<div className="glass-card p-stack-lg rounded-lg sticky top-[84px]">
-<h3 className="font-headline-md text-[20px] mb-stack-md">Job Profile Summary</h3>
-<div className="space-y-4 border-b border-white/5 pb-stack-md mb-stack-md">
-<div className="flex justify-between items-start">
-<div>
-<p className="text-[12px] text-text-muted uppercase tracking-wider">Role</p>
-<p className="font-body-md font-bold text-primary">Senior AI Engineer</p>
-</div>
-<div className="text-right">
-<p className="text-[12px] text-text-muted uppercase tracking-wider">Budget</p>
-<p className="font-body-md font-bold text-on-surface">$140k - $180k</p>
-</div>
-</div>
-<div>
-<p className="text-[12px] text-text-muted uppercase tracking-wider">Department</p>
-<p className="font-body-md font-bold text-on-surface">Core Infrastructure</p>
-</div>
-</div>
-<div className="space-y-4 mb-6">
-<h4 className="text-label-md font-bold flex items-center gap-2">
-<span className="material-symbols-outlined text-[18px]">verified</span>
-                            AI Validation Pulse
-                        </h4>
-<div className="space-y-3">
-<div>
-<div className="flex justify-between text-[12px] mb-1">
-<span className="text-text-secondary">Matching Precision</span>
-<span className="text-green font-data-md">High</span>
-</div>
-<div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-<div className="h-full bg-green w-[92%]"></div>
-</div>
-</div>
-<div>
-<div className="flex justify-between text-[12px] mb-1">
-<span className="text-text-secondary">Market Competitiveness</span>
-<span className="text-yellow font-data-md">Top 15%</span>
-</div>
-<div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-<div className="h-full bg-yellow w-[85%]"></div>
-</div>
-</div>
-</div>
-</div>
-<button className="btn-gold w-full h-[50px] rounded-full font-label-md text-label-md flex items-center justify-center gap-2">
-<span className="material-symbols-outlined">workspace_premium</span>
-                        Upgrade to Gold Priority
-                    </button>
-<p className="text-center text-[11px] text-text-muted mt-3">Get 2x better matches with AI Agent outreach</p>
-</div>
-{/*  Preview Card  */}
-<div className="relative overflow-hidden rounded-lg group h-48">
-<img className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" data-alt="A cinematic, high-contrast image of a futuristic office interior at night, with neon blue and red lights reflecting off dark glass and metallic surfaces. The atmosphere is professional yet cutting-edge, perfectly aligning with the dark-mode aesthetic of the HireGo recruitment platform. Soft bokeh highlights of data streams or binary codes in the background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2O2vS_CHTIulftffL9eVIsL3sNhQVduQm22_c_-sOROXTcigMNaJn80h7M3O4pRfQSoftvcH5LK2G0qDbcaIyleaOcrAeO8DvSsXuskWO9rLqc5nOPwjkgGnPpEMCyoijqoUkmdqIx-z_4P8au9IPvPIke791xicxiN3KG2v4Dn89--iEC4xd7LW4EED6cBpcLeuIHx7lUNksTWTi2SWSDCA69jucMZGMmlBiw1W8RFJm0WDBaoU3OkTePfPIP2xtEK3GIptCGuc" />
-<div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-6">
-<div>
-<p className="text-white font-bold text-body-md">Candidate Experience</p>
-<p className="text-white/60 text-[12px]">See how candidates view this posting</p>
-</div>
-</div>
-</div>
-</div>
-</div>
-
+      )}
     </PageContainer>
   );
 }
