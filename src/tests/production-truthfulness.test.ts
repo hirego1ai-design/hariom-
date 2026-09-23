@@ -24,6 +24,7 @@ test("runtime persistence contains no mock identities, passwords, or jobs", () =
 test("audited production UI surfaces do not present fabricated people or metrics", () => {
   const expectations: Array<[string, RegExp[]]> = [
     ["src/app/employer/dashboard/page.tsx", [/Acme Corporation Recruiting/i, /Sarah Jenkins/i, /Alex Rivera/i, /23 qualified candidates/i]],
+    ["src/app/employer/hiring-pipeline/page.tsx", [/Hiring Health Score/i, /Jordan S\./i, /Aarav Sharma/i, /Excellent \(\+3\.4%\)/i]],
     ["src/app/employer/candidate-user-management/page.tsx", [/initialCandidates/, /Math\.random\(/, /aarav\.sharma@example\.com/i, /\*\s*1560/]],
     ["src/app/employer/employer-analytics-dashboard/page.tsx", [/value:\s*"1,240"/, /Cost per Hire.*7,200/i, /LinkedIn.*45%/]],
     ["src/app/applications/pipeline/page.tsx", [/Marcus Chen/, /Elena Rodriguez/, /Samir Kulkarni/, /images\.unsplash\.com/]],
@@ -106,6 +107,7 @@ test("privileged page guard, OTP hashing, and security headers remain enabled", 
   assert.match(otp, /createHmac\("sha256"/);
   assert.match(otp, /timingSafeEqual/);
   assert.doesNotMatch(otp, /data:\s*\{\s*email:\s*normalizedEmail,\s*otp,\s*type/);
+  assert.doesNotMatch(otp, /record\.otp\s*!==\s*otp\.trim\(\)/);
 
   const nextConfig = read("next.config.ts");
   assert.match(nextConfig, /configuredSecurityHeaders/);
