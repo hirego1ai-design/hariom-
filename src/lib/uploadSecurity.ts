@@ -34,13 +34,13 @@ export function validatePassiveDocumentContent(
   // Reject common active-content containers before they reach parsers, OCR, or AI.
   const ascii = data.toString("latin1").toLowerCase();
   if (mimeType === "application/pdf") {
-    const activePdfMarkers = ["/javascript", "/openaction", "/launch", "/richmedia", "/embeddedfile"];
+    const activePdfMarkers = ["/javascript", "/js", "/openaction", "/aa", "/launch", "/richmedia", "/embeddedfile", "/xfa"];
     if (activePdfMarkers.some((marker) => ascii.includes(marker))) {
       return { valid: false, error: "PDF contains active or embedded content that is not permitted." };
     }
   }
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-    const activeDocxMarkers = ["vbaproject.bin", "word/embeddings/", "oleobject", "activex/"];
+    const activeDocxMarkers = ["vbaproject.bin", "word/embeddings/", "oleobject", "activex/", "word/externallinks/", "customui/"];
     if (activeDocxMarkers.some((marker) => ascii.includes(marker))) {
       return { valid: false, error: "Document contains active or embedded content that is not permitted." };
     }
