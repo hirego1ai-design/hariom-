@@ -4,7 +4,6 @@ import { verifyOtpCode } from "@/lib/otp";
 import { db } from "@/lib/prisma";
 import { createSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { getDevEmployer, markDevEmployerVerified } from "@/lib/dev-employer-store";
 
 const verifyOtpSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -30,11 +29,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await db.findUserByEmail(body.email) || getDevEmployer(body.email);
+    const user = await db.findUserByEmail(body.email);
     if (user && body.type === "VERIFY_EMAIL") {
       const { prisma } = await import("@/lib/prisma");
       await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } }).catch(() => undefined);
-      markDevEmployerVerified(body.email);
     }
 
     const response = NextResponse.json({
