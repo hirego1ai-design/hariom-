@@ -51,21 +51,17 @@ export interface TransitionLifecycleParams {
 export async function transitionLifecycle(params: TransitionLifecycleParams): Promise<void> {
   validateTransition(params.currentState, params.targetState);
   
-  try {
-    await prisma.agentLifecycleLog.create({
-      data: {
-        agentId: params.agentId,
-        executionId: params.executionId,
-        correlationId: params.correlationId,
-        previousState: params.currentState,
-        currentState: params.targetState,
-        reason: params.reason,
-        metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
-      },
-    });
-  } catch (error) {
-    if (process.env.NODE_ENV === 'production' || process.env.MOCK_DB !== 'true') throw error;
-  }
+  await prisma.agentLifecycleLog.create({
+    data: {
+      agentId: params.agentId,
+      executionId: params.executionId,
+      correlationId: params.correlationId,
+      previousState: params.currentState,
+      currentState: params.targetState,
+      reason: params.reason,
+      metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
+    },
+  });
 }
 
 /**
