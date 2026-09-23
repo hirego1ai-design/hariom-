@@ -27,6 +27,30 @@ const OTP_LOCKOUT_MS = 15 * 60_000;
 
 // Development-only convenience. Production always relies on PostgreSQL.
 const inMemoryOtps = new Map<string, OtpEntry>();
+const developmentOtpHmacKey = crypto.randomBytes(32);
+
+function otpHmacKey(): Buffer | string {
+  const configured =
+    process.env.OTP_HMAC_SECRET ||
+    process.env.RATE_LIMIT_HMAC_SECRET ||
+    process.env.INTERNAL_API_KEY ||
+    process.env.NEXTAUTH_SECRET ||
+    process.env.JWT_SECRET;
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") {
+    throw new OtpError("Verification is temporarily unavailable. Please try again.", 503);
+  }
+  return developmentOtpHmacKey;
+}
+
+function otpDigest(email: string, type: "VERIFY_EMAIL" | "RESET_PASSWORD", otp: string): string {
+  return crypto.createHmac("sha256", otpHmacKey()).update(email).update("\0").update(type).update("\0").update(otp.trim()).digest("hex");
+}
+
+function otpMatches(storedDigest: string, expectedDigest: string): boolean {
+  if (!/^[a-f0-9]{64}$/i.test(storedDigest) || !/^[a-f0-9]{64}$/i.test(expectedDigest)) return false;
+  return crypto.timingSafeEqual(Buffer.from(storedDigest, "hex"), Buffer.from(expectedDigest, "hex"));
+}
 
 function keyFor(email: string, type: string) {
   return `${email.toLowerCase().trim()}_${type}`;
@@ -67,7 +91,7 @@ export async function generateAndSendOtp(
           data: { verified: true },
         });
         await tx.otpVerification.create({
-          data: { email: normalizedEmail, otp, type, expiresAt },
+          data: { email: normalizedEmail, otp: otpDigest(normalizedEmail, type, otp), type, expiresAt },
         });
       },
       { maxWait: 10_000, timeout: 20_000 }
@@ -132,7 +156,7 @@ export async function verifyOtpCode(
     } else if (record.expiresAt <= new Date()) {
       await prisma.otpVerification.update({ where: { id: record.id }, data: { verified: true } });
       return { valid: false, error: "Invalid or expired verification code." };
-    } else if (record.otp !== otp.trim()) {
+    } else if (!otpMatches(record.otp, otpDigest(normalizedEmail, type, otp))) {
       const nextAttempts = record.attempts + 1;
       await prisma.otpVerification.update({
         where: { id: record.id },
