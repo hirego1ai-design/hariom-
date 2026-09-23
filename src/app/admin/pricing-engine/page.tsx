@@ -37,14 +37,14 @@ export default function AdminPricingEnginePage() {
             COMMERCIAL ENGINE
           </div>
           <h1 className="text-2xl font-bold text-white">Commercial Pricing & Replacement Engine</h1>
-          <p className="text-xs text-slate-400">Configure fee models, replacement warranties & simulate real-time commercial deal values</p>
+          <p className="text-xs text-slate-400">Non-persistent commercial fee calculator. Saved commercial terms remain authoritative only in managed-hiring agreements.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Controls Form (Left Column) */}
           <div className="lg:col-span-7 bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-6 shadow-2xl">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#29B6F6]">tune</span> Commercial Simulator Controls
+              <span className="material-symbols-outlined text-[#29B6F6]">tune</span> Commercial Calculator Inputs
             </h2>
 
             {/* CTC Slider */}
