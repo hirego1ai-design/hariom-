@@ -9,7 +9,7 @@ const tests = [
   'subscription-checkout-route', 'test-safety-regression',
   'workflow-engine-regression', 'hiring-pipeline-contract', 'production-consumers',
   'mock-interview-regression',
-  'security-attack-surface',
+  'security-attack-surface',\n  'production-truthfulness',
 ];
 const child = spawn(process.execPath, ['--import', 'tsx', '--test', '--test-concurrency=2',
   ...tests.map(name => `src/tests/${name}.test.ts`)], { stdio: 'inherit' });
