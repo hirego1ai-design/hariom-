@@ -26,20 +26,15 @@ export class KillSwitchManager {
       return true;
     }
 
-    try {
-      const switchConfig = await prisma.killSwitchConfig.findUnique({
-        where: {
-          targetType_targetId: {
-            targetType,
-            targetId,
-          },
+    const switchConfig = await prisma.killSwitchConfig.findUnique({
+      where: {
+        targetType_targetId: {
+          targetType,
+          targetId,
         },
-      });
-      return switchConfig?.isActive ?? false;
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production' && process.env.MOCK_DB === 'true') return false;
-      throw error;
-    }
+      },
+    });
+    return switchConfig?.isActive ?? false;
   }
 
   /**
@@ -155,17 +150,12 @@ export class KillSwitchManager {
    * Checks if the global kill switch (targetId = 'SYSTEM') is active.
    */
   private async checkGlobalKillSwitch(): Promise<boolean> {
-    try {
-      const globalSwitch = await prisma.killSwitchConfig.findFirst({
-        where: {
-          targetId: 'SYSTEM',
-          isActive: true,
-        },
-      });
-      return globalSwitch !== null;
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production' && process.env.MOCK_DB === 'true') return false;
-      throw error;
-    }
+    const globalSwitch = await prisma.killSwitchConfig.findFirst({
+      where: {
+        targetId: 'SYSTEM',
+        isActive: true,
+      },
+    });
+    return globalSwitch !== null;
   }
 }
