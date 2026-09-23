@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { AiCompanyBudget, BudgetReservation } from '@prisma/client';
-import { assertAndConsumeAiEntitlement, AiEntitlementError } from './AiEntitlements';
+import { assertAndConsumeAiEntitlement } from './AiEntitlements';
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
