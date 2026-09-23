@@ -37,7 +37,7 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({});
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [user, setUser] = useState<User>({ name: "Employer", role: "Admin" });
+  const [user] = useState<User>({ name: "", role: "" });
   const [draftJob, setDraftJob] = useState<DraftJob>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCandidatesLoading, setIsCandidatesLoading] = useState(true);
