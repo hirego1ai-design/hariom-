@@ -172,7 +172,7 @@ async function dispatchWorkerJob(params: {
 
     const claim = await claimVideoAnalysisJob(params.jobId);
     if (!claim) return;
-    const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile(safeFile.id);
+    const downloadUrl = await getWorkerDownloadUrlForCleanStoredFile(params.fileId);
     const appOrigin = process.env.VIDEO_ANALYSIS_CALLBACK_ORIGIN?.trim().replace(/\/$/, "")
       || process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "")
       || params.callbackOrigin.replace(/\/$/, "");
