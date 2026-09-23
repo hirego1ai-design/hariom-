@@ -9,11 +9,18 @@ import { prisma } from "@/lib/prisma";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
-  company: z.string().min(2, "Company name required"),
   location: z.string().min(2, "Location required"),
   type: z.string().default("Full-time"),
   salary: z.string().min(2, "Salary range required"),
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED"]).default("ACTIVE"),
+  department: z.string().trim().max(120).optional(),
+  requirements: z.array(z.string().trim().min(1).max(120)).max(100).optional(),
+  screeningQuestions: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
+  aiFocusAreas: z.string().trim().max(2_000).optional(),
+  skillRequirements: z.array(z.object({
+    name: z.string().trim().min(1).max(120),
+    priority: z.enum(["required", "preferred"]),
+  }).strict()).max(100).optional(),
   matchingConfig: z.object({
     weightExperience: z.number().min(0).max(100),
     weightEducation: z.number().min(0).max(100),
@@ -24,6 +31,9 @@ const jobSchema = z.object({
   }).refine(
     (config) => config.weightExperience + config.weightSkills > 0,
     "Experience and skills weights must total more than zero.",
+  ).refine(
+    (config) => config.weightExperience + config.weightEducation + config.weightSkills === 100,
+    "Matching weights must total exactly 100.",
   ).optional(),
 });
 
@@ -150,6 +160,11 @@ export async function POST(request: Request) {
           location: body.location,
           type: body.type ?? "Full-time",
           matchingConfig: body.matchingConfig,
+          department: body.department,
+          requirements: body.requirements,
+          screeningQuestions: body.screeningQuestions,
+          aiFocusAreas: body.aiFocusAreas,
+          skillRequirements: body.skillRequirements,
         },
         tx
       );
