@@ -240,24 +240,22 @@ export default function HiringPipelinePage() {
               <span className="material-symbols-outlined text-[16px]">list</span>
               <span>List</span>
             </button>
-            <button
-              onClick={() => setViewMode("table")}
-              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed"
-              title="Table View (Coming Soon)"
-              disabled
+            <Link
+              href="/employer/candidate-user-management"
+              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5"
+              title="Open candidate table"
             >
               <span className="material-symbols-outlined text-[16px]">table_chart</span>
               <span>Table</span>
-            </button>
-            <button
-              onClick={() => setViewMode("analytics")}
-              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed"
-              title="Analytics View (Coming Soon)"
-              disabled
+            </Link>
+            <Link
+              href="/employer/employer-analytics-dashboard"
+              className="px-3 py-1.5 rounded-lg text-xs text-text-muted hover:text-white transition-all flex items-center gap-1.5"
+              title="Open recruiting analytics"
             >
               <span className="material-symbols-outlined text-[16px]">analytics</span>
               <span>Analytics</span>
-            </button>
+            </Link>
           </div>
 
           {/* Collapsible Action buttons */}
