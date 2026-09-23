@@ -10,7 +10,7 @@ const schema = z.object({
   companyName: z.string().min(2), email: z.string().email(), industry: z.string().min(2), companySize: z.string().min(1),
   password: z.string().min(8), confirmPassword: z.string().min(8),
   referralCode: z.string().trim().toUpperCase().optional(),
-}).refine((data) => data.password === data.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
+}).strict().refine((data) => data.password === data.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 
 export async function POST(request: Request) {
   try {
