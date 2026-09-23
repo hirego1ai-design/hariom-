@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMalwareScannerEnv } from "@/lib/env";
 import { deleteObject, readPrivateObjectForSecurityScan } from "@/lib/storage";
 import crypto from "crypto";
+import { assertSafeOutboundNetworkTarget, parseAllowedHosts } from "@/lib/security/outboundUrl";
 
 export const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -51,6 +52,9 @@ export function validateUploadFile(mimeType: string, sizeBytes: number, maxSize 
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
     return { valid: false, error: "Unsupported file type." };
   }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return { valid: false, error: "Uploaded file is empty or invalid." };
+  }
   if (sizeBytes > maxSize) {
     return { valid: false, error: "File exceeds the maximum allowed size." };
   }
@@ -75,8 +79,13 @@ export async function scanUpload(fileId: string, data: Buffer): Promise<UploadSc
       const config = requireMalwareScannerEnv();
       endpoint = config.url;
       token = config.token;
+      await assertSafeOutboundNetworkTarget(endpoint, {
+        label: "MALWARE_SCANNER_URL",
+        requireHttps: true,
+        allowedHosts: parseAllowedHosts(process.env.MALWARE_SCANNER_ALLOWED_HOSTS),
+      });
     } catch (error) {
-      return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured." };
+      return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured safely." };
     }
   }
   if (!endpoint) return { status: "CLEAN", detail: "Development scan bypass." };
