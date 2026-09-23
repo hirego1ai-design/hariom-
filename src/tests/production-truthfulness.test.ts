@@ -63,6 +63,78 @@ test("employer production routes contain no legacy prototype markers or demo dat
   }
 });
 
+test("legacy admin settings do not simulate authoritative configuration", () => {
+  const checks: Array<[string, RegExp[]]> = [
+    ["src/app/settings/ai-agents/page.tsx", [/GPT-4o/i, /Claude 3\.5/i, /CodeLlama/i, /tasks completed today/i, /toggleAgent/]],
+    ["src/app/settings/domain/page.tsx", [/portal\.hirego\.ai/i, /Let's Encrypt/i, /Auto-renews in/i, /Verify & Bind Domain/i]],
+    ["src/app/settings/integrations/page.tsx", [/connected:\s*true/i, /toggleIntegration/i, /Greenhouse ATS/i]],
+    ["src/app/settings/plan-management/page.tsx", [/Starter Tier/i, /₹14,999/i, /Configured tier/i]],
+    ["src/app/settings/hub/page.tsx", [/maintenanceMode/i, /Platform settings saved successfully/i, /Save Configuration/i]],
+    ["src/app/settings/terms-privacy/page.tsx", [/Legal documents published successfully/i, /Publish Legal Document/i]],
+    ["src/app/admin/settings/whatsapp/page.tsx", [/G05Component/, /@\/app\/settings\/whatsapp\/page/]],
+  ];
+
+  for (const [path, patterns] of checks) {
+    const source = read(path);
+    for (const pattern of patterns) {
+      assert.doesNotMatch(source, pattern, `${path} still simulates authoritative configuration: ${pattern}`);
+    }
+  }
+
+  assert.match(read("src/app/settings/plan-management/page.tsx"), /\/admin\/subscriptions/);
+});
+
+test("managed hiring and employer access UI contain no synthetic operational records", () => {
+  const managedHiring = read("src/app/employer/managed-hiring/page.tsx");
+  for (const pattern of [/mockCandidates/i, /Matched Candidates Pool/i, /Aravind Swamy/i, /Neha Deshmukh/i, /Vikram Aditya/i, /calendar invite has been dispatched/i]) {
+    assert.doesNotMatch(managedHiring, pattern);
+  }
+  assert.match(managedHiring, /\/api\/agreements\/requirements/);
+  assert.match(managedHiring, /\/api\/agreements\/contracts/);
+
+  const roles = read("src/app/employer/roles-and-permissions/page.tsx");
+  assert.match(roles, /redirect\("\/employer\/team-members-management"\)/);
+  assert.doesNotMatch(roles, /initialRoles|Super Admin|Compliance Officer|savePermissions/);
+});
+
+test("registration flow does not hardcode commercial, compliance, or activation status claims", () => {
+  const business = read("src/app/employer/employer-registration-business-model/page.tsx");
+  for (const pattern of [/\$499/, /14-Day Free Trial/i, /SOC2 Certified/i, /256-Bit SSL/i, /8\.33% to 15%/]) {
+    assert.doesNotMatch(business, pattern);
+  }
+
+  const complete = read("src/app/employer/employer-registration-complete/page.tsx");
+  for (const pattern of [/fully configured and ready/i, /typically within 2–4 hours/i, /AI Proctoring Enabled/i, /trial includes full access/i]) {
+    assert.doesNotMatch(complete, pattern);
+  }
+  assert.match(complete, /\/api\/auth\/me/);
+});
+
+test("production navigation excludes intentionally unconnected admin tools", () => {
+  const sidebar = read("src/components/admin/AdminSidebar.tsx");
+  const dashboard = read("src/app/admin/dashboard/page.tsx");
+  const hidden = [
+    "/admin/proctoring-control-panel",
+    "/admin/roles",
+    "/admin/system/db-pool",
+    "/admin/system/backup-recovery",
+    "/admin/sla/monitor",
+    "/admin/security/vulnerability-inspector",
+    "/admin/models/registry",
+    "/admin/models/playground",
+    "/admin/licenses/allocator",
+    "/admin/logs/stream",
+    "/admin/settings/ai-agents",
+  ];
+
+  for (const route of hidden) {
+    assert.ok(!sidebar.includes(route), `Admin sidebar exposes unconnected tool: ${route}`);
+  }
+  for (const route of ["/admin/proctoring-control-panel", "/admin/roles", "/admin/system/backup-recovery", "/admin/security/vulnerability-inspector"]) {
+    assert.ok(!dashboard.includes(route), `Admin dashboard exposes unconnected tool: ${route}`);
+  }
+});
+
 test("job creation follows the authoritative persisted workflow", () => {
   const basic = read("src/app/employer/create-job-basic-info/page.tsx");
   const requirements = read("src/app/employer/create-job-requirements/page.tsx");
