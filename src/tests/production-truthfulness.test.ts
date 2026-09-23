@@ -21,6 +21,51 @@ test("runtime persistence contains no mock identities, passwords, or jobs", () =
   assert.equal(existsSync("src/lib/document-verification-store.ts"), false, "document verification must not use a process-local runtime store");
 });
 
+test("production runtime has no environment-switched mock database paths", () => {
+  const runtimeFiles = filesUnder("src").filter((path) =>
+    !path.startsWith("src/tests/") && /\.(?:ts|tsx|js|jsx)$/.test(path)
+  );
+
+  for (const path of runtimeFiles) {
+    const source = read(path);
+    assert.doesNotMatch(
+      source,
+      /process\.env\.MOCK_DB/,
+      `${path} contains a production runtime MOCK_DB branch`,
+    );
+  }
+});
+
+test("admin configuration surfaces do not fabricate persisted commercial state", () => {
+  const platformRoute = read("src/app/api/admin/config/route.ts");
+  assert.doesNotMatch(platformRoute, /process\.env\.MOCK_DB/);
+  assert.doesNotMatch(platformRoute, /defaultPlacementFeePct:\s*8\.33/);
+  assert.doesNotMatch(platformRoute, /defaultReplacementDays:\s*60/);
+
+  const managedRoute = read("src/app/api/admin/managed-hiring/config/route.ts");
+  for (const pattern of [
+    /process\.env\.MOCK_DB/,
+    /managedHiringGlobalConfig/,
+    /managedHiringAuditLogs/,
+    /LOG-MH-901/,
+    /superadmin@hirego\.ai/i,
+    /finance\.director@hirego\.ai/i,
+    /Fortune 500 campus hiring ramp/i,
+  ]) {
+    assert.doesNotMatch(managedRoute, pattern);
+  }
+
+  const settingsPage = read("src/app/admin/settings/managed-hiring/page.tsx");
+  for (const pattern of [
+    /defaultPlacementFeePct:\s*8\.33/,
+    /defaultReplacementDays:\s*60/,
+    /defaultCreditDays:\s*15/,
+    /taxRatePct:\s*18(?:\.0)?/,
+  ]) {
+    assert.doesNotMatch(settingsPage, pattern);
+  }
+});
+
 test("audited production UI surfaces do not present fabricated people or metrics", () => {
   const expectations: Array<[string, RegExp[]]> = [
     ["src/app/employer/dashboard/page.tsx", [/Acme Corporation Recruiting/i, /Sarah Jenkins/i, /Alex Rivera/i, /23 qualified candidates/i]],
