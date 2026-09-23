@@ -61,18 +61,6 @@ class ReferralDatabaseStore {
   private fraudProfiles = new Map<string, UserFraudProfile>();
   private inFlightTransactionLocks = new Map<string, Promise<ReferralReward | null>>();
 
-  constructor() {
-    this.referralCodeToUserMap.set("HIREGO2026", "usr-demo-referrer");
-    this.referralCodeToUserMap.set("RAHUL2026", "usr-rahul-sharma");
-    this.referralCodeToUserMap.set("ALEX2026", "usr-alex-candidate");
-    this.referralCodeToUserMap.set("ALPHA2026", "usr-referrer-alpha");
-
-    this.userProfiles.set("usr-referrer-alpha", {
-      email: "alpha.referrer@example.com",
-      phone: "+919876543210",
-    });
-  }
-
   public registerTestUserProfile(userId: string, profile: { email?: string; phone?: string }): void {
     this.userProfiles.set(userId, profile);
   }
@@ -103,14 +91,6 @@ class ReferralDatabaseStore {
     this.fraudProfiles.clear();
     this.inFlightTransactionLocks.clear();
     this.referralCodeToUserMap.clear();
-    this.referralCodeToUserMap.set("HIREGO2026", "usr-demo-referrer");
-    this.referralCodeToUserMap.set("RAHUL2026", "usr-rahul-sharma");
-    this.referralCodeToUserMap.set("ALEX2026", "usr-alex-candidate");
-    this.referralCodeToUserMap.set("ALPHA2026", "usr-referrer-alpha");
-    this.userProfiles.set("usr-referrer-alpha", {
-      email: "alpha.referrer@example.com",
-      phone: "+919876543210",
-    });
   }
 
   // ================================================================
