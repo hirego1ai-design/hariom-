@@ -20,8 +20,9 @@ test("private uploads enforce type, signature and malware quarantine", () => {
   assert.match(route, /validateUploadFile\(file\.type, file\.size/);
   assert.match(route, /Invalid file signature/);
   assert.match(route, /File content does not match claimed MIME type/);
-  assert.match(route, /scanUpload\(storedFile\.id, buffer\)/);
-  assert.match(route, /scanResult\.status !== "CLEAN"/);
+  assert.match(route, /scanUpload\(`preflight-\$\{crypto\.randomUUID\(\)\}`, buffer\)/);
+  assert.match(route, /preflightScan\.status !== "CLEAN"/);
+  assert.ok(route.indexOf("scanUpload(`preflight-") < route.indexOf("sharp(buffer"), "malware scan must run before raster decoding");
   assert.equal(security.includes('"image/svg+xml"'), false);
   assert.equal(security.includes('"text/html"'), false);
   assert.equal(security.includes('"application/javascript"'), false);
