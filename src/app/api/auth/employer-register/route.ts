@@ -5,7 +5,6 @@ import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { generateAndSendOtp } from "@/lib/otp";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { referralDb } from "@/lib/referral-db";
-import { createDevEmployer, getDevEmployer } from "@/lib/dev-employer-store";
 
 const schema = z.object({
   companyName: z.string().min(2), email: z.string().email(), industry: z.string().min(2), companySize: z.string().min(1),
@@ -24,18 +23,8 @@ export async function POST(request: Request) {
     const email = body.email.toLowerCase().trim();
     const referralCode = body.referralCode?.trim().toUpperCase() || null;
 
-    try {
-      if (await prisma.user.findUnique({ where: { email } })) {
-        return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
-      }
-    } catch (databaseError) {
-      if (process.env.NODE_ENV === "production" || process.env.MOCK_DB !== "true") throw databaseError;
-      const existing = getDevEmployer(email);
-      if (existing) return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
-      const passwordHash = await hashPassword(body.password);
-      const user = createDevEmployer({ email, name: body.companyName, passwordHash, companyName: body.companyName, industry: body.industry, companySize: body.companySize });
-      const otp = await generateAndSendOtp(email, "VERIFY_EMAIL");
-      return NextResponse.json({ success: true, email, userId: user.id, message: otp.message, debugOtp: otp.debugOtp, localMode: true });
+    if (await prisma.user.findUnique({ where: { email } })) {
+      return NextResponse.json({ success: false, error: "An account with this email already exists." }, { status: 409 });
     }
 
     // Validate referral code BEFORE creating user (fail fast, no side effects)
