@@ -69,28 +69,23 @@ export class AgentEvaluator {
       verdict = 'FALLBACK';
     }
 
-    let logId = `eval-${Date.now()}`;
-    try {
-      const log = await prisma.agentEvaluationLog.create({
-        data: {
-          companyId: params.companyId,
-          correlationId: params.correlationId,
-          executionId: params.executionId,
-          agentId: params.agentId,
-          algorithmVersion: 'hirego-score-v1.2',
-          score,
-          fairnessChecked: fairness.fairnessChecked,
-          policyCompliant: fairness.policyCompliant,
-          biasScore: fairness.biasScore,
-          schemaValid,
-          factualConsistency,
-          verdict,
-        },
-      });
-      logId = log.id;
-    } catch (error) {
-      if (process.env.NODE_ENV === 'production' || process.env.MOCK_DB !== 'true') throw error;
-    }
+    const log = await prisma.agentEvaluationLog.create({
+      data: {
+        companyId: params.companyId,
+        correlationId: params.correlationId,
+        executionId: params.executionId,
+        agentId: params.agentId,
+        algorithmVersion: 'hirego-score-v1.2',
+        score,
+        fairnessChecked: fairness.fairnessChecked,
+        policyCompliant: fairness.policyCompliant,
+        biasScore: fairness.biasScore,
+        schemaValid,
+        factualConsistency,
+        verdict,
+      },
+    });
+    const logId = log.id;
 
     return {
       score,
