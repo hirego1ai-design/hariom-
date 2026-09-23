@@ -41,6 +41,19 @@ test("production runtime has no environment-switched mock database fallbacks", (
   assert.match(prismaSource, /FATAL: MOCK_DB is not supported by the application runtime/);
 });
 
+test("agreement repository contains no fabricated seed companies or contacts", () => {
+  const source = read("src/lib/agreements-db.ts");
+  for (const pattern of [
+    /Sarah Jenkins/i,
+    /sarah\.j@enterprise\.com/i,
+    /HireGo Enterprise Partner/i,
+    /REQ-2026-001/,
+    /tpl-default-1/,
+  ]) {
+    assert.doesNotMatch(source, pattern);
+  }
+});
+
 test("subscription persistence has no in-memory commercial datasets or fallbacks", () => {
   const source = read("src/lib/subscriptions-db.ts");
   for (const pattern of [
