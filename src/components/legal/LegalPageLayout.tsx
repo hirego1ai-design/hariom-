@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import MarketingShell from "@/components/marketing/MarketingShell";
+import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 
 export type LegalNavItem = { href: string; label: string };
 
@@ -109,9 +110,10 @@ export default function LegalPageLayout({
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Questions</p>
-                  <a href="mailto:support@hiregoai.com" className="mt-2 inline-block text-sm font-semibold text-cyan-300 hover:underline">
-                    support@hiregoai.com
+                  <a href={`mailto:${PUBLIC_BUSINESS_DETAILS.supportEmail}`} className="mt-2 inline-block text-sm font-semibold text-cyan-300 hover:underline">
+                    {PUBLIC_BUSINESS_DETAILS.supportEmail}
                   </a>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">{PUBLIC_BUSINESS_DETAILS.postalAddress}</p>
                 </div>
               </div>
             </div>
