@@ -5,7 +5,7 @@ import { CircuitBreaker } from "./CircuitBreaker";
  * diagnostics. ModelRouter itself returns OpenAI only until real adapters are
  * implemented for the other providers.
  */
-export type LlmProviderName = "google" | "openai" | "anthropic" | "deepseek" | "kimi";
+export type LlmProviderName = "google" | "openai" | "deepseek" | "kimi";
 
 export interface ProviderModel {
   provider: LlmProviderName;
