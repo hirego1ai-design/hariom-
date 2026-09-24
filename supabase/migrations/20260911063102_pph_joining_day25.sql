@@ -1,3 +1,7 @@
+-- Historical Supabase migration ledger synchronized from production.
+-- Prisma migrations remain the authoritative application schema history.
+-- Do not edit this historical file after it has been recorded remotely.
+
 -- Additive PPH billing schedule. Existing invoices and agreements are not changed.
 CREATE TABLE "PphPlacement" (
   "id" TEXT NOT NULL,
