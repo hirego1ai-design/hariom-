@@ -30,7 +30,7 @@ export default function RefundCancellationPage() {
       summary="This policy explains how cancellations, duplicate charges, failed payments, subscriptions, digital credits and managed hiring fees are handled when paid services are enabled on HireGo AI."
       updated="25 September 2026"
       nav={nav}
-      badges={["Digital services", "Subscriptions", "Failed-payment protection", "Original payment method", "Stripe / PayU ready"]}
+      badges={["Digital services", "Subscriptions", "Failed-payment protection", "Original payment method", "Stripe / PayU policy coverage"]}
     >
       <LegalSection id="overview" eyebrow="01 · Overview" title="What this policy covers">
         <p>
