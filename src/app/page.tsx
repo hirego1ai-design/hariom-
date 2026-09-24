@@ -17,10 +17,13 @@ export default function HomePage() {
     <section className={heroStyles.hero}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
-        <h1 className="text-[clamp(2.45rem,4.7vw,4.35rem)] font-black leading-[1.07] tracking-[-.045em] text-white">Better hiring starts<br />with <span className="bg-gradient-to-r from-[#42b9ff] via-[#c079ff] via-[#ff77d8] to-[#ff7767] bg-clip-text text-transparent">people.</span></h1>
-        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.35em] text-slate-200 sm:text-xs">Managed Hiring · Pay Per Hire</p>
-        <p className="mx-auto mt-5 max-w-2xl text-sm leading-6 tracking-[.025em] text-slate-200 sm:text-lg sm:leading-7">Tell us who you need. We help find and coordinate candidates. You make the hiring decision. Technology helps where it is useful.</p>
-        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/contact" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Discuss Managed Hiring <span aria-hidden className="ml-2">→</span></Link><Link href="/services" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>How it works</Link></div>
+        <h1 className="text-[clamp(2.45rem,4.7vw,4.35rem)] font-black leading-[1.07] tracking-[-.045em] text-white">Welcome to the <span className="bg-gradient-to-r from-[#42b9ff] via-[#c079ff] via-[#ff77d8] to-[#ff7767] bg-clip-text text-transparent">Future of Hiring</span></h1>
+        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.35em] text-slate-200 sm:text-xs">The world’s fastest hiring platform</p>
+        <div className="mx-auto mt-5 max-w-3xl text-slate-200">
+          <p className="text-base font-semibold leading-7 sm:text-xl sm:leading-8">Hiring doesn’t need more applications. It needs more job-ready people.</p>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 tracking-[.015em] text-slate-300 sm:text-base sm:leading-7">HireGo AI finds, evaluates and prepares relevant candidates while autonomous AI agents move the hiring workflow from requirement to interview.</p>
+        </div>
+        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/contact" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Find Job-Ready Talent <span aria-hidden className="ml-2">→</span></Link><Link href="/services" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>See How HireGo Works</Link></div>
       </div>
       <svg className={heroStyles.transition} viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="hirego-carved-edge" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#eaf4ff" /><stop offset="1" stopColor="#fff" /></linearGradient></defs><path d="M0 -8 C220 142 780 142 1000 -8 L1000 122 L0 122Z" fill="url(#hirego-carved-edge)" /><path d="M0 0 C220 150 780 150 1000 0 L1000 122 L0 122Z" fill="#fff" /></svg>
     </section>
