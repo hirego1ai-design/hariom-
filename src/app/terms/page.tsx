@@ -36,7 +36,7 @@ export default function TermsPage() {
       summary="These Terms explain how candidates, employers and recruiters may use HireGo AI, including AI-assisted hiring workflows, assessments, video resumes, managed hiring, subscriptions and paid services."
       updated="25 September 2026"
       nav={nav}
-      badges={["Candidates", "Employers", "AI-assisted workflows", "Stripe / PayU ready", "India"]}
+      badges={["Candidates", "Employers", "AI-assisted workflows", "Stripe / PayU policy coverage", "India"]}
     >
       <LegalSection id="scope" eyebrow="01 · Foundation" title="Scope and acceptance">
         <p>
