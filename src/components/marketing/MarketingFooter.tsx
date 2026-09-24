@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 
 const groups = [
   { title: "Platform", links: [["Platform", "/features"], ["Services", "/services"], ["Solutions", "/solutions"], ["Pricing", "/pricing"]] },
@@ -17,7 +18,8 @@ export default function MarketingFooter() {
           <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={180} height={60} className="h-auto w-[180px]" sizes="180px" />
         </Link>
         <p className="mt-4 max-w-xs text-sm leading-6 text-slate-300">Connected hiring operations, with people responsible for consequential hiring decisions.</p>
-        <a href="mailto:support@hiregoai.com" className="mt-4 inline-block text-sm font-medium text-cyan-300 hover:underline">support@hiregoai.com</a>
+        <p className="mt-4 max-w-xs text-xs leading-5 text-slate-400">{PUBLIC_BUSINESS_DETAILS.postalAddress}</p>
+        <a href={`mailto:${PUBLIC_BUSINESS_DETAILS.supportEmail}`} className="mt-3 inline-block text-sm font-medium text-cyan-300 hover:underline">{PUBLIC_BUSINESS_DETAILS.supportEmail}</a>
       </div>
       {groups.map(group=><nav key={group.title} aria-label={`${group.title} footer links`}><h2 className="text-sm font-bold">{group.title}</h2><ul className="mt-4 space-y-3 text-sm text-slate-300">{group.links.map(([label,href])=><li key={href}><Link href={href} className="rounded hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">{label}</Link></li>)}</ul></nav>)}
     </div>
