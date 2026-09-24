@@ -20,7 +20,7 @@ const REQUIRED_ENVIRONMENT = {
 } as const;
 
 const SENDGRID_SEND_URL = "https://api.sendgrid.com/v3/mail/send";
-const ZOHO_CPAAS_SEND_URL = "https://api.cpaas.com/v1.1/email";
+const ZOHO_CPAAS_SEND_URL = "https://cpaas.zoho.in/v1.1/email";
 
 export async function runEmailProviderContractTests(): Promise<{
   passed: number;
@@ -46,8 +46,8 @@ export async function runEmailProviderContractTests(): Promise<{
 
   assert(
     "Zoho CPaaS request contract",
-    ZOHO_CPAAS_SEND_URL === "https://api.cpaas.com/v1.1/email",
-    "Zoho CPaaS must use its v1.1 email endpoint with Zoho-enczapikey authentication."
+    ZOHO_CPAAS_SEND_URL === "https://cpaas.zoho.in/v1.1/email",
+    "HireGo's Zoho CPaaS India data-center endpoint must use v1.1 email with Zoho-enczapikey authentication."
   );
 
   assert(
