@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 
-export type LlmProvider = "openai" | "gemini" | "claude" | "deepseek";
+export type LlmProvider = "openai" | "gemini" | "deepseek";
 
 export interface AiTaskRequest {
   task: "RESUME_SCORE" | "JD_GENERATION" | "CANDIDATE_MATCH" | "INTERVIEW_EVALUATION" | "GENERAL";
@@ -123,7 +123,6 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   const modelMap: Record<LlmProvider, string> = {
     openai: "gpt-4o",
     gemini: "gemini-1.5-pro",
-    claude: "claude-3-5-sonnet",
     deepseek: "deepseek-v3",
   };
 
@@ -273,7 +272,6 @@ export async function getAiUsageStats() {
     providerCounts: {
       openai: providerCounts.openai || 0,
       gemini: providerCounts.gemini || 0,
-      claude: providerCounts.claude || 0,
       deepseek: providerCounts.deepseek || 0,
     },
     logs: logs.slice(0, 20),
