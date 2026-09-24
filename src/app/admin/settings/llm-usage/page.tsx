@@ -99,7 +99,6 @@ export default function AdminLlmUsagePage() {
                 {[
                   { name: "OpenAI (GPT-4o)", key: "openai", color: "#26A69A" },
                   { name: "Gemini (1.5 Pro)", key: "gemini", color: "#29B6F6" },
-                  { name: "Claude (3.5 Sonnet)", key: "claude", color: "#AB47BC" },
                   { name: "DeepSeek (V3)", key: "deepseek", color: "#FFCA28" },
                 ].map((p) => (
                   <div key={p.key} className="bg-[#16161B] p-4 rounded-xl border border-white/5 space-y-1">
@@ -136,7 +135,6 @@ export default function AdminLlmUsagePage() {
                   >
                     <option value="openai">OpenAI (GPT-4o)</option>
                     <option value="gemini">Gemini (1.5 Pro)</option>
-                    <option value="claude">Claude (3.5 Sonnet)</option>
                     <option value="deepseek">DeepSeek (V3)</option>
                   </select>
                 </div>
