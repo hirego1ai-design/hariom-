@@ -1,1 +1,121 @@
-import { writeFile } from "node:fs/promises";\nimport { performance } from "node:perf_hooks";\n\nconst BASE_URL = (process.env.LOAD_TEST_BASE_URL || "https://www.hiregoai.com").replace(/\\\/$/, "");\nconst REQUEST_TIMEOUT_MS = Number(process.env.LOAD_TEST_TIMEOUT_MS || 10000);\n\nconst stages = [\n  { name: "health-baseline", rps: 5, durationSec: 15, paths: ["/api/health"] },\n  { name: "public-read", rps: 10, durationSec: 30, paths: ["/", "/login", "/about", "/services", "/solutions", "/pricing"] },\n  { name: "public-peak", rps: 20, durationSec: 30, paths: ["/", "/login", "/about", "/services", "/solutions", "/pricing", "/api/health"] },\n];\n\nconst sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));\n\nfunction percentile(values, p) {\n  if (!values.length) return 0;\n  const sorted = [...values].sort((a, b) => a - b);\n  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);\n  return sorted[Math.max(0, index)];\n}\n\nasync function oneRequest(path) {\n  const controller = new AbortController();\n  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);\n  const started = performance.now();\n  try {\n    const response = await fetch(`${BASE_URL}${path}`, {\n      method: "GET",\n      redirect: "manual",\n      headers: {\n        "user-agent": "HireGo-Production-Load-Test/1.0",\n        "x-hirego-load-test": "safe-read-only",\n      },\n      signal: controller.signal,\n      cache: "no-store",\n    });\n    return { path, status: response.status, ok: response.status >= 200 && response.status < 400, latencyMs: performance.now() - started, error: null };\n  } catch (error) {\n    return { path, status: 0, ok: false, latencyMs: performance.now() - started, error: error instanceof Error ? error.message : String(error) };\n  } finally {\n    clearTimeout(timeout);\n  }\n}\n\nasync function runStage(stage) {\n  const results = [];\n  const inFlight = new Set();\n  const intervalMs = 100;\n  const ticks = Math.ceil((stage.durationSec * 1000) / intervalMs);\n  let budget = 0;\n  let requestIndex = 0;\n  const stageStarted = performance.now();\n\n  for (let tick = 0; tick < ticks; tick++) {\n    const targetTickAt = stageStarted + tick * intervalMs;\n    const waitMs = targetTickAt - performance.now();\n    if (waitMs > 0) await sleep(waitMs);\n    budget += stage.rps * (intervalMs / 1000);\n    while (budget >= 1) {\n      budget -= 1;\n      const path = stage.paths[requestIndex++ % stage.paths.length];\n      const promise = oneRequest(path).then((result) => results.push(result)).finally(() => inFlight.delete(promise));\n      inFlight.add(promise);\n    }\n  }\n\n  await Promise.all(inFlight);\n  const latencies = results.map((r) => r.latencyMs);\n  const failed = results.filter((r) => !r.ok);\n  const serverErrors = results.filter((r) => r.status >= 500);\n  const networkErrors = results.filter((r) => r.status === 0);\n  const statusCounts = {};\n  for (const result of results) statusCounts[result.status] = (statusCounts[result.status] || 0) + 1;\n\n  return {\n    name: stage.name, rps: stage.rps, durationSec: stage.durationSec, requests: results.length,\n    failed: failed.length, serverErrors: serverErrors.length, networkErrors: networkErrors.length,\n    errorRate: results.length ? failed.length / results.length : 1,\n    latencyMs: {\n      min: Math.round(Math.min(...latencies)),\n      avg: Math.round(latencies.reduce((sum, value) => sum + value, 0) / Math.max(1, latencies.length)),\n      p50: Math.round(percentile(latencies, 50)), p95: Math.round(percentile(latencies, 95)),\n      p99: Math.round(percentile(latencies, 99)), max: Math.round(Math.max(...latencies)),\n    },\n    statusCounts,\n  };\n}\n\nconst report = { generatedAt: new Date().toISOString(), target: BASE_URL, profile: "safe-read-only-production-baseline", stages: [] };\nfor (const stage of stages) {\n  console.log(`Starting ${stage.name}: ${stage.rps} RPS for ${stage.durationSec}s`);\n  const result = await runStage(stage);\n  report.stages.push(result);\n  console.log(JSON.stringify(result));\n}\n\nreport.totals = report.stages.reduce((acc, stage) => {\n  acc.requests += stage.requests; acc.failed += stage.failed; acc.serverErrors += stage.serverErrors; acc.networkErrors += stage.networkErrors; return acc;\n}, { requests: 0, failed: 0, serverErrors: 0, networkErrors: 0 });\n\nawait writeFile("load-test-results.json", JSON.stringify(report, null, 2) + "\\n");\n\nconst failedThreshold =\n  report.stages.some((stage) => stage.errorRate > 0.01) ||\n  report.stages.some((stage) => stage.serverErrors > 0) ||\n  report.stages.some((stage) => stage.latencyMs.p95 > 2000) ||\n  report.stages.some((stage) => stage.latencyMs.p99 > 5000);\n\nconsole.log("\\nLoad test summary");\nconsole.log(JSON.stringify(report, null, 2));\nif (failedThreshold) {\n  console.error("LOAD TEST FAILED: one or more safety/performance thresholds were exceeded.");\n  process.exit(1);\n}\nconsole.log("LOAD TEST PASSED: error rate, 5xx rate, p95, and p99 thresholds are within limits.");\n
+import { writeFile } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
+
+const BASE_URL = (process.env.LOAD_TEST_BASE_URL || "https://www.hiregoai.com").replace(/\/$/, "");
+const REQUEST_TIMEOUT_MS = Number(process.env.LOAD_TEST_TIMEOUT_MS || 10000);
+
+const stages = [
+  { name: "health-baseline", rps: 5, durationSec: 15, paths: ["/api/health"] },
+  { name: "public-read", rps: 10, durationSec: 30, paths: ["/", "/login", "/about", "/services", "/solutions", "/pricing"] },
+  { name: "public-peak", rps: 20, durationSec: 30, paths: ["/", "/login", "/about", "/services", "/solutions", "/pricing", "/api/health"] },
+];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function percentile(values, p) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
+  return sorted[Math.max(0, index)];
+}
+
+async function oneRequest(path) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const started = performance.now();
+  try {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        "user-agent": "HireGo-Production-Load-Test/1.0",
+        "x-hirego-load-test": "safe-read-only",
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    return { path, status: response.status, ok: response.status >= 200 && response.status < 400, latencyMs: performance.now() - started, error: null };
+  } catch (error) {
+    return { path, status: 0, ok: false, latencyMs: performance.now() - started, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function runStage(stage) {
+  const results = [];
+  const inFlight = new Set();
+  const intervalMs = 100;
+  const ticks = Math.ceil((stage.durationSec * 1000) / intervalMs);
+  let budget = 0;
+  let requestIndex = 0;
+  const stageStarted = performance.now();
+
+  for (let tick = 0; tick < ticks; tick++) {
+    const targetTickAt = stageStarted + tick * intervalMs;
+    const waitMs = targetTickAt - performance.now();
+    if (waitMs > 0) await sleep(waitMs);
+    budget += stage.rps * (intervalMs / 1000);
+    while (budget >= 1) {
+      budget -= 1;
+      const path = stage.paths[requestIndex++ % stage.paths.length];
+      const promise = oneRequest(path).then((result) => results.push(result)).finally(() => inFlight.delete(promise));
+      inFlight.add(promise);
+    }
+  }
+
+  await Promise.all(inFlight);
+  const latencies = results.map((r) => r.latencyMs);
+  const failed = results.filter((r) => !r.ok);
+  const serverErrors = results.filter((r) => r.status >= 500);
+  const networkErrors = results.filter((r) => r.status === 0);
+  const statusCounts = {};
+  for (const result of results) statusCounts[result.status] = (statusCounts[result.status] || 0) + 1;
+
+  return {
+    name: stage.name, rps: stage.rps, durationSec: stage.durationSec, requests: results.length,
+    failed: failed.length, serverErrors: serverErrors.length, networkErrors: networkErrors.length,
+    errorRate: results.length ? failed.length / results.length : 1,
+    latencyMs: {
+      min: Math.round(Math.min(...latencies)),
+      avg: Math.round(latencies.reduce((sum, value) => sum + value, 0) / Math.max(1, latencies.length)),
+      p50: Math.round(percentile(latencies, 50)),
+      p95: Math.round(percentile(latencies, 95)),
+      p99: Math.round(percentile(latencies, 99)),
+      max: Math.round(Math.max(...latencies)),
+    },
+    statusCounts,
+  };
+}
+
+const report = { generatedAt: new Date().toISOString(), target: BASE_URL, profile: "safe-read-only-production-baseline", stages: [] };
+for (const stage of stages) {
+  console.log(`Starting ${stage.name}: ${stage.rps} RPS for ${stage.durationSec}s`);
+  const result = await runStage(stage);
+  report.stages.push(result);
+  console.log(JSON.stringify(result));
+}
+
+report.totals = report.stages.reduce((acc, stage) => {
+  acc.requests += stage.requests;
+  acc.failed += stage.failed;
+  acc.serverErrors += stage.serverErrors;
+  acc.networkErrors += stage.networkErrors;
+  return acc;
+}, { requests: 0, failed: 0, serverErrors: 0, networkErrors: 0 });
+
+await writeFile("load-test-results.json", JSON.stringify(report, null, 2) + "\n");
+
+const failedThreshold =
+  report.stages.some((stage) => stage.errorRate > 0.01) ||
+  report.stages.some((stage) => stage.serverErrors > 0) ||
+  report.stages.some((stage) => stage.latencyMs.p95 > 2000) ||
+  report.stages.some((stage) => stage.latencyMs.p99 > 5000);
+
+console.log("\nLoad test summary");
+console.log(JSON.stringify(report, null, 2));
+if (failedThreshold) {
+  console.error("LOAD TEST FAILED: one or more safety/performance thresholds were exceeded.");
+  process.exit(1);
+}
+console.log("LOAD TEST PASSED: error rate, 5xx rate, p95, and p99 thresholds are within limits.");

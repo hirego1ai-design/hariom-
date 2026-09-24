@@ -1,1 +1,50 @@
-name: Production Load Test\n\non:\n  workflow_dispatch:\n  push:\n    branches: [main]\n\npermissions:\n  contents: read\n\njobs:\n  safe-production-load-test:\n    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[load-test]')\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v4\n\n      - name: Setup Node\n        uses: actions/setup-node@v4\n        with:\n          node-version: "20"\n\n      - name: Run safe read-only production load test\n        env:\n          LOAD_TEST_BASE_URL: https://www.hiregoai.com\n          LOAD_TEST_TIMEOUT_MS: "10000"\n        run: node scripts/load-test.mjs\n\n      - name: Publish summary\n        if: always()\n        shell: bash\n        run: |\n          if [ -f load-test-results.json ]; then\n            echo "## Production load-test result" >> "$GITHUB_STEP_SUMMARY"\n            echo "```json" >> "$GITHUB_STEP_SUMMARY"\n            cat load-test-results.json >> "$GITHUB_STEP_SUMMARY"\n            echo "```" >> "$GITHUB_STEP_SUMMARY"\n          fi\n\n      - name: Upload load-test evidence\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: production-load-test-results\n          path: load-test-results.json\n          if-no-files-found: warn\n          retention-days: 30\n
+name: Production Load Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  safe-production-load-test:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[load-test]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run safe read-only production load test
+        env:
+          LOAD_TEST_BASE_URL: https://www.hiregoai.com
+          LOAD_TEST_TIMEOUT_MS: "10000"
+        run: node scripts/load-test.mjs
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f load-test-results.json ]; then
+            echo "## Production load-test result" >> "$GITHUB_STEP_SUMMARY"
+            echo "```json" >> "$GITHUB_STEP_SUMMARY"
+            cat load-test-results.json >> "$GITHUB_STEP_SUMMARY"
+            echo "```" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload load-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-load-test-results
+          path: load-test-results.json
+          if-no-files-found: warn
+          retention-days: 30
