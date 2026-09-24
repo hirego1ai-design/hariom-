@@ -12,6 +12,16 @@ export type EmailDeliveryResult = { success: boolean; messageId: string; provide
 
 const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
 
+function getZohoCpaasApiBaseUrl() {
+  const configured = process.env.ZOHO_CPAAS_API_BASE_URL?.trim();
+  const value = (configured || "https://api.cpaas.com/v1.1").replace(/\/+$/, "");
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error("ZOHO_CPAAS_API_BASE_URL must be a credential-free HTTPS URL.");
+  }
+  return value;
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
 }
@@ -45,7 +55,7 @@ async function sendWithSendGrid(message: EmailMessage, apiKey: string, sender: s
 }
 
 async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: string, messageId: string): Promise<EmailDeliveryResult> {
-  const response = await fetch("https://api.zeptomail.com/v1.1/email", {
+  const response = await fetch(`${getZohoCpaasApiBaseUrl()}/email`, {
     method: "POST",
     headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
@@ -59,7 +69,7 @@ async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: 
       textbody: message.text,
     }),
   });
-  if (!response.ok) throw new EmailProviderDispatchError(`ZeptoMail returned ${response.status}`, response.status >= 400 && response.status < 500);
+  if (!response.ok) throw new EmailProviderDispatchError(`Zoho CPaaS returned ${response.status}`, response.status >= 400 && response.status < 500);
   const body = await response.json().catch(() => null);
   const providerMessageId = body?.data?.[0]?.message_id || body?.message_id;
   return { success: true, messageId: providerMessageId || messageId, provider: "ZEPTOMAIL" };
@@ -81,7 +91,7 @@ async function sendZeptoMailStoredTemplate(
   if (!message.templateKey && !message.templateAlias) {
     throw new EmailProviderDispatchError("ZeptoMail template key or alias is required.", false);
   }
-  const response = await fetch("https://api.zeptomail.com/v1.1/email/template", {
+  const response = await fetch(`${getZohoCpaasApiBaseUrl()}/email/template`, {
     method: "POST",
     headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
@@ -94,7 +104,7 @@ async function sendZeptoMailStoredTemplate(
       merge_info: message.mergeInfo,
     }),
   });
-  if (!response.ok) throw new EmailProviderDispatchError(`ZeptoMail template API returned ${response.status}`, response.status >= 400 && response.status < 500);
+  if (!response.ok) throw new EmailProviderDispatchError(`Zoho CPaaS template API returned ${response.status}`, response.status >= 400 && response.status < 500);
   const body = await response.json().catch(() => null);
   return { success: true, messageId: body?.data?.[0]?.message_id || body?.message_id || messageId, provider: "ZEPTOMAIL" };
 }
@@ -106,8 +116,8 @@ export async function sendZeptoMailTemplate(message: ZeptoMailTemplateMessage): 
   try {
     return await sendZeptoMailStoredTemplate(message, provider.apiKey, provider.fromEmail, messageId);
   } catch (error) {
-    console.error("[Email Dispatch] ZeptoMail template delivery failed", error);
-    const reason = error instanceof EmailProviderDispatchError ? error.message : "ZeptoMail template delivery failed with an ambiguous provider error.";
+    console.error("[Email Dispatch] Zoho CPaaS template delivery failed", error);
+    const reason = error instanceof EmailProviderDispatchError ? error.message : "Zoho CPaaS template delivery failed with an ambiguous provider error.";
     return { success: false, messageId, provider: "ZEPTOMAIL", reason };
   }
 }
