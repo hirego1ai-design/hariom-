@@ -14,7 +14,7 @@ const EMAIL_PROVIDER_TIMEOUT_MS = 10_000;
 
 function getZohoCpaasApiBaseUrl() {
   const configured = process.env.ZOHO_CPAAS_API_BASE_URL?.trim();
-  const value = (configured || "https://api.cpaas.com/v1.1").replace(/\/+$/, "");
+  const value = (configured || "https://cpaas.zoho.in/v1.1").replace(/\/+$/, "");
   const parsed = new URL(value);
   if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
     throw new Error("ZOHO_CPAAS_API_BASE_URL must be a credential-free HTTPS URL.");
