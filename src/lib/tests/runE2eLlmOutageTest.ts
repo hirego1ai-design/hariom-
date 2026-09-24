@@ -118,7 +118,7 @@ async function runLlmOutageTests() {
   let passedScenarios = 0;
 
   // Helper to reset CircuitBreaker states between test scenarios
-  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'anthropic:claude-3-haiku-20240307', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k', 'google:gemini-1.5-pro', 'openai:gpt-4o', 'anthropic:claude-3-5-sonnet-20240620', 'deepseek:deepseek-r1', 'kimi:moonshot-v1-32k'].forEach(k => CircuitBreaker.reset(k));
+  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k', 'google:gemini-1.5-pro', 'openai:gpt-4o', 'deepseek:deepseek-r1', 'kimi:moonshot-v1-32k'].forEach(k => CircuitBreaker.reset(k));
 
   // ----------------------------------------------------------------
   // Scenario 1: Gemini rate limit -> verify fallback to OpenAI
@@ -146,9 +146,9 @@ async function runLlmOutageTests() {
   }
 
   // ----------------------------------------------------------------
-  // Scenario 2: OpenAI rate limit -> verify next provider (Anthropic)
+  // Scenario 2: OpenAI rate limit -> verify next provider (DeepSeek)
   // ----------------------------------------------------------------
-  console.log('\n--- Scenario 2: Gemini & OpenAI 429 -> Fallback to Anthropic ---');
+  console.log('\n--- Scenario 2: Gemini & OpenAI 429 -> Fallback to DeepSeek ---');
   try {
     const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
@@ -160,8 +160,8 @@ async function runLlmOutageTests() {
       },
     });
 
-    if (usedEndpoint.provider === 'anthropic' && result.includes('anthropic')) {
-      console.log(`PASS: Scenario 2 - Dual 429 triggered fallback to Anthropic (${usedEndpoint.model})`);
+    if (usedEndpoint.provider === 'deepseek' && result.includes('deepseek')) {
+      console.log(`PASS: Scenario 2 - Dual 429 triggered fallback to DeepSeek (${usedEndpoint.model})`);
       passedScenarios++;
     } else {
       console.error(`FAIL: Scenario 2 - Expected fallback to anthropic, got ${usedEndpoint.provider}`);
@@ -171,34 +171,34 @@ async function runLlmOutageTests() {
   }
 
   // ----------------------------------------------------------------
-  // Scenario 3: Anthropic unavailable -> verify fallback to DeepSeek
+  // Scenario 3: DeepSeek unavailable -> verify fallback to DeepSeek
   // ----------------------------------------------------------------
-  console.log('\n--- Scenario 3: Gemini, OpenAI & Anthropic Outage -> Fallback to DeepSeek ---');
+  console.log('\n--- Scenario 3: Gemini, OpenAI & DeepSeek Outage -> Fallback to Kimi ---');
   try {
     const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
       fn: async (provider, model) => {
-        if (provider === 'google' || provider === 'openai' || provider === 'anthropic') {
+        if (provider === 'google' || provider === 'openai' || provider === 'deepseek') {
           throw new Error(`503 Service Unavailable on ${provider}`);
         }
         return `Response from ${provider} (${model})`;
       },
     });
 
-    if (usedEndpoint.provider === 'deepseek' && result.includes('deepseek')) {
-      console.log(`PASS: Scenario 3 - Triple outage triggered fallback to DeepSeek (${usedEndpoint.model})`);
+    if (usedEndpoint.provider === 'kimi' && result.includes('kimi')) {
+      console.log(`PASS: Scenario 3 - Triple outage triggered fallback to Kimi (${usedEndpoint.model})`);
       passedScenarios++;
     } else {
-      console.error(`FAIL: Scenario 3 - Expected fallback to deepseek, got ${usedEndpoint.provider}`);
+      console.error(`FAIL: Scenario 3 - Expected fallback to kimi, got ${usedEndpoint.provider}`);
     }
   } catch (e: any) {
     console.error('FAIL: Scenario 3 error', e);
   }
 
   // ----------------------------------------------------------------
-  // Scenario 4: All 5 providers unavailable -> deterministic fallback / escalation
+  // Scenario 4: All 4 providers unavailable -> deterministic fallback / escalation
   // ----------------------------------------------------------------
-  console.log('\n--- Scenario 4: All 5 Providers Outage -> Deterministic Error ---');
+  console.log('\n--- Scenario 4: All 4 Providers Outage -> Deterministic Error ---');
   try {
     await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
@@ -208,8 +208,8 @@ async function runLlmOutageTests() {
     });
     console.error('FAIL: Scenario 4 - All providers failed but no error thrown');
   } catch (e: any) {
-    if (e.message.includes('All 5 model endpoints') && e.message.includes('failed for taskType')) {
-      console.log(`PASS: Scenario 4 - All 5 providers failed deterministically: ${e.message.substring(0, 70)}...`);
+    if (e.message.includes('All 4 model endpoints') && e.message.includes('failed for taskType')) {
+      console.log(`PASS: Scenario 4 - All 4 providers failed deterministically: ${e.message.substring(0, 70)}...`);
       passedScenarios++;
     } else {
       console.error('FAIL: Scenario 4 unexpected error message', e);
@@ -217,7 +217,7 @@ async function runLlmOutageTests() {
   }
 
   // Reset circuit breakers after scenario 4 failures
-  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'anthropic:claude-3-haiku-20240307', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k'].forEach(k => CircuitBreaker.reset(k));
+  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k'].forEach(k => CircuitBreaker.reset(k));
 
   // ----------------------------------------------------------------
   // Scenario 5: Repeated 429 responses -> bounded retries helper
