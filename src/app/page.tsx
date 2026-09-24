@@ -17,7 +17,7 @@ export default function HomePage() {
     <section className={heroStyles.hero}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
-        <h1 className="text-[clamp(2.35rem,4.45vw,4.15rem)] font-black leading-[1.02] tracking-[-.045em] text-white"><span className="block">Welcome to <span className="bg-gradient-to-r from-[#4285F4] via-[#EA4335] via-[#FBBC05] to-[#34A853] bg-clip-text text-transparent">Future</span></span><span className="mt-1 block">of Hiring</span></h1>
+        <h1 className={`${heroStyles.headline} text-[clamp(2.35rem,4.45vw,4.15rem)] leading-[1.01] text-white`}><span className="block">Welcome to <span className={heroStyles.futureWord}>Future</span></span><span className="mt-1 block">of Hiring</span></h1>
         <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.35em] text-slate-200 sm:text-xs">The world’s fastest hiring platform</p>
         <div className="mx-auto mt-5 max-w-3xl text-slate-200">
           <p className="text-base font-semibold leading-7 sm:text-xl sm:leading-8">Hiring doesn’t need more applications. It needs more job-ready people.</p>
