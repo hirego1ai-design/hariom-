@@ -1,5 +1,6 @@
 import { getConfiguredEmailProvider, getConfiguredEmailProviders, type EmailProvider, type EmailProviderRuntimeConfig } from "@/lib/email-delivery-config";
 import { buildPublicAppUrl } from "@/lib/env";
+import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 
 export interface EmailMessage {
   to: string;
@@ -24,6 +25,22 @@ function getZohoCpaasApiBaseUrl() {
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
+}
+
+function withTransactionalFooter(message: EmailMessage): EmailMessage {
+  const footerHtml = `
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #E5E7EB;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;">
+      <strong style="color:#374151;">${escapeHtml(PUBLIC_BUSINESS_DETAILS.brandName)}</strong><br />
+      ${escapeHtml(PUBLIC_BUSINESS_DETAILS.postalAddress)}<br />
+      Support: <a href="mailto:${escapeHtml(PUBLIC_BUSINESS_DETAILS.supportEmail)}" style="color:#2563EB;">${escapeHtml(PUBLIC_BUSINESS_DETAILS.supportEmail)}</a>
+    </div>
+  `;
+  const footerText = `\n\n${PUBLIC_BUSINESS_DETAILS.brandName}\n${PUBLIC_BUSINESS_DETAILS.postalAddress}\nSupport: ${PUBLIC_BUSINESS_DETAILS.supportEmail}`;
+  return {
+    ...message,
+    html: `${message.html}${footerHtml}`,
+    text: `${message.text || message.html.replace(/<[^>]*>/g, " ")}${footerText}`,
+  };
 }
 
 
@@ -127,6 +144,7 @@ export async function sendEmail(
   options?: { provider?: EmailProvider; allowFallback?: boolean }
 ): Promise<EmailDeliveryResult> {
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const normalizedMessage = withTransactionalFooter(message);
   const isProduction = process.env.NODE_ENV === "production";
   let providers: EmailProviderRuntimeConfig[];
   try {
@@ -141,9 +159,9 @@ export async function sendEmail(
   for (const provider of providers) {
     try {
       if (provider.provider === "SENDGRID") {
-        return await sendWithSendGrid(message, provider.apiKey, provider.fromEmail, messageId);
+        return await sendWithSendGrid(normalizedMessage, provider.apiKey, provider.fromEmail, messageId);
       }
-      return await sendWithZeptoMail(message, provider.apiKey, provider.fromEmail, messageId);
+      return await sendWithZeptoMail(normalizedMessage, provider.apiKey, provider.fromEmail, messageId);
     } catch (error) {
       console.error(`[Email Dispatch] ${provider.provider} delivery failed`, error);
       // Never retry on an uncertain network/5xx result: the first provider may
