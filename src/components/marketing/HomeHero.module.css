@@ -59,7 +59,33 @@
 }
 
 .copy h1 { text-shadow: 0 3px 26px #00000035; }
-.copy h1 span { text-shadow: none; }
+
+.headline {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+
+.futureWord {
+  display: inline-block;
+  color: transparent;
+  background: linear-gradient(90deg, #42b9ff 0%, #7b8cff 24%, #c079ff 48%, #ff77d8 72%, #ff7767 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: future-gradient 6s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 18px rgba(119, 151, 255, .16));
+}
+
+@keyframes future-gradient {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .futureWord { animation: none; background-position: 50% 50%; }
+}
 
 .primaryCta {
   box-shadow: 0 0 0 1px #b7ddff, 0 0 17px #2185ffb0, 0 0 44px #167bff55;
