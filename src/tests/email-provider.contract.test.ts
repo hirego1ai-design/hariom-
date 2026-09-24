@@ -11,13 +11,16 @@ export interface EmailProviderContractResult {
 const REQUIRED_ENVIRONMENT = {
   sendgridApiKey: "SENDGRID_API_KEY",
   sendgridFromEmail: "SENDGRID_FROM_EMAIL",
-  zeptoMailApiKey: "ZEPTOMAIL_API_KEY",
-  zeptoMailFromEmail: "ZEPTOMAIL_FROM_EMAIL",
+  zohoCpaasSendMailToken: "ZOHO_CPAAS_SEND_MAIL_TOKEN",
+  zohoCpaasFromEmail: "ZOHO_CPAAS_FROM_EMAIL",
+  zohoCpaasApiBaseUrl: "ZOHO_CPAAS_API_BASE_URL",
+  legacyZeptoMailApiKey: "ZEPTOMAIL_API_KEY",
+  legacyZeptoMailFromEmail: "ZEPTOMAIL_FROM_EMAIL",
   encryptionKey: "EMAIL_CONFIG_ENCRYPTION_KEY",
 } as const;
 
 const SENDGRID_SEND_URL = "https://api.sendgrid.com/v3/mail/send";
-const ZEPTOMAIL_SEND_URL = "https://api.zeptomail.com/v1.1/email";
+const ZOHO_CPAAS_SEND_URL = "https://api.cpaas.com/v1.1/email";
 
 export async function runEmailProviderContractTests(): Promise<{
   passed: number;
@@ -31,8 +34,8 @@ export async function runEmailProviderContractTests(): Promise<{
 
   assert(
     "Email provider environment names are explicit",
-    Object.values(REQUIRED_ENVIRONMENT).length === 5,
-    "Separate credentials and sender addresses are defined for SendGrid and ZeptoMail; admin-selected credentials require an encryption key."
+    Object.values(REQUIRED_ENVIRONMENT).length === 8,
+    "SendGrid and Zoho CPaaS credentials are explicit; legacy ZeptoMail environment names remain supported during migration."
   );
 
   assert(
@@ -42,15 +45,15 @@ export async function runEmailProviderContractTests(): Promise<{
   );
 
   assert(
-    "ZeptoMail request contract",
-    ZEPTOMAIL_SEND_URL === "https://api.zeptomail.com/v1.1/email",
-    "ZeptoMail must use its v1.1 email endpoint with Zoho-enczapikey authentication."
+    "Zoho CPaaS request contract",
+    ZOHO_CPAAS_SEND_URL === "https://api.cpaas.com/v1.1/email",
+    "Zoho CPaaS must use its v1.1 email endpoint with Zoho-enczapikey authentication."
   );
 
   assert(
     "Provider selection is explicit",
     ["SENDGRID", "ZEPTOMAIL"].every((provider) => provider.length > 0),
-    "The admin configuration must select SENDGRID or ZEPTOMAIL explicitly."
+    "The persisted provider label remains SENDGRID or ZEPTOMAIL for backward compatibility while ZEPTOMAIL is transported through Zoho CPaaS."
   );
 
   assert(
