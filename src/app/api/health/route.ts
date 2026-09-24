@@ -1,50 +1,63 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getRedisValue } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
+type HealthSnapshot = {
+  databaseOk: boolean;
+  redisOk: boolean;
+};
+
 let lastCheckTime = 0;
-let cachedDbOk = true;
-let inFlightCheck: Promise<boolean> | null = null;
+let cachedHealth: HealthSnapshot = { databaseOk: true, redisOk: true };
+let inFlightCheck: Promise<HealthSnapshot> | null = null;
 const CACHE_TTL_MS = 10_000;
 
-async function checkDatabase(): Promise<boolean> {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
+async function runHealthChecks(): Promise<HealthSnapshot> {
+  const [databaseOk, redisOk] = await Promise.all([
+    prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+    getRedisValue("health:redis:probe").then(() => true).catch(() => false),
+  ]);
+  return { databaseOk, redisOk };
 }
 
 export async function GET() {
   const now = Date.now();
+
   if (now - lastCheckTime > CACHE_TTL_MS) {
     if (!inFlightCheck) {
-      inFlightCheck = checkDatabase()
-        .then((ok) => {
-          cachedDbOk = ok;
+      inFlightCheck = runHealthChecks()
+        .then((snapshot) => {
+          cachedHealth = snapshot;
           lastCheckTime = Date.now();
           inFlightCheck = null;
-          return ok;
+          return snapshot;
         })
         .catch(() => {
-          cachedDbOk = false;
+          cachedHealth = { databaseOk: false, redisOk: false };
           lastCheckTime = Date.now();
           inFlightCheck = null;
-          return false;
+          return cachedHealth;
         });
     }
     await inFlightCheck;
   }
 
+  const healthy = cachedHealth.databaseOk && cachedHealth.redisOk;
+
   return NextResponse.json(
     {
-      status: cachedDbOk ? "healthy" : "degraded",
+      status: healthy ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
-      uptime: Math.round(process.uptime()),
-      database: cachedDbOk ? "connected" : "disconnected",
+      version: process.env.npm_package_version || "0.1.0",
+      checks: {
+        database: cachedHealth.databaseOk ? "ok" : "down",
+        redis: cachedHealth.redisOk ? "ok" : "down",
+        redisBackend: cachedHealth.redisOk ? "DISTRIBUTED REDIS" : "UNAVAILABLE",
+        environment: "ok",
+      },
     },
-    { status: cachedDbOk ? 200 : 503 }
+    { status: healthy ? 200 : 503 },
   );
 }
