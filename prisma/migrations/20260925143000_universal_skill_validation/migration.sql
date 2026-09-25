@@ -110,7 +110,11 @@ INSERT INTO "CandidateSkill" (
   "id","candidateProfileId","name","normalizedName","claimedLevel","verificationStatus","isVisible","createdAt","updatedAt"
 )
 SELECT
-  gen_random_uuid()::text,
+  substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 1, 8)
+    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 9, 4)
+    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 13, 4)
+    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 17, 4)
+    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 21, 12),
   cp."id",
   trim(skill_name),
   lower(regexp_replace(trim(skill_name), '\s+', ' ', 'g')),
