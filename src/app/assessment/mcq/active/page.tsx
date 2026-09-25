@@ -33,6 +33,14 @@ type StartResponse = {
   error?: string;
 };
 
+type PrivateFeedback = {
+  summary: string;
+  strengths: string[];
+  improvementAreas: Array<{ skill: string; observation: string; nextStep: string }>;
+  practiceSuggestions: string[];
+  mockInterviewFocusSkills: string[];
+};
+
 type SubmitResponse = {
   success: boolean;
   results: {
@@ -74,6 +82,9 @@ export default function ActiveMCQAssessment() {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   
   const [results, setResults] = useState<SubmitResponse["results"] | null>(null);
+  const [privateFeedback, setPrivateFeedback] = useState<PrivateFeedback | null>(null);
+  const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "loading" | "ready" | "unavailable">("idle");
+  const [mockInterviewSetupUrl, setMockInterviewSetupUrl] = useState<string | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -156,6 +167,41 @@ export default function ActiveMCQAssessment() {
       
       setResults(data.results);
       setStatus("results");
+      setFeedbackStatus("loading");
+
+      void (async () => {
+        try {
+          const feedbackResponse = await fetch("/api/candidate/skill-validation/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ attemptId }),
+          });
+          const feedbackBody = await feedbackResponse.json();
+          if (feedbackResponse.ok && feedbackBody.status === "COMPLETED" && feedbackBody.feedback) {
+            setPrivateFeedback(feedbackBody.feedback);
+            setMockInterviewSetupUrl(feedbackBody.mockInterviewSetupUrl ?? null);
+            setFeedbackStatus("ready");
+            return;
+          }
+          if (feedbackResponse.status === 202 || feedbackBody.status === "PROCESSING") {
+            for (let poll = 0; poll < 5; poll += 1) {
+              await new Promise((resolve) => setTimeout(resolve, 1200));
+              const check = await fetch(`/api/candidate/skill-validation/feedback?attemptId=${encodeURIComponent(attemptId)}`, { cache: "no-store" });
+              const checkBody = await check.json();
+              if (check.ok && checkBody.status === "COMPLETED" && checkBody.feedback) {
+                setPrivateFeedback(checkBody.feedback);
+                setMockInterviewSetupUrl(checkBody.mockInterviewSetupUrl ?? null);
+                setFeedbackStatus("ready");
+                return;
+              }
+              if (checkBody.status === "FAILED") break;
+            }
+          }
+          setFeedbackStatus("unavailable");
+        } catch {
+          setFeedbackStatus("unavailable");
+        }
+      })();
     } catch (err: any) {
       setStatus("error");
       setErrorMessage(err.message || "Failed to submit. Please contact support.");
@@ -289,6 +335,52 @@ export default function ActiveMCQAssessment() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+              <h2 className="font-semibold text-white">Private improvement feedback</h2>
+              {feedbackStatus === "loading" && (
+                <p className="mt-2 text-xs text-gray-500">Preparing coaching from your assessment evidence…</p>
+              )}
+              {feedbackStatus === "unavailable" && (
+                <p className="mt-2 text-xs text-gray-500">Private feedback is unavailable right now. Your assessment result and application are already saved.</p>
+              )}
+              {feedbackStatus === "ready" && privateFeedback && (
+                <div className="mt-3 space-y-4">
+                  <p className="text-sm leading-relaxed text-gray-300">{privateFeedback.summary}</p>
+                  {privateFeedback.strengths.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">Strengths</p>
+                      <ul className="mt-2 space-y-1 text-xs text-gray-400">
+                        {privateFeedback.strengths.map((item) => <li key={item}>• {item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {privateFeedback.improvementAreas.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-300">Improve next</p>
+                      <div className="mt-2 space-y-2">
+                        {privateFeedback.improvementAreas.map((item) => (
+                          <div key={item.skill} className="rounded-md border border-gray-800 p-3">
+                            <p className="text-xs font-semibold text-gray-200">{item.skill}</p>
+                            <p className="mt-1 text-xs text-gray-500">{item.observation}</p>
+                            <p className="mt-1 text-xs text-gray-400">Next: {item.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {mockInterviewSetupUrl && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(mockInterviewSetupUrl)}
+                      className="w-full rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2.5 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20"
+                    >
+                      Practice these gaps with HireGo Mock Interview
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="grid gap-3 sm:grid-cols-2">
