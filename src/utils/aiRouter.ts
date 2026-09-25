@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
+import { ModelRouter } from "../lib/ai/ModelRouter";
 import {
   AiModelConfig,
   LlmProviderName,
@@ -13,9 +14,10 @@ export type LlmProvider = LlmProviderName;
 export interface AiTaskRequest {
   task: "RESUME_SCORE" | "JD_GENERATION" | "CANDIDATE_MATCH" | "INTERVIEW_EVALUATION" | "ASSESSMENT_AUTHORING" | "ASSESSMENT_FEEDBACK" | "GENERAL";
   prompt: string;
-  provider: LlmProvider;
-  model: string;
-  modelConfig: AiModelConfig;
+  provider?: LlmProvider;
+  model?: string;
+  modelConfig?: AiModelConfig;
+  taskType?: string;
   timeoutMs?: number;
   temperature?: number | null;
   maxTokens?: number;
@@ -120,6 +122,32 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   resultText: string;
   log: AiExecutionLog;
 }> {
+  if (!request.provider || !request.model || !request.modelConfig) {
+    const defaultTaskType: Record<AiTaskRequest["task"], string> = {
+      RESUME_SCORE: "resume-screening",
+      JD_GENERATION: "jd-generation",
+      CANDIDATE_MATCH: "job-match-explanation",
+      INTERVIEW_EVALUATION: "mock-interview",
+      ASSESSMENT_AUTHORING: "assessment-authoring",
+      ASSESSMENT_FEEDBACK: "assessment-feedback",
+      GENERAL: "general",
+    };
+    const routed = await ModelRouter.executeWithFallback({
+      taskType: request.taskType || defaultTaskType[request.task],
+      fn: (endpoint, policy, isFallback) => dispatchAiTask({
+        ...request,
+        provider: endpoint.provider,
+        model: endpoint.model,
+        modelConfig: endpoint.config,
+        timeoutMs: request.timeoutMs ?? policy.timeoutMs,
+        temperature: request.temperature ?? policy.temperature,
+        maxTokens: request.maxTokens ?? policy.maxTokens,
+        isFallback,
+      }),
+    });
+    return routed.result;
+  }
+
   const startTime = Date.now();
   assertNoSecretMaterial(request.prompt, "prompt");
 
