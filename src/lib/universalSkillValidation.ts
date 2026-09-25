@@ -193,6 +193,7 @@ async function generateQuestions(roleTitle: string) {
         timeoutMs: route.timeoutMs,
         temperature: route.temperature,
         maxTokens: route.maxTokens,
+        maxCostUsdPerRequest: route.maxCostUsdPerRequest,
         isFallback,
       });
       actualCostMinorUnits = execution.log.actualCostMinorUnits;
