@@ -15,7 +15,8 @@ const createQuestionSchema = z.object({
   explanation: z.string().optional(),
   points: z.number().int().min(1),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
-  category: z.string().optional(),
+  category: z.string().trim().max(80).optional(),
+  skillTags: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   options: z.array(optionSchema).min(2).max(6),
 }).refine(
   (data) => data.options.filter((o) => o.isCorrect).length === 1,
@@ -68,6 +69,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     const orderIndex = lastQuestion ? lastQuestion.orderIndex + 1 : 0;
 
+    const skillTags = Array.from(new Set(
+      (data.skillTags?.length ? data.skillTags : data.category ? [data.category] : [])
+        .map((tag) => tag.trim().replace(/\s+/g, " "))
+        .filter(Boolean),
+    ));
+
     const question = await prisma.$transaction(async (tx) => {
       const newQuestion = await tx.mcqQuestion.create({
         data: {
@@ -76,7 +83,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           explanation: data.explanation,
           points: data.points,
           difficulty: data.difficulty,
-          category: data.category,
+          category: data.category || skillTags[0] || undefined,
+          skillTags,
           orderIndex,
           options: {
             create: data.options.map((opt) => ({
