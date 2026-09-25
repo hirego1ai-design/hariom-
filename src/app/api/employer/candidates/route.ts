@@ -48,6 +48,19 @@ export async function GET(req: NextRequest) {
             candidateProfile: { include: {
               user: { select: { name: true } },
               readinessRecords: { where: { status: "JOB_READY" }, select: { roleTitle: true, seniority: true, score: true, validUntil: true } },
+              candidateSkills: {
+                where: { isVisible: true },
+                select: {
+                  name: true,
+                  claimedLevel: true,
+                  verifiedLevel: true,
+                  verificationStatus: true,
+                  latestScore: true,
+                  verifiedAt: true,
+                  validUntil: true,
+                },
+                orderBy: { name: "asc" },
+              },
               videoResumes: {
                 where: { OR: [{ retentionExpiresAt: null }, { retentionExpiresAt: { gt: new Date() } }] },
                 select: { id: true },
