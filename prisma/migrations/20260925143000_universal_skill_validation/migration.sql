@@ -106,24 +106,38 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- Backfill legacy visible skills without fabricating proficiency or verification.
+WITH normalized_skills AS (
+  SELECT DISTINCT ON (
+    cp."id",
+    lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))
+  )
+    cp."id" AS "candidateProfileId",
+    trim(skill_name) AS "name",
+    lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g')) AS "normalizedName"
+  FROM "CandidateProfile" cp
+  CROSS JOIN LATERAL unnest(cp."skills") AS skill_name
+  WHERE trim(skill_name) <> ''
+  ORDER BY
+    cp."id",
+    lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g')),
+    trim(skill_name)
+)
 INSERT INTO "CandidateSkill" (
   "id","candidateProfileId","name","normalizedName","claimedLevel","verificationStatus","isVisible","createdAt","updatedAt"
 )
 SELECT
-  substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))), 1, 8)
-    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))), 9, 4)
-    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))), 13, 4)
-    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))), 17, 4)
-    || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g'))), 21, 12),
-  cp."id",
-  trim(skill_name),
-  lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g')),
+  substr(md5(ns."candidateProfileId" || ':' || ns."normalizedName"), 1, 8)
+    || '-' || substr(md5(ns."candidateProfileId" || ':' || ns."normalizedName"), 9, 4)
+    || '-' || substr(md5(ns."candidateProfileId" || ':' || ns."normalizedName"), 13, 4)
+    || '-' || substr(md5(ns."candidateProfileId" || ':' || ns."normalizedName"), 17, 4)
+    || '-' || substr(md5(ns."candidateProfileId" || ':' || ns."normalizedName"), 21, 12),
+  ns."candidateProfileId",
+  ns."name",
+  ns."normalizedName",
   'INTERMEDIATE'::"SkillProficiencyLevel",
   'SELF_DECLARED'::"SkillVerificationStatus",
   true,
   CURRENT_TIMESTAMP,
   CURRENT_TIMESTAMP
-FROM "CandidateProfile" cp
-CROSS JOIN LATERAL unnest(cp."skills") AS skill_name
-WHERE trim(skill_name) <> ''
+FROM normalized_skills ns
 ON CONFLICT ("candidateProfileId","normalizedName") DO NOTHING;
