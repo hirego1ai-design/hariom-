@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
 const optionSchema = z.object({
   optionText: z.string().min(1, "Option text cannot be empty"),
@@ -15,7 +16,8 @@ const updateQuestionSchema = z.object({
   explanation: z.string().optional(),
   points: z.number().int().min(1).optional(),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
-  category: z.string().optional(),
+  category: z.string().trim().max(80).optional(),
+  skillTags: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   options: z.array(optionSchema).min(2).max(6).optional(),
 }).refine(
   (data) => !data.options || data.options.filter((o) => o.isCorrect).length === 1,
@@ -69,6 +71,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       throw new ApiError("Cannot modify questions for an assessment that already has candidate attempts.", 400);
     }
 
+    const requestedSkillTags = data.skillTags !== undefined
+      ? data.skillTags
+      : data.category !== undefined
+        ? [data.category]
+        : undefined;
+    let skillTags: string[] | undefined;
+    if (requestedSkillTags !== undefined) {
+      const resolved = await resolveCanonicalSkillTags(requestedSkillTags);
+      if (resolved.unknownTags.length) {
+        throw new ApiError(
+          `Unknown skill tag(s): ${resolved.unknownTags.join(", ")}. Use the canonical skill master or have an administrator approve the missing skill first.`,
+          422,
+        );
+      }
+      skillTags = resolved.canonicalTags;
+    }
+
     const updatedQuestion = await prisma.$transaction(async (tx) => {
       if (data.options) {
         await tx.mcqOption.deleteMany({
@@ -83,7 +102,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           explanation: data.explanation,
           points: data.points,
           difficulty: data.difficulty,
-          category: data.category,
+          category: skillTags !== undefined ? (skillTags[0] || null) : data.category,
+          ...(skillTags !== undefined ? { skillTags } : {}),
           ...(data.options && {
             options: {
               create: data.options.map((opt) => ({

@@ -11,6 +11,16 @@ interface CandidateProfileData {
   bio?: string;
   location?: string;
   skills?: string[];
+  candidateSkills?: Array<{
+    id: string;
+    name: string;
+    claimedLevel: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
+    verifiedLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT" | null;
+    verificationStatus: "SELF_DECLARED" | "ASSESSMENT_VALIDATED" | "VERIFIED" | "EXPIRED";
+    latestScore?: number | null;
+    verifiedAt?: string | null;
+    validUntil?: string | null;
+  }>;
   experienceYears?: number;
   hireGoScore?: number;
   isVerified?: boolean;
@@ -320,16 +330,54 @@ export default function ProfilePage() {
 
               {activeTab === "skills" && (
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
-                  <h3 className="text-base font-bold text-white">Verified Skills</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {(profile?.skills || []).map((skill) => (
-                      <span
-                        key={skill}
-                        className="px-3.5 py-1.5 bg-primary/10 rounded-full border border-primary/20 text-xs text-primary font-semibold"
-                      >
-                        {skill}
-                      </span>
-                    ))}
+                  <div>
+                    <h3 className="text-base font-bold text-white">Skills</h3>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Self-declared skills stay clearly separate from HireGo assessment evidence.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(profile?.candidateSkills?.length
+                      ? profile.candidateSkills
+                      : (profile?.skills || []).map((name) => ({
+                          id: name,
+                          name,
+                          claimedLevel: "INTERMEDIATE" as const,
+                          verificationStatus: "SELF_DECLARED" as const,
+                          latestScore: null,
+                        }))
+                    ).map((skill) => {
+                      const statusLabel = skill.verificationStatus === "VERIFIED"
+                        ? "Verified"
+                        : skill.verificationStatus === "ASSESSMENT_VALIDATED"
+                          ? "Assessment validated"
+                          : skill.verificationStatus === "EXPIRED"
+                            ? "Evidence expired"
+                            : "Self-declared";
+                      const evidenceBacked = skill.verificationStatus === "VERIFIED"
+                        || skill.verificationStatus === "ASSESSMENT_VALIDATED";
+                      return (
+                        <div
+                          key={skill.id}
+                          className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
+                        >
+                          <span className="text-sm font-bold text-white">{skill.name}</span>
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400">
+                            {skill.claimedLevel.toLowerCase()}
+                          </span>
+                          <span
+                            className={`ml-auto rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                              evidenceBacked
+                                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                                : "border-white/10 bg-white/5 text-gray-400"
+                            }`}
+                          >
+                            {statusLabel}
+                            {evidenceBacked && typeof skill.latestScore === "number" ? ` · ${skill.latestScore}%` : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

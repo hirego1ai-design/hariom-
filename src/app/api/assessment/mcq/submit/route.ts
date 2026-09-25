@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { handleApiError, ApiError, readValidatedJson, enforceRateLimit } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
+import {
+  McqQuestionResult,
+  persistMcqSkillEvidence,
+  qualifiesMcqSkillEvidence,
+} from "@/lib/skillValidation";
 import { z } from "zod";
 
 const SubmitAssessmentSchema = z.object({
@@ -23,16 +28,12 @@ export async function POST(req: NextRequest) {
     }
 
     await enforceRateLimit(req, "candidate_mcq_submit", 5, 60000);
-
     const { attemptId, answers } = await readValidatedJson(req, SubmitAssessmentSchema);
 
     const candidateProfile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
     });
-
-    if (!candidateProfile) {
-      throw new ApiError("Candidate profile not found", 404);
-    }
+    if (!candidateProfile) throw new ApiError("Candidate profile not found", 404);
 
     const attempt = await prisma.mcqAttempt.findUnique({
       where: { id: attemptId },
@@ -40,33 +41,24 @@ export async function POST(req: NextRequest) {
         assessment: {
           include: {
             questions: {
-              include: {
-                options: true,
-              },
+              include: { options: true },
             },
           },
         },
       },
     });
 
-    if (!attempt) {
-      throw new ApiError("Attempt not found", 404);
-    }
-
+    if (!attempt) throw new ApiError("Attempt not found", 404);
     if (attempt.candidateProfileId !== candidateProfile.id) {
       throw new ApiError("Attempt does not belong to you", 403);
     }
-
     if (attempt.submittedAt !== null) {
       throw new ApiError("Attempt has already been submitted", 400);
     }
 
     const { assessment } = attempt;
-
-    // Server-Side Timer Expiry Enforcement
-    const durationLimitMs = (assessment.durationMinutes * 60 + 60) * 1000; // 60s network grace period
-    const elapsedMs = Date.now() - attempt.startedAt.getTime();
-    if (elapsedMs > durationLimitMs) {
+    const durationLimitMs = (assessment.durationMinutes * 60 + 60) * 1000;
+    if (Date.now() - attempt.startedAt.getTime() > durationLimitMs) {
       throw new ApiError("Assessment duration has expired. Submission rejected.", 400);
     }
 
@@ -74,34 +66,36 @@ export async function POST(req: NextRequest) {
     let totalPoints = 0;
     let correctCount = 0;
     const answerData: { questionId: string; selectedOptionId: string }[] = [];
+    const questionResults: McqQuestionResult[] = [];
 
-    for (const q of assessment.questions) {
-      totalPoints += q.points;
-      
-      const submittedAnswer = answers.find(a => a.questionId === q.id);
+    for (const question of assessment.questions) {
+      totalPoints += question.points;
+      const submittedAnswer = answers.find((answer) => answer.questionId === question.id);
       let selectedOptionId: string | null = null;
       let isCorrect = false;
 
       if (submittedAnswer) {
         selectedOptionId = submittedAnswer.selectedOptionId;
-        const selectedOption = q.options.find(opt => opt.id === selectedOptionId);
-        
+        const selectedOption = question.options.find((option) => option.id === selectedOptionId);
         if (!selectedOption) {
-          throw new ApiError(`Option ${selectedOptionId} is not valid for question ${q.id}`, 400);
+          throw new ApiError(`Option ${selectedOptionId} is not valid for question ${question.id}`, 400);
         }
-        
         isCorrect = selectedOption.isCorrect;
         if (isCorrect) {
-          earnedPoints += q.points;
+          earnedPoints += question.points;
           correctCount++;
         }
       }
 
+      questionResults.push({
+        skillTags: question.skillTags,
+        category: question.category,
+        points: question.points,
+        correct: isCorrect,
+      });
+
       if (selectedOptionId) {
-        answerData.push({
-          questionId: q.id,
-          selectedOptionId: selectedOptionId,
-        });
+        answerData.push({ questionId: question.id, selectedOptionId });
       }
     }
 
@@ -109,8 +103,7 @@ export async function POST(req: NextRequest) {
     const passed = percentage >= assessment.passingPercentage;
     const score = Math.round(percentage);
 
-    // Atomic Submission with double-submit race condition defense
-    const updatedAttempt = await prisma.$transaction(async (tx) => {
+    const submission = await prisma.$transaction(async (tx) => {
       const claim = await tx.mcqAttempt.updateMany({
         where: { id: attemptId, submittedAt: null },
         data: {
@@ -122,24 +115,35 @@ export async function POST(req: NextRequest) {
           submittedAt: new Date(),
         },
       });
-
       if (claim.count === 0) {
         throw new ApiError("Attempt has already been submitted or completed", 400);
       }
 
       if (answerData.length > 0) {
         await tx.mcqCandidateAnswer.createMany({
-          data: answerData.map(a => ({
+          data: answerData.map((answer) => ({
             attemptId,
-            questionId: a.questionId,
-            selectedOptionId: a.selectedOptionId,
+            questionId: answer.questionId,
+            selectedOptionId: answer.selectedOptionId,
           })),
         });
       }
 
-      return await tx.mcqAttempt.findUniqueOrThrow({
+      const skillEvidence = await persistMcqSkillEvidence(tx, {
+        candidateProfileId: candidateProfile.id,
+        assessmentId: assessment.id,
+        attemptId,
+        roleTitle: assessment.roleTitle,
+        seniority: assessment.seniority,
+        passingPercentage: assessment.passingPercentage,
+        validityDays: assessment.validityDays,
+        questionResults,
+      });
+
+      const updatedAttempt = await tx.mcqAttempt.findUniqueOrThrow({
         where: { id: attemptId },
       });
+      return { updatedAttempt, skillEvidence };
     }, { maxWait: 15000, timeout: 20000 });
 
     if (assessment.scope === "PLATFORM_READINESS" && assessment.roleTitle && assessment.seniority) {
@@ -166,25 +170,33 @@ export async function POST(req: NextRequest) {
       userId: session.id,
       action: "MCQ_ASSESSMENT_SUBMITTED",
       resource: `McqAssessment:${assessment.id}`,
-      details: `McqAttempt:${attemptId}|Score:${score}|Passed:${passed}`,
+      details: `McqAttempt:${attemptId}|Score:${score}|Passed:${passed}|SkillsEvaluated:${submission.skillEvidence.length}`,
     });
 
     return NextResponse.json({
       success: true,
       attempt: {
-        score: updatedAttempt.score,
-        earnedPoints: updatedAttempt.earnedPoints,
-        totalPoints: updatedAttempt.totalPoints,
-        percentage: updatedAttempt.percentage,
-        passed: updatedAttempt.passed,
-        submittedAt: updatedAttempt.submittedAt,
+        score: submission.updatedAttempt.score,
+        earnedPoints: submission.updatedAttempt.earnedPoints,
+        totalPoints: submission.updatedAttempt.totalPoints,
+        percentage: submission.updatedAttempt.percentage,
+        passed: submission.updatedAttempt.passed,
+        submittedAt: submission.updatedAttempt.submittedAt,
       },
       results: {
-        score: updatedAttempt.score,
+        score: submission.updatedAttempt.score,
         correctCount,
         incorrectCount: assessment.questions.length - correctCount,
-        passed: updatedAttempt.passed,
-      }
+        passed: submission.updatedAttempt.passed,
+        skillEvidence: submission.skillEvidence.map((item) => ({
+          name: item.name,
+          score: item.score,
+          questionCount: item.questionCount,
+          earnedPoints: item.earnedPoints,
+          totalPoints: item.totalPoints,
+          assessmentValidated: qualifiesMcqSkillEvidence(item, assessment.passingPercentage),
+        })),
+      },
     });
   } catch (error) {
     return handleApiError(error);

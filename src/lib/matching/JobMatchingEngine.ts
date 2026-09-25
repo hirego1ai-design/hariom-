@@ -25,10 +25,25 @@ export function computeMatchScore(candidate: any, job: any) {
   
   const rawRequirements = job.skillRequirements ?? job.requirements ?? [];
   const jobReqs = Array.isArray(rawRequirements) ? rawRequirements.filter((skill): skill is string => typeof skill === 'string') : [];
-  const candSkills = candidate.skills || [];
+  const candidateSkillRecords = Array.isArray(candidate.candidateSkills) ? candidate.candidateSkills : [];
+  const candSkills = candidateSkillRecords.length > 0
+    ? candidateSkillRecords.filter((skill: any) => skill?.isVisible !== false).map((skill: any) => skill.name)
+    : (candidate.skills || []);
+  const now = Date.now();
+  const verifiedSkillNames = new Set(
+    candidateSkillRecords
+      .filter((skill: any) =>
+        skill?.isVisible !== false
+        && ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(skill?.verificationStatus)
+        && (!skill?.validUntil || new Date(skill.validUntil).getTime() > now)
+      )
+      .map((skill: any) => String(skill.name).toLowerCase()),
+  );
   
   let skillScore = 0;
   const matchingSkills: string[] = [];
+  const verifiedMatchingSkills: string[] = [];
+  const selfDeclaredMatchingSkills: string[] = [];
   const missingSkills: string[] = [];
   
   const candSkillsLower = candSkills.map((s: string) => s.toLowerCase());
@@ -37,6 +52,8 @@ export function computeMatchScore(candidate: any, job: any) {
     for (const req of jobReqs) {
       if (candSkillsLower.includes(req.toLowerCase())) {
         matchingSkills.push(req);
+        if (verifiedSkillNames.has(req.toLowerCase())) verifiedMatchingSkills.push(req);
+        else selfDeclaredMatchingSkills.push(req);
       } else {
         missingSkills.push(req);
       }
@@ -80,7 +97,12 @@ export function computeMatchScore(candidate: any, job: any) {
   return {
     matchScore,
     matchingSkills,
+    verifiedMatchingSkills,
+    selfDeclaredMatchingSkills,
     missingSkills,
+    verificationCoverage: jobReqs.length > 0
+      ? Math.round((verifiedMatchingSkills.length / jobReqs.length) * 100)
+      : 100,
     breakdown: {
       skillScore: Math.round(skillScore),
       experienceScore: Math.round(experienceScore),
@@ -95,7 +117,11 @@ export async function batchMatchCandidates(jobId: string, options?: any) {
     include: {
       applications: {
         include: {
-          candidateProfile: true
+          candidateProfile: {
+            include: {
+              candidateSkills: true,
+            },
+          }
         }
       }
     }

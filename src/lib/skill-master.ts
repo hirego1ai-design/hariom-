@@ -332,8 +332,19 @@ export function getRoleSkillSuggestions(role: string): RoleSkillSuggestion[] {
   return ROLE_SKILL_MAPPINGS[foundRole?.title || role] || (foundRole ? DEPARTMENT_SKILL_FALLBACKS[foundRole.department] || [] : []);
 }
 
+const ALL_CANONICAL_SKILLS = [...new Set([
+  ...Object.values(ROLE_SKILL_MAPPINGS).flat().map((skill) => skill.name),
+  ...Object.values(DEPARTMENT_SKILL_FALLBACKS).flat().map((skill) => skill.name),
+])];
+
+export function getCanonicalSkillName(name: string) {
+  const normalized = name.trim().replace(/\s+/g, " ").toLowerCase();
+  return ALL_CANONICAL_SKILLS.find((skill) => skill.toLowerCase() === normalized) ?? null;
+}
+
 export function searchSkills(query = "") {
   const normalized = query.trim().toLowerCase();
-  const all = [...new Set(Object.values(ROLE_SKILL_MAPPINGS).flat().map((skill) => skill.name))];
-  return all.filter((skill) => !normalized || skill.toLowerCase().includes(normalized)).slice(0, 12);
+  return ALL_CANONICAL_SKILLS
+    .filter((skill) => !normalized || skill.toLowerCase().includes(normalized))
+    .slice(0, 12);
 }

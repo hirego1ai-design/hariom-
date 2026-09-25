@@ -38,6 +38,7 @@ type Question = {
   points: number;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   category: string | null;
+  skillTags: string[];
   options: Option[];
 };
 
@@ -97,7 +98,24 @@ export default function AssessmentBuilder() {
       const res = await fetch(`/api/employer/assessments/${assessmentId}/questions`);
       if (!res.ok) throw new Error("Failed to fetch questions");
       const data = await res.json();
-      setQuestions(data.questions || []);
+      setQuestions((data.questions || []).map((question: any) => ({
+        id: question.id,
+        text: question.questionText,
+        explanation: question.explanation,
+        points: question.points,
+        difficulty: question.difficulty,
+        category: question.category,
+        skillTags: question.skillTags?.length
+          ? question.skillTags
+          : question.category
+            ? [question.category]
+            : [],
+        options: (question.options || []).map((option: any) => ({
+          id: option.id,
+          text: option.optionText,
+          isCorrect: option.isCorrect,
+        })),
+      })));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -167,6 +185,7 @@ export default function AssessmentBuilder() {
       points: 1,
       difficulty: "MEDIUM",
       category: "",
+      skillTags: [],
       options: [
         { id: `opt-1-${Date.now()}`, text: "", isCorrect: true },
         { id: `opt-2-${Date.now()}`, text: "", isCorrect: false },
@@ -193,6 +212,10 @@ export default function AssessmentBuilder() {
       setError("At least 2 options are required");
       return;
     }
+    if (questionForm.skillTags.length === 0) {
+      setError("Add at least one skill tag so this question can produce auditable skill evidence.");
+      return;
+    }
     const hasCorrect = questionForm.options.some(o => o.isCorrect);
     if (!hasCorrect) {
       setError("At least one option must be marked as correct");
@@ -210,7 +233,8 @@ export default function AssessmentBuilder() {
         explanation: questionForm.explanation || undefined,
         points: questionForm.points,
         difficulty: questionForm.difficulty,
-        category: questionForm.category || undefined,
+        category: questionForm.skillTags[0] || questionForm.category || undefined,
+        skillTags: questionForm.skillTags,
         options: questionForm.options.map(opt => ({
           optionText: opt.text,
           isCorrect: opt.isCorrect
@@ -236,6 +260,11 @@ export default function AssessmentBuilder() {
         points: data.question.points,
         difficulty: data.question.difficulty,
         category: data.question.category,
+        skillTags: data.question.skillTags?.length
+          ? data.question.skillTags
+          : data.question.category
+            ? [data.question.category]
+            : [],
         options: data.question.options.map((opt: any) => ({
           id: opt.id,
           text: opt.optionText,
@@ -592,14 +621,23 @@ export default function AssessmentBuilder() {
                             </select>
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-2">Category (Optional)</label>
-                            <input 
-                              type="text" 
-                              value={questionForm?.category || ""}
-                              onChange={e => questionForm && setQuestionForm({...questionForm, category: e.target.value})}
+                            <label className="block text-sm font-medium text-gray-400 mb-2">Skill tags *</label>
+                            <input
+                              type="text"
+                              value={questionForm?.skillTags.join(", ") || ""}
+                              onChange={e => questionForm && setQuestionForm({
+                                ...questionForm,
+                                skillTags: Array.from(new Set(
+                                  e.target.value
+                                    .split(",")
+                                    .map((tag) => tag.trim())
+                                    .filter(Boolean),
+                                )),
+                              })}
                               className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              placeholder="e.g. React"
+                              placeholder="e.g. React, JavaScript"
                             />
+                            <p className="mt-1 text-xs text-gray-500">Use canonical skills from the role skill master; separate multiple skills with commas.</p>
                           </div>
                         </div>
 

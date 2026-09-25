@@ -46,7 +46,12 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     try {
       profileData = await prisma.candidateProfile.findUnique({
         where: { id: candidateProfileId },
-        include: { user: true },
+        include: {
+          user: true,
+          candidateSkills: {
+            where: { isVisible: true },
+          },
+        },
       });
       jobData = await prisma.jobListing.findUnique({ where: { id: jobId } });
     } catch (error) {
@@ -84,9 +89,25 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     }
 
     const candidateSkills = Array.isArray(profileData.skills) ? profileData.skills.filter((v): v is string => typeof v === 'string').slice(0, 100).map((v) => v.slice(0, 200)) : [];
+    const now = Date.now();
+    const validatedSkills = profileData.candidateSkills
+      .filter((skill) =>
+        ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(skill.verificationStatus)
+        && (!skill.validUntil || skill.validUntil.getTime() > now)
+      )
+      .map((skill) => ({
+        name: skill.name,
+        score: skill.latestScore,
+        status: skill.verificationStatus,
+      }));
     const jobRequirements = Array.isArray(jobData.requirements) ? jobData.requirements.filter((v): v is string => typeof v === 'string').slice(0, 100).map((v) => v.slice(0, 500)) : [];
     const headline = typeof profileData.headline === 'string' ? profileData.headline.slice(0, 1000) : '';
-    const untrustedCandidateData = wrapUntrustedContent({ headline, skills: candidateSkills, jobRequirements }, "resume-evaluation-data");
+    const untrustedCandidateData = wrapUntrustedContent({
+      headline,
+      claimedSkills: candidateSkills,
+      validatedSkills,
+      jobRequirements,
+    }, "resume-evaluation-data");
 
     let actualCostMinorUnits: number | null = null;
     // Execute LLM via ModelRouter with multi-provider fallback
@@ -129,6 +150,8 @@ export class ResumeEvaluatorAgent extends BaseAgent {
       candidateProfileId,
       jobId,
       candidateScore: evaluation.score,
+      claimedSkills: candidateSkills,
+      validatedSkills,
       extractedSkills: candidateSkills,
       matchingSkills: evaluation.matchingSkills || candidateSkills.filter((s) => jobRequirements.includes(s)),
       summary: evaluation.summary,

@@ -21,6 +21,15 @@ type Candidate = {
   availabilityConfirmedAt?: string | null;
   jobReady: boolean;
   jobReadyRecords?: Array<{ roleTitle: string; seniority: string; score: number | null; validUntil: string | null }>;
+  skills?: Array<{
+    name: string;
+    claimedLevel: string;
+    verifiedLevel: string | null;
+    verificationStatus: "SELF_DECLARED" | "ASSESSMENT_VALIDATED" | "VERIFIED" | "EXPIRED";
+    latestScore: number | null;
+    verifiedAt: string | null;
+    validUntil: string | null;
+  }>;
 };
 
 export default function EmployerCandidateProfilePage() {
@@ -93,6 +102,45 @@ export default function EmployerCandidateProfilePage() {
                     <p className="mt-1 text-xs text-text-muted">Score: {typeof record.score === "number" ? `${record.score}/100` : "Not available"} · Valid until: {record.validUntil ? new Date(record.validUntil).toLocaleDateString() : "No expiry recorded"}</p>
                   </div>
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+            <h2 className="text-lg font-extrabold text-white">Skill Evidence</h2>
+            {!candidate.skills?.length ? (
+              <p className="mt-3 text-sm text-text-muted">No candidate skills have been recorded.</p>
+            ) : (
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {candidate.skills.map((skill) => {
+                  const evidenceBacked = skill.verificationStatus === "ASSESSMENT_VALIDATED" || skill.verificationStatus === "VERIFIED";
+                  const label = skill.verificationStatus === "VERIFIED"
+                    ? "Verified"
+                    : skill.verificationStatus === "ASSESSMENT_VALIDATED"
+                      ? "Assessment validated"
+                      : skill.verificationStatus === "EXPIRED"
+                        ? "Evidence expired"
+                        : "Self-declared";
+                  return (
+                    <div key={skill.name} className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-bold text-white">{skill.name}</p>
+                        <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${
+                          evidenceBacked
+                            ? "border-green-500/30 bg-green-500/10 text-green-300"
+                            : "border-white/10 text-text-muted"
+                        }`}>
+                          {label}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-text-muted">
+                        Claimed level: {skill.claimedLevel}
+                        {skill.verifiedLevel ? ` · Verified level: ${skill.verifiedLevel}` : ""}
+                        {evidenceBacked && typeof skill.latestScore === "number" ? ` · Evidence score: ${skill.latestScore}/100` : ""}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>

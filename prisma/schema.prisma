@@ -40,6 +40,27 @@ enum CustomSkillStatus {
   REJECTED
 }
 
+enum SkillProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum SkillVerificationStatus {
+  SELF_DECLARED
+  ASSESSMENT_VALIDATED
+  VERIFIED
+  EXPIRED
+}
+
+enum SkillEvidenceType {
+  MCQ_ASSESSMENT
+  RECORDED_ASSESSMENT
+  INTERVIEW
+  EMPLOYER_ATTESTATION
+}
+
 enum MockInterviewStatus {
   IN_PROGRESS
   COMPLETED
@@ -179,6 +200,7 @@ model CandidateProfile {
   creditLedgerEntries        CandidateCreditLedger[]
   serviceUsages              CandidateServiceUsage[]
   sourcingRelationships      CandidateSourcingRelationship[]
+  candidateSkills            CandidateSkill[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -299,7 +321,8 @@ model SkillMaster {
   isActive     Boolean            @default(true)
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
-  roleMappings RoleSkillMapping[]
+  roleMappings    RoleSkillMapping[]
+  candidateSkills CandidateSkill[]
 }
 
 model RoleSkillMapping {
@@ -336,6 +359,55 @@ model CustomSkillRequest {
   @@index([status, createdAt])
   @@index([normalizedName])
   @@index([requestedById])
+}
+
+model CandidateSkill {
+  id                 String                  @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile        @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  skillId            String?
+  skill              SkillMaster?            @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  name               String
+  normalizedName     String
+  claimedLevel       SkillProficiencyLevel   @default(INTERMEDIATE)
+  verifiedLevel      SkillProficiencyLevel?
+  verificationStatus SkillVerificationStatus @default(SELF_DECLARED)
+  latestScore        Int?
+  verifiedAt         DateTime?
+  validUntil         DateTime?
+  isVisible          Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  evidence SkillEvidence[]
+
+  @@unique([candidateProfileId, normalizedName])
+  @@index([candidateProfileId, verificationStatus])
+  @@index([skillId])
+}
+
+model SkillEvidence {
+  id                      String            @id @default(uuid())
+  candidateSkillId        String
+  candidateSkill          CandidateSkill    @relation(fields: [candidateSkillId], references: [id], onDelete: Cascade)
+  evidenceType            SkillEvidenceType
+  sourceId                String
+  sourceVersion           String?
+  score                   Int?
+  earnedPoints            Int?
+  totalPoints             Int?
+  questionCount           Int?
+  roleTitle               String?
+  seniority               String?
+  qualifiesVerification   Boolean           @default(false)
+  metadata                Json?
+  observedAt              DateTime          @default(now())
+  validUntil              DateTime?
+  createdAt               DateTime          @default(now())
+
+  @@unique([candidateSkillId, evidenceType, sourceId])
+  @@index([candidateSkillId, observedAt])
+  @@index([evidenceType, observedAt])
 }
 
 model SavedJob {
@@ -2192,6 +2264,7 @@ model McqQuestion {
   points       Int           @default(1)
   difficulty   String        @default("MEDIUM") // EASY, MEDIUM, HARD
   category     String?
+  skillTags    String[]      @default([])
   orderIndex   Int           @default(0)
 
   options          McqOption[]

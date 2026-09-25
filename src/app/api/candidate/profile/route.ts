@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { normalizeSkillName, syncCandidateClaimedSkills } from "@/lib/skillValidation";
 
 const optionalText = z.string().trim().max(5_000).nullable().optional();
+const claimedLevelSchema = z.enum(["beginner", "intermediate", "advanced", "expert"]);
 const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   name: z.string().trim().min(2).max(160).optional(),
@@ -14,6 +16,10 @@ const profileUpdateSchema = z.object({
   bio: optionalText,
   location: z.string().trim().max(240).nullable().optional(),
   skills: z.array(z.string().trim().min(1).max(120)).max(100).optional(),
+  skillDetails: z.array(z.object({
+    name: z.string().trim().min(1).max(120),
+    claimedLevel: claimedLevelSchema,
+  }).strict()).max(100).optional(),
   experienceYears: z.coerce.number().min(0).max(80).optional(),
   resumeUrl: z.string().trim().max(2_048).nullable().optional(),
   education: z.unknown().optional(),
@@ -42,9 +48,32 @@ export async function GET(request: NextRequest) {
       include: {
         user: { select: { id: true, email: true, name: true, avatarUrl: true, phoneNumber: true } },
         applications: { include: { job: { select: { id: true, title: true, company: { select: { name: true, logoUrl: true } }, location: true } } } },
+        candidateSkills: {
+          where: { isVisible: true },
+          orderBy: { name: "asc" },
+          include: {
+            evidence: {
+              orderBy: { observedAt: "desc" },
+              take: 10,
+            },
+          },
+        },
       },
     });
-    return NextResponse.json({ success: true, profile });
+    const now = new Date();
+    const presentedProfile = profile ? {
+      ...profile,
+      candidateSkills: profile.candidateSkills.map((skill) => {
+        const expired = !!skill.validUntil && skill.validUntil <= now;
+        return {
+          ...skill,
+          verificationStatus: expired ? "EXPIRED" : skill.verificationStatus,
+          latestScore: expired ? null : skill.latestScore,
+          verifiedAt: expired ? null : skill.verifiedAt,
+        };
+      }),
+    } : null;
+    return NextResponse.json({ success: true, profile: presentedProfile });
   } catch (error) { return handleApiError(error); }
 }
 
@@ -53,17 +82,104 @@ export async function PUT(request: NextRequest) {
     await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
     const body = await readValidatedJson(request, profileUpdateSchema, 64 * 1024);
-    const existing = await prisma.candidateProfile.findUnique({ where: { userId: session.id } });
-    const existingPreferences = existing?.preferences && typeof existing.preferences === "object" && !Array.isArray(existing.preferences) ? existing.preferences as Record<string, unknown> : {};
-    const preferences = body.preferences !== undefined || body.linkedinUrl ? { ...existingPreferences, ...(body.preferences ?? {}), ...(body.linkedinUrl ? { linkedinUrl: body.linkedinUrl } : {}) } : undefined;
+    const existing = await prisma.candidateProfile.findUnique({
+      where: { userId: session.id },
+      include: {
+        candidateSkills: {
+          where: { isVisible: true },
+          select: { normalizedName: true, claimedLevel: true },
+        },
+      },
+    });
+    const existingPreferences = existing?.preferences && typeof existing.preferences === "object" && !Array.isArray(existing.preferences)
+      ? existing.preferences as Record<string, unknown>
+      : {};
+    const preferences = body.preferences !== undefined || body.linkedinUrl
+      ? { ...existingPreferences, ...(body.preferences ?? {}), ...(body.linkedinUrl ? { linkedinUrl: body.linkedinUrl } : {}) }
+      : undefined;
+
+    const existingLevels = new Map(
+      (existing?.candidateSkills ?? []).map((skill) => [
+        skill.normalizedName,
+        skill.claimedLevel.toLowerCase() as "beginner" | "intermediate" | "advanced" | "expert",
+      ]),
+    );
+    const claimedSkills = body.skillDetails !== undefined
+      ? body.skillDetails
+      : body.skills !== undefined
+        ? body.skills.map((name) => ({
+            name,
+            claimedLevel: existingLevels.get(normalizeSkillName(name)) ?? "intermediate" as const,
+          }))
+        : undefined;
+    const legacySkillNames = claimedSkills?.map((skill) => skill.name) ?? body.skills;
+
     const profile = await prisma.$transaction(async (tx) => {
-      if (body.fullName || body.name || body.phone || body.phoneNumber) await tx.user.update({ where: { id: session.id }, data: { ...(body.fullName || body.name ? { name: body.fullName || body.name } : {}), ...(body.phone || body.phoneNumber ? { phoneNumber: body.phone || body.phoneNumber } : {}) } });
-      return tx.candidateProfile.upsert({
+      if (body.fullName || body.name || body.phone || body.phoneNumber) {
+        await tx.user.update({
+          where: { id: session.id },
+          data: {
+            ...(body.fullName || body.name ? { name: body.fullName || body.name } : {}),
+            ...(body.phone || body.phoneNumber ? { phoneNumber: body.phone || body.phoneNumber } : {}),
+          },
+        });
+      }
+
+      const updated = await tx.candidateProfile.upsert({
         where: { userId: session.id },
-        update: { ...(body.headline !== undefined ? { headline: body.headline } : {}), ...(body.bio !== undefined ? { bio: body.bio } : {}), ...(body.location !== undefined ? { location: body.location } : {}), ...(body.skills !== undefined ? { skills: body.skills } : {}), ...(body.experienceYears !== undefined ? { experienceYears: body.experienceYears } : {}), ...(body.resumeUrl !== undefined ? { resumeUrl: body.resumeUrl } : {}), ...(body.education !== undefined ? { education: toNullableJson(body.education) } : {}), ...(body.experience !== undefined ? { experience: toNullableJson(body.experience) } : {}), ...(preferences !== undefined ? { preferences: toNullableJson(preferences) } : {}) },
-        create: { userId: session.id, headline: body.headline ?? "", bio: body.bio ?? "", location: body.location ?? "", skills: body.skills ?? [], experienceYears: body.experienceYears ?? 0, resumeUrl: body.resumeUrl ?? null, education: toNullableJson(body.education ?? []), experience: toNullableJson(body.experience ?? []), preferences: toNullableJson(preferences ?? {}) },
+        update: {
+          ...(body.headline !== undefined ? { headline: body.headline } : {}),
+          ...(body.bio !== undefined ? { bio: body.bio } : {}),
+          ...(body.location !== undefined ? { location: body.location } : {}),
+          ...(legacySkillNames !== undefined ? { skills: legacySkillNames } : {}),
+          ...(body.experienceYears !== undefined ? { experienceYears: body.experienceYears } : {}),
+          ...(body.resumeUrl !== undefined ? { resumeUrl: body.resumeUrl } : {}),
+          ...(body.education !== undefined ? { education: toNullableJson(body.education) } : {}),
+          ...(body.experience !== undefined ? { experience: toNullableJson(body.experience) } : {}),
+          ...(preferences !== undefined ? { preferences: toNullableJson(preferences) } : {}),
+        },
+        create: {
+          userId: session.id,
+          headline: body.headline ?? "",
+          bio: body.bio ?? "",
+          location: body.location ?? "",
+          skills: legacySkillNames ?? [],
+          experienceYears: body.experienceYears ?? 0,
+          resumeUrl: body.resumeUrl ?? null,
+          education: toNullableJson(body.education ?? []),
+          experience: toNullableJson(body.experience ?? []),
+          preferences: toNullableJson(preferences ?? {}),
+        },
+      });
+
+      if (claimedSkills !== undefined) {
+        await syncCandidateClaimedSkills(tx, updated.id, claimedSkills);
+      }
+
+      return tx.candidateProfile.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          candidateSkills: {
+            where: { isVisible: true },
+            orderBy: { name: "asc" },
+          },
+        },
       });
     }, { maxWait: 10_000, timeout: 20_000 });
-    return NextResponse.json({ success: true, profile });
+
+    const now = new Date();
+    const presentedProfile = {
+      ...profile,
+      candidateSkills: profile.candidateSkills.map((skill) => {
+        const expired = !!skill.validUntil && skill.validUntil <= now;
+        return {
+          ...skill,
+          verificationStatus: expired ? "EXPIRED" : skill.verificationStatus,
+          latestScore: expired ? null : skill.latestScore,
+          verifiedAt: expired ? null : skill.verifiedAt,
+        };
+      }),
+    };
+    return NextResponse.json({ success: true, profile: presentedProfile });
   } catch (error) { return handleApiError(error); }
 }
