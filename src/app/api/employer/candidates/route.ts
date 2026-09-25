@@ -74,6 +74,14 @@ export async function GET(req: NextRequest) {
                 type: true,
               },
             },
+            gates: {
+              select: {
+                type: true,
+                status: true,
+                assessmentId: true,
+                completedAt: true,
+              },
+            },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           cursor: requestedCursor ? { id: requestedCursor } : undefined,
