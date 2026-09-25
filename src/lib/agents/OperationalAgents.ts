@@ -125,6 +125,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
           timeoutMs: policy.timeoutMs,
           temperature: policy.temperature,
           maxTokens: policy.maxTokens,
+          maxCostUsdPerRequest: policy.maxCostUsdPerRequest,
           isFallback,
         });
         actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
@@ -193,6 +194,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
           timeoutMs: policy.timeoutMs,
           temperature: policy.temperature,
           maxTokens: policy.maxTokens,
+          maxCostUsdPerRequest: policy.maxCostUsdPerRequest,
           isFallback,
         });
         actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
@@ -330,6 +332,7 @@ export class JdGeneratorAgent extends BaseAgent {
           timeoutMs: policy.timeoutMs,
           temperature: policy.temperature,
           maxTokens: policy.maxTokens,
+          maxCostUsdPerRequest: policy.maxCostUsdPerRequest,
           isFallback,
         });
         actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
