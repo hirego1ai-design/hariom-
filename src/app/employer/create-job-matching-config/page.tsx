@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
-import { useJobCreationStore, ProctoringLevel } from "@/store/useJobCreationStore";
+import { useJobCreationStore } from "@/store/useJobCreationStore";
 
 export default function JobMatchingConfigPage() {
   const router = useRouter();
@@ -53,13 +53,13 @@ export default function JobMatchingConfigPage() {
           skillRequirements: requirements,
           screeningQuestions: store.screeningQuestions.map((question) => question.trim()).filter(Boolean),
           aiFocusAreas: store.aiFocusAreas.trim() || undefined,
+          requiresJobSpecificAssessment: store.requiresJobSpecificAssessment,
           matchingConfig: {
             weightExperience: store.weightExperience,
             weightEducation: store.weightEducation,
             weightSkills: store.weightSkills,
             autoArchiveScore: store.autoArchiveScore,
             autoInterviewLimit: store.autoInterviewLimit,
-            proctoringLevel: store.proctoringLevel,
           },
         }),
       });
@@ -132,14 +132,28 @@ export default function JobMatchingConfigPage() {
                 <p className="mt-2 text-xs text-text-muted">Stored as matching configuration; this screen does not claim an automatic rejection action.</p>
               </label>
 
-              <label className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Proctoring level</span>
-                <select value={store.proctoringLevel} onChange={(event) => store.updateField("proctoringLevel", event.target.value as ProctoringLevel)} className="mt-3 h-11 w-full rounded-xl border border-white/10 bg-bg-elevated px-3 text-sm text-white">
-                  <option value="Standard">Standard</option>
-                  <option value="High Security">High Security</option>
-                </select>
-                <p className="mt-2 text-xs text-text-muted">Applied to configured assessment/proctoring workflows.</p>
-              </label>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Additional job-specific assessment</span>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => store.updateField("requiresJobSpecificAssessment", false)}
+                    className={`rounded-xl border px-4 py-3 text-xs font-bold transition-colors ${!store.requiresJobSpecificAssessment ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-text-secondary"}`}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => store.updateField("requiresJobSpecificAssessment", true)}
+                    className={`rounded-xl border px-4 py-3 text-xs font-bold transition-colors ${store.requiresJobSpecificAssessment ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-text-secondary"}`}
+                  >
+                    Yes
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-text-muted">
+                  If enabled, HireGo automatically creates the assessment from this job’s role and approved skills. Question count and scoring policy are controlled by HireGo, not manually configured here.
+                </p>
+              </div>
             </section>
 
             {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
