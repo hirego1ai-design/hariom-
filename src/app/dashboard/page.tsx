@@ -16,6 +16,12 @@ export default function CandidateDashboardPage() {
   const [appliedCount, setAppliedCount] = useState(0);
   const [availability, setAvailability] = useState("RECONFIRMATION_REQUIRED");
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [skillValidation, setSkillValidation] = useState<{
+    targetRole: string | null;
+    validation: { status: string; score: number | null; assessedAt: string | null; validUntil: string | null } | null;
+    validatedSkillCount: number;
+    pendingApplications: Array<{ applicationId: string; jobTitle: string; noticeUrl: string | null }>;
+  } | null>(null);
   const displayName = candidateName || user.name || "Candidate";
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
 
@@ -52,6 +58,20 @@ export default function CandidateDashboardPage() {
       .then((data) => {
         if (data.success && data.applications) {
           setAppliedCount(data.applications.length);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/candidate/skill-validation/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setSkillValidation({
+            targetRole: data.targetRole ?? null,
+            validation: data.validation ?? null,
+            validatedSkillCount: data.validatedSkillCount ?? 0,
+            pendingApplications: data.pendingApplications ?? [],
+          });
         }
       })
       .catch(() => {});
@@ -321,19 +341,37 @@ export default function CandidateDashboardPage() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                  AI Readiness Score
+                  Skill Validation
                 </span>
                 <span className="material-symbols-outlined text-[20px]" style={{ color: "var(--primary)" }}>
-                  auto_awesome
+                  verified
                 </span>
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  —
+                  {skillValidation?.validation?.score ?? "—"}
+                  {typeof skillValidation?.validation?.score === "number" ? "%" : ""}
                 </span>
-                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Complete assessment to calculate</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+                  {skillValidation?.validation?.status === "COMPLETED"
+                    ? `${skillValidation.validatedSkillCount} validated skill${skillValidation.validatedSkillCount === 1 ? "" : "s"}`
+                    : skillValidation?.pendingApplications.length
+                      ? "Required to finish application"
+                      : "Not completed yet"}
+                </span>
               </div>
-              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Your verified readiness score will appear here.</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                {skillValidation?.targetRole ? `Role: ${skillValidation.targetRole}` : "Choose a target role to enable validation."}
+              </p>
+              {skillValidation?.pendingApplications[0]?.noticeUrl && (
+                <Link
+                  href={skillValidation.pendingApplications[0].noticeUrl!}
+                  className="mt-3 inline-flex text-xs font-bold"
+                  style={{ color: "var(--primary)" }}
+                >
+                  Continue Skill Validation →
+                </Link>
+              )}
             </div>
 
             <div
@@ -425,7 +463,7 @@ export default function CandidateDashboardPage() {
                 </div>
                 <h3 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>AI Mock Interview Practice</h3>
                 <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  Practice live technical questions with real-time feedback on confidence, speech clarity, and code quality.
+                  Practice role-relevant questions in a text-based mock interview and receive structured feedback on your answers.
                 </p>
                 <div className="mt-5 space-y-2">
                   <Link
