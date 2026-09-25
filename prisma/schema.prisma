@@ -314,8 +314,9 @@ model JobListing {
   screeningQuestions String[]  @default([])
   aiFocusAreas       String?
   skillRequirements  Json?
-  requiresJobReady   Boolean   @default(false)
-  jobReadyRoleTitle  String?
+  requiresJobReady             Boolean   @default(false)
+  requiresJobSpecificAssessment Boolean   @default(false)
+  jobReadyRoleTitle            String?
   jobReadySeniority  String?
   status             JobStatus @default(ACTIVE)
   createdAt          DateTime  @default(now())
