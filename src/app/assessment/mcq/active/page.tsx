@@ -51,7 +51,8 @@ type SubmitResponse = {
     validationEligible?: boolean;
     validationNote?: string | null;
     releasedApplicationIds?: string[];
-    applicationContinuation?: "SUBMITTED" | "NO_PENDING_APPLICATION";
+    applicationContinuation?: "SUBMITTED" | "JOB_SPECIFIC_ASSESSMENT_COMPLETED" | "NO_PENDING_APPLICATION";
+    completedJobSpecificApplicationIds?: string[];
     skillEvidence: Array<{
       name: string;
       score: number;
@@ -288,6 +289,11 @@ export default function ActiveMCQAssessment() {
             {results.applicationContinuation === "SUBMITTED" && (
               <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                 Your pending job application has now been submitted.
+              </div>
+            )}
+            {results.applicationContinuation === "JOB_SPECIFIC_ASSESSMENT_COMPLETED" && (
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                Your additional job-specific assessment is complete. Your application is now ready for employer screening.
               </div>
             )}
           </div>
