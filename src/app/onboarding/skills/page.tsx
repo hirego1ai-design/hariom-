@@ -34,7 +34,11 @@ export default function SkillsPage() {
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skills: nextSkills.map((skill) => skill.name), preferences: { targetRole: targetRole.trim() } }),
+        body: JSON.stringify({
+          skills: nextSkills.map((skill) => skill.name),
+          skillDetails: nextSkills.map((skill) => ({ name: skill.name, claimedLevel: skill.level })),
+          preferences: { targetRole: targetRole.trim() },
+        }),
       });
       if (!response.ok) throw new Error("Profile save failed");
       router.push("/onboarding/resume-upload");
