@@ -27,6 +27,18 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum ApplicationGateType {
+  UNIVERSAL_SKILL_VALIDATION
+  JOB_SPECIFIC_ASSESSMENT
+}
+
+enum ApplicationGateStatus {
+  REQUIRED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 enum JobStatus {
   DRAFT
   ACTIVE
@@ -486,9 +498,27 @@ model Application {
   roundProgress InterviewRoundProgress[]
   employerNotes EmployerCandidateNote[]
   employerTags  EmployerCandidateTag[]
+  gates         ApplicationGate[]
 
   @@unique([candidateProfileId, jobId])
   @@index([jobId])
+}
+
+model ApplicationGate {
+  id            String                @id @default(uuid())
+  applicationId String
+  application   Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          ApplicationGateType
+  status        ApplicationGateStatus @default(REQUIRED)
+  assessmentId  String?
+  assessment    McqAssessment?        @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([applicationId, type])
+  @@index([type, status])
+  @@index([assessmentId])
 }
 
 model EmployerCandidateNote {
@@ -2250,6 +2280,7 @@ model McqAssessment {
   questions        McqQuestion[]
   attempts         McqAttempt[]
   readinessRecords CandidateReadiness[]
+  applicationGates ApplicationGate[]
 
   @@index([jobListingId, isActive])
   @@index([scope, roleTitle, seniority, isActive])
