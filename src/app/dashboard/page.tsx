@@ -20,7 +20,12 @@ export default function CandidateDashboardPage() {
     targetRole: string | null;
     validation: { status: string; score: number | null; assessedAt: string | null; validUntil: string | null } | null;
     validatedSkillCount: number;
-    pendingApplications: Array<{ applicationId: string; jobTitle: string; noticeUrl: string | null }>;
+    pendingApplications: Array<{
+      applicationId: string;
+      jobTitle: string;
+      gateType: "UNIVERSAL_SKILL_VALIDATION" | "JOB_SPECIFIC_ASSESSMENT";
+      actionUrl: string | null;
+    }>;
   } | null>(null);
   const displayName = candidateName || user.name || "Candidate";
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
@@ -363,13 +368,15 @@ export default function CandidateDashboardPage() {
               <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
                 {skillValidation?.targetRole ? `Role: ${skillValidation.targetRole}` : "Choose a target role to enable validation."}
               </p>
-              {skillValidation?.pendingApplications[0]?.noticeUrl && (
+              {skillValidation?.pendingApplications[0]?.actionUrl && (
                 <Link
-                  href={skillValidation.pendingApplications[0].noticeUrl!}
+                  href={skillValidation.pendingApplications[0].actionUrl!}
                   className="mt-3 inline-flex text-xs font-bold"
                   style={{ color: "var(--primary)" }}
                 >
-                  Continue Skill Validation →
+                  {skillValidation.pendingApplications[0].gateType === "JOB_SPECIFIC_ASSESSMENT"
+                    ? "Continue job-specific assessment →"
+                    : "Continue Skill Validation →"}
                 </Link>
               )}
             </div>
