@@ -827,7 +827,8 @@ export default function AssessmentBuilder() {
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {!isCreatingAssessment && !selectedAssessment && !loading && (
             <div className="h-full flex items-center justify-center flex-col text-center opacity-50">
@@ -835,8 +836,7 @@ export default function AssessmentBuilder() {
               <h2 className="text-2xl font-bold text-gray-400 mb-2">Assessment Builder</h2>
               <p className="text-gray-500 max-w-sm">Select an assessment from the sidebar or create a new one to start editing questions.</p>
             </div>
-            );
-          })()}
+          )}
         </div>
       </div>
     </div>
