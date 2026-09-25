@@ -588,10 +588,10 @@ export default function AssessmentBuilder() {
                 </button>
                 <button 
                   onClick={handleAddNewQuestion}
-                  disabled={selectedAssessment.isActive}
+                  disabled={selectedAssessment.isActive || questions.length >= screeningPolicy.maxQuestions}
                   className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 text-white py-2 px-5 rounded-lg transition-colors font-medium whitespace-nowrap"
                 >
-                  <Plus className="h-4 w-4" /> Add Question
+                  <Plus className="h-4 w-4" /> {questions.length >= screeningPolicy.maxQuestions ? "Question Limit Reached" : "Add Question"}
                 </button>
               </div>
 
