@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const body = await readValidatedJson(request, schema);
     const normalizedText = body.questionText.replace(/\s+/g, " ").trim();
     const normalizedRole = body.roleTitle.replace(/\s+/g, " ").trim();
-    const { canonicalTags: skillTags, unknownTags } = await resolveCanonicalSkillTags(body.skillTags);
+    const { canonicalTags: skillTags, unknownTags } = await resolveCanonicalSkillTags(body.skillTags ?? []);
     if (unknownTags.length) {
       throw new ApiError(
         `Unknown skill tag(s): ${unknownTags.join(", ")}. Use the canonical skill master or approve the missing skill before publishing assessment evidence.`,
