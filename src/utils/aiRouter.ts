@@ -22,6 +22,7 @@ export interface AiTaskRequest {
   temperature?: number | null;
   maxTokens?: number;
   isFallback?: boolean;
+  maxCostUsdPerRequest?: number | null;
   metadata?: Record<string, unknown>;
   bypassCache?: boolean;
 }
@@ -142,6 +143,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
         timeoutMs: request.timeoutMs ?? policy.timeoutMs,
         temperature: request.temperature ?? policy.temperature,
         maxTokens: request.maxTokens ?? policy.maxTokens,
+        maxCostUsdPerRequest: request.maxCostUsdPerRequest ?? policy.maxCostUsdPerRequest,
         isFallback,
       }),
     });
@@ -186,6 +188,25 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   }
 
   const timeoutMs = Math.min(Math.max(request.timeoutMs ?? 20_000, 1_000), 120_000);
+  const maxTokens = request.maxTokens ?? 2_000;
+
+  if (
+    request.maxCostUsdPerRequest !== null &&
+    request.maxCostUsdPerRequest !== undefined &&
+    request.modelConfig.inputUsdPerMillion !== null &&
+    request.modelConfig.outputUsdPerMillion !== null
+  ) {
+    const conservativeInputTokenUpperBound = new TextEncoder().encode(request.prompt).length;
+    const maxEstimatedCost =
+      (conservativeInputTokenUpperBound / 1_000_000) * request.modelConfig.inputUsdPerMillion +
+      (maxTokens / 1_000_000) * request.modelConfig.outputUsdPerMillion;
+    if (maxEstimatedCost > request.maxCostUsdPerRequest) {
+      throw new Error(
+        `AI request denied by budget policy: estimated maximum ${maxEstimatedCost.toFixed(6)} exceeds ${request.maxCostUsdPerRequest.toFixed(6)}.`,
+      );
+    }
+  }
+
   const client = createProviderClient(request.provider, timeoutMs);
 
   let responseText = "";
@@ -202,7 +223,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
       ...(request.temperature === null || request.temperature === undefined
         ? {}
         : { temperature: request.temperature }),
-      max_tokens: request.maxTokens ?? 2_000,
+      max_tokens: maxTokens,
     });
 
     responseText = response.choices[0]?.message?.content || "";
@@ -210,6 +231,35 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     actualCompletionTokens = response.usage?.completion_tokens ?? null;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown provider error";
+    const failureLog: AiExecutionLog = {
+      id: crypto.randomUUID(),
+      task: request.task,
+      provider: request.provider,
+      model: request.model,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      latencyMs: Date.now() - startTime,
+      costEstUsd: null,
+      actualCostMinorUnits: null,
+      status: "FAILED",
+      timestamp: new Date().toISOString(),
+    };
+    await prisma.aiExecutionLog.create({
+      data: {
+        id: failureLog.id,
+        task: failureLog.task,
+        provider: failureLog.provider,
+        model: failureLog.model,
+        promptTokens: null,
+        completionTokens: null,
+        totalTokens: null,
+        latencyMs: failureLog.latencyMs,
+        costEstUsd: null,
+        status: failureLog.status,
+        timestamp: new Date(failureLog.timestamp),
+      },
+    }).catch(() => null);
     throw new Error(`AI provider ${request.provider}/${request.model} failed: ${message}`);
   }
 
