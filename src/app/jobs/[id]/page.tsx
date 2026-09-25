@@ -83,6 +83,10 @@ export default function JobDetailPage() {
       }
 
       setIsApplied(true);
+      if (data.assessmentRequired && data.assessmentType === "JOB_SPECIFIC_ASSESSMENT" && data.assessmentUrl) {
+        router.push(data.assessmentUrl);
+        return;
+      }
       setFeedbackMessage("Application submitted successfully.");
     } catch (cause) {
       setFeedbackMessage(cause instanceof Error ? cause.message : "Application could not be submitted.");
