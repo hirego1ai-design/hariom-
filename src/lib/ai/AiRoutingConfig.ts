@@ -50,7 +50,7 @@ export const aiTaskRouteSchema = z.object({
   fallbackModelKeys: z.array(z.string().trim().min(3).max(160)).max(5),
   timeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
   maxTokens: z.number().int().min(1).max(100_000).default(2_000),
-  temperature: z.number().finite().min(0).max(2).default(0.2),
+  temperature: z.number().finite().min(0).max(2).nullable().default(null),
   maxRetriesPerEndpoint: z.number().int().min(0).max(1).default(0),
   maxCostUsdPerRequest: z.number().finite().positive().max(100).nullable().default(null),
 }).strict();
