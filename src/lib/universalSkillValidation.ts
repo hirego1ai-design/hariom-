@@ -4,6 +4,7 @@ import { getKnowledgeScreeningPolicy } from "@/lib/knowledgeScreeningPolicy";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
 import { dispatchAiTask } from "@/utils/aiRouter";
+import { getUniversalSkillValidationPolicy } from "@/lib/universalSkillValidationPolicy";
 
 export const UNIVERSAL_VALIDATION_SENIORITY = "UNIVERSAL";
 
@@ -255,7 +256,10 @@ export async function ensureUniversalAssessment(roleTitleInput: string) {
   // Model work happens before acquiring the database advisory lock. Another
   // request may win the race; the transaction re-check below prevents duplicate
   // active templates from being committed.
-  const generated = await generateQuestions(roleTitle);
+  const [generated, validationPolicy] = await Promise.all([
+    generateQuestions(roleTitle),
+    getUniversalSkillValidationPolicy(),
+  ]);
 
   return prisma.$transaction(async (tx) => {
     const lockKey = `hirego:universal-skill-validation:${roleTitle.toLowerCase()}`;
@@ -282,18 +286,15 @@ export async function ensureUniversalAssessment(roleTitleInput: string) {
     );
     if (winner) return winner;
 
-    // These defaults are inherited from the existing product assessment policy.
-    // They are stored on the created assessment and remain editable through the
-    // authoritative admin assessment controls before future versions are issued.
     const assessment = await tx.mcqAssessment.create({
       data: {
         title: `${roleTitle} Skill Validation`,
         description: `HireGo universal knowledge validation for ${roleTitle}.`,
         instructions: "Answer each question independently. Your score and skill evidence are calculated server-side.",
         durationMinutes: generated.policy.recommendedDurationMinutes,
-        passingPercentage: 70,
-        validityDays: 180,
-        retakeCooldownHours: 24,
+        passingPercentage: validationPolicy.passingPercentage,
+        validityDays: validationPolicy.validityDays,
+        retakeCooldownHours: validationPolicy.retakeCooldownHours,
         isActive: true,
         scope: "PLATFORM_READINESS",
         roleTitle,
