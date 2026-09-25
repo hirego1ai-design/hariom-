@@ -124,11 +124,28 @@ export async function POST(req: NextRequest) {
             userId: session.id,
             jobId: application.jobId,
           });
+          const jobSpecificGate = await prisma.applicationGate.findUnique({
+            where: {
+              applicationId_type: {
+                applicationId: application.id,
+                type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+              },
+            },
+            select: { assessmentId: true, status: true },
+          });
           return NextResponse.json({
             success: true,
             application,
             evaluation: "COMPLETED",
-            message: "Application submitted successfully",
+            assessmentRequired: Boolean(jobSpecificGate?.assessmentId),
+            assessmentType: jobSpecificGate?.assessmentId ? "JOB_SPECIFIC_ASSESSMENT" : null,
+            assessmentId: jobSpecificGate?.assessmentId ?? null,
+            assessmentUrl: jobSpecificGate?.assessmentId
+              ? `/assessment/mcq/active?id=${encodeURIComponent(jobSpecificGate.assessmentId)}`
+              : null,
+            message: jobSpecificGate?.assessmentId
+              ? "Application submitted. Complete the additional job-specific assessment."
+              : "Application submitted successfully",
           }, { status: 201 });
         }
       }
@@ -212,7 +229,15 @@ export async function POST(req: NextRequest) {
         success: true,
         application: submission.application,
         evaluation: submission.evaluation,
-        message: "Application submitted successfully",
+        assessmentRequired: Boolean(submission.jobSpecificAssessmentId),
+        assessmentType: submission.jobSpecificAssessmentId ? "JOB_SPECIFIC_ASSESSMENT" : null,
+        assessmentId: submission.jobSpecificAssessmentId,
+        assessmentUrl: submission.jobSpecificAssessmentId
+          ? `/assessment/mcq/active?id=${encodeURIComponent(submission.jobSpecificAssessmentId)}`
+          : null,
+        message: submission.jobSpecificAssessmentId
+          ? "Application submitted. Complete the additional job-specific assessment."
+          : "Application submitted successfully",
       }, { status: 201 });
     } catch (error: any) {
       if (error?.code === "P2002" || error?.name === "DuplicateApplicationError") {
