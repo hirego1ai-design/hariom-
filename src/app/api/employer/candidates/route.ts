@@ -3,6 +3,7 @@ import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonErro
 import { prisma } from "@/lib/prisma";
 import { toEmployerCandidate } from "@/lib/candidateEvidence";
 import { getSessionCompany } from "@/lib/routeAuthorization";
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -43,7 +44,17 @@ export async function GET(req: NextRequest) {
         // Cursor pagination prevents a large tenant's pipeline from loading
         // every application and nested profile into one request.
         const applications = await prisma.application.findMany({
-          where: { job: { companyId } },
+          where: {
+            job: { companyId },
+            NOT: {
+              gates: {
+                some: {
+                  type: ApplicationGateType.UNIVERSAL_SKILL_VALIDATION,
+                  status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+                },
+              },
+            },
+          },
           include: {
             candidateProfile: { include: {
               user: { select: { name: true } },
