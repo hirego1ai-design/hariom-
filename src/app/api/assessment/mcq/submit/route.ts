@@ -10,6 +10,8 @@ import {
 } from "@/lib/skillValidation";
 import { z } from "zod";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
+import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
+import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -178,6 +180,37 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    let releasedApplicationIds: string[] = [];
+    if (
+      qualifiesForSkillValidation &&
+      assessment.scope === "PLATFORM_READINESS" &&
+      assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY
+    ) {
+      const { RosGateway } = await import("@/lib/ros/RosGateway");
+      releasedApplicationIds = await RosGateway.releaseUniversalValidationApplications({
+        userId: session.id,
+        candidateProfileId: candidateProfile.id,
+        assessmentId: assessment.id,
+      });
+
+      if (releasedApplicationIds.length > 0) {
+        const releasedApplications = await prisma.application.findMany({
+          where: {
+            id: { in: releasedApplicationIds },
+            candidateProfileId: candidateProfile.id,
+          },
+          select: { id: true, jobId: true },
+        });
+        for (const application of releasedApplications) {
+          await dispatchApplicationReceivedConfirmation({
+            applicationId: application.id,
+            userId: session.id,
+            jobId: application.jobId,
+          });
+        }
+      }
+    }
+
     await logAuditEvent({
       userId: session.id,
       action: "MCQ_ASSESSMENT_SUBMITTED",
@@ -204,6 +237,10 @@ export async function POST(req: NextRequest) {
         correctCount,
         incorrectCount: assessment.questions.length - correctCount,
         passed: submission.updatedAttempt.passed,
+        releasedApplicationIds,
+        applicationContinuation: releasedApplicationIds.length > 0
+          ? "SUBMITTED"
+          : "NO_PENDING_APPLICATION",
         skillEvidence: submission.skillEvidence.map((item) => ({
           name: item.name,
           score: item.score,
