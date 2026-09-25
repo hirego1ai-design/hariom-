@@ -165,7 +165,7 @@ export async function GET(
       const assessmentValidated = verificationStatus === "ASSESSMENT_VALIDATED" || verificationStatus === "VERIFIED";
       return {
         name: skill.name,
-        level: (skill.verifiedLevel ?? skill.claimedLevel).toLowerCase(),
+        level: skill.verifiedLevel?.toLowerCase() ?? null,
         claimedLevel: skill.claimedLevel.toLowerCase(),
         verifiedLevel: skill.verifiedLevel?.toLowerCase() ?? null,
         years: null,
