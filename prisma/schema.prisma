@@ -2511,6 +2511,7 @@ model MockInterviewSession {
   candidateProfileId   String
   candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
   roleTarget           String
+  focusSkills          String[]            @default([])
   status               MockInterviewStatus @default(IN_PROGRESS)
   totalQuestions       Int                 @default(5)
   currentQuestionIndex Int                 @default(0)
