@@ -4,7 +4,7 @@ import { KillSwitchManager } from '../security/KillSwitchManager';
 import { BudgetManager } from '../governance/BudgetManager';
 import { ExecutionLoop } from '../agents/ExecutionLoop';
 import { OutboxPublisher } from '../events/Outbox';
-import { ApplicationGateType, ApplicationGateStatus, Role, KillSwitchType } from '@prisma/client';
+import { ApplicationGateType, ApplicationGateStatus, JobStatus, Role, KillSwitchType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { computeMatchScore } from '@/lib/matching/JobMatchingEngine';
@@ -17,6 +17,8 @@ export interface DispatchJobCreationParams {
   salaryRange: string;
   location: string;
   type: string;
+  status: JobStatus;
+  requiresJobSpecificAssessment?: boolean;
   department?: string;
   requirements?: string[];
   screeningQuestions?: string[];
@@ -105,15 +107,16 @@ export class RosGateway {
         aiFocusAreas: params.aiFocusAreas,
         skillRequirements: params.skillRequirements,
         matchingConfig: params.matchingConfig,
-        status: 'ACTIVE',
+        requiresJobSpecificAssessment: params.requiresJobSpecificAssessment ?? false,
+        status: params.status,
       },
     });
 
     // Publish System Event via Outbox (using transaction handle tx if provided)
     await OutboxPublisher.publish(
       {
-        eventType: 'JOB_LISTING_CREATED',
-        payload: { jobId: job.id, companyId: params.companyId, title: job.title },
+        eventType: params.status === JobStatus.ACTIVE ? 'JOB_LISTING_CREATED' : 'JOB_DRAFT_CREATED',
+        payload: { jobId: job.id, companyId: params.companyId, title: job.title, status: params.status },
         correlationId,
         companyId: params.companyId,
         idempotencyKey: `outbox-job-${job.id}`,
