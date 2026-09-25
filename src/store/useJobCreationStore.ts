@@ -51,6 +51,7 @@ interface JobCreationState {
   boostJob: boolean;
   notifyMatches: boolean;
   proctoringLevel: ProctoringLevel;
+  requiresJobSpecificAssessment: boolean;
   weightExperience: number;
   weightEducation: number;
   weightSkills: number;
@@ -97,6 +98,7 @@ const initialState = {
   boostJob: false,
   notifyMatches: true,
   proctoringLevel: 'Standard' as ProctoringLevel,
+  requiresJobSpecificAssessment: false,
   weightExperience: 40,
   weightEducation: 20,
   weightSkills: 40,
