@@ -5,6 +5,7 @@ import { handleApiError, ApiError, readValidatedJson, enforceRateLimit } from "@
 import { logAuditEvent } from "@/lib/auditLogger";
 import {
   McqQuestionResult,
+  aggregateMcqSkillEvidence,
   persistMcqSkillEvidence,
   qualifiesMcqSkillEvidence,
 } from "@/lib/skillValidation";
@@ -12,6 +13,7 @@ import { z } from "zod";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -141,17 +143,23 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      // Only the universal PLATFORM_READINESS assessment can change reusable
+      // CandidateSkill verification evidence. Employer/job-specific assessment
+      // results remain scoped to that application and must never overwrite the
+      // candidate's universal historical validation.
       const skillEvidence = qualifiesForSkillValidation
-        ? await persistMcqSkillEvidence(tx, {
-            candidateProfileId: candidateProfile.id,
-            assessmentId: assessment.id,
-            attemptId,
-            roleTitle: assessment.roleTitle,
-            seniority: assessment.seniority,
-            passingPercentage: assessment.passingPercentage,
-            validityDays: assessment.validityDays,
-            questionResults,
-          })
+        ? assessment.scope === "PLATFORM_READINESS"
+          ? await persistMcqSkillEvidence(tx, {
+              candidateProfileId: candidateProfile.id,
+              assessmentId: assessment.id,
+              attemptId,
+              roleTitle: assessment.roleTitle,
+              seniority: assessment.seniority,
+              passingPercentage: assessment.passingPercentage,
+              validityDays: assessment.validityDays,
+              questionResults,
+            })
+          : aggregateMcqSkillEvidence(questionResults)
         : [];
 
       const updatedAttempt = await tx.mcqAttempt.findUniqueOrThrow({
@@ -211,6 +219,48 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let completedJobSpecificApplicationIds: string[] = [];
+    if (qualifiesForSkillValidation && assessment.scope === "EMPLOYER_JOB") {
+      const gates = await prisma.applicationGate.findMany({
+        where: {
+          type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+          status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+          assessmentId: assessment.id,
+          application: { candidateProfileId: candidateProfile.id },
+        },
+        select: { id: true, applicationId: true },
+      });
+
+      for (const gate of gates) {
+        const completed = await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "ApplicationGate" WHERE id = ${gate.id} FOR UPDATE`;
+          const claim = await tx.applicationGate.updateMany({
+            where: {
+              id: gate.id,
+              status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+            },
+            data: {
+              status: ApplicationGateStatus.COMPLETED,
+              completedAt: new Date(),
+            },
+          });
+          if (claim.count !== 1) return false;
+
+          await tx.application.updateMany({
+            where: {
+              id: gate.applicationId,
+              candidateProfileId: candidateProfile.id,
+              status: "ASSESSMENT",
+            },
+            data: { status: "APPLIED" },
+          });
+          return true;
+        });
+
+        if (completed) completedJobSpecificApplicationIds.push(gate.applicationId);
+      }
+    }
+
     await logAuditEvent({
       userId: session.id,
       action: "MCQ_ASSESSMENT_SUBMITTED",
@@ -240,7 +290,10 @@ export async function POST(req: NextRequest) {
         releasedApplicationIds,
         applicationContinuation: releasedApplicationIds.length > 0
           ? "SUBMITTED"
-          : "NO_PENDING_APPLICATION",
+          : completedJobSpecificApplicationIds.length > 0
+            ? "JOB_SPECIFIC_ASSESSMENT_COMPLETED"
+            : "NO_PENDING_APPLICATION",
+        completedJobSpecificApplicationIds,
         skillEvidence: submission.skillEvidence.map((item) => ({
           name: item.name,
           score: item.score,
