@@ -18,6 +18,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "users", label: "Candidate Users", href: "/admin/users", icon: "group" },
   { id: "employers", label: "Employers & Companies", href: "/admin/employers", icon: "domain" },
   { id: "jobs", label: "Job Listings", href: "/admin/jobs", icon: "work" },
+  { id: "skill-validation", label: "Universal Skill Validation", href: "/admin/assessment/skill-validation", icon: "fact_check" },
   { id: "signups", label: "New Signups", href: "/admin/signups", icon: "person_add" },
   { id: "document-verification", label: "KYC Document Review", href: "/admin/document-verification", icon: "verified_user" },
   { id: "revenue", label: "Revenue & Billing", href: "/admin/revenue", icon: "payments" },
@@ -42,6 +43,7 @@ const infrastructureItems: NavRailItem[] = [
 ];
 
 const modelItems: NavRailItem[] = [
+  { id: "model-registry", label: "AI Model Registry", href: "/admin/models/registry", icon: "model_training" },
   { id: "LM06", label: "LLM Usage Analytics (LM06)", href: "/admin/settings/llm-usage", icon: "analytics" },
   { id: "LM07", label: "Model & Platform Settings (LM07)", href: "/admin/settings/hub", icon: "tune" },
 ];
