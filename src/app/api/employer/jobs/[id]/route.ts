@@ -5,6 +5,9 @@ import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { prisma } from "@/lib/prisma";
+import { JobStatus } from "@prisma/client";
+import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
+import { OutboxPublisher } from "@/lib/events/Outbox";
 
 const updateJobSchema = z.object({
   title: z.string().min(3).optional(),
@@ -13,6 +16,7 @@ const updateJobSchema = z.object({
   type: z.string().optional(),
   salary: z.string().min(2).optional(),
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED", "PAUSED"]).optional(),
+  requiresJobSpecificAssessment: z.boolean().optional(),
 });
 
 export async function GET(
@@ -79,31 +83,52 @@ export async function PUT(
 
     const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
 
+    const nextRequiresJobSpecificAssessment =
+      body.requiresJobSpecificAssessment ?? oldJob.requiresJobSpecificAssessment;
+
+    if (isPublishingDraft && nextRequiresJobSpecificAssessment) {
+      await ensureJobSpecificAssessment(id, oldJob.companyId);
+    }
+
     const updateData = {
       title: body.title !== undefined ? body.title : undefined,
       location: body.location !== undefined ? body.location : undefined,
       type: body.type !== undefined ? body.type : undefined,
       salaryRange: body.salary !== undefined ? body.salary : undefined,
-      status: body.status !== undefined ? (body.status as any) : undefined,
+      requiresJobSpecificAssessment: body.requiresJobSpecificAssessment,
+      status: body.status !== undefined ? (body.status as JobStatus) : undefined,
     };
 
-    // Publishing consumes a credit and changes the job state in one database
-    // transaction.  A concurrent publish can therefore never create a second
-    // active job without an available credit.
-    const updatedJob = isPublishingDraft && session.role !== "ADMIN"
+    const updatedJob = isPublishingDraft
       ? await prisma.$transaction(async (tx) => {
-          const debited = await tx.companyCredits.updateMany({
-            where: { companyId: companyId!, jobPostsLeft: { gt: 0 } },
-            data: { jobPostsLeft: { decrement: 1 } },
-          });
-          if (debited.count !== 1) {
-            throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
+          if (session.role !== "ADMIN") {
+            const debited = await tx.companyCredits.updateMany({
+              where: { companyId: companyId!, jobPostsLeft: { gt: 0 } },
+              data: { jobPostsLeft: { decrement: 1 } },
+            });
+            if (debited.count !== 1) {
+              throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
+            }
           }
-          return tx.jobListing.update({ where: { id }, data: updateData });
+
+          const updated = await tx.jobListing.update({ where: { id }, data: updateData });
+          await OutboxPublisher.publish({
+            eventType: "JOB_LISTING_CREATED",
+            payload: {
+              jobId: updated.id,
+              companyId: updated.companyId,
+              title: updated.title,
+              status: JobStatus.ACTIVE,
+            },
+            correlationId: updated.id,
+            companyId: updated.companyId,
+            idempotencyKey: `job-published:${updated.id}`,
+          }, tx);
+          return updated;
         })
       : await prisma.jobListing.update({ where: { id }, data: updateData });
 
-    logAuditEvent({
+    await logAuditEvent({
       userId: session.id,
       action: "JOB_UPDATE",
       resource: `/api/employer/jobs/${id}`,
