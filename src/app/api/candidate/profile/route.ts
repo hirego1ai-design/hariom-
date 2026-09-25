@@ -60,7 +60,20 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-    return NextResponse.json({ success: true, profile });
+    const now = new Date();
+    const presentedProfile = profile ? {
+      ...profile,
+      candidateSkills: profile.candidateSkills.map((skill) => {
+        const expired = !!skill.validUntil && skill.validUntil <= now;
+        return {
+          ...skill,
+          verificationStatus: expired ? "EXPIRED" : skill.verificationStatus,
+          latestScore: expired ? null : skill.latestScore,
+          verifiedAt: expired ? null : skill.verifiedAt,
+        };
+      }),
+    } : null;
+    return NextResponse.json({ success: true, profile: presentedProfile });
   } catch (error) { return handleApiError(error); }
 }
 
@@ -154,6 +167,19 @@ export async function PUT(request: NextRequest) {
       });
     }, { maxWait: 10_000, timeout: 20_000 });
 
-    return NextResponse.json({ success: true, profile });
+    const now = new Date();
+    const presentedProfile = {
+      ...profile,
+      candidateSkills: profile.candidateSkills.map((skill) => {
+        const expired = !!skill.validUntil && skill.validUntil <= now;
+        return {
+          ...skill,
+          verificationStatus: expired ? "EXPIRED" : skill.verificationStatus,
+          latestScore: expired ? null : skill.latestScore,
+          verifiedAt: expired ? null : skill.verifiedAt,
+        };
+      }),
+    };
+    return NextResponse.json({ success: true, profile: presentedProfile });
   } catch (error) { return handleApiError(error); }
 }
