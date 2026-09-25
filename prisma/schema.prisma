@@ -213,6 +213,7 @@ model CandidateProfile {
   serviceUsages              CandidateServiceUsage[]
   sourcingRelationships      CandidateSourcingRelationship[]
   candidateSkills            CandidateSkill[]
+  assessmentNoticeAcknowledgements AssessmentNoticeAcknowledgement[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -502,6 +503,22 @@ model Application {
 
   @@unique([candidateProfileId, jobId])
   @@index([jobId])
+}
+
+model AssessmentNoticeAcknowledgement {
+  id                 String           @id @default(uuid())
+  candidateProfileId String
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  assessmentId       String
+  assessment         McqAssessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  applicationId      String?
+  acknowledgedAt     DateTime         @default(now())
+  noticeVersion      String
+  createdAt          DateTime         @default(now())
+
+  @@unique([candidateProfileId, assessmentId])
+  @@index([assessmentId, acknowledgedAt])
+  @@index([applicationId])
 }
 
 model ApplicationGate {
@@ -2281,6 +2298,7 @@ model McqAssessment {
   attempts         McqAttempt[]
   readinessRecords CandidateReadiness[]
   applicationGates ApplicationGate[]
+  noticeAcknowledgements AssessmentNoticeAcknowledgement[]
 
   @@index([jobListingId, isActive])
   @@index([scope, roleTitle, seniority, isActive])
