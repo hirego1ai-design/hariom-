@@ -89,6 +89,7 @@ export async function GET(request: Request) {
         jobListing: {
           select: {
             title: true,
+            department: true,
           }
         },
         _count: {
