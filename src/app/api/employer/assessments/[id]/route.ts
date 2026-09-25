@@ -42,11 +42,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Publication Safety: Cannot publish an assessment with 0 questions
+    // Publication Safety: every scored question must identify the skill(s)
+    // it measures so candidate skill evidence is auditable across every role.
     if (data.isActive === true) {
-      const questionCount = await prisma.mcqQuestion.count({ where: { assessmentId: id } });
-      if (questionCount === 0) {
+      const questions = await prisma.mcqQuestion.findMany({
+        where: { assessmentId: id },
+        select: { id: true, category: true, skillTags: true },
+      });
+      if (questions.length === 0) {
         throw new ApiError("Cannot publish an assessment with zero questions. Add questions before publishing.", 400);
+      }
+      const untagged = questions.filter((question) =>
+        question.skillTags.length === 0 && !question.category?.trim()
+      );
+      if (untagged.length > 0) {
+        throw new ApiError(
+          `Cannot publish: ${untagged.length} question(s) have no skill tag. Tag every question with the skill it measures.`,
+          400,
+        );
       }
     }
 
