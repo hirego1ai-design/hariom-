@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
-import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
+import { assignUniversalAssessment, getCandidateTargetRole, getUniversalValidationState } from "@/lib/universalSkillValidation";
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const applicationSchema = z.object({
@@ -36,6 +38,9 @@ export async function GET(req: NextRequest) {
               },
             },
             interviews: true,
+            gates: {
+              select: { id: true, type: true, status: true, assessmentId: true, completedAt: true },
+            },
           },
           orderBy: { createdAt: "desc" },
         });
@@ -50,51 +55,146 @@ export async function POST(req: NextRequest) {
   try {
     await enforceRateLimit(req, "candidate_application_submit", 12, 60_000);
     const session = await getCurrentSession(req.headers);
-    if (!session) {
-      return jsonError("Unauthorized access", 401);
-    }
-    if (session.role !== "CANDIDATE") {
-      return jsonError("Candidate access required", 403);
-    }
+    if (!session) return jsonError("Unauthorized access", 401);
+    if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const { jobId } = await readValidatedJson(req, applicationSchema);
+    const [job, candidate] = await Promise.all([
+      prisma.jobListing.findUnique({ where: { id: jobId } }),
+      prisma.candidateProfile.findUnique({ where: { userId: session.id } }),
+    ]);
 
-    const job = await prisma.jobListing.findUnique({ where: { id: jobId } });
-    if (!job) {
-      return jsonError("Job listing not found", 404);
+    if (!job) return jsonError("Job listing not found", 404);
+    if (job.status !== "ACTIVE") return jsonError("This job is no longer accepting applications", 409);
+    if (!candidate) return jsonError("Complete your candidate profile before applying.", 409);
+
+    const targetRole = getCandidateTargetRole(candidate.preferences) || job.title;
+    const { RosGateway } = await import("@/lib/ros/RosGateway");
+
+    const existingApplication = await prisma.application.findUnique({
+      where: {
+        candidateProfileId_jobId: {
+          candidateProfileId: candidate.id,
+          jobId,
+        },
+      },
+      include: {
+        gates: {
+          where: { type: ApplicationGateType.UNIVERSAL_SKILL_VALIDATION },
+          take: 1,
+        },
+      },
+    });
+
+    const validationState = await getUniversalValidationState(candidate.id, targetRole);
+
+    // A previous Apply click may already have created a durable validation gate.
+    // Resume that exact intent rather than creating a duplicate application.
+    if (existingApplication) {
+      const gate = existingApplication.gates[0];
+      if (
+        !gate ||
+        ![ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(gate.status)
+      ) {
+        return jsonError("You have already applied to this job.", 409);
+      }
+
+      if (
+        validationState.completedAndCurrent &&
+        validationState.readiness?.assessmentId
+      ) {
+        if (gate.assessmentId !== validationState.readiness.assessmentId) {
+          await RosGateway.attachUniversalAssessment({
+            applicationId: existingApplication.id,
+            candidateProfileId: candidate.id,
+            assessmentId: validationState.readiness.assessmentId,
+          });
+        }
+        const released = await RosGateway.releaseUniversalValidationApplications({
+          userId: session.id,
+          candidateProfileId: candidate.id,
+          assessmentId: validationState.readiness.assessmentId,
+        });
+        if (released.includes(existingApplication.id)) {
+          const application = await prisma.application.findUniqueOrThrow({
+            where: { id: existingApplication.id },
+          });
+          await dispatchApplicationReceivedConfirmation({
+            applicationId: application.id,
+            userId: session.id,
+            jobId: application.jobId,
+          });
+          return NextResponse.json({
+            success: true,
+            application,
+            evaluation: "COMPLETED",
+            message: "Application submitted successfully",
+          }, { status: 201 });
+        }
+      }
+
+      try {
+        const assignment = await assignUniversalAssessment(candidate.id, targetRole);
+        await RosGateway.attachUniversalAssessment({
+          applicationId: existingApplication.id,
+          candidateProfileId: candidate.id,
+          assessmentId: assignment.assessment.id,
+        });
+        return NextResponse.json({
+          success: true,
+          application: existingApplication,
+          assessmentRequired: true,
+          assessmentType: "UNIVERSAL_SKILL_VALIDATION",
+          assessmentId: assignment.assessment.id,
+          noticeUrl: `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assignment.assessment.id)}&applicationId=${encodeURIComponent(existingApplication.id)}`,
+          message: "Complete HireGo Skill Validation to finish this application.",
+        }, { status: 202 });
+      } catch {
+        return NextResponse.json({
+          success: false,
+          applicationPendingValidation: true,
+          applicationId: existingApplication.id,
+          error: "Your application is saved, but HireGo Skill Validation is temporarily unavailable. Please retry shortly.",
+        }, { status: 503 });
+      }
     }
-    if (job.status !== "ACTIVE") {
-      return jsonError("This job is no longer accepting applications", 409);
+
+    if (!validationState.completedAndCurrent) {
+      const pending = await RosGateway.handleApplicationValidationIntent({
+        userId: session.id,
+        jobId,
+        candidateProfileId: candidate.id,
+        companyId: job.companyId,
+      });
+
+      try {
+        const assignment = await assignUniversalAssessment(candidate.id, targetRole);
+        await RosGateway.attachUniversalAssessment({
+          applicationId: pending.application.id,
+          candidateProfileId: candidate.id,
+          assessmentId: assignment.assessment.id,
+        });
+
+        return NextResponse.json({
+          success: true,
+          application: pending.application,
+          assessmentRequired: true,
+          assessmentType: "UNIVERSAL_SKILL_VALIDATION",
+          assessmentId: assignment.assessment.id,
+          noticeUrl: `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assignment.assessment.id)}&applicationId=${encodeURIComponent(pending.application.id)}`,
+          message: "Complete HireGo Skill Validation to finish this application.",
+        }, { status: 202 });
+      } catch {
+        return NextResponse.json({
+          success: false,
+          applicationPendingValidation: true,
+          applicationId: pending.application.id,
+          error: "Your application is saved, but HireGo Skill Validation is temporarily unavailable. Please retry shortly.",
+        }, { status: 503 });
+      }
     }
 
     try {
-      const candidate = await prisma.candidateProfile.findUnique({
-        where: { userId: session.id },
-      });
-      if (!candidate) {
-        return jsonError("Complete your candidate profile before applying.", 409);
-      }
-
-      if (job.requiresJobReady) {
-        if (!job.jobReadyRoleTitle || !job.jobReadySeniority) {
-          return jsonError("This job's Job-Ready requirement is not configured. Please contact support.", 409);
-        }
-        const readiness = await prisma.candidateReadiness.findUnique({
-          where: {
-            candidateProfileId_roleTitle_seniority: {
-              candidateProfileId: candidate.id,
-              roleTitle: job.jobReadyRoleTitle,
-              seniority: job.jobReadySeniority,
-            },
-          },
-        });
-        const isCurrent = readiness?.status === "JOB_READY" && (!readiness.validUntil || readiness.validUntil > new Date());
-        if (!isCurrent) {
-          return jsonError("Complete and pass the required Job-Ready assessment before applying to this role.", 403);
-        }
-      }
-
-      const { RosGateway } = await import("@/lib/ros/RosGateway");
       const submission = await RosGateway.handleApplicationSubmission({
         userId: session.id,
         jobId,
@@ -102,11 +202,11 @@ export async function POST(req: NextRequest) {
         companyId: job.companyId,
       });
 
-      const candidateUser = await prisma.user.findUnique({ where: { id: session.id }, select: { id: true, name: true, email: true, phoneNumber: true } });
-      const company = await prisma.company.findUnique({ where: { id: job.companyId }, select: { name: true } });
-      const variables = { candidate_name: candidateUser?.name || "Candidate", company_name: company?.name || "Employer", job_title: job.title };
-      if (candidateUser?.email) await dispatchCommunication({ eventKey: "JOB_APPLICATION_RECEIVED", channel: "EMAIL", audience: "CANDIDATE", recipient: candidateUser.email, variables, idempotencyKey: `application:${submission.application.id}:candidate:email:received`, correlationId: submission.application.id, recipientRef: candidateUser.id }).catch(() => null);
-      if (candidateUser?.phoneNumber) await dispatchCommunication({ eventKey: "JOB_APPLICATION_RECEIVED", channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidateUser.phoneNumber, variables, idempotencyKey: `application:${submission.application.id}:candidate:whatsapp:received`, correlationId: submission.application.id, recipientRef: candidateUser.id }).catch(() => null);
+      await dispatchApplicationReceivedConfirmation({
+        applicationId: submission.application.id,
+        userId: session.id,
+        jobId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -114,18 +214,17 @@ export async function POST(req: NextRequest) {
         evaluation: submission.evaluation,
         message: "Application submitted successfully",
       }, { status: 201 });
-    } catch (e: any) {
-      if (e?.code === "P2002" || e?.name === "DuplicateApplicationError") {
+    } catch (error: any) {
+      if (error?.code === "P2002" || error?.name === "DuplicateApplicationError") {
         return jsonError("You have already applied to this job.", 409);
       }
-      if (e instanceof ApiError) throw e;
+      if (error instanceof ApiError) throw error;
       return jsonError("Application could not be submitted. Please try again.", 503);
     }
   } catch (error) {
     return handleApiError(error);
   }
 }
-
 
 const withdrawSchema = z.object({
   applicationId: z.string().uuid(),
