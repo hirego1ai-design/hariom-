@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { RECORDED_ASSESSMENT_READING_SECONDS } from "@/lib/recordedAssessment";
+import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
 const schema = z.object({
   roleTitle: z.string().trim().min(2).max(120),
@@ -41,6 +42,13 @@ export async function POST(request: NextRequest) {
     const body = await readValidatedJson(request, schema);
     const normalizedText = body.questionText.replace(/\s+/g, " ").trim();
     const normalizedRole = body.roleTitle.replace(/\s+/g, " ").trim();
+    const { canonicalTags: skillTags, unknownTags } = await resolveCanonicalSkillTags(body.skillTags);
+    if (unknownTags.length) {
+      throw new ApiError(
+        `Unknown skill tag(s): ${unknownTags.join(", ")}. Use the canonical skill master or approve the missing skill before publishing assessment evidence.`,
+        422,
+      );
+    }
     let question;
     try {
       question = await prisma.$transaction(async (tx) => {
@@ -55,6 +63,7 @@ export async function POST(request: NextRequest) {
         return tx.recordedAssessmentQuestionBank.create({
         data: {
           ...body,
+          skillTags,
           roleTitle: normalizedRole,
           questionText: normalizedText,
           version: (family[0]?.version ?? 0) + 1,
