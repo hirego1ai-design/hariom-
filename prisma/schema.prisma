@@ -112,6 +112,13 @@ enum CandidateReadinessStatus {
   EXPIRED
 }
 
+enum AssessmentFeedbackStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum CandidateCreditLedgerType {
   PURCHASE
   BONUS
@@ -214,6 +221,7 @@ model CandidateProfile {
   sourcingRelationships      CandidateSourcingRelationship[]
   candidateSkills            CandidateSkill[]
   assessmentNoticeAcknowledgements AssessmentNoticeAcknowledgement[]
+  assessmentFeedback AssessmentFeedback[]
 
   @@index([availabilityStatus, lastAvailabilityConfirmedAt])
 }
@@ -2349,10 +2357,31 @@ model McqAttempt {
   submittedAt        DateTime?
 
   answers McqCandidateAnswer[]
+  feedback AssessmentFeedback?
 
   @@index([candidateProfileId, assessmentId])
   @@index([candidateProfileId, startedAt])
   @@index([assessmentId])
+}
+
+model AssessmentFeedback {
+  id                 String                   @id @default(uuid())
+  attemptId          String                   @unique
+  attempt            McqAttempt               @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  candidateProfileId String
+  candidateProfile   CandidateProfile         @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  status             AssessmentFeedbackStatus @default(PENDING)
+  feedback           Json?
+  provider           String?
+  model              String?
+  schemaVersion      String                   @default("assessment-feedback-v1")
+  errorMessage       String?
+  generatedAt        DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([candidateProfileId, status])
+  @@index([generatedAt])
 }
 
 model McqCandidateAnswer {
