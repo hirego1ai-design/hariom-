@@ -149,6 +149,14 @@ export default function AdminModelRegistryPage() {
     return map;
   }, [telemetry]);
 
+  const cheapestConfiguredUnitCost = useMemo(() => {
+    const costs = config.models
+      .filter((model) => model.enabled && model.inputUsdPerMillion !== null && model.outputUsdPerMillion !== null)
+      .map((model) => (model.inputUsdPerMillion ?? 0) + (model.outputUsdPerMillion ?? 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    return costs.length ? Math.min(...costs) : null;
+  }, [config.models]);
+
   const save = async () => {
     setSaving(true);
     setError("");
@@ -403,6 +411,20 @@ export default function AdminModelRegistryPage() {
                               </label>
                             );
                           })}
+                        </div>
+
+                        <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
+                          <span className="rounded-full border border-white/10 px-2.5 py-1 text-text-secondary">
+                            Cost tier: {model.qualityTier}
+                          </span>
+                          {cheapestConfiguredUnitCost !== null && model.inputUsdPerMillion !== null && model.outputUsdPerMillion !== null && (
+                            <span className="rounded-full border border-emerald-500/20 px-2.5 py-1 text-emerald-300">
+                              Token cost index: {(((model.inputUsdPerMillion + model.outputUsdPerMillion) / cheapestConfiguredUnitCost)).toFixed(2)}× cheapest enabled
+                            </span>
+                          )}
+                          <span className="rounded-full border border-white/10 px-2.5 py-1 text-text-muted">
+                            Best-use tasks: {model.taskTypes.join(", ")}
+                          </span>
                         </div>
 
                         <div className="grid gap-3 rounded-xl border border-white/5 bg-black/15 p-4 text-xs sm:grid-cols-5">
