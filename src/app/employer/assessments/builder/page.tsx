@@ -6,6 +6,7 @@ import {
   GripVertical, FileText, CheckCircle2, Clock, 
   AlertCircle, Target, BookOpen, Layers, Edit
 } from "lucide-react";
+import { getKnowledgeScreeningPolicy } from "@/lib/knowledgeScreeningPolicy";
 
 type Assessment = {
   id: string;
@@ -16,6 +17,7 @@ type Assessment = {
   passingPercentage: number;
   jobListingId: string | null;
   isActive: boolean;
+  jobListing?: { title: string; department: string | null } | null;
   _count?: { questions: number };
 };
 
@@ -23,6 +25,7 @@ type Job = {
   id: string;
   title: string;
   status: string;
+  department?: string | null;
 };
 
 type Option = {
@@ -61,7 +64,7 @@ export default function AssessmentBuilder() {
     description: "",
     instructions: "",
     durationMinutes: "",
-    passingPercentage: "",
+    passingPercentage: "70",
     jobListingId: "",
   });
 
@@ -460,13 +463,32 @@ export default function AssessmentBuilder() {
                   <select
                     required
                     value={newAssessment.jobListingId}
-                    onChange={e => setNewAssessment({ ...newAssessment, jobListingId: e.target.value })}
+                    onChange={e => {
+                      const job = jobs.find((item) => item.id === e.target.value);
+                      const policy = getKnowledgeScreeningPolicy(job?.title, job?.department);
+                      setNewAssessment({
+                        ...newAssessment,
+                        jobListingId: e.target.value,
+                        durationMinutes: e.target.value ? String(policy.recommendedDurationMinutes) : "",
+                      });
+                    }}
                     className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Select a job</option>
                     {jobs.map((job) => <option key={job.id} value={job.id}>{job.title} ({job.status})</option>)}
                   </select>
                   {jobs.length === 0 && <p className="mt-2 text-sm text-amber-300">Create a job before creating an assessment.</p>}
+                  {newAssessment.jobListingId && (() => {
+                    const job = jobs.find((item) => item.id === newAssessment.jobListingId);
+                    const policy = getKnowledgeScreeningPolicy(job?.title, job?.department);
+                    return (
+                      <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs text-indigo-100">
+                        <strong>{policy.label}:</strong> {policy.minQuestions}-{policy.maxQuestions} questions.
+                        Recommended: {policy.recommendedQuestions} questions / about {policy.recommendedDurationMinutes} minutes.
+                        This is a basic knowledge screening, not an interview.
+                      </div>
+                    );
+                  })()}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-6">
@@ -532,7 +554,15 @@ export default function AssessmentBuilder() {
           )}
 
           {/* Assessment Editor */}
-          {!isCreatingAssessment && selectedAssessment && (
+          {!isCreatingAssessment && selectedAssessment && (() => {
+            const job = jobs.find((item) => item.id === selectedAssessment.jobListingId);
+            const screeningPolicy = getKnowledgeScreeningPolicy(
+              selectedAssessment.jobListing?.title ?? job?.title,
+              selectedAssessment.jobListing?.department ?? job?.department,
+            );
+            const questionCountInRange = questions.length >= screeningPolicy.minQuestions
+              && questions.length <= screeningPolicy.maxQuestions;
+            return (
             <div>
               <div className="mb-8 bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-md flex justify-between items-start">
                 <div>
@@ -545,8 +575,8 @@ export default function AssessmentBuilder() {
                     <span className="flex items-center gap-1.5 text-sm bg-gray-950 px-3 py-1.5 rounded-md border border-gray-800 text-gray-300">
                       <Target className="h-4 w-4 text-emerald-400" /> {selectedAssessment.passingPercentage}% to pass
                     </span>
-                    <span className="flex items-center gap-1.5 text-sm bg-gray-950 px-3 py-1.5 rounded-md border border-gray-800 text-gray-300">
-                      <Layers className="h-4 w-4 text-blue-400" /> {questions.length} questions
+                    <span className={`flex items-center gap-1.5 text-sm bg-gray-950 px-3 py-1.5 rounded-md border ${questionCountInRange ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300"}`}>
+                      <Layers className="h-4 w-4" /> {questions.length} / {screeningPolicy.minQuestions}-{screeningPolicy.maxQuestions} questions
                     </span>
                   </div>
                 </div>
@@ -805,7 +835,8 @@ export default function AssessmentBuilder() {
               <h2 className="text-2xl font-bold text-gray-400 mb-2">Assessment Builder</h2>
               <p className="text-gray-500 max-w-sm">Select an assessment from the sidebar or create a new one to start editing questions.</p>
             </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
