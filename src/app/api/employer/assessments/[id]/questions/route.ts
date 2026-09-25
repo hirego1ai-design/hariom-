@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
 const optionSchema = z.object({
   optionText: z.string().min(1, "Option text cannot be empty"),
@@ -69,11 +70,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     const orderIndex = lastQuestion ? lastQuestion.orderIndex + 1 : 0;
 
-    const skillTags = Array.from(new Set(
-      (data.skillTags?.length ? data.skillTags : data.category ? [data.category] : [])
-        .map((tag) => tag.trim().replace(/\s+/g, " "))
-        .filter(Boolean),
-    ));
+    const requestedSkillTags = data.skillTags?.length
+      ? data.skillTags
+      : data.category
+        ? [data.category]
+        : [];
+    const { canonicalTags: skillTags, unknownTags } = await resolveCanonicalSkillTags(requestedSkillTags);
+    if (unknownTags.length) {
+      throw new ApiError(
+        `Unknown skill tag(s): ${unknownTags.join(", ")}. Use the canonical skill master or have an administrator approve the missing skill first.`,
+        422,
+      );
+    }
 
     const question = await prisma.$transaction(async (tx) => {
       const newQuestion = await tx.mcqQuestion.create({
@@ -83,7 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           explanation: data.explanation,
           points: data.points,
           difficulty: data.difficulty,
-          category: data.category || skillTags[0] || undefined,
+          category: skillTags[0] || undefined,
           skillTags,
           orderIndex,
           options: {
