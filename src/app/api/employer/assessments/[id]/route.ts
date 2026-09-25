@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { getKnowledgeScreeningPolicy, MIN_QUESTIONS_PER_SKILL } from "@/lib/knowledgeScreeningPolicy";
 
 const updateAssessmentSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
@@ -52,12 +53,44 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       if (questions.length === 0) {
         throw new ApiError("Cannot publish an assessment with zero questions. Add questions before publishing.", 400);
       }
+
+      const screeningPolicy = getKnowledgeScreeningPolicy(
+        assessment.roleTitle ?? assessment.jobListing?.title,
+        assessment.jobListing?.department,
+      );
+      if (questions.length < screeningPolicy.minQuestions || questions.length > screeningPolicy.maxQuestions) {
+        throw new ApiError(
+          `This is a short knowledge screening, not an interview. ${screeningPolicy.label} requires ${screeningPolicy.minQuestions}-${screeningPolicy.maxQuestions} questions; this assessment has ${questions.length}.`,
+          400,
+        );
+      }
       const untagged = questions.filter((question) =>
         question.skillTags.length === 0 && !question.category?.trim()
       );
       if (untagged.length > 0) {
         throw new ApiError(
           `Cannot publish: ${untagged.length} question(s) have no skill tag. Tag every question with the skill it measures.`,
+          400,
+        );
+      }
+
+      const questionsPerSkill = new Map<string, number>();
+      for (const question of questions) {
+        const tags = question.skillTags.length
+          ? question.skillTags
+          : question.category?.trim()
+            ? [question.category.trim()]
+            : [];
+        for (const tag of new Set(tags.map((value) => value.trim()).filter(Boolean))) {
+          questionsPerSkill.set(tag, (questionsPerSkill.get(tag) ?? 0) + 1);
+        }
+      }
+      const underTestedSkills = Array.from(questionsPerSkill.entries())
+        .filter(([, count]) => count < MIN_QUESTIONS_PER_SKILL)
+        .map(([skill, count]) => `${skill} (${count}/${MIN_QUESTIONS_PER_SKILL})`);
+      if (underTestedSkills.length > 0) {
+        throw new ApiError(
+          `Each assessed skill needs at least ${MIN_QUESTIONS_PER_SKILL} questions for Knowledge Validated status. Add evidence for: ${underTestedSkills.join(", ")}.`,
           400,
         );
       }

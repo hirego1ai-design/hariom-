@@ -117,7 +117,7 @@ export default function EmployerCandidateProfilePage() {
                   const label = skill.verificationStatus === "VERIFIED"
                     ? "Verified"
                     : skill.verificationStatus === "ASSESSMENT_VALIDATED"
-                      ? "Assessment validated"
+                      ? "Knowledge Validated"
                       : skill.verificationStatus === "EXPIRED"
                         ? "Evidence expired"
                         : "Self-declared";

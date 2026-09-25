@@ -40,6 +40,15 @@ type SubmitResponse = {
     correctCount: number;
     incorrectCount: number;
     passed: boolean;
+    skillEvidence: Array<{
+      name: string;
+      score: number;
+      questionCount: number;
+      earnedPoints: number;
+      totalPoints: number;
+      knowledgeValidated: boolean;
+      assessmentValidated?: boolean;
+    }>;
   };
   error?: string;
 };
@@ -220,9 +229,11 @@ export default function ActiveMCQAssessment() {
             ) : (
               <XCircle className="mx-auto mb-4 h-16 w-16 text-red-500" />
             )}
-            <h1 className="text-3xl font-bold mb-2">Assessment Complete</h1>
+            <h1 className="text-3xl font-bold mb-2">Knowledge Screening Complete</h1>
             <p className="text-gray-400">
-              {results.passed ? "Congratulations! You passed the assessment." : "You did not meet the passing score this time."}
+              {results.passed
+                ? "You met the overall knowledge screening threshold."
+                : "You did not meet the overall knowledge screening threshold this time."}
             </p>
           </div>
           
@@ -241,6 +252,34 @@ export default function ActiveMCQAssessment() {
               <span className="text-gray-400">Incorrect Answers</span>
               <span className="text-red-500 font-medium">{results.incorrectCount}</span>
             </div>
+
+            {results.skillEvidence?.length > 0 && (
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <div className="mb-3">
+                  <h2 className="font-semibold text-white">Claimed skill knowledge check</h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Knowledge Validated means this short screening found enough basic evidence for the skill. It is not an interview or full practical verification.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {results.skillEvidence.map((skill) => (
+                    <div key={skill.name} className="flex items-center justify-between gap-3 rounded-md border border-gray-800 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-200">{skill.name}</p>
+                        <p className="text-xs text-gray-500">{skill.questionCount} questions · {skill.score}%</p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                        skill.knowledgeValidated
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "bg-gray-800 text-gray-400"
+                      }`}>
+                        {skill.knowledgeValidated ? "Knowledge Validated" : "Not validated"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
           <button 

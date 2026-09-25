@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
           questionCount: item.questionCount,
           earnedPoints: item.earnedPoints,
           totalPoints: item.totalPoints,
+          knowledgeValidated: qualifiesMcqSkillEvidence(item, assessment.passingPercentage),
           assessmentValidated: qualifiesMcqSkillEvidence(item, assessment.passingPercentage),
         })),
       },

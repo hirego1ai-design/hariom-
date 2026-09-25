@@ -4,8 +4,9 @@ import {
   SkillProficiencyLevel,
   SkillVerificationStatus,
 } from "@prisma/client";
+import { MIN_QUESTIONS_PER_SKILL } from "@/lib/knowledgeScreeningPolicy";
 
-export const MIN_SKILL_QUESTIONS_FOR_VALIDATION = 3;
+export const MIN_SKILL_QUESTIONS_FOR_VALIDATION = MIN_QUESTIONS_PER_SKILL;
 export const DEFAULT_SKILL_VALIDITY_DAYS = 180;
 
 export type ClaimedSkillInput = {
