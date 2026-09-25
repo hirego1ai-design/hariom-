@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { handleApiError, ApiError } from "@/lib/apiSecurity";
 import { ApplicationStatus } from "@prisma/client";
+import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 
 const eligibleStatuses: ApplicationStatus[] = [
   ApplicationStatus.APPLIED,
@@ -29,14 +30,17 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             title: true,
+            department: true,
             mcqAssessments: {
-              where: { isActive: true },
+              where: { isActive: true, scope: "EMPLOYER_JOB" },
               select: {
                 id: true,
                 title: true,
                 description: true,
+                roleTitle: true,
                 durationMinutes: true,
                 passingPercentage: true,
+                questions: { select: { category: true, skillTags: true } },
               },
             },
           },
@@ -44,7 +48,22 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const assessmentIds = applications.flatMap((application) => application.job.mcqAssessments.map((assessment) => assessment.id));
+    const validAssignments = applications.flatMap((application) =>
+      application.job.mcqAssessments
+        .filter((assessment) =>
+          validateKnowledgeScreeningAssessment({
+            roleTitle: assessment.roleTitle ?? application.job.title,
+            department: application.job.department,
+            questions: assessment.questions,
+          }).valid
+        )
+        .map(({ questions: _questions, ...assessment }) => ({
+          assessment,
+          job: { id: application.job.id, title: application.job.title },
+        })),
+    );
+
+    const assessmentIds = validAssignments.map(({ assessment }) => assessment.id);
     const attempts = assessmentIds.length
       ? await prisma.mcqAttempt.findMany({
           where: { candidateProfileId: candidate.id, assessmentId: { in: assessmentIds } },
@@ -52,6 +71,7 @@ export async function GET(request: NextRequest) {
           orderBy: { startedAt: "desc" },
         })
       : [];
+
     const attemptsByAssessment = new Map<string, typeof attempts[number]>();
     for (const attempt of attempts) {
       if (!attemptsByAssessment.has(attempt.assessmentId)) {
@@ -59,13 +79,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const assessments = applications.flatMap((application) =>
-      application.job.mcqAssessments.map((assessment) => ({
-        ...assessment,
-        job: application.job,
-        attempt: attemptsByAssessment.get(assessment.id) || null,
-      })),
-    );
+    const assessments = validAssignments.map(({ assessment, job }) => ({
+      ...assessment,
+      job,
+      attempt: attemptsByAssessment.get(assessment.id) || null,
+    }));
 
     return NextResponse.json({ success: true, assessments });
   } catch (error) {
