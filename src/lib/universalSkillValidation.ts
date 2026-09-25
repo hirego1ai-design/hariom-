@@ -224,6 +224,19 @@ export async function generateAssessmentQuestions(params: {
       actualCostMinorUnits = execution.log.actualCostMinorUnits;
       return execution.resultText;
     },
+    validateResult: (raw) => {
+      let parsed: unknown;
+      try {
+        parsed = parseModelJson(raw);
+      } catch {
+        throw new Error("Assessment authoring returned invalid JSON.");
+      }
+      const validated = authoringOutputSchema.safeParse(parsed);
+      if (!validated.success) {
+        throw new Error("Assessment authoring output failed the required schema.");
+      }
+      validateGeneratedQuestions(validated.data.questions, roleTitle, allocation, params.department);
+    },
   });
 
   let parsed: unknown;
