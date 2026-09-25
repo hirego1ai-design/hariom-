@@ -13,6 +13,12 @@ type Policy = {
   mockInterviewRecommendationEnabled: boolean;
 };
 
+type JobSpecificPolicy = {
+  passingPercentage: number;
+  validityDays: number;
+  retakeCooldownHours: number;
+};
+
 type Template = {
   id: string;
   title: string;
@@ -29,6 +35,9 @@ export default function AdminSkillValidationPage() {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [configured, setConfigured] = useState(false);
+  const [jobSpecificPolicy, setJobSpecificPolicy] = useState<JobSpecificPolicy | null>(null);
+  const [jobSpecificConfigured, setJobSpecificConfigured] = useState(false);
+  const [jobSpecificSaving, setJobSpecificSaving] = useState(false);
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,9 +48,20 @@ export default function AdminSkillValidationPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/skill-validation-policy", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "Could not load Skill Validation policy.");
+      const [universalResponse, jobSpecificResponse] = await Promise.all([
+        fetch("/api/admin/skill-validation-policy", { cache: "no-store" }),
+        fetch("/api/admin/job-specific-assessment-policy", { cache: "no-store" }),
+      ]);
+      const [data, jobSpecificData] = await Promise.all([
+        universalResponse.json(),
+        jobSpecificResponse.json(),
+      ]);
+      if (!universalResponse.ok || !data.success) {
+        throw new Error(data.error || "Could not load Skill Validation policy.");
+      }
+      if (!jobSpecificResponse.ok || !jobSpecificData.success) {
+        throw new Error(jobSpecificData.error || "Could not load job-specific assessment policy.");
+      }
       setConfigured(Boolean(data.configured));
       setPolicy(data.policy ?? {
         passingPercentage: 70,
@@ -51,6 +71,12 @@ export default function AdminSkillValidationPage() {
         mockInterviewRecommendationEnabled: true,
       });
       setTemplates(data.templates ?? []);
+      setJobSpecificConfigured(Boolean(jobSpecificData.configured));
+      setJobSpecificPolicy(jobSpecificData.policy ?? {
+        passingPercentage: 70,
+        validityDays: 90,
+        retakeCooldownHours: 24,
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load Skill Validation policy.");
     } finally {
@@ -84,6 +110,36 @@ export default function AdminSkillValidationPage() {
       setError(cause instanceof Error ? cause.message : "Could not save Skill Validation policy.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveJobSpecific = async () => {
+    if (!jobSpecificPolicy || jobSpecificSaving) return;
+    setJobSpecificSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/job-specific-assessment-policy", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          policy: jobSpecificPolicy,
+          reason: reason.trim() || undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Could not save job-specific assessment policy.");
+      }
+      setJobSpecificPolicy(data.policy);
+      setJobSpecificConfigured(true);
+      setReason("");
+      setNotice("Job-specific assessment policy saved and audited.");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save job-specific assessment policy.");
+    } finally {
+      setJobSpecificSaving(false);
     }
   };
 
@@ -198,6 +254,68 @@ export default function AdminSkillValidationPage() {
                   {saving ? "Saving…" : "Save policy"}
                 </button>
               </section>
+
+              {jobSpecificPolicy && (
+                <section className="rounded-3xl border border-white/10 bg-[#121215] p-6 space-y-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Job-specific assessment policy</h2>
+                    <p className="mt-1 text-xs text-text-muted">
+                      Employers choose only Yes/No. HireGo controls the assessment thresholds and auto-generates compliant questions from the job role and approved skills.
+                    </p>
+                  </div>
+
+                  {!jobSpecificConfigured && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+                      This policy is not configured. Jobs requiring an additional assessment will remain drafts until the policy is saved.
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="text-xs text-text-muted">
+                      Passing percentage
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={jobSpecificPolicy.passingPercentage}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, passingPercentage: Number(event.target.value) })}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
+                      />
+                    </label>
+                    <label className="text-xs text-text-muted">
+                      Result validity (days)
+                      <input
+                        type="number"
+                        min={1}
+                        max={3650}
+                        value={jobSpecificPolicy.validityDays}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, validityDays: Number(event.target.value) })}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
+                      />
+                    </label>
+                    <label className="text-xs text-text-muted">
+                      Retake cooldown (hours)
+                      <input
+                        type="number"
+                        min={0}
+                        max={8760}
+                        value={jobSpecificPolicy.retakeCooldownHours}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, retakeCooldownHours: Number(event.target.value) })}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void saveJobSpecific()}
+                    disabled={jobSpecificSaving}
+                    className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-extrabold text-white disabled:opacity-50"
+                  >
+                    {jobSpecificSaving ? "Saving…" : "Save job-specific policy"}
+                  </button>
+                </section>
+              )}
 
               <section className="space-y-4">
                 <div>
