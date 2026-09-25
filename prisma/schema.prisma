@@ -2298,6 +2298,10 @@ model McqAssessment {
   seniority           String?
   validityDays        Int?
   retakeCooldownHours Int?
+  authoringProvider   String?
+  authoringModel      String?
+  authoringVersion    String?
+  authoringSource     String?
   jobListingId        String?
   jobListing          JobListing?     @relation(fields: [jobListingId], references: [id], onDelete: SetNull)
   createdAt           DateTime        @default(now())
