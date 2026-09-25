@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
 const optionSchema = z.object({
   optionText: z.string().min(1, "Option text cannot be empty"),
@@ -70,9 +71,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       throw new ApiError("Cannot modify questions for an assessment that already has candidate attempts.", 400);
     }
 
-    const skillTags = data.skillTags !== undefined
-      ? Array.from(new Set(data.skillTags.map((tag) => tag.trim().replace(/\s+/g, " ")).filter(Boolean)))
-      : undefined;
+    const requestedSkillTags = data.skillTags !== undefined
+      ? data.skillTags
+      : data.category !== undefined
+        ? [data.category]
+        : undefined;
+    let skillTags: string[] | undefined;
+    if (requestedSkillTags !== undefined) {
+      const resolved = await resolveCanonicalSkillTags(requestedSkillTags);
+      if (resolved.unknownTags.length) {
+        throw new ApiError(
+          `Unknown skill tag(s): ${resolved.unknownTags.join(", ")}. Use the canonical skill master or have an administrator approve the missing skill first.`,
+          422,
+        );
+      }
+      skillTags = resolved.canonicalTags;
+    }
 
     const updatedQuestion = await prisma.$transaction(async (tx) => {
       if (data.options) {
@@ -88,7 +102,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           explanation: data.explanation,
           points: data.points,
           difficulty: data.difficulty,
-          category: data.category ?? (skillTags?.[0] || undefined),
+          category: skillTags !== undefined ? (skillTags[0] || null) : data.category,
           ...(skillTags !== undefined ? { skillTags } : {}),
           ...(data.options && {
             options: {
