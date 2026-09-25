@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, ShieldAlert, XCircle, LayoutGrid } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, ShieldCheck, XCircle, LayoutGrid } from "lucide-react";
 
 type Option = {
   id: string;
@@ -40,6 +40,10 @@ type SubmitResponse = {
     correctCount: number;
     incorrectCount: number;
     passed: boolean;
+    validationEligible?: boolean;
+    validationNote?: string | null;
+    releasedApplicationIds?: string[];
+    applicationContinuation?: "SUBMITTED" | "NO_PENDING_APPLICATION";
     skillEvidence: Array<{
       name: string;
       score: number;
@@ -233,8 +237,13 @@ export default function ActiveMCQAssessment() {
             <p className="text-gray-400">
               {results.passed
                 ? "You met the overall knowledge screening threshold."
-                : "You did not meet the overall knowledge screening threshold this time."}
+                : "You completed the screening, but did not meet the overall knowledge threshold this time."}
             </p>
+            {results.applicationContinuation === "SUBMITTED" && (
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                Your pending job application has now been submitted.
+              </div>
+            )}
           </div>
           
           <div className="space-y-4 mb-8">
@@ -282,12 +291,20 @@ export default function ActiveMCQAssessment() {
             )}
           </div>
           
-          <button 
-            onClick={() => router.push("/assessment/mcq")}
-            className="w-full rounded-lg bg-indigo-600 py-3 font-semibold hover:bg-indigo-700 transition-colors"
-          >
-            Return to Dashboard
-          </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="w-full rounded-lg bg-indigo-600 py-3 font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Candidate Dashboard
+            </button>
+            <button
+              onClick={() => router.push("/jobs")}
+              className="w-full rounded-lg border border-gray-700 bg-gray-950 py-3 font-semibold text-gray-200 hover:bg-gray-800 transition-colors"
+            >
+              Browse Jobs
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -409,11 +426,11 @@ export default function ActiveMCQAssessment() {
         <aside className="hidden w-80 flex-col border-l border-gray-800 bg-gray-950 lg:flex overflow-y-auto">
           <div className="p-6 border-b border-gray-800 bg-indigo-500/5">
             <div className="flex items-start gap-3">
-              <ShieldAlert className="h-5 w-5 text-indigo-400 mt-0.5 flex-shrink-0" />
+              <ShieldCheck className="h-5 w-5 text-indigo-400 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="text-sm font-semibold text-indigo-400 mb-1">Proctoring Active</h3>
+                <h3 className="text-sm font-semibold text-indigo-400 mb-1">Assessment integrity</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Your session is being monitored. Do not switch tabs or exit fullscreen mode during the assessment.
+                  The timer, candidate ownership, hidden answer keys, and duplicate-submission protection are enforced by the server. Webcam, microphone, screen recording, and tab-switch monitoring are not enabled in this flow.
                 </p>
               </div>
             </div>
