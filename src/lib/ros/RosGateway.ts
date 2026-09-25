@@ -8,6 +8,7 @@ import { ApplicationGateType, ApplicationGateStatus, JobStatus, Role, KillSwitch
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { computeMatchScore } from '@/lib/matching/JobMatchingEngine';
+import { ensureJobSpecificAssessment } from '@/lib/jobSpecificAssessment';
 
 export interface DispatchJobCreationParams {
   userId: string;
@@ -307,7 +308,15 @@ export class RosGateway {
     const released: string[] = [];
     for (const gate of gates) {
       const application = gate.application;
-      if (application.job.status !== "ACTIVE") continue;
+      if (application.job.status !== JobStatus.ACTIVE) continue;
+
+      const jobSpecificAssessment = application.job.requiresJobSpecificAssessment
+        ? await ensureJobSpecificAssessment(application.job.id, application.job.companyId)
+        : null;
+      if (application.job.requiresJobSpecificAssessment && !jobSpecificAssessment) {
+        throw new Error("Required job-specific assessment is unavailable.");
+      }
+
       const match = this.deterministicApplicationMatch(candidate, application.job);
       const correlationId = crypto.randomUUID();
 
@@ -328,17 +337,45 @@ export class RosGateway {
             completedAt: new Date(),
           },
         });
+
+        if (jobSpecificAssessment) {
+          await tx.applicationGate.upsert({
+            where: {
+              applicationId_type: {
+                applicationId: application.id,
+                type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+              },
+            },
+            create: {
+              applicationId: application.id,
+              type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+              status: ApplicationGateStatus.REQUIRED,
+              assessmentId: jobSpecificAssessment.id,
+            },
+            update: {
+              assessmentId: jobSpecificAssessment.id,
+              status: ApplicationGateStatus.REQUIRED,
+              completedAt: null,
+            },
+          });
+        }
+
         await tx.application.update({
           where: { id: application.id },
           data: {
-            status: "APPLIED",
+            status: jobSpecificAssessment ? "ASSESSMENT" : "APPLIED",
             matchScore: match.matchScore,
             aiSummary: match.summary,
           },
         });
+
         await OutboxPublisher.publish({
           eventType: "APPLICATION_SUBMITTED",
-          payload: { applicationId: application.id, jobId: application.jobId },
+          payload: {
+            applicationId: application.id,
+            jobId: application.jobId,
+            jobSpecificAssessmentRequired: Boolean(jobSpecificAssessment),
+          },
           correlationId,
           companyId: application.job.companyId,
           idempotencyKey: `application-submitted:${application.id}`,
@@ -358,10 +395,18 @@ export class RosGateway {
   static async handleApplicationSubmission(params: DispatchApplicationParams): Promise<{
     application: { id: string; jobId: string; candidateProfileId: string; status: string; matchScore: number; aiSummary: string | null };
     evaluation: "COMPLETED";
+    jobSpecificAssessmentId: string | null;
   }> {
     const { candidate, job } = await this.authorizedApplicationInputs(params);
     const match = this.deterministicApplicationMatch(candidate, job);
     const correlationId = crypto.randomUUID();
+
+    const jobSpecificAssessment = job.requiresJobSpecificAssessment
+      ? await ensureJobSpecificAssessment(job.id, job.companyId)
+      : null;
+    if (job.requiresJobSpecificAssessment && !jobSpecificAssessment) {
+      throw new Error("Required job-specific assessment is unavailable.");
+    }
 
     try {
       const application = await prisma.$transaction(async (tx) => {
@@ -369,9 +414,20 @@ export class RosGateway {
           data: {
             jobId: job.id,
             candidateProfileId: candidate.id,
-            status: "APPLIED",
+            status: jobSpecificAssessment ? "ASSESSMENT" : "APPLIED",
             matchScore: match.matchScore,
             aiSummary: match.summary,
+            ...(jobSpecificAssessment
+              ? {
+                  gates: {
+                    create: {
+                      type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+                      status: ApplicationGateStatus.REQUIRED,
+                      assessmentId: jobSpecificAssessment.id,
+                    },
+                  },
+                }
+              : {}),
           },
           select: {
             id: true,
@@ -385,14 +441,22 @@ export class RosGateway {
 
         await OutboxPublisher.publish({
           eventType: "APPLICATION_SUBMITTED",
-          payload: { applicationId: created.id, jobId: created.jobId },
+          payload: {
+            applicationId: created.id,
+            jobId: created.jobId,
+            jobSpecificAssessmentRequired: Boolean(jobSpecificAssessment),
+          },
           correlationId,
           companyId: job.companyId,
           idempotencyKey: `application-submitted:${created.id}`,
         }, tx);
         return created;
       });
-      return { application, evaluation: "COMPLETED" };
+      return {
+        application,
+        evaluation: "COMPLETED",
+        jobSpecificAssessmentId: jobSpecificAssessment?.id ?? null,
+      };
     } catch (error: any) {
       if (error?.code === "P2002") throw new DuplicateApplicationError();
       throw error;
