@@ -156,6 +156,17 @@ export class ModelRouter {
 
     if (policy.mode === "COST_SAVER") {
       candidates.sort((a, b) => costWeight(a.config) - costWeight(b.config));
+    } else if (policy.mode === "BALANCED") {
+      candidates.sort((a, b) => {
+        const aCost = costWeight(a.config);
+        const bCost = costWeight(b.config);
+        const aEfficiency = Number.isFinite(aCost) ? qualityWeight(a.config) / Math.max(aCost, 0.000001) : 0;
+        const bEfficiency = Number.isFinite(bCost) ? qualityWeight(b.config) / Math.max(bCost, 0.000001) : 0;
+        if (aEfficiency !== bEfficiency) return bEfficiency - aEfficiency;
+        if (a.key === policy.primaryModelKey && b.key !== policy.primaryModelKey) return -1;
+        if (b.key === policy.primaryModelKey && a.key !== policy.primaryModelKey) return 1;
+        return aCost - bCost;
+      });
     } else if (policy.mode === "QUALITY_FIRST") {
       candidates.sort((a, b) => {
         const qualityDelta = qualityWeight(b.config) - qualityWeight(a.config);
