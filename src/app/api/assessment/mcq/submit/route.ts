@@ -9,6 +9,7 @@ import {
   qualifiesMcqSkillEvidence,
 } from "@/lib/skillValidation";
 import { z } from "zod";
+import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -57,6 +58,15 @@ export async function POST(req: NextRequest) {
     }
 
     const { assessment } = attempt;
+    const validation = validateKnowledgeScreeningAssessment({
+      roleTitle: assessment.roleTitle,
+      questions: assessment.questions.map((question) => ({
+        category: question.category,
+        skillTags: question.skillTags,
+      })),
+    });
+    const qualifiesForSkillValidation = validation.valid;
+
     const durationLimitMs = (assessment.durationMinutes * 60 + 60) * 1000;
     if (Date.now() - attempt.startedAt.getTime() > durationLimitMs) {
       throw new ApiError("Assessment duration has expired. Submission rejected.", 400);
@@ -129,16 +139,18 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const skillEvidence = await persistMcqSkillEvidence(tx, {
-        candidateProfileId: candidateProfile.id,
-        assessmentId: assessment.id,
-        attemptId,
-        roleTitle: assessment.roleTitle,
-        seniority: assessment.seniority,
-        passingPercentage: assessment.passingPercentage,
-        validityDays: assessment.validityDays,
-        questionResults,
-      });
+      const skillEvidence = qualifiesForSkillValidation
+        ? await persistMcqSkillEvidence(tx, {
+            candidateProfileId: candidateProfile.id,
+            assessmentId: assessment.id,
+            attemptId,
+            roleTitle: assessment.roleTitle,
+            seniority: assessment.seniority,
+            passingPercentage: assessment.passingPercentage,
+            validityDays: assessment.validityDays,
+            questionResults,
+          })
+        : [];
 
       const updatedAttempt = await tx.mcqAttempt.findUniqueOrThrow({
         where: { id: attemptId },
@@ -146,7 +158,7 @@ export async function POST(req: NextRequest) {
       return { updatedAttempt, skillEvidence };
     }, { maxWait: 15000, timeout: 20000 });
 
-    if (assessment.scope === "PLATFORM_READINESS" && assessment.roleTitle && assessment.seniority) {
+    if (qualifiesForSkillValidation && assessment.scope === "PLATFORM_READINESS" && assessment.roleTitle && assessment.seniority) {
       const validUntil = assessment.validityDays
         ? new Date(Date.now() + assessment.validityDays * 24 * 60 * 60 * 1000)
         : null;
@@ -185,6 +197,10 @@ export async function POST(req: NextRequest) {
       },
       results: {
         score: submission.updatedAttempt.score,
+        validationEligible: qualifiesForSkillValidation,
+        validationNote: qualifiesForSkillValidation
+          ? null
+          : "This legacy assessment result is retained for history but is not eligible for HireGo Skill Validation evidence.",
         correctCount,
         incorrectCount: assessment.questions.length - correctCount,
         passed: submission.updatedAttempt.passed,
