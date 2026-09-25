@@ -16,6 +16,15 @@ type EmployerApplicationEvidence = {
     availabilityStatus: string;
     lastAvailabilityConfirmedAt: Date | null;
     readinessRecords: { roleTitle: string; seniority: string; score: number | null; validUntil: Date | null }[];
+    candidateSkills: {
+      name: string;
+      claimedLevel: string;
+      verifiedLevel: string | null;
+      verificationStatus: string;
+      latestScore: number | null;
+      verifiedAt: Date | null;
+      validUntil: Date | null;
+    }[];
   };
   job: { title: string };
 };
@@ -59,6 +68,23 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     availabilityConfirmedAt: profile.lastAvailabilityConfirmedAt?.toISOString() || null,
     jobReady: profile.readinessRecords.some((record) => !record.validUntil || record.validUntil > new Date()),
     jobReadyRecords: profile.readinessRecords,
+    skills: profile.candidateSkills.map((skill) => {
+      const expired = !!skill.validUntil && skill.validUntil <= new Date();
+      const verificationStatus = expired ? "EXPIRED" : skill.verificationStatus;
+      return {
+        name: skill.name,
+        claimedLevel: skill.claimedLevel.toLowerCase(),
+        verifiedLevel: skill.verifiedLevel?.toLowerCase() ?? null,
+        verificationStatus,
+        latestScore: ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(verificationStatus) ? skill.latestScore : null,
+        verifiedAt: ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(verificationStatus)
+          ? skill.verifiedAt?.toISOString() ?? null
+          : null,
+        validUntil: ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(verificationStatus)
+          ? skill.validUntil?.toISOString() ?? null
+          : null,
+      };
+    }),
   };
 }
 
