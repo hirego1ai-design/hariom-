@@ -27,6 +27,12 @@ type EmployerApplicationEvidence = {
     }[];
   };
   job: { title: string };
+  gates?: {
+    type: string;
+    status: string;
+    assessmentId: string | null;
+    completedAt: Date | null;
+  }[];
 };
 
 /** Only the application match score is currently available in this query.
@@ -43,6 +49,8 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     experience: `${profile.experienceYears}y Exp`,
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
     stage: app.status === "APPLIED" ? "SCREENING" : app.status,
+    applicationGates: app.gates ?? [],
+    universalSkillValidationGate: (app.gates ?? []).find((gate) => gate.type === "UNIVERSAL_SKILL_VALIDATION") ?? null,
     jobId: app.jobId,
     currentRole: profile.headline || "Not provided",
     appliedJob: app.job.title,
