@@ -62,6 +62,16 @@ export async function GET(
           },
           orderBy: { createdAt: "desc" },
         },
+        candidateSkills: {
+          where: { isVisible: true },
+          orderBy: { name: "asc" },
+          include: {
+            evidence: {
+              orderBy: { observedAt: "desc" },
+              take: 10,
+            },
+          },
+        },
       },
     });
 
@@ -148,13 +158,52 @@ export async function GET(
       matchBreakdown: [],
     };
 
-    const ucpSkills = {
-      technical: profile.skills.map((s) => ({
-        name: s,
+    const now = new Date();
+    const evidenceBackedSkills = profile.candidateSkills.map((skill) => {
+      const expired = !!skill.validUntil && skill.validUntil <= now;
+      const verificationStatus = expired ? "EXPIRED" : skill.verificationStatus;
+      const assessmentValidated = verificationStatus === "ASSESSMENT_VALIDATED" || verificationStatus === "VERIFIED";
+      return {
+        name: skill.name,
+        level: (skill.verifiedLevel ?? skill.claimedLevel).toLowerCase(),
+        claimedLevel: skill.claimedLevel.toLowerCase(),
+        verifiedLevel: skill.verifiedLevel?.toLowerCase() ?? null,
+        years: null,
+        verified: assessmentValidated,
+        verificationStatus,
+        latestScore: assessmentValidated ? skill.latestScore : null,
+        verifiedAt: assessmentValidated ? skill.verifiedAt?.toISOString() ?? null : null,
+        validUntil: assessmentValidated ? skill.validUntil?.toISOString() ?? null : null,
+        evidence: skill.evidence.map((item) => ({
+          type: item.evidenceType,
+          score: item.score,
+          questionCount: item.questionCount,
+          qualifiesVerification: item.qualifiesVerification,
+          roleTitle: item.roleTitle,
+          seniority: item.seniority,
+          observedAt: item.observedAt.toISOString(),
+          validUntil: item.validUntil?.toISOString() ?? null,
+        })),
+      };
+    });
+    const legacySkills = profile.skills
+      .filter((name) => !profile.candidateSkills.some((skill) => skill.name.toLowerCase() === name.toLowerCase()))
+      .map((name) => ({
+        name,
         level: null,
+        claimedLevel: null,
+        verifiedLevel: null,
         years: null,
         verified: false,
-      })),
+        verificationStatus: "SELF_DECLARED",
+        latestScore: null,
+        verifiedAt: null,
+        validUntil: null,
+        evidence: [],
+      }));
+
+    const ucpSkills = {
+      technical: [...evidenceBackedSkills, ...legacySkills],
       softSkills: [],
       languages: [],
       tools: [],
