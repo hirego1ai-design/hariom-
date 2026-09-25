@@ -1,166 +1,304 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
-import { formatNumber, formatDate } from "@/utils";
+
+type Model = {
+  key: string;
+  provider: string;
+  modelId: string;
+  label: string;
+  enabled: boolean;
+  qualityTier: string;
+  inputUsdPerMillion: number | null;
+  outputUsdPerMillion: number | null;
+};
+
+type Route = {
+  taskType: string;
+  mode: string;
+  primaryModelKey: string | null;
+  fallbackModelKeys: string[];
+};
+
+type ProviderStatus = {
+  provider: string;
+  configured: boolean;
+  status: string;
+};
+
+type ModelStat = {
+  provider: string;
+  model: string;
+  requests: number;
+  successRate: number;
+  fallbackRate: number;
+  failureRate: number;
+  avgLatencyMs: number | null;
+  avgCostUsd: number | null;
+  costPerSuccessfulTaskUsd: number | null;
+};
+
+type RoutingPayload = {
+  success: boolean;
+  config: { models: Model[]; routes: Route[] };
+  providers: ProviderStatus[];
+  telemetry: {
+    totalRequests: number;
+    totalTokens: number;
+    totalCostUsd: number;
+    avgLatencyMs: number;
+    providerCounts: Record<string, number>;
+    modelStats: ModelStat[];
+  };
+  error?: string;
+};
+
+type BenchmarkResult = {
+  key: string;
+  provider: string;
+  model: string;
+  label: string;
+  success: boolean;
+  schemaPass: boolean;
+  latencyMs: number;
+  totalTokens: number | null;
+  costUsd: number | null;
+  output: string | null;
+  error: string | null;
+};
+
+function money(value: number | null) {
+  return value === null ? "Not measured" : `$${value.toFixed(value < 0.01 ? 6 : 4)}`;
+}
+
+function percent(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
 
 export default function AdminLlmUsagePage() {
-  const [stats, setStats] = useState<any>(null);
+  const [data, setData] = useState<RoutingPayload | null>(null);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [benchmark, setBenchmark] = useState<BenchmarkResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [testPrompt, setTestPrompt] = useState("Generate a 3-bullet summary of a Senior AI Engineer candidate.");
-  const [selectedProvider, setSelectedProvider] = useState("openai");
-  const [testResult, setTestResult] = useState<any>(null);
-  const [executing, setExecuting] = useState(false);
+  const [benchmarking, setBenchmarking] = useState(false);
+  const [error, setError] = useState("");
 
-  const loadStats = () => {
-    fetch("/api/admin/llm-usage")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setStats(data.stats);
-        }
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/ai-routing", { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to load AI telemetry.");
+      setData(body);
+      const runnableKeys = (body.config?.models || [])
+        .filter((model: Model) => model.enabled)
+        .slice(0, 3)
+        .map((model: Model) => model.key);
+      setSelectedModels((current) => current.length ? current : runnableKeys);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load AI telemetry.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadStats();
+    void load();
   }, []);
 
-  const handleTestDispatch = async () => {
-    if (!testPrompt.trim()) return;
-    setExecuting(true);
+  const statsByModel = useMemo(() => {
+    const map = new Map<string, ModelStat>();
+    for (const stat of data?.telemetry.modelStats || []) {
+      map.set(`${stat.provider}:${stat.model}`, stat);
+    }
+    return map;
+  }, [data]);
+
+  const runBenchmark = async () => {
+    if (!selectedModels.length || benchmarking) return;
+    setBenchmarking(true);
+    setError("");
+    setBenchmark([]);
     try {
-      const res = await fetch("/api/agents/dispatch", {
+      const response = await fetch("/api/admin/model-benchmark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task: "GENERAL",
-          prompt: testPrompt,
-          provider: selectedProvider,
-        }),
+        body: JSON.stringify({ modelKeys: selectedModels }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setTestResult(data);
-        loadStats();
-      }
-    } catch (err) {
-      console.error(err);
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Benchmark failed.");
+      setBenchmark(body.results || []);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Benchmark failed.");
     } finally {
-      setExecuting(false);
+      setBenchmarking(false);
     }
   };
 
   return (
     <div className="bg-[#0A0A0C] text-white min-h-screen relative">
       <AdminSidebar />
-      <AdminHeader />
+      <AdminHeader title="LLM Usage & Model Comparison" />
 
-      <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-6xl mx-auto">
-        <div className="border-b border-white/10 pb-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#AB47BC]/10 text-[#AB47BC] border border-[#AB47BC]/20 mb-1">
-            AI INFRASTRUCTURE
-          </div>
-          <h1 className="text-2xl font-bold text-white">Multi-LLM Router & Agent Monitoring</h1>
-          <p className="text-xs text-slate-400">Monitor token consumption, LLM provider distribution & test Multi-LLM dispatch</p>
-        </div>
+      <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-8 max-w-7xl mx-auto">
+        <header className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">AI infrastructure</p>
+          <h1 className="text-3xl font-extrabold">Usage, Cost & Model Comparison</h1>
+          <p className="max-w-4xl text-sm text-text-muted">
+            Live telemetry comes from the same model registry and router used by HireGo agents. No provider or model name on this page is hardcoded.
+          </p>
+          <Link href="/admin/models/registry" className="inline-flex text-xs font-bold text-primary">
+            Open Model Registry & Routing →
+          </Link>
+        </header>
 
-        {/* Live Metrics */}
-        {loading ? (
-          <div className="text-center py-12 text-xs text-slate-400">Loading AI stats...</div>
-        ) : stats ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-[#121215] border border-white/10 rounded-2xl p-5 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-slate-500">Total AI Executions</span>
-                <div className="text-xl font-extrabold text-white font-mono">{formatNumber(stats.totalRequests)}</div>
-              </div>
-              <div className="bg-[#121215] border border-white/10 rounded-2xl p-5 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-slate-500">Total Tokens Consumed</span>
-                <div className="text-xl font-extrabold text-[#29B6F6] font-mono">{formatNumber(stats.totalTokens)}</div>
-              </div>
-              <div className="bg-[#121215] border border-white/10 rounded-2xl p-5 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-slate-500">Average Latency</span>
-                <div className="text-xl font-extrabold text-[#26A69A] font-mono">{stats.avgLatencyMs} ms</div>
-              </div>
-              <div className="bg-[#121215] border border-white/10 rounded-2xl p-5 space-y-1">
-                <span className="text-[10px] uppercase font-bold text-slate-500">Estimated Cost (USD)</span>
-                <div className="text-xl font-extrabold text-[#FFCA28] font-mono">${stats.totalCostUsd}</div>
-              </div>
-            </div>
+        {loading && <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">Loading real AI telemetry…</div>}
+        {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
 
-            {/* Provider Distribution */}
-            <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-4 shadow-xl">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">LLM Provider Distribution</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { name: "OpenAI (GPT-4o)", key: "openai", color: "#26A69A" },
-                  { name: "Gemini (1.5 Pro)", key: "gemini", color: "#29B6F6" },
-                  { name: "DeepSeek (V3)", key: "deepseek", color: "#FFCA28" },
-                ].map((p) => (
-                  <div key={p.key} className="bg-[#16161B] p-4 rounded-xl border border-white/5 space-y-1">
-                    <span className="text-xs font-bold text-slate-300">{p.name}</span>
-                    <div className="text-lg font-extrabold font-mono" style={{ color: p.color }}>
-                      {stats.providerCounts[p.key] || 0} Requests
+        {!loading && data && (
+          <>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Requests</p><p className="mt-2 text-2xl font-bold">{data.telemetry.totalRequests}</p></div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Tokens</p><p className="mt-2 text-2xl font-bold">{data.telemetry.totalTokens}</p></div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Observed spend</p><p className="mt-2 text-2xl font-bold">{money(data.telemetry.totalCostUsd)}</p></div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Average latency</p><p className="mt-2 text-2xl font-bold">{data.telemetry.avgLatencyMs} ms</p></div>
+            </section>
+
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-xl font-bold">Provider usage</h2>
+                <p className="mt-1 text-xs text-text-muted">Configured status is server-derived. It does not mean every model under that provider is enabled.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                {data.providers.map((provider) => (
+                  <article key={provider.provider} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold uppercase">{provider.provider}</p>
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${provider.configured ? "border-green-500/30 text-green-300" : "border-amber-500/30 text-amber-300"}`}>
+                        {provider.configured ? "CONFIGURED" : "NOT CONFIGURED"}
+                      </span>
                     </div>
-                  </div>
+                    <p className="mt-3 text-xl font-extrabold">{data.telemetry.providerCounts[provider.provider] || 0}</p>
+                    <p className="text-xs text-text-muted">observed requests</p>
+                  </article>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* Interactive Prompt Playground */}
-            <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-4 shadow-xl">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#29B6F6]">terminal</span> Multi-LLM Router Playground
-              </h3>
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-xl font-bold">Model performance</h2>
+                <p className="mt-1 text-xs text-text-muted">Cost per successful task reflects observed cost and reliability when enough telemetry exists.</p>
+              </div>
+              {data.config.models.length === 0 ? (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-text-muted">
+                  No models are registered yet. Configure exact model IDs and prices in Model Registry first.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="bg-white/5 text-text-muted">
+                      <tr>
+                        <th className="px-4 py-3">Model</th>
+                        <th className="px-4 py-3">Tier</th>
+                        <th className="px-4 py-3">Configured token price</th>
+                        <th className="px-4 py-3">Requests</th>
+                        <th className="px-4 py-3">Success</th>
+                        <th className="px-4 py-3">Fallback</th>
+                        <th className="px-4 py-3">Avg latency</th>
+                        <th className="px-4 py-3">Cost / success</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.config.models.map((model) => {
+                        const stat = statsByModel.get(`${model.provider}:${model.modelId}`);
+                        return (
+                          <tr key={model.key} className="border-t border-white/5 bg-[#121215]">
+                            <td className="px-4 py-3"><p className="font-bold">{model.label}</p><p className="text-text-muted">{model.provider} · {model.modelId}</p></td>
+                            <td className="px-4 py-3">{model.qualityTier}</td>
+                            <td className="px-4 py-3">{model.inputUsdPerMillion === null || model.outputUsdPerMillion === null ? "Missing" : `$${model.inputUsdPerMillion} in / $${model.outputUsdPerMillion} out`}</td>
+                            <td className="px-4 py-3">{stat?.requests ?? 0}</td>
+                            <td className="px-4 py-3">{stat ? percent(stat.successRate) : "No data"}</td>
+                            <td className="px-4 py-3">{stat ? percent(stat.fallbackRate) : "No data"}</td>
+                            <td className="px-4 py-3">{stat?.avgLatencyMs == null ? "No data" : `${stat.avgLatencyMs} ms`}</td>
+                            <td className="px-4 py-3">{money(stat?.costPerSuccessfulTaskUsd ?? null)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="md:col-span-3">
-                  <label className="text-xs text-slate-400 mb-1 block">Test Prompt</label>
-                  <input
-                    value={testPrompt}
-                    onChange={(e) => setTestPrompt(e.target.value)}
-                    className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Primary LLM Provider</label>
-                  <select
-                    value={selectedProvider}
-                    onChange={(e) => setSelectedProvider(e.target.value)}
-                    className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                  >
-                    <option value="openai">OpenAI (GPT-4o)</option>
-                    <option value="gemini">Gemini (1.5 Pro)</option>
-                    <option value="deepseek">DeepSeek (V3)</option>
-                  </select>
-                </div>
+            <section className="rounded-3xl border border-white/10 bg-[#121215] p-6 space-y-5">
+              <div>
+                <h2 className="text-xl font-bold">Safe Model Comparison</h2>
+                <p className="mt-1 max-w-3xl text-xs text-text-muted">
+                  Compare up to five enabled models using the same synthetic structured-summary task. No real candidate, employer, resume, or conversation data is used.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {data.config.models.filter((model) => model.enabled).map((model) => {
+                  const selected = selectedModels.includes(model.key);
+                  return (
+                    <button
+                      key={model.key}
+                      type="button"
+                      onClick={() => setSelectedModels((current) =>
+                        selected
+                          ? current.filter((key) => key !== model.key)
+                          : current.length < 5
+                            ? [...current, model.key]
+                            : current
+                      )}
+                      className={`rounded-full border px-3 py-2 text-xs font-bold ${selected ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 text-text-secondary"}`}
+                    >
+                      {model.label} · {model.provider}
+                    </button>
+                  );
+                })}
               </div>
 
               <button
-                disabled={executing}
-                onClick={handleTestDispatch}
-                className="px-6 py-2.5 rounded-xl bg-[#29B6F6] text-white text-xs font-bold hover:bg-[#29B6F6]/90 flex items-center gap-2"
+                type="button"
+                onClick={() => void runBenchmark()}
+                disabled={!selectedModels.length || benchmarking}
+                className="w-fit rounded-xl bg-white px-5 py-3 text-xs font-extrabold text-black disabled:opacity-50"
               >
-                {executing ? "Routing Prompt..." : "Execute LLM Request"}
+                {benchmarking ? "Running benchmark…" : "Compare selected models"}
               </button>
 
-              {testResult && (
-                <div className="bg-[#16161B] p-4 rounded-xl border border-white/10 space-y-2">
-                  <div className="flex justify-between text-[10px] text-slate-400 font-mono border-b border-white/5 pb-2">
-                    <span>Provider: <strong className="text-white uppercase">{testResult.log.provider}</strong></span>
-                    <span>Tokens: {testResult.log.totalTokens}</span>
-                    <span>Latency: {testResult.log.latencyMs} ms</span>
-                  </div>
-                  <pre className="text-xs text-[#26A69A] font-mono whitespace-pre-wrap">{testResult.result}</pre>
+              {benchmark.length > 0 && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {benchmark.map((result) => (
+                    <article key={result.key} className="rounded-2xl border border-white/10 bg-black/20 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="font-bold">{result.label}</p><p className="text-xs text-text-muted">{result.provider} · {result.model}</p></div>
+                        <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${result.success && result.schemaPass ? "border-green-500/30 text-green-300" : "border-red-500/30 text-red-300"}`}>
+                          {result.success ? (result.schemaPass ? "SCHEMA PASS" : "SCHEMA FAIL") : "FAILED"}
+                        </span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+                        <div><p className="text-text-muted">Latency</p><p className="font-bold">{result.latencyMs} ms</p></div>
+                        <div><p className="text-text-muted">Tokens</p><p className="font-bold">{result.totalTokens ?? "Unknown"}</p></div>
+                        <div><p className="text-text-muted">Cost</p><p className="font-bold">{money(result.costUsd)}</p></div>
+                      </div>
+                      {result.error && <p className="mt-4 text-xs text-red-300">{result.error}</p>}
+                      {result.output && <pre className="mt-4 max-h-44 overflow-auto whitespace-pre-wrap rounded-xl border border-white/5 bg-black/30 p-3 text-[11px] text-text-secondary">{result.output}</pre>}
+                    </article>
+                  ))}
                 </div>
               )}
-            </div>
-          </div>
-        ) : null}
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
