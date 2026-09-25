@@ -189,6 +189,7 @@ export class ModelRouter {
   public static async executeWithFallback<T>(params: {
     taskType: string;
     fn: (endpoint: ProviderModel, policy: AiTaskRoute, isFallback: boolean) => Promise<T>;
+    validateResult?: (result: T, endpoint: ProviderModel, policy: AiTaskRoute) => void | Promise<void>;
   }): Promise<{ result: T; usedEndpoint: ProviderModel }> {
     const mapping = await this.route({ taskType: params.taskType });
     const endpoints = [mapping.primary, ...mapping.fallbackChain];
@@ -204,6 +205,9 @@ export class ModelRouter {
             breakerKey,
             () => params.fn(endpoint, mapping.policy, endpoint.key !== mapping.primary.key),
           );
+          if (params.validateResult) {
+            await params.validateResult(result, endpoint, mapping.policy);
+          }
           return { result, usedEndpoint: endpoint };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
