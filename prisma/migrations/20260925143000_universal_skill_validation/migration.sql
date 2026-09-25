@@ -117,7 +117,7 @@ SELECT
     || '-' || substr(md5(cp."id" || ':' || lower(regexp_replace(trim(skill_name), '\\s+', ' ', 'g'))), 21, 12),
   cp."id",
   trim(skill_name),
-  lower(regexp_replace(trim(skill_name), '\s+', ' ', 'g')),
+  lower(regexp_replace(trim(skill_name), '[[:space:]]+', ' ', 'g')),
   'INTERMEDIATE'::"SkillProficiencyLevel",
   'SELF_DECLARED'::"SkillVerificationStatus",
   true,
