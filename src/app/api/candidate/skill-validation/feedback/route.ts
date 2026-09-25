@@ -263,6 +263,24 @@ export async function POST(request: NextRequest) {
         });
         return execution.resultText;
       },
+      validateResult: (rawResult) => {
+        let candidateFeedback: z.infer<typeof feedbackSchema>;
+        try {
+          candidateFeedback = feedbackSchema.parse(parseJson(rawResult));
+        } catch {
+          throw new Error("Assessment feedback returned invalid structured output.");
+        }
+        for (const item of candidateFeedback.improvementAreas) {
+          if (!allowedSkills.has(item.skill.toLowerCase())) {
+            throw new Error("Assessment feedback referenced a skill outside the deterministic evidence.");
+          }
+        }
+        for (const skill of candidateFeedback.mockInterviewFocusSkills) {
+          if (!allowedSkills.has(skill.toLowerCase())) {
+            throw new Error("Assessment feedback proposed a mock-interview focus outside the deterministic evidence.");
+          }
+        }
+      },
     });
 
     const parsed = feedbackSchema.parse(parseJson(raw));
