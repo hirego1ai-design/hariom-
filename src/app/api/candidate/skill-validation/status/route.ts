@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
           where: {
             gates: {
               some: {
-                type: ApplicationGateType.UNIVERSAL_SKILL_VALIDATION,
                 status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
               },
             },
@@ -48,9 +47,11 @@ export async function GET(request: NextRequest) {
             jobId: true,
             job: { select: { title: true } },
             gates: {
-              where: { type: ApplicationGateType.UNIVERSAL_SKILL_VALIDATION },
-              select: { status: true, assessmentId: true },
-              take: 1,
+              where: {
+                status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+              },
+              select: { type: true, status: true, assessmentId: true },
+              orderBy: { createdAt: "asc" },
             },
           },
           orderBy: { createdAt: "desc" },
@@ -80,20 +81,25 @@ export async function GET(request: NextRequest) {
       ["ASSESSMENT_VALIDATED", "VERIFIED"].includes(skill.status)
     );
 
-    const pendingApplications = profile.applications.map((application) => {
-      const gate = application.gates[0];
-      const assessmentId = gate?.assessmentId ?? null;
-      return {
-        applicationId: application.id,
-        jobId: application.jobId,
-        jobTitle: application.job.title,
-        gateStatus: gate?.status ?? null,
-        assessmentId,
-        noticeUrl: assessmentId
-          ? `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assessmentId)}&applicationId=${encodeURIComponent(application.id)}`
-          : null,
-      };
-    });
+    const pendingApplications = profile.applications.flatMap((application) =>
+      application.gates.map((gate) => {
+        const assessmentId = gate.assessmentId ?? null;
+        const actionUrl = assessmentId
+          ? gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+            ? `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assessmentId)}&applicationId=${encodeURIComponent(application.id)}`
+            : `/assessment/mcq/active?id=${encodeURIComponent(assessmentId)}`
+          : null;
+        return {
+          applicationId: application.id,
+          jobId: application.jobId,
+          jobTitle: application.job.title,
+          gateType: gate.type,
+          gateStatus: gate.status,
+          assessmentId,
+          actionUrl,
+        };
+      }),
+    );
 
     return NextResponse.json({
       success: true,
