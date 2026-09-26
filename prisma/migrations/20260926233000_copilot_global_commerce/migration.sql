@@ -286,21 +286,21 @@ VALUES
   ('copilot-growth-in','copilot-growth','IN',ARRAY['IN'],'INR',79900,'TAX_EXCLUSIVE','PAYU',true,CURRENT_TIMESTAMP),
   ('copilot-pro-in','copilot-pro','IN',ARRAY['IN'],'INR',149900,'TAX_EXCLUSIVE','PAYU',true,CURRENT_TIMESTAMP),
 
-  ('copilot-starter-us','copilot-starter','US',ARRAY['US'],'USD',900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-growth-us','copilot-growth','US',ARRAY['US'],'USD',1900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-pro-us','copilot-pro','US',ARRAY['US'],'USD',3900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
+  ('copilot-starter-us','copilot-starter','US',ARRAY['US'],'USD',900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-growth-us','copilot-growth','US',ARRAY['US'],'USD',1900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-pro-us','copilot-pro','US',ARRAY['US'],'USD',3900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
 
-  ('copilot-starter-gb','copilot-starter','GB',ARRAY['GB'],'GBP',700,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-growth-gb','copilot-growth','GB',ARRAY['GB'],'GBP',1500,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-pro-gb','copilot-pro','GB',ARRAY['GB'],'GBP',2900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
+  ('copilot-starter-gb','copilot-starter','GB',ARRAY['GB'],'GBP',700,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-growth-gb','copilot-growth','GB',ARRAY['GB'],'GBP',1500,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-pro-gb','copilot-pro','GB',ARRAY['GB'],'GBP',2900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
 
-  ('copilot-starter-eu','copilot-starter','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-growth-eu','copilot-growth','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',1900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-pro-eu','copilot-pro','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',3900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
+  ('copilot-starter-eu','copilot-starter','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-growth-eu','copilot-growth','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',1900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-pro-eu','copilot-pro','EU',ARRAY['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'],'EUR',3900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
 
-  ('copilot-starter-row','copilot-starter','ROW',ARRAY[]::TEXT[],'USD',900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-growth-row','copilot-growth','ROW',ARRAY[]::TEXT[],'USD',1900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP),
-  ('copilot-pro-row','copilot-pro','ROW',ARRAY[]::TEXT[],'USD',3900,'TAX_EXCLUSIVE','STRIPE',true,CURRENT_TIMESTAMP);
+  ('copilot-starter-row','copilot-starter','ROW',ARRAY[]::TEXT[],'USD',900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-growth-row','copilot-growth','ROW',ARRAY[]::TEXT[],'USD',1900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP),
+  ('copilot-pro-row','copilot-pro','ROW',ARRAY[]::TEXT[],'USD',3900,'MERCHANT_OF_RECORD','MERCHANT_OF_RECORD',true,CURRENT_TIMESTAMP);
 
 -- Hidden internal weights. These are never returned to employer-facing APIs.
 INSERT INTO "CopilotUsageRule"
