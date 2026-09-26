@@ -186,7 +186,7 @@ function candidateSkillEvidence(candidate: any) {
             : skill?.name,
         ),
       )
-      .filter((name): name is string => Boolean(name)),
+      .filter((name: string) => Boolean(name)),
   );
 
   return { all, verified, available: all.size > 0 };
