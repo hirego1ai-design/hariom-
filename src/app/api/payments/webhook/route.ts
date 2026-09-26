@@ -9,15 +9,18 @@ export async function POST(req: NextRequest) {
   try {
     const rawBody = await readBoundedTextBody(req, 64 * 1024);
     let body: any;
+    const contentType = req.headers.get("content-type") || "";
     try {
-      body = JSON.parse(rawBody);
-    } catch {
-      // PayU posts form-encoded callbacks, while Stripe posts JSON. Preserve
-      // the exact raw body for cryptographic verification in both cases.
-      body = Object.fromEntries(new URLSearchParams(rawBody).entries());
-      if (!body || Object.keys(body).length === 0) {
-        throw new ApiError("Invalid payment webhook payload", 400);
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        body = Object.fromEntries(new URLSearchParams(rawBody).entries());
+      } else {
+        body = JSON.parse(rawBody);
       }
+      if (!body || typeof body !== "object" || Object.keys(body).length === 0) {
+        throw new Error("empty payload");
+      }
+    } catch {
+      throw new ApiError("Invalid payment webhook payload format", 400);
     }
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
@@ -475,7 +478,7 @@ export async function POST(req: NextRequest) {
             companyId,
             action: "PAYMENT_AND_REFERRAL_COMMITTED",
             resource: "/api/payments/webhook",
-            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ${expectedAmount} ${planSnapshot.currency}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
           },
         });
 
