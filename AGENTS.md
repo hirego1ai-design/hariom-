@@ -20,3 +20,32 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Do not bypass RBAC, tenant derivation, human approvals, malware quarantine, rate limits, or security checks to make a test pass.
 - A file may reach OCR, parsing, transcription, model analysis, or a worker only after the application has verified `scanStatus === "CLEAN"` and `deletedAt === null`.
 - Consequential hiring actions must remain behind the durable approval/executor boundary; generic model or MCP output is not authorization.
+
+
+## Shared coding discipline for Codex and Antigravity
+
+The workspace skill at `.agents/skills/karpathy-guidelines/SKILL.md` is the default engineering discipline for non-trivial coding, debugging, refactoring, review, security, database, payments, and production-readiness work.
+
+- Inspect the relevant implementation, tests, schema, routes, and existing patterns before editing.
+- Do not silently invent requirements, APIs, database fields, environment variables, or business rules.
+- Prefer the smallest production-safe change that fully solves the requested task.
+- Reuse existing abstractions before adding new ones; do not create duplicate screens, endpoints, services, tables, migrations, or business logic without a verified need.
+- Keep diffs surgical. Do not refactor unrelated code, comments, formatting, or naming while fixing something else.
+- Define observable success criteria and verify them before claiming completion.
+- For bugs, reproduce or identify the failing path and add/update a regression test when practical.
+- Run focused checks first, then applicable repository gates such as tests, type checks, linting, builds, migrations, and security checks.
+- Do not merge or recommend merging while required CI/security checks are red.
+
+### HireGo production integrity
+
+- Never introduce production mock, fake, demo, placeholder, or fabricated business data.
+- Do not use client-side storage as authoritative state for profiles, scores, hiring decisions, payments, security state, or workflow state.
+- Reuse authoritative server APIs, Prisma/PostgreSQL data, existing services, and established project patterns.
+- Preserve server-side authentication, RBAC, tenant isolation, validation, idempotency, auditability, and fail-closed behavior.
+- Do not fabricate AI scores, payment success, provider delivery/read status, interview/proctoring evidence, or operational-health results.
+- Do not weaken security controls merely to make a test pass.
+- If your own change creates unused imports, variables, functions, files, or tests, clean up only those newly orphaned items.
+
+### Completion report
+
+When reporting a completed task, state what changed, what verification passed, what was deliberately left unchanged, and any remaining external blocker. Do not claim success for checks that were not actually run.
