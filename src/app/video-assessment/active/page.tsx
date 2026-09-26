@@ -44,10 +44,10 @@ export default function VideoAssessmentActivePage() {
 
   const question = attempt?.questions[index];
 
-  const reportProctoring = useCallback(async (eventType: string, severity: "INFO" | "WARNING" | "HIGH", evidence?: Record<string, unknown>) => {
+  const reportProctoring = useCallback(async (eventType: string, evidence?: Record<string, unknown>) => {
     if (!attempt || phase === "COMPLETE") return;
     try {
-      const result = await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/proctoring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventType, severity, evidence }) });
+      const result = await jsonRequest(`/api/candidate/recorded-assessment/attempts/${attempt.id}/proctoring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventType, evidence }) });
       if (result.warningNumber) { warningRef.current = result.warningNumber; setMessage(`Proctoring warning ${result.warningNumber} of 3. Keep the assessment visible and camera/microphone active.`); }
       if (result.terminated) {
         if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
@@ -93,14 +93,14 @@ export default function VideoAssessmentActivePage() {
 
   useEffect(() => {
     if (!attempt || phase === "READY" || phase === "COMPLETE" || phase === "ERROR") return;
-    const onVisibility = () => { if (document.hidden) void reportProctoring("TAB_HIDDEN", "WARNING", { phase }); };
-    const onFullscreen = () => { if (!document.fullscreenElement) void reportProctoring("FULLSCREEN_EXIT", "WARNING", { phase }); };
+    const onVisibility = () => { if (document.hidden) void reportProctoring("TAB_HIDDEN", { phase }); };
+    const onFullscreen = () => { if (!document.fullscreenElement) void reportProctoring("FULLSCREEN_EXIT", { phase }); };
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("fullscreenchange", onFullscreen);
     const stream = streamRef.current;
     const ended = (event: Event) => {
       const track = event.target as MediaStreamTrack;
-      void reportProctoring(track.kind === "video" ? "CAMERA_INTERRUPTED" : "MIC_INTERRUPTED", "HIGH", { phase });
+      void reportProctoring(track.kind === "video" ? "CAMERA_INTERRUPTED" : "MIC_INTERRUPTED", { phase });
     };
     stream?.getTracks().forEach((track) => track.addEventListener("ended", ended));
     return () => {
