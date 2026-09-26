@@ -48,7 +48,8 @@ test("managed hiring orchestrator preserves evidence-first and human decision ga
   );
   assert.match(route, /consequentialActionsRequireHumanApproval:\s*true/);
   assert.match(route, /missingEvidenceCanReject:\s*false/);
-  assert.match(readiness, /STATE_ORCHESTRATION_AVAILABLE/);
+  assert.match(readiness, /automaticHiringPipeline:[\s\S]*NOT_IMPLEMENTED/);
+  assert.match(readiness, /safeStateOrchestration:[\s\S]*STATE_ORCHESTRATION_AVAILABLE/);
   assert.match(readiness, /production-like end-to-end runtime proof/i);
   assert.doesNotMatch(orchestrator, /data:\s*\{\s*status:\s*["']REJECTED["']/);
   assert.doesNotMatch(orchestrator, /application\.update/);
