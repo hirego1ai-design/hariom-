@@ -1361,6 +1361,39 @@ model CopilotRegionalPrice {
   @@index([regionCode, isActive])
 }
 
+model CopilotCapacityOffer {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  description   String
+  capacityUnits Int
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  regionalPrices CopilotCapacityOfferPrice[]
+
+  @@index([isArchived])
+}
+
+model CopilotCapacityOfferPrice {
+  id           String              @id @default(uuid())
+  offerId      String
+  offer        CopilotCapacityOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  regionCode   String
+  countries    String[]            @default([])
+  currency     String
+  amountMinor  Int
+  taxMode      CopilotTaxMode      @default(TAX_EXCLUSIVE)
+  paymentRoute CopilotPaymentRoute
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([offerId, regionCode])
+  @@index([regionCode, isActive])
+}
+
 model CopilotSubscription {
   id                  String                    @id @default(uuid())
   companyId           String
