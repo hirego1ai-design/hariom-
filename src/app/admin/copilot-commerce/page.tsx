@@ -8,7 +8,8 @@ type RegionalPrice = {
   countries: string[];
   currency: string;
   amountMinor: number;
-  taxMode: "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
+  taxRateBps: number;
+  taxMode: "NO_TAX_COLLECTION" | "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
   paymentRoute: "PAYU" | "STRIPE" | "MERCHANT_OF_RECORD";
   isActive: boolean;
 };
@@ -95,7 +96,8 @@ export default function AdminCopilotCommercePage() {
         countries,
         currency: String(form.get("currency") || "").trim().toUpperCase(),
         amountMinor: Number(form.get("amountMinor")),
-        taxMode: String(form.get("taxMode") || "TAX_EXCLUSIVE"),
+        taxMode: String(form.get("taxMode") || "NO_TAX_COLLECTION"),
+        taxRateBps: Number(form.get("taxRateBps") || 0),
         paymentRoute: String(form.get("paymentRoute") || "STRIPE"),
         isActive: true,
       }],
@@ -211,6 +213,7 @@ export default function AdminCopilotCommercePage() {
                         <th className="py-3 pr-3">Currency</th>
                         <th className="py-3 pr-3">Amount (minor)</th>
                         <th className="py-3 pr-3">Tax mode</th>
+                        <th className="py-3 pr-3">Tax rate %</th>
                         <th className="py-3 pr-3">Payment route</th>
                         <th className="py-3">Action</th>
                       </tr>
@@ -228,13 +231,18 @@ export default function AdminCopilotCommercePage() {
                           </td>
                           <td className="py-3 pr-3">
                             <select id={`tax-${price.id}`} defaultValue={price.taxMode} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
-                              <option value="TAX_EXCLUSIVE">Tax exclusive</option>
+                              <option value="NO_TAX_COLLECTION">No tax collection</option>
+                              <option value="NO_TAX_COLLECTION">No tax collection</option>
+                <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
                               <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </td>
                           <td className="py-3 pr-3">
-                            <select id={`route-${price.id}`} defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                            <input id={`tax-rate-${price.id}`} type="number" min={0} max={100} step={0.01} defaultValue={price.taxRateBps / 100} className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
+                          </td>
+                          <td className="py-3 pr-3">
+                            <select id={`route-${price.id}` defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
                               <option value="PAYU">PayU</option>
                               <option value="STRIPE">Stripe</option>
                               <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
@@ -247,8 +255,9 @@ export default function AdminCopilotCommercePage() {
                                 const currency = (document.getElementById(`cur-${price.id}`) as HTMLInputElement)?.value.toUpperCase();
                                 const amountMinor = Number((document.getElementById(`amt-${price.id}`) as HTMLInputElement)?.value);
                                 const taxMode = (document.getElementById(`tax-${price.id}`) as HTMLSelectElement)?.value;
+                                const taxRateBps = Math.round(Number((document.getElementById(`tax-rate-${price.id}`) as HTMLInputElement)?.value) * 100);
                                 const paymentRoute = (document.getElementById(`route-${price.id}`) as HTMLSelectElement)?.value;
-                                void patch({ type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, paymentRoute }, price.id);
+                                void patch({ type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, taxRateBps, paymentRoute }, price.id);
                               }}
                               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-bold text-white hover:bg-white/10 disabled:opacity-50"
                             >
@@ -281,10 +290,11 @@ export default function AdminCopilotCommercePage() {
               <input name="countries" required placeholder="Countries, e.g. IN or DE,FR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="currency" required maxLength={3} placeholder="INR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="amountMinor" required type="number" min={1} placeholder="Amount in minor units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
-              <select name="taxMode" defaultValue="TAX_EXCLUSIVE" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+              <select name="taxMode" defaultValue="NO_TAX_COLLECTION" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
                 <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                 <option value="TAX_INCLUSIVE">Tax inclusive</option>
               </select>
+              <input name="taxRateBps" type="number" min={0} max={10000} defaultValue={0} placeholder="Tax basis points (1800 = 18%)" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
               <select name="paymentRoute" defaultValue="STRIPE" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
                 <option value="STRIPE">Stripe</option>
                 <option value="PAYU">PayU</option>
@@ -320,7 +330,7 @@ export default function AdminCopilotCommercePage() {
                       {offer.regionalPrices.map((price) => (
                         <div key={price.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
                           <span className="font-bold text-[#D5DBE5]">{price.regionCode} · {price.currency}</span>
-                          <span className="text-[#94A3B8]">{price.amountMinor} minor units · {price.paymentRoute}</span>
+                          <span className="text-[#94A3B8]">{price.amountMinor} minor units · {price.taxMode} {price.taxRateBps ? `(${price.taxRateBps / 100}%)` : ""} · {price.paymentRoute}</span>
                         </div>
                       ))}
                     </div>
