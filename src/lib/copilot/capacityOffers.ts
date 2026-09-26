@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/apiSecurity";
 import { calculateCopilotTax, normalizeCountryCode } from "./commerce";
+import { assertCurrentCopilotTaxPolicy } from "./taxPolicy";
 
 export type ResolvedCapacityOffer = {
   offerId: string;
@@ -38,6 +39,12 @@ export async function resolveCapacityOffer(offerId: string, countryInput: string
   const price = selectPrice(offer.regionalPrices, countryCode);
   if (!price) throw new ApiError("This capacity offer is not available for the billing country.", 409);
 
+  assertCurrentCopilotTaxPolicy({
+    regionCode: price.regionCode,
+    countries: price.countries,
+    taxMode: price.taxMode,
+    taxRateBps: price.taxRateBps,
+  });
   const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
   return {
     offerId: offer.id,
@@ -71,6 +78,12 @@ export async function listPublicCapacityOffers(countryInput: string) {
   return offers.flatMap((offer) => {
     const price = selectPrice(offer.regionalPrices, countryCode);
     if (!price) return [];
+    assertCurrentCopilotTaxPolicy({
+      regionCode: price.regionCode,
+      countries: price.countries,
+      taxMode: price.taxMode,
+      taxRateBps: price.taxRateBps,
+    });
     const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
     return [{
       id: offer.id,
