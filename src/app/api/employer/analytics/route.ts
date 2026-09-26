@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 
 const querySchema = z.object({
   range: z.enum(["7", "30", "90"]).default("30"),
@@ -20,6 +21,9 @@ export async function GET(req: NextRequest) {
     }
 
     const company = await getSessionCompany(session);
+    await prisma.$transaction(tx =>
+      requireCompanyPlanFeature(tx, company.id, ["ANALYTICS"], "Your current plan does not include hiring analytics.")
+    );
     const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()));
     const rangeDays = Number(query.range);
     const end = new Date();
