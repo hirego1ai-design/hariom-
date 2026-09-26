@@ -19,6 +19,11 @@ const bounded = (label: string, max: number) =>
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().or(z.literal(""));
 
+const optionalMoney = z.preprocess(
+  (value) => value === "" || value === null ? undefined : value,
+  z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
+);
+
 const requirementInputSchema = z
   .object({
     companyId: z.string().trim().min(1).max(128).optional(),
@@ -63,10 +68,10 @@ const requirementInputSchema = z
     languages: optionalText(2_000),
     tools: optionalText(2_000),
 
-    salaryRangeMin: z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
-    salaryRangeMax: z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
-    budgetMin: z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
-    budgetMax: z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
+    salaryRangeMin: optionalMoney,
+    salaryRangeMax: optionalMoney,
+    budgetMin: optionalMoney,
+    budgetMax: optionalMoney,
     currency: z.string().trim().regex(/^[A-Z]{3}$/, "Currency must be a 3-letter ISO code."),
     variableComponent: optionalText(500),
     bonusIncentives: optionalText(2_000),
