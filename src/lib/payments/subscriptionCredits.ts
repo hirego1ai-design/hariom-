@@ -1,6 +1,11 @@
 type PlanQuotas = {
-  jobPostsQuota: number; resumeUnlocksQuota: number; aiInterviewsQuota: number;
-  applicationsQuota: number; resumeDownloadsQuota: number; backgroundVerificationsQuota: number;
+  jobPostsQuota: number;
+  resumeUnlocksQuota: number;
+  aiInterviewsQuota: number;
+  copilotJobsQuota?: number;
+  applicationsQuota: number;
+  resumeDownloadsQuota: number;
+  backgroundVerificationsQuota: number;
 };
 
 /** Calendar-month renewal, clamped to the target month's last day in UTC. */
@@ -17,13 +22,14 @@ export function subscriptionExpiry(start: Date, months: number): Date {
   return expiry;
 }
 
-/** Agent calls currently share the plan's configured AI interview allowance. */
+/** Customer quotas. Provider/model spend is tracked separately and is never exposed as a per-AI-call customer charge. */
 export function subscriptionCredits(plan: PlanQuotas) {
   const credits = {
     jobPostsLeft: plan.jobPostsQuota,
     resumeUnlocksLeft: plan.resumeUnlocksQuota,
     aiInterviewsLeft: plan.aiInterviewsQuota,
-    aiAgentCreditsLeft: plan.aiInterviewsQuota,
+    aiAgentCreditsLeft: 0,
+    copilotJobsLeft: plan.copilotJobsQuota ?? 0,
     applicationsLeft: plan.applicationsQuota,
     resumeDownloadsLeft: plan.resumeDownloadsQuota,
     backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
@@ -33,4 +39,3 @@ export function subscriptionCredits(plan: PlanQuotas) {
   }
   return credits;
 }
-
