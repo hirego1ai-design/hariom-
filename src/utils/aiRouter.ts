@@ -43,6 +43,20 @@ export interface AiExecutionLog {
   timestamp: string;
 }
 
+const DEFAULT_TASK_TYPE_BY_REQUEST: Record<AiTaskRequest["task"], string> = {
+  RESUME_SCORE: "resume-screening",
+  JD_GENERATION: "jd-generator",
+  CANDIDATE_MATCH: "job-match-explanation",
+  INTERVIEW_EVALUATION: "mock-interview",
+  ASSESSMENT_AUTHORING: "assessment-authoring",
+  ASSESSMENT_FEEDBACK: "assessment-feedback",
+  GENERAL: "general",
+};
+
+function resolvedTaskType(request: AiTaskRequest): string {
+  return request.taskType?.trim() || DEFAULT_TASK_TYPE_BY_REQUEST[request.task];
+}
+
 function requiredPositiveNumber(name: string, developmentDefault: number): number {
   const raw = process.env[name];
   const value = raw ? Number(raw) : developmentDefault;
@@ -123,18 +137,10 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   resultText: string;
   log: AiExecutionLog;
 }> {
+  const effectiveTaskType = resolvedTaskType(request);
   if (!request.provider || !request.model || !request.modelConfig) {
-    const defaultTaskType: Record<AiTaskRequest["task"], string> = {
-      RESUME_SCORE: "resume-screening",
-      JD_GENERATION: "jd-generation",
-      CANDIDATE_MATCH: "job-match-explanation",
-      INTERVIEW_EVALUATION: "mock-interview",
-      ASSESSMENT_AUTHORING: "assessment-authoring",
-      ASSESSMENT_FEEDBACK: "assessment-feedback",
-      GENERAL: "general",
-    };
     const routed = await ModelRouter.executeWithFallback({
-      taskType: request.taskType || defaultTaskType[request.task],
+      taskType: effectiveTaskType,
       fn: (endpoint, policy, isFallback) => dispatchAiTask({
         ...request,
         provider: endpoint.provider,
@@ -165,13 +171,13 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     assertCostMetadata(request.modelConfig);
   }
 
-  const cacheKey = `${request.task}:${request.provider}:${request.model}:${request.prompt.trim().toLowerCase()}`;
+  const cacheKey = `${effectiveTaskType}:${request.provider}:${request.model}:${request.prompt.trim().toLowerCase()}`;
   if (allowLocalAiCache && !request.bypassCache && promptResponseCache.has(cacheKey)) {
     const cachedEntry = promptResponseCache.get(cacheKey)!;
     if (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS) {
       const cachedLog: AiExecutionLog = {
         id: `ai-cache-${Date.now()}`,
-        task: request.task,
+        task: effectiveTaskType,
         provider: request.provider,
         model: request.model,
         promptTokens: 0,
@@ -233,7 +239,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     const message = error instanceof Error ? error.message : "Unknown provider error";
     const failureLog: AiExecutionLog = {
       id: crypto.randomUUID(),
-      task: request.task,
+      task: effectiveTaskType,
       provider: request.provider,
       model: request.model,
       promptTokens: null,
@@ -295,7 +301,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
 
   const log: AiExecutionLog = {
     id: crypto.randomUUID(),
-    task: request.task,
+    task: effectiveTaskType,
     provider: request.provider,
     model: request.model,
     promptTokens: actualPromptTokens,
@@ -330,6 +336,13 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   }
 
   return { success: true, resultText: responseText, log };
+}
+
+export async function markAiExecutionValidationFailure(logId: string): Promise<void> {
+  await prisma.aiExecutionLog.updateMany({
+    where: { id: logId, status: { in: ["SUCCESS", "FALLBACK"] } },
+    data: { status: "FAILED" },
+  });
 }
 
 export async function getAiUsageStats() {
