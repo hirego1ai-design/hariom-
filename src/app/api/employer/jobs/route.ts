@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
-import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
+import { consumeJobPublicationEntitlement } from "@/lib/subscriptionAccess";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
@@ -123,22 +123,17 @@ export async function POST(request: Request) {
 
               let remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
               if (job.status !== JobStatus.ACTIVE) {
-                await requireActiveCompanySubscription(
-                  tx,
-                  companyId,
-                  "An active subscription is required to publish jobs. Please purchase or renew a plan.",
-                );
-                const debit = await tx.companyCredits.updateMany({
-                  where: { companyId, jobPostsLeft: { gt: 0 } },
-                  data: { jobPostsLeft: { decrement: 1 } },
-                });
-                if (debit.count !== 1) {
-                  throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
-                }
-                remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+                const publication = await consumeJobPublicationEntitlement(tx, companyId);
+                remainingCredits = publication.remainingJobPosts;
                 await tx.jobListing.update({
                   where: { id: job.id },
-                  data: { status: JobStatus.ACTIVE },
+                  data: {
+                    status: JobStatus.ACTIVE,
+                    publishedAt: publication.publishedAt,
+                    expiresAt: publication.expiresAt,
+                    copilotEnabled: publication.copilotEnabled,
+                    copilotActivatedAt: publication.copilotEnabled ? publication.publishedAt : null,
+                  },
                 });
                 await OutboxPublisher.publish({
                   eventType: "JOB_LISTING_CREATED",
@@ -193,23 +188,10 @@ export async function POST(request: Request) {
         });
       }
 
-      if (isPublishing) {
-        await requireActiveCompanySubscription(
-          tx,
-          companyId,
-          "An active subscription is required to publish jobs. Please purchase or renew a plan.",
-        );
-
-        if (!requiresGeneratedAssessment) {
-          const updateResult = await tx.companyCredits.updateMany({
-            where: { companyId, jobPostsLeft: { gt: 0 } },
-            data: { jobPostsLeft: { decrement: 1 } },
-          });
-          if (updateResult.count === 0) {
-            throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
-          }
-          remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
-        }
+      let publicationTerms: Awaited<ReturnType<typeof consumeJobPublicationEntitlement>> | null = null;
+      if (isPublishing && !requiresGeneratedAssessment) {
+        publicationTerms = await consumeJobPublicationEntitlement(tx, companyId);
+        remainingCredits = publicationTerms.remainingJobPosts;
       }
 
       const { RosGateway } = await import("@/lib/ros/RosGateway");
@@ -234,10 +216,21 @@ export async function POST(request: Request) {
         tx,
       );
 
-      const jobObj = newJob as any;
+      const persistedJob = publicationTerms
+        ? await tx.jobListing.update({
+            where: { id: (newJob as { id: string }).id },
+            data: {
+              publishedAt: publicationTerms.publishedAt,
+              expiresAt: publicationTerms.expiresAt,
+              copilotEnabled: publicationTerms.copilotEnabled,
+              copilotActivatedAt: publicationTerms.copilotEnabled ? publicationTerms.publishedAt : null,
+            },
+          })
+        : newJob;
+      const jobObj = persistedJob as any;
       const responsePayload = {
         success: true,
-        job: newJob,
+        job: persistedJob,
         jobPostsLeft: remainingCredits,
         jobSpecificAssessment: requiresGeneratedAssessment ? "GENERATING" : "NOT_REQUIRED",
         message: requiresGeneratedAssessment
@@ -270,22 +263,17 @@ export async function POST(request: Request) {
       try {
         await ensureJobSpecificAssessment(result.jobId, companyId);
         const finalPayload = await prisma.$transaction(async (tx) => {
-          await requireActiveCompanySubscription(
-            tx,
-            companyId,
-            "An active subscription is required to publish jobs. Please purchase or renew a plan.",
-          );
-          const debit = await tx.companyCredits.updateMany({
-            where: { companyId, jobPostsLeft: { gt: 0 } },
-            data: { jobPostsLeft: { decrement: 1 } },
-          });
-          if (debit.count !== 1) {
-            throw new ApiError("Insufficient job posting credits. Job remains a draft.", 402);
-          }
-          const remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+          const publication = await consumeJobPublicationEntitlement(tx, companyId);
+          const remainingCredits = publication.remainingJobPosts;
           const activeJob = await tx.jobListing.update({
             where: { id: result.jobId },
-            data: { status: JobStatus.ACTIVE },
+            data: {
+              status: JobStatus.ACTIVE,
+              publishedAt: publication.publishedAt,
+              expiresAt: publication.expiresAt,
+              copilotEnabled: publication.copilotEnabled,
+              copilotActivatedAt: publication.copilotEnabled ? publication.publishedAt : null,
+            },
           });
           await OutboxPublisher.publish({
             eventType: "JOB_LISTING_CREATED",
