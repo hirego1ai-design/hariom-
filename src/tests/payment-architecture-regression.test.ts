@@ -25,13 +25,13 @@ test("subscription feature contracts accept admin service keys and legacy human-
     validityMonths: 1,
   };
 
-  assert.equal(createPlanSchema.safeParse({ ...plan, id: undefined }).success, true);
+  const { id: _planId, ...planFields } = plan;
+  assert.equal(createPlanSchema.safeParse(planFields).success, true);
   const snapshot = createPurchasedPlanSnapshot(plan);
   assert.deepEqual(parsePurchasedPlanSnapshot(snapshot).featuresAllowed, plan.featuresAllowed);
 
   const unsafe = createPlanSchema.safeParse({
-    ...plan,
-    id: undefined,
+    ...planFields,
     featuresAllowed: ["<script>alert(1)</script>"],
   });
   assert.equal(unsafe.success, false);
