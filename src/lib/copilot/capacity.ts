@@ -153,6 +153,7 @@ export async function reconcileCopilotReservation(params: {
   provider?: string;
   model?: string;
   metadata?: Prisma.InputJsonValue;
+  allowOverage?: boolean;
 }) {
   const actualQuantity = safeUnits(params.actualQuantity, "actual Copilot quantity");
   return prisma.$transaction(async (tx) => {
@@ -184,7 +185,7 @@ export async function reconcileCopilotReservation(params: {
     const additional = Math.max(0, actualUnits - reservation.reservedUnits);
     const availableAfterReservation =
       cycle.baseCapacityUnits + cycle.addonCapacityUnits - cycle.consumedCapacityUnits - cycle.reservedCapacityUnits;
-    if (additional > availableAfterReservation) {
+    if (additional > availableAfterReservation && !params.allowOverage) {
       throw new ApiError("Actual Copilot usage exceeds the remaining plan capacity.", 402);
     }
 
@@ -248,4 +249,27 @@ export async function releaseCopilotReservation(reservationId: string) {
     });
     return true;
   });
+}
+
+
+export async function reserveCopilotCapacityIfActive(params: {
+  companyId: string;
+  actionKey: string;
+  quantity: number;
+  idempotencyKey: string;
+  expiresAt?: Date;
+  reference?: CopilotUsageReference;
+}) {
+  const now = new Date();
+  const active = await prisma.copilotSubscription.findFirst({
+    where: {
+      companyId: params.companyId,
+      status: "ACTIVE",
+      startDate: { lte: now },
+      endDate: { gt: now },
+    },
+    select: { id: true },
+  });
+  if (!active) return null;
+  return reserveCopilotCapacity(params);
 }
