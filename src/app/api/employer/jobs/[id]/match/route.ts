@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError } from '@/lib/apiSecurity';
 import { prisma } from '@/lib/prisma';
 import { batchMatchCandidates } from '@/lib/matching/JobMatchingEngine';
 import { logAuditEvent } from '@/lib/auditLogger';
+import { requireCompanyPlanFeature } from '@/lib/subscriptionAccess';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (!job || job.companyId !== company.id) {
         return NextResponse.json({ success: false, error: 'Job not found or access denied' }, { status: 403 });
       }
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, company.id, ["MATCHING_SCORE"], "Your current plan does not include candidate matching.")
+      );
     }
     
     const result = await batchMatchCandidates(jobId);
