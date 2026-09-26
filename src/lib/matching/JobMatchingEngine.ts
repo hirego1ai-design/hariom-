@@ -22,13 +22,15 @@ export function computeMatchScore(candidate: any, job: any) {
     ...DEFAULT_CONFIG,
     ...Object.fromEntries(Object.entries(requestedConfig).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))),
   };
-  
+
   const rawRequirements = job.skillRequirements ?? job.requirements ?? [];
-  const jobReqs = Array.isArray(rawRequirements) ? rawRequirements.filter((skill): skill is string => typeof skill === 'string') : [];
+  const jobReqs = Array.isArray(rawRequirements)
+    ? rawRequirements.filter((skill): skill is string => typeof skill === 'string' && skill.trim().length > 0)
+    : [];
   const candidateSkillRecords = Array.isArray(candidate.candidateSkills) ? candidate.candidateSkills : [];
   const candSkills = candidateSkillRecords.length > 0
-    ? candidateSkillRecords.filter((skill: any) => skill?.isVisible !== false).map((skill: any) => skill.name)
-    : (candidate.skills || []);
+    ? candidateSkillRecords.filter((skill: any) => skill?.isVisible !== false).map((skill: any) => String(skill.name))
+    : (Array.isArray(candidate.skills) ? candidate.skills.map((skill: unknown) => String(skill)) : []);
   const now = Date.now();
   const verifiedSkillNames = new Set(
     candidateSkillRecords
@@ -39,15 +41,14 @@ export function computeMatchScore(candidate: any, job: any) {
       )
       .map((skill: any) => String(skill.name).toLowerCase()),
   );
-  
-  let skillScore = 0;
+
   const matchingSkills: string[] = [];
   const verifiedMatchingSkills: string[] = [];
   const selfDeclaredMatchingSkills: string[] = [];
   const missingSkills: string[] = [];
-  
-  const candSkillsLower = candSkills.map((s: string) => s.toLowerCase());
-  
+  const candSkillsLower = candSkills.map((skill: string) => skill.toLowerCase());
+
+  let skillScore: number | null = null;
   if (jobReqs.length > 0) {
     for (const req of jobReqs) {
       if (candSkillsLower.includes(req.toLowerCase())) {
@@ -59,55 +60,48 @@ export function computeMatchScore(candidate: any, job: any) {
       }
     }
     skillScore = (matchingSkills.length / jobReqs.length) * 100;
-  } else {
-    skillScore = 100;
   }
-  
-  let requiredExp = 0;
-  const expMatch = job.description?.match(/(\d+)\s*(?:\+|-|to|years?)\s*(?:\d+)?\s*years?/i);
-  if (expMatch) {
-    requiredExp = parseInt(expMatch[1], 10);
+
+  let requiredExp: number | null = null;
+  const expMatch = typeof job.description === "string"
+    ? job.description.match(/(\d+)\s*(?:\+|-|to|years?)\s*(?:\d+)?\s*years?/i)
+    : null;
+  if (expMatch) requiredExp = parseInt(expMatch[1], 10);
+
+  let experienceScore: number | null = null;
+  if (requiredExp !== null && requiredExp > 0) {
+    const candExp = Number(candidate.experienceYears || 0);
+    experienceScore = candExp >= requiredExp ? 100 : Math.max(0, Math.min(100, (candExp / requiredExp) * 100));
   }
-  
-  let experienceScore = 0;
-  if (requiredExp === 0) {
-    experienceScore = 100;
-  } else {
-    const candExp = candidate.experienceYears || 0;
-    if (candExp >= requiredExp) {
-      experienceScore = 100;
-    } else {
-      experienceScore = (candExp / requiredExp) * 100;
-    }
-  }
-  
-  // No education requirement is stored for this job, so it is not scored.
-  const educationScore = null;
+
   const weightedDimensions = [
     { score: skillScore, weight: Math.max(0, config.weightSkills) },
     { score: experienceScore, weight: Math.max(0, config.weightExperience) },
-  ].filter((dimension) => dimension.weight > 0);
+  ].filter((dimension): dimension is { score: number; weight: number } => dimension.score !== null && dimension.weight > 0);
+
   const totalWeight = weightedDimensions.reduce((total, dimension) => total + dimension.weight, 0);
-  const rawScore = (
-    weightedDimensions.reduce((total, dimension) => total + dimension.score * dimension.weight, 0)
-  ) / (totalWeight || 1);
-  
-  const matchScore = Math.round(rawScore);
-  
+  const scoreAvailable = totalWeight > 0;
+  const matchScore = scoreAvailable
+    ? Math.round(weightedDimensions.reduce((total, dimension) => total + dimension.score * dimension.weight, 0) / totalWeight)
+    : 0;
+
   return {
     matchScore,
+    scoreAvailable,
+    insufficientEvidence: !scoreAvailable,
     matchingSkills,
     verifiedMatchingSkills,
     selfDeclaredMatchingSkills,
     missingSkills,
     verificationCoverage: jobReqs.length > 0
       ? Math.round((verifiedMatchingSkills.length / jobReqs.length) * 100)
-      : 100,
+      : 0,
+    verificationCoverageAvailable: jobReqs.length > 0,
     breakdown: {
-      skillScore: Math.round(skillScore),
-      experienceScore: Math.round(experienceScore),
-      educationScore
-    }
+      skillScore: skillScore === null ? null : Math.round(skillScore),
+      experienceScore: experienceScore === null ? null : Math.round(experienceScore),
+      educationScore: null,
+    },
   };
 }
 
