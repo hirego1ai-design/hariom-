@@ -11,6 +11,7 @@ const BILLABLE_AGENT_FEATURES: Record<string, readonly string[]> = {
   "resume-evaluator": ["AI_SCREENING", "BASIC_RESUME_SCREENING"],
   "jd-generator": ["AI_SCREENING", "AI_JD_GENERATION"],
   "mock-interview-copilot": ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
+  "live-interview-evaluator": ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
 };
 
 export const DIRECT_DISPATCH_AGENT_IDS = ["resume-evaluator", "jd-generator"] as const;
