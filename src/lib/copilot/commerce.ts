@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/apiSecurity";
 import { countryCodeSchema } from "./contracts";
+import { assertCurrentCopilotTaxPolicy } from "./taxPolicy";
 
 export type ResolvedCopilotPrice = {
   planId: string;
@@ -67,6 +68,12 @@ export async function resolveCopilotPrice(planId: string, countryInput: string):
   const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
   if (!price) throw new ApiError("Copilot is not currently available for this billing country.", 409);
 
+  assertCurrentCopilotTaxPolicy({
+    regionCode: price.regionCode,
+    countries: price.countries,
+    taxMode: price.taxMode,
+    taxRateBps: price.taxRateBps,
+  });
   const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
 
   return {
@@ -103,6 +110,12 @@ export async function listPublicCopilotPlans(countryInput: string) {
   return plans.flatMap((plan) => {
     const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
     if (!price) return [];
+    assertCurrentCopilotTaxPolicy({
+      regionCode: price.regionCode,
+      countries: price.countries,
+      taxMode: price.taxMode,
+      taxRateBps: price.taxRateBps,
+    });
     const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
     return [{
       id: plan.id,
