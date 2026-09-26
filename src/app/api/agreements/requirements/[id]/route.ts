@@ -125,6 +125,7 @@ export async function PATCH(
         requirementId: current.id,
         activeAgreementId: body.activeAgreementId,
         assignedSalesLead: body.assignedSalesLead,
+        activatedById: session.id,
       });
       return NextResponse.json({
         success: true,
