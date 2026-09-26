@@ -267,3 +267,66 @@ test('approved action consumption is single-use under replay', async (t) => {
   await WorkflowEngine.consumeApprovedAction(params);
   await assert.rejects(WorkflowEngine.consumeApprovedAction(params), /already been consumed/);
 });
+
+
+test('expired approval cannot be consumed', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a' }));
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({
+    id: 'approval-expired',
+    workflowInstanceId: 'workflow-test',
+    companyId: 'company-a',
+    stepName: 'select',
+    actionType: 'CANDIDATE_SELECTION',
+    actionDigest: 'digest',
+    decision: 'APPROVED',
+    decidedBy: 'reviewer',
+    decidedAt: new Date(Date.now() - 60_000),
+    decidedByRole: Role.EMPLOYER,
+    consumedAt: null,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() - 1_000),
+  }));
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
+  await assert.rejects(
+    WorkflowEngine.consumeApprovedAction({
+      workflowId: 'workflow-test',
+      stepName: 'select',
+      action: { candidateId: 'candidate-a' },
+      context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+    }),
+    /expired before execution/,
+  );
+});
+
+test('revoked approval cannot be consumed', async (t) => {
+  const { createTenantContext } = await import('../lib/security/TenantContext');
+  const { Role } = await import('@prisma/client');
+  stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a' }));
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({
+    id: 'approval-revoked',
+    workflowInstanceId: 'workflow-test',
+    companyId: 'company-a',
+    stepName: 'select',
+    actionType: 'CANDIDATE_SELECTION',
+    actionDigest: 'digest',
+    decision: 'APPROVED',
+    decidedBy: 'reviewer',
+    decidedAt: new Date(),
+    decidedByRole: Role.EMPLOYER,
+    consumedAt: null,
+    revokedAt: new Date(),
+    expiresAt: new Date(Date.now() + 60_000),
+  }));
+  stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
+  await assert.rejects(
+    WorkflowEngine.consumeApprovedAction({
+      workflowId: 'workflow-test',
+      stepName: 'select',
+      action: { candidateId: 'candidate-a' },
+      context: createTenantContext('company-a', 'reviewer', Role.EMPLOYER),
+    }),
+    /revoked before execution/,
+  );
+});
