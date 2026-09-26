@@ -10,7 +10,17 @@ const plan = {
   name: "Contract test", description: "Not a live plan", price: 100, currency: "INR",
   jobPostsQuota: 0, resumeUnlocksQuota: 0, aiInterviewsQuota: 0,
   applicationsQuota: 0, resumeDownloadsQuota: 0, backgroundVerificationsQuota: 0,
-  featuresAllowed: ["JOB_POSTING"], validityMonths: 1,
+  featuresAllowed: ["JOB_POSTING"],
+  displayBenefits: ["Post a job"],
+  validityMonths: 1,
+  jobValidityDays: 7,
+  planType: "STANDARD" as const,
+  firstTimeOnly: false,
+  copilotJobsQuota: 0,
+  copilotAutoActivate: false,
+  badge: null,
+  isFeatured: false,
+  displayOrder: 10,
 };
 
 test("checkout accepts existing legacy and new UUID plan identifiers", () => {
@@ -34,9 +44,23 @@ test("zero quota remains zero through validated plan and credit provisioning", (
 test("plan validation rejects invalid prices, quotas, validity and unknown mutable fields", () => {
   for (const change of [
     { price: -1 }, { price: Infinity }, { jobPostsQuota: -1 }, { aiInterviewsQuota: 1.5 },
-    { validityMonths: 0 }, { resumeDownloadsQuota: 2147483648 }, { currency: "inr" },
-    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["bad feature"] },
+    { validityMonths: 0 }, { jobValidityDays: 0 }, { resumeDownloadsQuota: 2147483648 }, { currency: "inr" },
+    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["NOT_A_REAL_FEATURE"] },
+    { displayBenefits: ["<script>alert(1)</script>"] },
   ]) assert.equal(createPlanSchema.safeParse({ ...plan, ...change }).success, false);
+});
+
+test("free-trial and Co-Pilot commercial rules are validated", () => {
+  assert.equal(createPlanSchema.safeParse({ ...plan, planType: "FREE_TRIAL", price: 0, firstTimeOnly: true }).success, true);
+  assert.equal(createPlanSchema.safeParse({ ...plan, planType: "FREE_TRIAL", price: 299, firstTimeOnly: true }).success, false);
+  assert.equal(createPlanSchema.safeParse({ ...plan, planType: "COPILOT", copilotJobsQuota: 1, copilotAutoActivate: true }).success, true);
+  assert.equal(createPlanSchema.safeParse({ ...plan, planType: "COPILOT", copilotJobsQuota: 0 }).success, false);
+});
+
+test("customer AI calls are not provisioned as per-call credits", () => {
+  const credits = subscriptionCredits({ ...plan, aiInterviewsQuota: 99, copilotJobsQuota: 2 });
+  assert.equal(credits.aiAgentCreditsLeft, 0);
+  assert.equal(credits.copilotJobsLeft, 2);
 });
 
 test("updates whitelist commercial fields without accepting model metadata", () => {
