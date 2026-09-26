@@ -239,8 +239,11 @@ class SubscriptionsDb {
   }
 
   public async getCompanyCredits(companyId: string): Promise<CompanyCreditsRecord> {
-    const r = await prisma.companyCredits.findUnique({ where: { companyId } });
-    if (!r) throw new Error("Company credit account not found.");
+    const r = await prisma.companyCredits.upsert({
+      where: { companyId },
+      update: {},
+      create: { companyId },
+    });
     return {
       id: r.id,
       companyId: r.companyId,
