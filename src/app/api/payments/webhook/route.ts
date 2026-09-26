@@ -9,10 +9,16 @@ export async function POST(req: NextRequest) {
   try {
     const rawBody = await readBoundedTextBody(req, 64 * 1024);
     let body: any;
+    const contentType = req.headers.get("content-type") || "";
     try {
-      body = JSON.parse(rawBody);
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        const params = new URLSearchParams(rawBody);
+        body = Object.fromEntries(params.entries());
+      } else {
+        body = JSON.parse(rawBody);
+      }
     } catch {
-      throw new ApiError("Invalid JSON payload", 400);
+      throw new ApiError("Invalid webhook payload format", 400);
     }
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification

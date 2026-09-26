@@ -25,6 +25,12 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return jsonError("Unauthorized access", 401);
     }
+    
+    // F09 Fix: Reject oversized requests before multipart parsing writes them to disk
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES * 1.5) { // 1.5x buffer for multipart overhead
+      return jsonError("Payload too large", 413);
+    }
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

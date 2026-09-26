@@ -295,4 +295,12 @@ export class PaymentGatewayController {
     const provider = this.providers[params.provider];
     return provider.verifyWebhook(params);
   }
+
+  static async getPaymentStatus(providerName: GatewayName, gatewayTxId: string): Promise<{ status: "SUCCESS" | "FAILED" | "PENDING"; rawResponse?: any }> {
+    const provider = this.providers[providerName];
+    if (!provider) {
+      throw new Error(`Unsupported payment provider: ${providerName}`);
+    }
+    return provider.getPaymentStatus(gatewayTxId);
+  }
 }

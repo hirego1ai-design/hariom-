@@ -32,8 +32,18 @@ function PaymentStatusContent() {
 
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+    let currentPollCount = 0;
+    const MAX_POLLS = 12;
 
     async function checkStatus() {
+      if (!isMounted) return;
+      if (currentPollCount >= MAX_POLLS) {
+        setPaymentState("UNKNOWN");
+        setLoading(false);
+        return;
+      }
+
       try {
         const queryParams = new URLSearchParams();
         if (orderId) queryParams.set("orderId", orderId);
@@ -50,8 +60,7 @@ function PaymentStatusContent() {
           setPaymentState(currentStatus);
           setPaymentData(data);
 
-          // If definitive state reached, stop polling
-          if (currentStatus === "SUCCESS" || currentStatus === "FAILED" || currentStatus === "REJECTED") {
+          if (["SUCCESS", "FAILED", "REJECTED"].includes(currentStatus)) {
             setLoading(false);
             return;
           }
@@ -62,32 +71,19 @@ function PaymentStatusContent() {
         if (isMounted) setError(err.message || "Network error fetching payment status");
       }
 
-      setPollCount((prev) => {
-        const next = prev + 1;
-        if (next >= 12) {
-          // 12 polls * 2.5s = 30 seconds -> transition to UNKNOWN timeout state
-          setPaymentState("UNKNOWN");
-          setLoading(false);
-        }
-        return next;
-      });
+      currentPollCount++;
+      if (isMounted) {
+        timeoutId = setTimeout(checkStatus, 2500);
+      }
     }
 
-    // Initial check
     checkStatus();
-
-    // Poll every 2.5s if still pending
-    const intervalId = setInterval(() => {
-      if (paymentState === "PENDING" && pollCount < 12) {
-        checkStatus();
-      }
-    }, 2500);
 
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
+      clearTimeout(timeoutId);
     };
-  }, [orderId, gatewayOrderId, txId, pollCount, paymentState]);
+  }, [orderId, gatewayOrderId, txId]);
 
   return (
     <div className="min-h-screen bg-[#0A0A0C] text-white flex flex-col items-center justify-center p-4 font-[family-name:var(--font-body)]">

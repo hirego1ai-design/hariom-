@@ -102,7 +102,7 @@ async function parseSessionToken(token: string): Promise<SessionPayload | null> 
   }
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -202,7 +202,7 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export default proxy;
+export default middleware;
 
 export const config = {
   matcher: "/((?!_next/static|_next/image|favicon.ico).*)",
