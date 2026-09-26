@@ -36,13 +36,13 @@ export async function GET(req: NextRequest) {
       ? await prisma.paymentTransaction.findFirst({ where: { companyId, gatewayTxId: paymentOrder.gatewayTxId } })
       : null;
 
-    if (paymentOrder.productType === "COPILOT") {
+    if (paymentOrder.productType === "COPILOT" || paymentOrder.productType === "COPILOT_ADDON") {
       const { getCopilotCapacityStatus } = await import("@/lib/copilot/capacity");
       const capacity = await getCopilotCapacityStatus(companyId);
       if (!transaction) {
         return NextResponse.json({
           success: true,
-          product: "COPILOT",
+          product: paymentOrder.productType,
           status: paymentOrder.status === "FAILED" ? "FAILED" : "PENDING",
           message: paymentOrder.status === "FAILED"
             ? "Copilot payment attempt failed."
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       }
       return NextResponse.json({
         success: true,
-        product: "COPILOT",
+        product: paymentOrder.productType,
         status: transaction.status,
         transaction: {
           id: transaction.id,
