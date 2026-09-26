@@ -217,7 +217,9 @@ export async function POST(req: NextRequest) {
       return jsonError("This subscription plan has been archived and is no longer available", 400);
     }
 
-    const copilotConfig = await prisma.hiringCopilotConfig.findUnique({ where: { id: "default" } });
+    const copilotConfig = addCopilot
+      ? await prisma.hiringCopilotConfig.findUnique({ where: { id: "default" } })
+      : null;
     if (addCopilot && plan.copilotIncluded) throw new ApiError("This plan already includes Co-Pilot.", 400);
     if (addCopilot && (!copilotConfig?.enabled || copilotConfig.currency !== plan.currency)) {
       throw new ApiError("Co-Pilot add-on is not currently available for this plan.", 409);
