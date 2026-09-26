@@ -200,7 +200,6 @@ test("production navigation excludes intentionally unconnected admin tools", () 
     "/admin/system/backup-recovery",
     "/admin/sla/monitor",
     "/admin/security/vulnerability-inspector",
-    "/admin/models/registry",
     "/admin/models/playground",
     "/admin/licenses/allocator",
     "/admin/logs/stream",
@@ -213,6 +212,13 @@ test("production navigation excludes intentionally unconnected admin tools", () 
   for (const route of ["/admin/proctoring-control-panel", "/admin/roles", "/admin/system/backup-recovery", "/admin/security/vulnerability-inspector"]) {
     assert.ok(!dashboard.includes(route), `Admin dashboard exposes unconnected tool: ${route}`);
   }
+
+  assert.match(sidebar, /\/admin\/models\/registry/);
+  const registry = read("src/app/admin/models/registry/page.tsx");
+  const routingApi = read("src/app/api/admin/ai-routing/route.ts");
+  assert.match(registry, /\/api\/admin\/ai-routing/);
+  assert.match(routingApi, /requireAdminSession/);
+  assert.match(routingApi, /getAiRoutingConfig/);
 });
 
 test("job creation follows the authoritative persisted workflow", () => {
