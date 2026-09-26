@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { sendEmail } from "@/lib/email";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { dispatchCommunication } from "@/lib/communications/dispatcher";
 
 const schema = z.object({
   applicationId: z.string().min(1),
@@ -29,7 +28,7 @@ export async function POST(request: NextRequest) {
       });
       if (blocking > 0) return NextResponse.json({ success: false, error: "Complete your pending mandatory interview feedback before scheduling another interview." }, { status: 409 });
     }
-    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: true }, where: { id: body.applicationId } });
+    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: { include: { company: true } } }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
     if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
       return NextResponse.json({ success: false, error: "Interviews cannot be scheduled for an application in a terminal state." }, { status: 409 });
@@ -67,6 +66,8 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    const scheduledAt = new Date(body.scheduledAt);
+    const scheduledEnd = new Date(scheduledAt.getTime() + durationMins * 60_000);
     const roomId = mode === "ONLINE" ? `room-${crypto.randomUUID()}` : null;
     const roomUrl = mode === "ONLINE"
       ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}`
@@ -84,6 +85,35 @@ export async function POST(request: NextRequest) {
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
         select: { interviewId: true, status: true },
       });
+
+      const participantIds = [application.candidateProfile.userId, ...round.interviewers.map((item) => item.userId)].sort();
+      for (const participantId of participantIds) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`hirego:interview-participant:${participantId}`}))`;
+      }
+      const possibleConflicts = await tx.interview.findMany({
+        where: {
+          status: { in: ["SCHEDULED", "RESCHEDULED", "LIVE"] },
+          scheduledAt: {
+            gte: new Date(scheduledAt.getTime() - 4 * 60 * 60_000),
+            lt: scheduledEnd,
+          },
+        },
+        include: {
+          application: { include: { candidateProfile: { select: { userId: true } } } },
+          roundProgress: { include: { round: { include: { interviewers: { select: { userId: true } } } } } },
+        },
+      });
+      const requestedParticipants = new Set(participantIds);
+      const conflict = possibleConflicts.find((existing) => {
+        const existingEnd = new Date(existing.scheduledAt.getTime() + existing.durationMins * 60_000);
+        if (!(existing.scheduledAt < scheduledEnd && existingEnd > scheduledAt)) return false;
+        const existingParticipants = [
+          existing.application.candidateProfile.userId,
+          ...(existing.roundProgress?.round.interviewers.map((item) => item.userId) || []),
+        ];
+        return existingParticipants.some((id) => requestedParticipants.has(id));
+      });
+      if (conflict) throw new Error("INTERVIEW_TIME_CONFLICT");
       if (round.sequence > 1) {
         const previous = await tx.interviewRound.findUnique({
           where: { processId_sequence: { processId: round.processId, sequence: round.sequence - 1 } },
@@ -100,7 +130,7 @@ export async function POST(request: NextRequest) {
         }
       }
       if (progress?.interviewId) throw new Error("INTERVIEW_ROUND_ALREADY_SCHEDULED");
-      const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt: new Date(body.scheduledAt), durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
+      const created = await tx.interview.create({ data: { applicationId: body.applicationId, scheduledAt, durationMins: durationMins, status: "SCHEDULED", roomUrl, aiFeedback: metadata } });
       await tx.interviewRoundProgress.upsert({
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
         update: { interviewId: created.id, status: "SCHEDULED" },
@@ -108,16 +138,71 @@ export async function POST(request: NextRequest) {
       });
       return created;
     });
-    await prisma.notification.create({ data: { userId: application.candidateProfile.userId, title: `${round.name} interview scheduled`, message: `Your ${mode.toLowerCase()} interview is scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`, type: "INTERVIEW" } }).catch(() => undefined);
-    if (body.notifyEmail && application.candidateProfile.user?.email) {
-      await sendEmail({ to: application.candidateProfile.user.email, subject: "HireGo AI interview scheduled", html: `<p>Your ${round.name} interview is scheduled for <strong>${new Date(body.scheduledAt).toLocaleString()}</strong>.</p><p>Mode: ${mode}</p>${mode === "OFFLINE" ? `<p>Address: ${body.address}<br/>Contact: ${body.contactNumber}</p>` : `<p>Join from your HireGo interview portal.</p>`}` }).catch(() => undefined);
-    }
-    const whatsapp = body.notifyWhatsapp && application.candidateProfile.user?.phoneNumber ? await sendWhatsAppMessage(application.candidateProfile.user.phoneNumber, `HireGo AI ${round.name} interview scheduled for ${new Date(body.scheduledAt).toLocaleString()}.`) : { sent: false, reason: body.notifyWhatsapp ? "Candidate phone number is missing." : "Not selected." };
-    return NextResponse.json({ success: true, interviewId: interview.id, roomId, mode: mode, scheduledAt: interview.scheduledAt, notifications: { app: true, email: body.notifyEmail, whatsapp }, message: "Interview scheduled and candidate notification queued." }, { status: 201 });
+    const appNotification = await prisma.notification.create({
+      data: {
+        userId: application.candidateProfile.userId,
+        title: `${round.name} interview scheduled`,
+        message: `Your ${mode.toLowerCase()} interview is scheduled for ${scheduledAt.toISOString()}.`,
+        type: "INTERVIEW",
+      },
+    }).then(() => ({ status: "CREATED" as const })).catch(() => ({ status: "FAILED" as const }));
+
+    const interviewLink = roomId ? `/interviews/room/${encodeURIComponent(roomId)}` : "/interviews";
+    const variables = {
+      candidate_name: application.candidateProfile.user?.name || "Candidate",
+      company_name: application.job.company.name,
+      job_title: application.job.title,
+      interview_date: scheduledAt.toISOString().slice(0, 10),
+      interview_time: scheduledAt.toISOString().slice(11, 16),
+      timezone: "UTC",
+      interview_mode: mode,
+      interview_link: interviewLink,
+    };
+
+    const email = !body.notifyEmail
+      ? { status: "NOT_REQUESTED" as const }
+      : !application.candidateProfile.user?.email
+        ? { status: "MISSING_RECIPIENT" as const }
+        : await dispatchCommunication({
+            eventKey: "INTERVIEW_SCHEDULED",
+            channel: "EMAIL",
+            audience: "CANDIDATE",
+            recipient: application.candidateProfile.user.email,
+            variables,
+            idempotencyKey: `interview:${interview.id}:scheduled:candidate:email`,
+            correlationId: interview.id,
+            recipientRef: application.candidateProfile.userId,
+          }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "Email dispatch failed." }));
+
+    const whatsapp = !body.notifyWhatsapp
+      ? { status: "NOT_REQUESTED" as const }
+      : !application.candidateProfile.user?.phoneNumber
+        ? { status: "MISSING_RECIPIENT" as const }
+        : await dispatchCommunication({
+            eventKey: "INTERVIEW_SCHEDULED",
+            channel: "WHATSAPP",
+            audience: "CANDIDATE",
+            recipient: application.candidateProfile.user.phoneNumber,
+            variables,
+            idempotencyKey: `interview:${interview.id}:scheduled:candidate:whatsapp`,
+            correlationId: interview.id,
+            recipientRef: application.candidateProfile.userId,
+          }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "WhatsApp dispatch failed." }));
+
+    return NextResponse.json({
+      success: true,
+      interviewId: interview.id,
+      roomId,
+      mode,
+      scheduledAt: interview.scheduledAt,
+      notifications: { app: appNotification, email, whatsapp },
+      message: "Interview scheduled. Notification results are reported separately.",
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
+    if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
   }
