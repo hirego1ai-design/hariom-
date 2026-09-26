@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
 
     const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
     if (!profile?.companyId) throw new ApiError("Employer profile not found.", 403);
+    await prisma.jobListing.updateMany({
+      where: { companyId: profile.companyId, status: "ACTIVE", expiresAt: { lte: new Date() } },
+      data: { status: "CLOSED" },
+    });
     const jobs = await prisma.jobListing.findMany({
       where: { companyId: profile.companyId },
       orderBy: { createdAt: "desc" },
