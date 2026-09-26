@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 
-export const llmProviderSchema = z.enum(["openai", "gemini", "deepseek", "kimi", "qwen"]);
+export const llmProviderSchema = z.enum(["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"]);
 export type LlmProviderName = z.infer<typeof llmProviderSchema>;
 
 export const routingModeSchema = z.enum([
@@ -180,9 +180,19 @@ export function getProviderRuntime(provider: LlmProviderName): ProviderRuntime {
       : { configured: false, reason: "KIMI_API_KEY is missing" };
   }
 
-  if (!process.env.QWEN_API_KEY) return { configured: false, reason: "QWEN_API_KEY is missing" };
-  if (!process.env.QWEN_BASE_URL) return { configured: false, reason: "QWEN_BASE_URL is missing" };
-  return { configured: true, baseURL: process.env.QWEN_BASE_URL };
+  if (provider === "qwen") {
+    if (!process.env.QWEN_API_KEY) return { configured: false, reason: "QWEN_API_KEY is missing" };
+    if (!process.env.QWEN_BASE_URL) return { configured: false, reason: "QWEN_BASE_URL is missing" };
+    return { configured: true, baseURL: process.env.QWEN_BASE_URL };
+  }
+
+  if (!process.env.SELF_HOSTED_LLM_BASE_URL) {
+    return { configured: false, reason: "SELF_HOSTED_LLM_BASE_URL is missing" };
+  }
+  if (!process.env.SELF_HOSTED_LLM_API_KEY) {
+    return { configured: false, reason: "SELF_HOSTED_LLM_API_KEY is missing" };
+  }
+  return { configured: true, baseURL: process.env.SELF_HOSTED_LLM_BASE_URL };
 }
 
 export function getProviderApiKey(provider: LlmProviderName): string | null {
@@ -194,7 +204,9 @@ export function getProviderApiKey(provider: LlmProviderName): string | null {
         ? process.env.DEEPSEEK_API_KEY
         : provider === "kimi"
           ? process.env.KIMI_API_KEY
-          : process.env.QWEN_API_KEY;
+          : provider === "qwen"
+            ? process.env.QWEN_API_KEY
+            : process.env.SELF_HOSTED_LLM_API_KEY;
   return value?.trim() || null;
 }
 
