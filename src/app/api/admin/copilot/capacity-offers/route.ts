@@ -29,12 +29,6 @@ export async function POST(req: NextRequest) {
     const session = await requireAdminSession(req);
     const body = await readValidatedJson(req, copilotCapacityOfferCreateSchema);
 
-    for (const price of body.prices) {
-      if (price.paymentRoute === "MERCHANT_OF_RECORD") {
-        throw new ApiError("Merchant-of-record offers cannot be activated until an approved provider adapter is connected.", 409);
-      }
-    }
-
     const offer = await prisma.$transaction(async (tx) => {
       const created = await tx.copilotCapacityOffer.create({
         data: {
@@ -96,9 +90,6 @@ export async function PATCH(req: NextRequest) {
 
       const current = await tx.copilotCapacityOfferPrice.findUnique({ where: { id: body.priceId } });
       if (!current) throw new ApiError("Copilot capacity price not found.", 404);
-      if (body.paymentRoute === "MERCHANT_OF_RECORD") {
-        throw new ApiError("Merchant-of-record offers cannot be activated until an approved provider adapter is connected.", 409);
-      }
       const { type: _type, priceId, ...changes } = body;
       return {
         entity: "PRICE",
