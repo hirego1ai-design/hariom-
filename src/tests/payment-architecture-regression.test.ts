@@ -198,3 +198,46 @@ test("Payment controller rejects unsupported providers and safely migrates legac
   assert.equal(normalized.priorities.includes("RAZORPAY" as any), false);
   assert.equal(normalized.priorities.includes("PHONEPE" as any), false);
 });
+
+
+test("Stripe checkout completed without paid status remains nonterminal", async () => {
+  const stripe = new StripeGateway();
+  const secret = "mock_webhook_secret_unpaid_checkout";
+  process.env.STRIPE_WEBHOOK_SECRET = secret;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rawBody = JSON.stringify({
+    id: "evt_unpaid_checkout",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_test_unpaid",
+        amount_total: 49900,
+        currency: "inr",
+        metadata: { companyId: "company-unpaid", orderId: "order-unpaid" },
+        payment_status: "unpaid",
+      },
+    },
+  });
+  const sig = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const header = `t=${timestamp},v1=${sig}`;
+  const result = await stripe.verifyWebhook({
+    rawBody,
+    signature: header,
+    provider: "STRIPE",
+    headers: { "stripe-signature": header },
+  });
+  assert.equal(result.isValid, true);
+  assert.equal(result.status, "PENDING");
+});
+
+test("candidate credit and job boost purchase endpoints do not self-fulfill payment success", async () => {
+  const fs = await import("node:fs");
+  const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const boost = fs.readFileSync(new URL("../app/api/employer/jobs/[id]/boost/route.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(credits, /status:\s*["']SUCCESS["']/);
+  assert.doesNotMatch(credits, /balance:\s*\{\s*increment:/);
+  assert.match(credits, /PAYMENT_INTEGRATION_REQUIRED/);
+  assert.doesNotMatch(boost, /status:\s*["']SUCCESS["']/);
+  assert.doesNotMatch(boost, /isBoosted:\s*true/);
+  assert.match(boost, /PAYMENT_INTEGRATION_REQUIRED/);
+});
