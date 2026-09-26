@@ -200,7 +200,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       let approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
-      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.consumedAt) {
+      if (approval.workflowInstanceId !== body.workflowId || approval.actionType !== "CANDIDATE_REJECTION" || approval.consumedAt || approval.revokedAt) {
         throw new ApiError("Valid unconsumed candidate-rejection approval is required.", 409);
       }
       if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
