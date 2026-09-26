@@ -135,3 +135,20 @@ test("universal results can continue directly to required job-specific assessmen
   assert.ok(active.includes("Continue Job-Specific Assessment"));
   assert.ok(active.includes("isUniversalSkillValidation"), "private coaching must be scoped to Universal Skill Validation");
 });
+
+
+test("OpenAI reasoning-family Chat Completions uses current completion-token parameter", () => {
+  const dispatcher = read("src/utils/aiRouter.ts");
+  assert.ok(dispatcher.includes('request.provider === "openai"'));
+  assert.ok(dispatcher.includes("max_completion_tokens: maxTokens"));
+  assert.ok(dispatcher.includes("openAiReasoningFamily"));
+  assert.ok(dispatcher.includes("max_tokens: maxTokens"), "OpenAI-compatible non-OpenAI providers retain max_tokens");
+});
+
+
+test("production AI accounting fails closed before provider I/O", () => {
+  const dispatcher = read("src/utils/aiRouter.ts");
+  const accountingCheck = dispatcher.indexOf('requiredPositiveNumber("AI_BUDGET_USD_TO_INR", 83)');
+  const providerClient = dispatcher.indexOf("const client = createProviderClient");
+  assert.ok(accountingCheck >= 0 && providerClient > accountingCheck, "currency accounting must be validated before creating/provider calling the client");
+});
