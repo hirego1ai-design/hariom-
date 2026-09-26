@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       subscriptionsDb.getAiServices(),
       PaymentGatewayController.getConfig(),
     ]);
+    const latestSubscription = activeSubscription ?? await subscriptionsDb.getLatestCompanySubscription(companyId);
 
   let activePlan = null;
   if (activeSubscription) {
@@ -35,26 +36,44 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  // Calculate derived subscription state
+  // Calculate lifecycle state from the latest period while exposing
+  // active entitlements only when the server-side active-window check passes.
   const now = new Date();
   let derivedStatus = "INACTIVE";
   let daysRemaining = 0;
+  let displayPlan = activePlan;
 
-  if (activeSubscription) {
-    const endDate = new Date(activeSubscription.endDate);
+  if (!displayPlan && latestSubscription?.entitlementSnapshot) {
+    try {
+      const snapshot = parsePurchasedPlanSnapshot(latestSubscription.entitlementSnapshot);
+      displayPlan = {
+        ...snapshot,
+        id: snapshot.planId,
+        description: "Purchased subscription terms",
+        isArchived: false,
+      };
+    } catch {
+      displayPlan = null;
+    }
+  }
+
+  if (latestSubscription) {
+    const endDate = new Date(latestSubscription.endDate);
     const diffMs = endDate.getTime() - now.getTime();
-    daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    daysRemaining = activeSubscription
+      ? Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
+      : 0;
 
-    const statusStr = (activeSubscription.status as string) || "ACTIVE";
+    const statusStr = (latestSubscription.status as string) || "ACTIVE";
     if (statusStr === "CANCELLED") {
       derivedStatus = "CANCELLED";
     } else if (statusStr === "PAYMENT_FAILED") {
       derivedStatus = "PAYMENT_FAILED";
-    } else if (endDate < now) {
+    } else if (statusStr === "EXPIRED" || endDate <= now) {
       derivedStatus = "EXPIRED";
-    } else if (daysRemaining <= 7) {
+    } else if (activeSubscription && daysRemaining <= 7) {
       derivedStatus = "EXPIRING";
-    } else {
+    } else if (activeSubscription) {
       derivedStatus = "ACTIVE";
     }
   }
@@ -75,10 +94,13 @@ export async function GET(request: NextRequest) {
       subscriptionState: {
         status: derivedStatus,
         daysRemaining,
-        endDate: activeSubscription?.endDate || null,
-        price: activePlan?.price || 0,
-        currency: activePlan?.currency || "INR",
-        planName: activePlan?.name || "Free Tier",
+        endDate: latestSubscription?.endDate || null,
+        price: displayPlan?.price || 0,
+        currency: displayPlan?.currency || "INR",
+        planName: displayPlan?.name || "No active plan",
+        billingMode: "PREPAID_FIXED_TERM",
+        autoRenew: false,
+        creditAccess: activeSubscription ? "ENABLED" : "LOCKED",
       },
       quotas: {
         jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota ?? 0 },
