@@ -30,9 +30,13 @@ export class PayUGateway implements PaymentGateway {
     const gatewayOrderId = `payu_${params.orderId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20)}_${Date.now().toString(36)}`;
     const formattedAmount = params.amount.toFixed(2);
     const productInfo = (params.planName || "HireGo Subscription").replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 100) || "Subscription";
-    const firstname = "Employer";
-    const email = "billing@hirego.ai";
-    const phone = "9999999999";
+    const firstname = (params.customerName || "Employer").trim().slice(0, 60) || "Employer";
+    const email = (params.customerEmail || "").trim().toLowerCase();
+    const phone = (params.customerPhone || "").replace(/[^0-9+]/g, "").slice(0, 20);
+
+    if (isProduction && (!email || !phone)) {
+      throw new Error("PayU checkout requires the employer billing email and phone number.");
+    }
     const surl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU`;
     const furl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU&status=FAILED`;
     const udf1 = params.orderId;
@@ -64,8 +68,8 @@ export class PayUGateway implements PaymentGateway {
         amount: formattedAmount,
         productinfo: productInfo,
         firstname,
-        email,
-        phone,
+        email: email || "dev-billing@example.test",
+        phone: phone || "9999999999",
         surl,
         furl,
         hash,
