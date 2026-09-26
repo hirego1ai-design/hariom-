@@ -17,7 +17,15 @@ export interface SubscriptionPlanRecord {
   resumeDownloadsQuota: number;
   backgroundVerificationsQuota: number;
   featuresAllowed: string[];
+  marketingBenefits: string[];
   validityMonths: number;
+  jobValidityDays: number;
+  firstTimeOnly: boolean;
+  copilotIncluded: boolean;
+  copilotJobLimit: number;
+  isFeatured: boolean;
+  badgeText?: string | null;
+  displayOrder: number;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +54,7 @@ export interface CompanyCreditsRecord {
   applicationsLeft: number;
   resumeDownloadsLeft: number;
   backgroundVerificationsLeft: number;
+  copilotJobsLeft: number;
   updatedAt: string;
 }
 
@@ -60,6 +69,18 @@ export interface PromoCodeRecord {
   validUntil?: string;
   isArchived: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface HiringCopilotConfigRecord {
+  enabled: boolean;
+  addonPrice: number;
+  currency: string;
+  addonJobLimit: number;
+  title: string;
+  description: string;
+  badgeText?: string | null;
+  benefits: string[];
   updatedAt: string;
 }
 
@@ -94,7 +115,7 @@ class SubscriptionsDb {
   public async getSubscriptionPlans(includeArchived = false): Promise<SubscriptionPlanRecord[]> {
     const records = await prisma.subscriptionPlan.findMany({
       where: includeArchived ? {} : { isArchived: false },
-      orderBy: { price: "asc" },
+      orderBy: [{ displayOrder: "asc" }, { price: "asc" }],
     });
     return records.map((r) => ({
       id: r.id,
@@ -109,7 +130,15 @@ class SubscriptionsDb {
       resumeDownloadsQuota: r.resumeDownloadsQuota,
       backgroundVerificationsQuota: r.backgroundVerificationsQuota,
       featuresAllowed: r.featuresAllowed,
+      marketingBenefits: r.marketingBenefits,
       validityMonths: r.validityMonths,
+      jobValidityDays: r.jobValidityDays,
+      firstTimeOnly: r.firstTimeOnly,
+      copilotIncluded: r.copilotIncluded,
+      copilotJobLimit: r.copilotJobLimit,
+      isFeatured: r.isFeatured,
+      badgeText: r.badgeText,
+      displayOrder: r.displayOrder,
       isArchived: r.isArchived,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -132,7 +161,15 @@ class SubscriptionsDb {
       resumeDownloadsQuota: r.resumeDownloadsQuota,
       backgroundVerificationsQuota: r.backgroundVerificationsQuota,
       featuresAllowed: r.featuresAllowed,
+      marketingBenefits: r.marketingBenefits,
       validityMonths: r.validityMonths,
+      jobValidityDays: r.jobValidityDays,
+      firstTimeOnly: r.firstTimeOnly,
+      copilotIncluded: r.copilotIncluded,
+      copilotJobLimit: r.copilotJobLimit,
+      isFeatured: r.isFeatured,
+      badgeText: r.badgeText,
+      displayOrder: r.displayOrder,
       isArchived: r.isArchived,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -166,7 +203,15 @@ class SubscriptionsDb {
         resumeDownloadsQuota: payload.resumeDownloadsQuota,
         backgroundVerificationsQuota: payload.backgroundVerificationsQuota,
         featuresAllowed: payload.featuresAllowed || [],
+        marketingBenefits: payload.marketingBenefits || [],
         validityMonths: payload.validityMonths || 1,
+        jobValidityDays: payload.jobValidityDays,
+        firstTimeOnly: payload.firstTimeOnly,
+        copilotIncluded: payload.copilotIncluded,
+        copilotJobLimit: payload.copilotJobLimit,
+        isFeatured: payload.isFeatured,
+        badgeText: payload.badgeText || null,
+        displayOrder: payload.displayOrder,
         isArchived: false,
       },
     });
@@ -206,6 +251,7 @@ class SubscriptionsDb {
       applicationsLeft: r.applicationsLeft,
       resumeDownloadsLeft: r.resumeDownloadsLeft,
       backgroundVerificationsLeft: r.backgroundVerificationsLeft,
+      copilotJobsLeft: r.copilotJobsLeft,
       updatedAt: r.updatedAt.toISOString(),
     };
   }
@@ -238,6 +284,7 @@ class SubscriptionsDb {
       applicationsLeft: r.applicationsLeft,
       resumeDownloadsLeft: r.resumeDownloadsLeft,
       backgroundVerificationsLeft: r.backgroundVerificationsLeft,
+      copilotJobsLeft: r.copilotJobsLeft,
       updatedAt: r.updatedAt.toISOString(),
     };
   }
@@ -278,19 +325,21 @@ class SubscriptionsDb {
           jobPostsLeft: plan.jobPostsQuota,
           resumeUnlocksLeft: plan.resumeUnlocksQuota,
           aiInterviewsLeft: plan.aiInterviewsQuota,
-          aiAgentCreditsLeft: plan.aiInterviewsQuota,
+          aiAgentCreditsLeft: 0,
           applicationsLeft: plan.applicationsQuota,
           resumeDownloadsLeft: plan.resumeDownloadsQuota,
           backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
+          copilotJobsLeft: plan.copilotJobLimit,
         },
         update: {
           jobPostsLeft: plan.jobPostsQuota,
           resumeUnlocksLeft: plan.resumeUnlocksQuota,
           aiInterviewsLeft: plan.aiInterviewsQuota,
-          aiAgentCreditsLeft: plan.aiInterviewsQuota,
+          aiAgentCreditsLeft: 0,
           applicationsLeft: plan.applicationsQuota,
           resumeDownloadsLeft: plan.resumeDownloadsQuota,
           backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
+          copilotJobsLeft: plan.copilotJobLimit,
         },
       });
 
@@ -507,7 +556,58 @@ class SubscriptionsDb {
     });
   }
 
-  // AI SERVICES
+  public async getHiringCopilotConfig(): Promise<HiringCopilotConfigRecord> {
+    const record = await prisma.hiringCopilotConfig.upsert({
+      where: { id: "default" },
+      update: {},
+      create: {
+        id: "default",
+        benefits: [
+          "Candidate prioritisation",
+          "Assessment coordination",
+          "Interview scheduling",
+          "Reminder follow-ups",
+          "Feedback tracking",
+          "Next-step recommendations",
+          "Human approval at key steps",
+        ],
+      },
+    });
+    return {
+      enabled: record.enabled,
+      addonPrice: record.addonPrice,
+      currency: record.currency,
+      addonJobLimit: record.addonJobLimit,
+      title: record.title,
+      description: record.description,
+      badgeText: record.badgeText,
+      benefits: record.benefits,
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
+  public async updateHiringCopilotConfig(
+    updates: Omit<HiringCopilotConfigRecord, "updatedAt">
+  ): Promise<HiringCopilotConfigRecord> {
+    const record = await prisma.hiringCopilotConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", ...updates },
+      update: updates,
+    });
+    return {
+      enabled: record.enabled,
+      addonPrice: record.addonPrice,
+      currency: record.currency,
+      addonJobLimit: record.addonJobLimit,
+      title: record.title,
+      description: record.description,
+      badgeText: record.badgeText,
+      benefits: record.benefits,
+      updatedAt: record.updatedAt.toISOString(),
+    };
+  }
+
+  // AI SERVICES (internal cost/config visibility; not customer credit billing)
   public async getAiServices(): Promise<AiServiceCostRecord[]> {
     const records = await prisma.aiServiceCost.findMany({ orderBy: { serviceKey: "asc" } });
     return records.map((record) => ({
