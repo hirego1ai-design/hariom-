@@ -14,8 +14,13 @@ type PublicPlan = {
     countryCode: string;
     currency: string;
     amount: number;
+    taxAmount: number;
+    totalAmount: number;
+    taxRatePercent: number;
+    taxLabel: string | null;
     taxInclusive: boolean;
     taxesMayApplyAtCheckout: boolean;
+    noTaxCollected: boolean;
     checkoutAvailable: boolean;
   };
 };
@@ -30,8 +35,13 @@ type CapacityOffer = {
     regionCode: string;
     currency: string;
     amount: number;
+    taxAmount: number;
+    totalAmount: number;
+    taxRatePercent: number;
+    taxLabel: string | null;
     taxInclusive: boolean;
     taxesMayApplyAtCheckout: boolean;
+    noTaxCollected: boolean;
     checkoutAvailable: boolean;
   };
 };
@@ -294,7 +304,11 @@ export default function EmployerCopilotHubPage() {
                 <p className="mt-2 min-h-10 text-xs leading-5 text-[#94A3B8]">{offer.description}</p>
                 <p className="mt-4 text-2xl font-extrabold text-white">{money(offer.price.amount, offer.price.currency)}</p>
                 <p className="mt-1 text-[11px] text-[#64748B]">
-                  {offer.price.taxesMayApplyAtCheckout ? "Applicable tax may be added at checkout." : "Configured tax treatment is included."}
+                  {offer.price.taxesMayApplyAtCheckout
+                    ? `${offer.price.taxLabel || "Tax"} ${offer.price.taxRatePercent}% applies at checkout.`
+                    : offer.price.noTaxCollected
+                      ? "No tax is collected by HireGo for this billing region at checkout."
+                      : "Configured tax treatment is included."}
                 </p>
                 <button
                   disabled={submitting || !offer.price.checkoutAvailable}
@@ -354,7 +368,13 @@ export default function EmployerCopilotHubPage() {
 
                   <div className="mt-auto pt-6">
                     <p className="mb-3 text-[11px] leading-4 text-[#64748B]">
-                      {plan.price.taxInclusive ? "Displayed price includes configured transaction taxes." : "Applicable transaction tax, if required, may be added by the checkout provider."}
+                      {plan.price.taxesMayApplyAtCheckout
+                        ? `${plan.price.taxLabel || "Tax"} ${plan.price.taxRatePercent}% applies at checkout.`
+                        : plan.price.noTaxCollected
+                          ? "No tax is collected by HireGo for this billing region at checkout."
+                          : plan.price.taxInclusive
+                            ? "Displayed price includes configured transaction tax."
+                            : "No additional tax is configured at checkout."}
                     </p>
                     <button
                       disabled={!plan.price.checkoutAvailable}
@@ -411,8 +431,22 @@ export default function EmployerCopilotHubPage() {
                 <span className="text-sm text-[#94A3B8]">Plan price</span>
                 <span className="text-lg font-extrabold text-white">{money(checkoutPlan.price.amount, checkoutPlan.price.currency)}</span>
               </div>
+              {checkoutPlan.price.taxAmount > 0 && (
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-[#94A3B8]">{checkoutPlan.price.taxLabel || "Tax"} ({checkoutPlan.price.taxRatePercent}%)</span>
+                  <span className="font-bold text-white">{money(checkoutPlan.price.taxAmount, checkoutPlan.price.currency)}</span>
+                </div>
+              )}
+              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                <span className="text-sm font-bold text-white">Payable now</span>
+                <span className="text-lg font-extrabold text-white">{money(checkoutPlan.price.totalAmount, checkoutPlan.price.currency)}</span>
+              </div>
               <p className="mt-2 text-xs text-[#64748B]">
-                Billing country: {country}. {checkoutPlan.price.taxesMayApplyAtCheckout ? "Applicable local tax may be calculated at checkout." : "Tax treatment is included in the configured checkout route."}
+                Billing country: {country}. {checkoutPlan.price.taxesMayApplyAtCheckout
+                  ? `${checkoutPlan.price.taxLabel || "Tax"} is included in the payable total shown above.`
+                  : checkoutPlan.price.noTaxCollected
+                    ? "HireGo is not collecting tax for this non-India billing region under the current commerce policy."
+                    : "Configured tax treatment is reflected above."}
               </p>
             </div>
             <button
