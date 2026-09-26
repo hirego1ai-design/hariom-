@@ -14,7 +14,7 @@ async function authorizedInterview(id: string, session: { id: string; role: stri
     include: {
       application: {
         include: {
-          job: true,
+          job: { include: { company: true } },
           candidateProfile: {
             include: {
               user: true
@@ -145,12 +145,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const variables = body.action === "CANCEL"
       ? {
           candidate_name: candidate?.name || "Candidate",
-          company_name: "Employer",
+          company_name: interview.application.job.company.name,
           job_title: interview.application.job.title,
         }
       : {
           candidate_name: candidate?.name || "Candidate",
-          company_name: "Employer",
+          company_name: interview.application.job.company.name,
           job_title: interview.application.job.title,
           interview_date: nextScheduledAt.toISOString().slice(0, 10),
           interview_time: nextScheduledAt.toISOString().slice(11, 16),
