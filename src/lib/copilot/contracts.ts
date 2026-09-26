@@ -44,3 +44,46 @@ export const copilotAdminPatchSchema = z.union([
 ]);
 
 export type CopilotCheckoutInput = z.infer<typeof copilotCheckoutSchema>;
+
+
+export const copilotCapacityCheckoutSchema = z.object({
+  offerId: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
+  countryCode: countryCodeSchema,
+}).strict();
+
+export const copilotCapacityOfferCreateSchema = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9_]{2,64}$/),
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().min(1).max(1000),
+  capacityUnits: z.number().int().min(1).max(10_000_000),
+  prices: z.array(z.object({
+    regionCode: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,32}$/),
+    countries: z.array(countryCodeSchema).max(250),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    amountMinor: z.number().int().min(1).max(1_000_000_000),
+    taxMode: z.enum(["TAX_EXCLUSIVE", "TAX_INCLUSIVE", "MERCHANT_OF_RECORD"]),
+    paymentRoute: z.enum(["PAYU", "STRIPE", "MERCHANT_OF_RECORD"]),
+    isActive: z.boolean().default(true),
+  }).strict()).min(1).max(100),
+}).strict();
+
+export const copilotCapacityOfferPatchSchema = z.union([
+  z.object({
+    type: z.literal("OFFER"),
+    offerId: z.string().min(1).max(128),
+    name: z.string().trim().min(1).max(100).optional(),
+    description: z.string().trim().min(1).max(1000).optional(),
+    capacityUnits: z.number().int().min(1).max(10_000_000).optional(),
+    isArchived: z.boolean().optional(),
+  }).strict().refine((value) => Object.keys(value).length > 2, "No offer changes supplied."),
+  z.object({
+    type: z.literal("PRICE"),
+    priceId: z.string().min(1).max(128),
+    currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    amountMinor: z.number().int().min(1).max(1_000_000_000).optional(),
+    taxMode: z.enum(["TAX_EXCLUSIVE", "TAX_INCLUSIVE", "MERCHANT_OF_RECORD"]).optional(),
+    paymentRoute: z.enum(["PAYU", "STRIPE", "MERCHANT_OF_RECORD"]).optional(),
+    countries: z.array(countryCodeSchema).max(250).optional(),
+    isActive: z.boolean().optional(),
+  }).strict().refine((value) => Object.keys(value).length > 2, "No price changes supplied."),
+]);
