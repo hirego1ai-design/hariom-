@@ -52,6 +52,39 @@ CREATE TABLE "CopilotRegionalPrice" (
 CREATE UNIQUE INDEX "CopilotRegionalPrice_planId_regionCode_key" ON "CopilotRegionalPrice"("planId", "regionCode");
 CREATE INDEX "CopilotRegionalPrice_regionCode_isActive_idx" ON "CopilotRegionalPrice"("regionCode", "isActive");
 
+CREATE TABLE "CopilotCapacityOffer" (
+  "id" TEXT NOT NULL,
+  "code" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "capacityUnits" INTEGER NOT NULL,
+  "isArchived" BOOLEAN NOT NULL DEFAULT false,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "CopilotCapacityOffer_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "CopilotCapacityOffer_code_key" ON "CopilotCapacityOffer"("code");
+CREATE INDEX "CopilotCapacityOffer_isArchived_idx" ON "CopilotCapacityOffer"("isArchived");
+
+CREATE TABLE "CopilotCapacityOfferPrice" (
+  "id" TEXT NOT NULL,
+  "offerId" TEXT NOT NULL,
+  "regionCode" TEXT NOT NULL,
+  "countries" TEXT[] DEFAULT ARRAY[]::TEXT[],
+  "currency" TEXT NOT NULL,
+  "amountMinor" INTEGER NOT NULL,
+  "taxMode" "CopilotTaxMode" NOT NULL DEFAULT 'TAX_EXCLUSIVE',
+  "paymentRoute" "CopilotPaymentRoute" NOT NULL,
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "CopilotCapacityOfferPrice_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "CopilotCapacityOfferPrice_offerId_regionCode_key" ON "CopilotCapacityOfferPrice"("offerId", "regionCode");
+CREATE INDEX "CopilotCapacityOfferPrice_regionCode_isActive_idx" ON "CopilotCapacityOfferPrice"("regionCode", "isActive");
+
 CREATE TABLE "CopilotSubscription" (
   "id" TEXT NOT NULL,
   "companyId" TEXT NOT NULL,
@@ -183,6 +216,8 @@ CREATE INDEX "CopilotCapacityAddon_billingCycleId_idx" ON "CopilotCapacityAddon"
 
 ALTER TABLE "CopilotRegionalPrice" ADD CONSTRAINT "CopilotRegionalPrice_planId_fkey"
   FOREIGN KEY ("planId") REFERENCES "CopilotPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CopilotCapacityOfferPrice" ADD CONSTRAINT "CopilotCapacityOfferPrice_offerId_fkey"
+  FOREIGN KEY ("offerId") REFERENCES "CopilotCapacityOffer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "CopilotSubscription" ADD CONSTRAINT "CopilotSubscription_companyId_fkey"
   FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "CopilotSubscription" ADD CONSTRAINT "CopilotSubscription_planId_fkey"
@@ -214,6 +249,12 @@ ALTER TABLE "CopilotPlan"
 
 ALTER TABLE "CopilotRegionalPrice"
   ADD CONSTRAINT "CopilotRegionalPrice_amountMinor_check" CHECK ("amountMinor" > 0);
+
+ALTER TABLE "CopilotCapacityOffer"
+  ADD CONSTRAINT "CopilotCapacityOffer_capacityUnits_check" CHECK ("capacityUnits" > 0);
+
+ALTER TABLE "CopilotCapacityOfferPrice"
+  ADD CONSTRAINT "CopilotCapacityOfferPrice_amountMinor_check" CHECK ("amountMinor" > 0);
 
 ALTER TABLE "CopilotBillingCycle"
   ADD CONSTRAINT "CopilotBillingCycle_capacity_check"
