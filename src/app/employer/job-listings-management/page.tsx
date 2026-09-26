@@ -174,12 +174,6 @@ export default function JobListingsManagementPage() {
                       {status === "ACTIVE" ? "Activate" : status === "PAUSED" ? "Pause" : status === "CLOSED" ? "Close" : "Move to draft"}
                     </button>
                   ))}
-                  <Link
-                    href="/employer/job-boost-promote"
-                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20"
-                  >
-                    🚀 Boost
-                  </Link>
                   <button
                     type="button"
                     disabled={busyId === job.id}
