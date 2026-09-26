@@ -198,10 +198,15 @@ export async function POST(req: NextRequest) {
       body.mandatorySkills,
       body.skillsRequired,
     );
-    const salaryRangeMin = body.salaryRangeMin ?? body.budgetMin;
-    const salaryRangeMax = body.salaryRangeMax ?? body.budgetMax;
-    if (salaryRangeMin === undefined || salaryRangeMax === undefined) {
+    const rawSalaryRangeMin = body.salaryRangeMin ?? body.budgetMin;
+    const rawSalaryRangeMax = body.salaryRangeMax ?? body.budgetMax;
+    if (rawSalaryRangeMin === undefined || rawSalaryRangeMax === undefined) {
       throw new ApiError("Salary/budget range is required.", 422);
+    }
+    const salaryRangeMin = Number(rawSalaryRangeMin);
+    const salaryRangeMax = Number(rawSalaryRangeMax);
+    if (!Number.isFinite(salaryRangeMin) || !Number.isFinite(salaryRangeMax)) {
+      throw new ApiError("Salary/budget range must contain finite numbers.", 422);
     }
 
     const newReq = await agreementsDb.createRequirement({
