@@ -4,7 +4,7 @@ import { handleApiError, readValidatedJson, ApiError } from '@/lib/apiSecurity';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
-import { dispatchAiTask } from '@/utils/aiRouter';
+import { runMockInterviewStructured } from '@/lib/mockInterviewAi';
 
 const mockInterviewTurnSchema = z.object({
   sessionId: z.string().uuid(),
@@ -42,8 +42,10 @@ async function evaluateTurn({
   ].filter(Boolean).join("\n");
 
   try {
-    const response = await dispatchAiTask({ task: "INTERVIEW_EVALUATION", prompt });
-    const parsed = turnEvaluationSchema.parse(JSON.parse(response.resultText));
+    const parsed = await runMockInterviewStructured({
+      prompt,
+      schema: turnEvaluationSchema,
+    });
     return {
       score: Math.max(0, Math.min(100, Math.round(parsed.score))),
       feedback: parsed.feedback,
@@ -110,11 +112,10 @@ export async function POST(request: Request) {
       ].join("\n");
 
       try {
-        const aiResponse = await dispatchAiTask({
-          task: 'INTERVIEW_EVALUATION',
+        const parsed = await runMockInterviewStructured({
           prompt: promptStr,
+          schema: nextQuestionSchema,
         });
-        const parsed = nextQuestionSchema.parse(JSON.parse(aiResponse.resultText));
         nextQuestionText = parsed.nextQuestion;
       } catch {
         throw new ApiError('Mock interview question service is unavailable. Please try again later.', 503);
