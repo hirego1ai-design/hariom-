@@ -1,825 +1,600 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import { SUBSCRIPTION_FEATURE_OPTIONS } from "@/lib/subscriptionFeatures";
+
+type PlanType = "FREE_TRIAL" | "STANDARD" | "COPILOT";
+type Plan = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  jobPostsQuota: number;
+  validityMonths: number;
+  jobValidityDays: number;
+  planType: PlanType;
+  firstTimeOnly: boolean;
+  copilotJobsQuota: number;
+  copilotAutoActivate: boolean;
+  badge?: string | null;
+  isFeatured: boolean;
+  displayOrder: number;
+  displayBenefits: string[];
+  featuresAllowed: string[];
+  isArchived: boolean;
+};
+
+type Promo = {
+  id: string;
+  code: string;
+  discountType: "PERCENTAGE" | "FLAT";
+  discountValue: number;
+  maxUsage: number;
+  usageCount: number;
+  validUntil?: string;
+};
+
+type ServiceCost = {
+  id: string;
+  serviceKey: string;
+  serviceName: string;
+  creditCost: number;
+  billingType: "CREDIT_BASED" | "INCLUDED" | "PAID_ADDON";
+};
+
+type Notice = { tone: "success" | "error"; text: string } | null;
+
+const emptyPlan = {
+  name: "",
+  description: "",
+  price: "",
+  currency: "INR",
+  jobPostsQuota: "",
+  validityMonths: "1",
+  jobValidityDays: "7",
+  planType: "STANDARD" as PlanType,
+  firstTimeOnly: false,
+  copilotJobsQuota: "0",
+  copilotAutoActivate: false,
+  badge: "",
+  isFeatured: false,
+  displayOrder: "0",
+  benefitsText: "",
+  featuresAllowed: [] as string[],
+};
+
+function money(value: number, currency: string) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
+  }).format(value);
+}
 
 export default function AdminSubscriptionsPage() {
-  const [plans, setPlans] = useState<any[]>([]);
-  const [promos, setPromos] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"plans" | "services" | "promos">("plans");
+  const [activeTab, setActiveTab] = useState<"plans" | "promos" | "internal-ai">("plans");
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [promos, setPromos] = useState<Promo[]>([]);
+  const [services, setServices] = useState<ServiceCost[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<any | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
-  // Form states - Plans
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [currency, setCurrency] = useState("INR");
-  const [jobPostsQuota, setJobPostsQuota] = useState("");
-  const [resumeUnlocksQuota, setResumeUnlocksQuota] = useState("");
-  const [aiInterviewsQuota, setAiInterviewsQuota] = useState("");
-  const [applicationsQuota, setApplicationsQuota] = useState("100");
-  const [resumeDownloadsQuota, setResumeDownloadsQuota] = useState("50");
-  const [backgroundVerificationsQuota, setBackgroundVerificationsQuota] = useState("5");
-  const [validityMonths, setValidityMonths] = useState("1");
-  const [featuresAllowed, setFeaturesAllowed] = useState<string[]>([]);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [planForm, setPlanForm] = useState(emptyPlan);
+  const [pendingArchivePlan, setPendingArchivePlan] = useState<string | null>(null);
 
-  // Form states - Promos
   const [promoCode, setPromoCode] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FLAT">("PERCENTAGE");
   const [discountValue, setDiscountValue] = useState("");
   const [maxUsage, setMaxUsage] = useState("100");
   const [validUntil, setValidUntil] = useState("");
+  const [pendingArchivePromo, setPendingArchivePromo] = useState<string | null>(null);
 
-  // Edit states - AI Services
-  const [editingService, setEditingService] = useState<any | null>(null);
+  const [editingService, setEditingService] = useState<ServiceCost | null>(null);
   const [serviceCost, setServiceCost] = useState("");
-  const [serviceBillingType, setServiceBillingType] = useState<"INCLUDED" | "CREDIT_BASED" | "PAID_ADDON">("CREDIT_BASED");
+  const [serviceBillingType, setServiceBillingType] = useState<ServiceCost["billingType"]>("INCLUDED");
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      const plansRes = await fetch("/api/admin/subscription-plans?includeArchived=true");
-      const plansData = await plansRes.json();
-      
-      const settingsRes = await fetch("/api/admin/subscriptions/settings");
-      const settingsData = await settingsRes.json();
+      const [plansResponse, settingsResponse] = await Promise.all([
+        fetch("/api/admin/subscription-plans?includeArchived=true", { cache: "no-store" }),
+        fetch("/api/admin/subscriptions/settings", { cache: "no-store" }),
+      ]);
+      const [plansBody, settingsBody] = await Promise.all([plansResponse.json(), settingsResponse.json()]);
+      if (!plansResponse.ok || !plansBody.success) throw new Error(plansBody.error || "Unable to load plans.");
+      if (!settingsResponse.ok || !settingsBody.success) throw new Error(settingsBody.error || "Unable to load subscription settings.");
 
-      if (plansData.success) setPlans(plansData.plans);
-      if (settingsData.success) {
-        setPromos(settingsData.promos || []);
-        setServices(settingsData.services || []);
-      }
-    } catch (err) {
-      console.error("Failed to load subscription data", err);
+      setPlans(plansBody.plans || []);
+      setPromos(settingsBody.promos || []);
+      setServices(settingsBody.services || []);
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Unable to load subscription configuration." });
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  const handleCreateOrUpdatePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
+  const sortedPlans = useMemo(
+    () => [...plans].sort((a, b) => a.displayOrder - b.displayOrder || a.price - b.price),
+    [plans],
+  );
+
+  const resetPlan = () => {
+    setEditingPlanId(null);
+    setPlanForm(emptyPlan);
+    setPendingArchivePlan(null);
+  };
+
+  const editPlan = (plan: Plan) => {
+    setEditingPlanId(plan.id);
+    setPlanForm({
+      name: plan.name,
+      description: plan.description,
+      price: String(plan.price),
+      currency: plan.currency,
+      jobPostsQuota: String(plan.jobPostsQuota),
+      validityMonths: String(plan.validityMonths),
+      jobValidityDays: String(plan.jobValidityDays),
+      planType: plan.planType,
+      firstTimeOnly: plan.firstTimeOnly,
+      copilotJobsQuota: String(plan.copilotJobsQuota),
+      copilotAutoActivate: plan.copilotAutoActivate,
+      badge: plan.badge || "",
+      isFeatured: plan.isFeatured,
+      displayOrder: String(plan.displayOrder),
+      benefitsText: plan.displayBenefits.join("\n"),
+      featuresAllowed: plan.featuresAllowed,
+    });
+    setActiveTab("plans");
+    setNotice(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const toggleFeature = (key: string) => {
+    setPlanForm(current => ({
+      ...current,
+      featuresAllowed: current.featuresAllowed.includes(key)
+        ? current.featuresAllowed.filter(feature => feature !== key)
+        : [...current.featuresAllowed, key],
+    }));
+  };
+
+  const setPlanType = (value: PlanType) => {
+    setPlanForm(current => ({
+      ...current,
+      planType: value,
+      price: value === "FREE_TRIAL" ? "0" : current.price,
+      firstTimeOnly: value === "FREE_TRIAL" ? true : current.firstTimeOnly,
+      copilotJobsQuota: value === "COPILOT" && Number(current.copilotJobsQuota) < 1 ? "1" : current.copilotJobsQuota,
+      copilotAutoActivate: value === "COPILOT" ? true : current.copilotAutoActivate,
+    }));
+  };
+
+  const savePlan = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setNotice(null);
     try {
-      const isEdit = !!editingPlan;
-      const url = "/api/admin/subscription-plans";
-      const method = isEdit ? "PUT" : "POST";
       const payload = {
-        id: editingPlan?.id,
-        name,
-        description,
-        price: parseFloat(price),
-        currency: currency.trim().toUpperCase(),
-        jobPostsQuota: parseInt(jobPostsQuota),
-        resumeUnlocksQuota: parseInt(resumeUnlocksQuota),
-        aiInterviewsQuota: parseInt(aiInterviewsQuota),
-        applicationsQuota: parseInt(applicationsQuota),
-        resumeDownloadsQuota: parseInt(resumeDownloadsQuota),
-        backgroundVerificationsQuota: parseInt(backgroundVerificationsQuota),
-        featuresAllowed,
-        validityMonths: parseInt(validityMonths),
+        ...(editingPlanId ? { id: editingPlanId } : {}),
+        name: planForm.name.trim(),
+        description: planForm.description.trim(),
+        price: Number(planForm.price),
+        currency: planForm.currency.trim().toUpperCase(),
+        jobPostsQuota: Number(planForm.jobPostsQuota),
+        validityMonths: Number(planForm.validityMonths),
+        jobValidityDays: Number(planForm.jobValidityDays),
+        planType: planForm.planType,
+        firstTimeOnly: planForm.firstTimeOnly,
+        copilotJobsQuota: Number(planForm.copilotJobsQuota),
+        copilotAutoActivate: planForm.copilotAutoActivate,
+        badge: planForm.badge.trim() || null,
+        isFeatured: planForm.isFeatured,
+        displayOrder: Number(planForm.displayOrder),
+        displayBenefits: planForm.benefitsText
+          .split("\n")
+          .map(value => value.trim())
+          .filter(Boolean),
+        featuresAllowed: planForm.featuresAllowed,
       };
 
-      const res = await fetch(url, {
-        method,
+      const response = await fetch("/api/admin/subscription-plans", {
+        method: editingPlanId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Plan could not be saved.");
 
-      const data = await res.json();
-      if (data.success) {
-        resetPlanForm();
-        await loadData();
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("An unexpected error occurred.");
+      setNotice({ tone: "success", text: editingPlanId ? "Plan updated successfully." : "Plan created successfully." });
+      resetPlan();
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Plan could not be saved." });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCreatePromo = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const archivePlan = async (id: string) => {
     setSubmitting(true);
-
+    setNotice(null);
     try {
-      const res = await fetch("/api/admin/subscriptions/settings", {
+      const response = await fetch(`/api/admin/subscription-plans?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Plan could not be archived.");
+      setNotice({ tone: "success", text: "Plan archived. Existing purchased snapshots remain unchanged." });
+      setPendingArchivePlan(null);
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Plan could not be archived." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const createPromo = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/admin/subscriptions/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: promoCode,
+          code: promoCode.trim().toUpperCase(),
           discountType,
-          discountValue: parseFloat(discountValue),
-          maxUsage: parseInt(maxUsage),
-          validUntil: validUntil || undefined,
+          discountValue: Number(discountValue),
+          maxUsage: Number(maxUsage),
+          validUntil: validUntil ? new Date(validUntil).toISOString() : undefined,
         }),
       });
-
-      const data = await res.json();
-      if (data.success) {
-        setPromoCode("");
-        setDiscountValue("");
-        setMaxUsage("100");
-        setValidUntil("");
-        await loadData();
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Promo code could not be created.");
+      setPromoCode("");
+      setDiscountValue("");
+      setMaxUsage("100");
+      setValidUntil("");
+      setNotice({ tone: "success", text: "Promo code created." });
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Promo code could not be created." });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleUpdateService = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const archivePromo = async (code: string) => {
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/settings?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Promo code could not be archived.");
+      setPendingArchivePromo(null);
+      setNotice({ tone: "success", text: "Promo code archived." });
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Promo code could not be archived." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const saveInternalCost = async (event: FormEvent) => {
+    event.preventDefault();
     if (!editingService) return;
     setSubmitting(true);
-
+    setNotice(null);
     try {
-      const res = await fetch("/api/admin/subscriptions/settings", {
+      const response = await fetch("/api/admin/subscriptions/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           serviceKey: editingService.serviceKey,
-          creditCost: parseInt(serviceCost),
+          creditCost: Number(serviceCost),
           billingType: serviceBillingType,
         }),
       });
-
-      const data = await res.json();
-      if (data.success) {
-        setEditingService(null);
-        await loadData();
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Internal AI cost setting could not be updated.");
+      setEditingService(null);
+      setNotice({ tone: "success", text: "Internal AI cost metadata updated. Customer plans are unchanged." });
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Internal AI cost setting could not be updated." });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleArchivePlan = async (id: string) => {
-    if (!confirm("Are you sure you want to archive this plan? It will no longer be visible to employers.")) return;
-    try {
-      const res = await fetch(`/api/admin/subscription-plans?id=${id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (data.success) {
-        await loadData();
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleArchivePromo = async (code: string) => {
-    if (!confirm(`Are you sure you want to archive promo code ${code}?`)) return;
-    try {
-      const res = await fetch(`/api/admin/subscriptions/settings?code=${code}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (data.success) {
-        await loadData();
-      } else {
-        alert("Error: " + data.error);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleEditPlanClick = (plan: any) => {
-    setEditingPlan(plan);
-    setName(plan.name);
-    setDescription(plan.description);
-    setPrice(plan.price.toString());
-    setCurrency(plan.currency || "INR");
-    setJobPostsQuota(plan.jobPostsQuota.toString());
-    setResumeUnlocksQuota(plan.resumeUnlocksQuota.toString());
-    setAiInterviewsQuota(plan.aiInterviewsQuota.toString());
-    setApplicationsQuota(plan.applicationsQuota.toString());
-    setResumeDownloadsQuota(plan.resumeDownloadsQuota.toString());
-    setBackgroundVerificationsQuota(plan.backgroundVerificationsQuota.toString());
-    setFeaturesAllowed(plan.featuresAllowed || []);
-    setValidityMonths(plan.validityMonths.toString());
-  };
-
-  const toggleFeatureSelection = (key: string) => {
-    setFeaturesAllowed(prev =>
-      prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key]
-    );
-  };
-
-  const resetPlanForm = () => {
-    setEditingPlan(null);
-    setName("");
-    setDescription("");
-    setPrice("");
-    setCurrency("INR");
-    setJobPostsQuota("");
-    setResumeUnlocksQuota("");
-    setAiInterviewsQuota("");
-    setApplicationsQuota("100");
-    setResumeDownloadsQuota("50");
-    setBackgroundVerificationsQuota("5");
-    setFeaturesAllowed([]);
-    setValidityMonths("1");
-  };
-
   return (
-    <div className="min-h-screen bg-[#0E0E10] text-[#F8FAFC] flex font-[family-name:var(--font-body)]">
+    <div className="min-h-screen bg-[#090B12] text-slate-100">
       <AdminSidebar />
+      <main className="min-h-screen pl-[130px]">
+        <div className="mx-auto max-w-[1500px] px-6 py-8">
+          <header className="mb-7">
+            <span className="inline-flex rounded-full border border-blue-400/20 bg-blue-400/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[.18em] text-blue-200">
+              Authoritative commercial configuration
+            </span>
+            <h1 className="mt-3 text-3xl font-black tracking-tight">Subscription & Co-Pilot Catalog</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              Manage the exact plans shown to employers. Prices, benefits, job validity, feature access and Co-Pilot inclusion are read from these database records.
+            </p>
+          </header>
 
-      {/* Main Admin Config Panel */}
-      <main className="flex-1 pl-[130px] pr-8 py-10 max-w-7xl overflow-y-auto">
-        <header className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="material-symbols-outlined text-[#448AFF] text-3xl">settings_applications</span>
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-white">
-              Recruitment Operating System Configurator
-            </h1>
+          {notice && (
+            <div className={`mb-5 rounded-2xl border px-4 py-3 text-sm ${notice.tone === "success" ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200" : "border-red-400/20 bg-red-400/10 text-red-200"}`}>
+              {notice.text}
+            </div>
+          )}
+
+          <div className="mb-7 flex flex-wrap gap-2 rounded-2xl border border-white/8 bg-white/[.035] p-2">
+            {[
+              ["plans", "Plans", "view_carousel"],
+              ["promos", "Promotions", "sell"],
+              ["internal-ai", "Internal AI Cost", "monitoring"],
+            ].map(([id, label, icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id as typeof activeTab)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition ${activeTab === id ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+              >
+                <span className="material-symbols-outlined text-[17px]">{icon}</span>
+                {label}
+              </button>
+            ))}
           </div>
-          <p className="text-[#CBD5E1] text-sm">
-            Control subscription pricing, validity, entitlements, coupon promotions, and AI service credit values globally.
-          </p>
-        </header>
 
-        {/* Console Tab Selector */}
-        <div className="flex gap-4 border-b border-white/10 mb-8">
-          <button
-            onClick={() => setActiveTab("plans")}
-            className={`py-3 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === "plans" ? "border-[#448AFF] text-[#448AFF]" : "border-transparent text-[#94A3B8] hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">card_membership</span>
-            Plans Manager
-          </button>
-          <button
-            onClick={() => setActiveTab("services")}
-            className={`py-3 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === "services" ? "border-[#448AFF] text-[#448AFF]" : "border-transparent text-[#94A3B8] hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
-            AI Services Cost Matrix
-          </button>
-          <button
-            onClick={() => setActiveTab("promos")}
-            className={`py-3 px-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-              activeTab === "promos" ? "border-[#448AFF] text-[#448AFF]" : "border-transparent text-[#94A3B8] hover:text-white"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">local_activity</span>
-            Promotion Engine
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            {/* TABS VIEW CONTROLLER */}
-            {activeTab === "plans" && (
-              <>
-                {/* Plans Form */}
-                <div className="lg:col-span-5">
-                  <div className="glass-card p-6 bg-[#16161B] border border-white/10 rounded-2xl shadow-xl">
-                    <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-white mb-6 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#448AFF]">
-                        {editingPlan ? "edit_note" : "add_card"}
-                      </span>
-                      {editingPlan ? "Modify Plan Parameters" : "Provision Plan Template"}
-                    </h2>
-
-                    <form onSubmit={handleCreateOrUpdatePlan} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                          Plan Name
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g., Starter, Growth, Enterprise"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#448AFF]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                          Description
-                        </label>
-                        <textarea
-                          required
-                          rows={3}
-                          placeholder="Describe details and quotas included..."
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                          className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#448AFF] resize-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Price
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            min="0"
-                            placeholder="Price"
-                            value={price}
-                            onChange={(e) => setPrice(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#448AFF]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Currency
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            minLength={3}
-                            maxLength={3}
-                            pattern="[A-Za-z]{3}"
-                            placeholder="INR"
-                            value={currency}
-                            onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm uppercase focus:outline-none focus:border-[#448AFF]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Validity
-                          </label>
-                          <select
-                            value={validityMonths}
-                            onChange={(e) => setValidityMonths(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                          >
-                            <option value="1">1 Month</option>
-                            <option value="3">3 Months</option>
-                            <option value="6">6 Months</option>
-                            <option value="12">12 Months</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-white/5 pt-4">
-                        <p className="text-xs font-bold text-[#FF5252] uppercase mb-4 tracking-wider">
-                          Quotas Configurator
-                        </p>
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">Jobs Post Cap</label>
-                            <input
-                              type="number"
-                              required
-                              value={jobPostsQuota}
-                              onChange={(e) => setJobPostsQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">Profile Unlocks</label>
-                            <input
-                              type="number"
-                              required
-                              value={resumeUnlocksQuota}
-                              onChange={(e) => setResumeUnlocksQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">AI Agent Credits</label>
-                            <input
-                              type="number"
-                              required
-                              value={aiInterviewsQuota}
-                              onChange={(e) => setAiInterviewsQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">Apps Cap</label>
-                            <input
-                              type="number"
-                              required
-                              value={applicationsQuota}
-                              onChange={(e) => setApplicationsQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">CV Downloads</label>
-                            <input
-                              type="number"
-                              required
-                              value={resumeDownloadsQuota}
-                              onChange={(e) => setResumeDownloadsQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">BG Verifies</label>
-                            <input
-                              type="number"
-                              required
-                              value={backgroundVerificationsQuota}
-                              onChange={(e) => setBackgroundVerificationsQuota(e.target.value)}
-                              className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-white/5 pt-4">
-                        <p className="text-xs font-bold text-[#40C4FF] uppercase mb-3 tracking-wider">
-                          Allowed AI Features Matrix
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          {services.map(s => (
-                            <label key={s.serviceKey} className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-white/5">
-                              <input
-                                type="checkbox"
-                                checked={featuresAllowed.includes(s.serviceKey)}
-                                onChange={() => toggleFeatureSelection(s.serviceKey)}
-                                className="rounded text-[#448AFF] focus:ring-0 focus:ring-offset-0 bg-[#1A1A20] border-white/15"
-                              />
-                              <span className="text-[#CBD5E1]">{s.serviceName}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          type="submit"
-                          disabled={submitting}
-                          className="flex-1 btn-3d-blue text-sm rounded-xl py-2.5 font-bold text-white transition-all"
-                        >
-                          {submitting ? "Saving..." : editingPlan ? "Update Plan" : "Publish Plan"}
-                        </button>
-                        {(editingPlan || name !== "") && (
-                          <button
-                            type="button"
-                            onClick={resetPlanForm}
-                            className="px-4 py-2.5 border border-white/15 hover:bg-white/5 rounded-xl text-xs font-semibold"
-                          >
-                            Reset Form
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </div>
-                </div>
-
-                {/* Plans List */}
-                <div className="lg:col-span-7 space-y-4">
-                  {plans.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`glass-card p-5 bg-[#16161B] border border-white/5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all hover:border-white/15 ${
-                        p.isArchived ? "opacity-60 border-dashed border-white/10" : ""
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2.5 mb-1.5">
-                          <h3 className="font-bold text-white text-base font-[family-name:var(--font-display)]">{p.name}</h3>
-                          {p.price === 0 && (
-                            <span className="px-2 py-0.5 rounded bg-green/10 text-green border border-green/20 text-[9px] uppercase tracking-wider font-extrabold">
-                              Zero-Price Plan
-                            </span>
-                          )}
-                          {p.isArchived && (
-                            <span className="px-2 py-0.5 rounded bg-white/5 text-[#94A3B8] text-[9px] uppercase tracking-wider font-semibold">
-                              Archived
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-[#CBD5E1] mb-3 leading-relaxed">{p.description}</p>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[10px] text-[#94A3B8] border-t border-white/5 pt-3">
-                          <span className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[14px]">work</span>
-                            Jobs Limit: {p.jobPostsQuota === 9999 ? "Unlimited" : p.jobPostsQuota}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[14px]">person_search</span>
-                            Unlocks: {p.resumeUnlocksQuota === 9999 ? "Unlimited" : p.resumeUnlocksQuota}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[14px]">psychology</span>
-                            AI Credits: {p.aiInterviewsQuota === 9999 ? "Unlimited" : p.aiInterviewsQuota}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[14px]">manage_search</span>
-                            CV Downloads: {p.resumeDownloadsQuota}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex md:flex-col items-end gap-2 w-full md:w-auto border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
-                        <p className="font-semibold text-lg text-[#FF5252] tracking-tight">
-                          {new Intl.NumberFormat("en-IN", { style: "currency", currency: p.currency || "INR" }).format(p.price)}
-                          <span className="text-[10px] text-[#94A3B8]"> / {p.validityMonths || 1} month{(p.validityMonths || 1) === 1 ? "" : "s"}</span>
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditPlanClick(p)}
-                            className="p-2 border border-white/10 hover:bg-white/5 rounded-lg text-[#448AFF] hover:border-[#448AFF] transition-all"
-                            title="Edit Plan Settings"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">edit</span>
-                          </button>
-                          {!p.isArchived && (
-                            <button
-                              onClick={() => handleArchivePlan(p.id)}
-                              className="p-2 border border-white/10 hover:bg-white/5 rounded-lg text-[#FF5252] hover:border-[#FF5252] transition-all"
-                              title="Archive Plan"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">archive</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {activeTab === "services" && (
-              <div className="lg:col-span-12">
-                <div className="glass-card bg-[#16161B] border border-white/10 rounded-2xl p-6">
-                  <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#448AFF]">list_alt</span>
-                    AI Services Credits Configurator Table
-                  </h2>
-                  <p className="text-xs text-[#94A3B8] mb-6">
-                    Define the credit values consumed per transaction for all custom AI screening, proctoring, matching, and payroll services.
-                  </p>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-white/5 border-b border-white/10 text-[#94A3B8] uppercase tracking-wider font-semibold">
-                          <th className="px-6 py-4">Service Key</th>
-                          <th className="px-6 py-4">Service Display Name</th>
-                          <th className="px-6 py-4">Billing Framework</th>
-                          <th className="px-6 py-4">Credit Cost</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {services.map(s => {
-                          const isEditing = editingService?.serviceKey === s.serviceKey;
-                          return (
-                            <tr key={s.serviceKey} className="hover:bg-white/2 transition-colors">
-                              <td className="px-6 py-4 font-mono text-[#CBD5E1]">{s.serviceKey}</td>
-                              <td className="px-6 py-4 font-bold text-white">{s.serviceName}</td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <select
-                                    value={serviceBillingType}
-                                    onChange={(e: any) => setServiceBillingType(e.target.value)}
-                                    className="bg-[#1A1A20] border border-white/10 rounded px-2.5 py-1 text-white text-xs"
-                                  >
-                                    <option value="INCLUDED">Included</option>
-                                    <option value="CREDIT_BASED">Credit Based</option>
-                                    <option value="PAID_ADDON">Paid Add-on</option>
-                                  </select>
-                                ) : (
-                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                    s.billingType === "INCLUDED" 
-                                      ? "bg-green/10 text-green border-green/20"
-                                      : s.billingType === "CREDIT_BASED"
-                                      ? "bg-[#448AFF]/15 text-[#448AFF] border-[#448AFF]/20"
-                                      : "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                                  }`}>
-                                    {s.billingType.replace("_", " ")}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 font-bold">
-                                {isEditing ? (
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={serviceCost}
-                                    onChange={(e) => setServiceCost(e.target.value)}
-                                    className="w-16 bg-[#1A1A20] border border-white/10 rounded px-2.5 py-1 text-white text-xs"
-                                  />
-                                ) : (
-                                  <span>{s.creditCost} Credits</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                {isEditing ? (
-                                  <div className="flex gap-2 justify-end">
-                                    <button
-                                      onClick={handleUpdateService}
-                                      disabled={submitting}
-                                      className="px-3 py-1 rounded bg-[#4CAF50] text-[#1a1a1a] font-bold"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={() => setEditingService(null)}
-                                      className="px-3 py-1 rounded bg-white/5 border border-white/10"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setEditingService(s);
-                                      setServiceCost(s.creditCost.toString());
-                                      setServiceBillingType(s.billingType);
-                                    }}
-                                    className="text-[#448AFF] hover:underline flex items-center gap-1.5 ml-auto"
-                                  >
-                                    <span className="material-symbols-outlined text-[14px]">edit</span>
-                                    Modify Costs
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+          {loading ? (
+            <div className="grid min-h-[420px] place-items-center rounded-3xl border border-white/8 bg-white/[.025]">
+              <div className="flex items-center gap-3 text-sm text-slate-400">
+                <span className="material-symbols-outlined animate-spin text-blue-400">progress_activity</span>
+                Loading production configuration…
               </div>
-            )}
-
-            {activeTab === "promos" && (
-              <>
-                {/* Coupon Form */}
-                <div className="lg:col-span-5">
-                  <div className="glass-card p-6 bg-[#16161B] border border-white/10 rounded-2xl">
-                    <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-white mb-6 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#40C4FF]">local_activity</span>
-                      Create Promo Discount Code
-                    </h2>
-
-                    <form onSubmit={handleCreatePromo} className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                          Promo Code String
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. WELCOME50"
-                          value={promoCode}
-                          onChange={(e) => setPromoCode(e.target.value)}
-                          className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Discount Type
-                          </label>
-                          <select
-                            value={discountType}
-                            onChange={(e: any) => setDiscountType(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                          >
-                            <option value="PERCENTAGE">Percentage (%)</option>
-                            <option value="FLAT">Flat Amount (INR)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Discount Value
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            placeholder="e.g. 50"
-                            value={discountValue}
-                            onChange={(e) => setDiscountValue(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Usage Limit
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            value={maxUsage}
-                            onChange={(e) => setMaxUsage(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Expiration Date
-                          </label>
-                          <input
-                            type="date"
-                            value={validUntil}
-                            onChange={(e) => setValidUntil(e.target.value)}
-                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={submitting}
-                        className="w-full btn-3d-blue py-2.5 rounded-xl font-bold text-white text-sm shadow-[var(--shadow-btn-blue)] transition-all"
-                      >
-                        {submitting ? "Publishing..." : "Launch Coupon"}
-                      </button>
-                    </form>
+            </div>
+          ) : activeTab === "plans" ? (
+            <div className="grid gap-6 xl:grid-cols-[520px_1fr]">
+              <form onSubmit={savePlan} className="h-fit rounded-3xl border border-white/10 bg-[#111521] p-6 shadow-2xl shadow-black/20">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-blue-300">{editingPlanId ? "Editing live plan" : "New plan"}</p>
+                    <h2 className="mt-1 text-xl font-black">{editingPlanId ? "Update plan" : "Create plan"}</h2>
                   </div>
+                  {editingPlanId && (
+                    <button type="button" onClick={resetPlan} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-white/5">
+                      Cancel edit
+                    </button>
+                  )}
                 </div>
 
-                {/* Coupons List */}
-                <div className="lg:col-span-7">
-                  <div className="glass-card bg-[#16161B] border border-white/10 rounded-2xl p-6">
-                    <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-white mb-6 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#FF5252]">local_activity</span>
-                      Campaign Discount Coupons
-                    </h2>
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-bold text-slate-300">
+                      Plan name
+                      <input required value={planForm.name} onChange={event => setPlanForm({ ...planForm, name: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-300">
+                      Plan type
+                      <select value={planForm.planType} onChange={event => setPlanType(event.target.value as PlanType)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0C1019] px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400">
+                        <option value="FREE_TRIAL">Free Trial</option>
+                        <option value="STANDARD">Standard</option>
+                        <option value="COPILOT">Co-Pilot</option>
+                      </select>
+                    </label>
+                  </div>
 
-                    <div className="space-y-4">
-                      {promos.map((pr) => (
-                        <div
-                          key={pr.id}
-                          className="p-4 rounded-xl border border-white/5 bg-white/2 flex justify-between items-center"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-mono font-black text-sm text-[#448AFF] bg-[#448AFF]/15 px-3 py-0.5 rounded border border-[#448AFF]/20">
-                                {pr.code}
-                              </span>
-                              <span className="text-[10px] text-[#94A3B8]">
-                                {pr.discountType === "PERCENTAGE" ? `${pr.discountValue}% Discount` : `Flat ₹${pr.discountValue} Off`}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-[#CBD5E1] mt-2">
-                              Max Limit: {pr.maxUsage} • Used: {pr.usageCount}
-                            </p>
-                          </div>
+                  <label className="block text-xs font-bold text-slate-300">
+                    Description
+                    <textarea required rows={3} value={planForm.description} onChange={event => setPlanForm({ ...planForm, description: event.target.value })} className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400" />
+                  </label>
 
-                          <button
-                            onClick={() => handleArchivePromo(pr.code)}
-                            className="p-2 border border-white/10 hover:bg-white/5 rounded-lg text-[#FF5252]"
-                            title="Deactivate Coupon"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
-                        </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="text-xs font-bold text-slate-300">
+                      Price
+                      <input required min="0" step="0.01" type="number" disabled={planForm.planType === "FREE_TRIAL"} value={planForm.price} onChange={event => setPlanForm({ ...planForm, price: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white disabled:opacity-60" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-300">
+                      Currency
+                      <input required minLength={3} maxLength={3} pattern="[A-Za-z]{3}" value={planForm.currency} onChange={event => setPlanForm({ ...planForm, currency: event.target.value.toUpperCase() })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm uppercase text-white" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-300">
+                      Display order
+                      <input required type="number" value={planForm.displayOrder} onChange={event => setPlanForm({ ...planForm, displayOrder: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="text-xs font-bold text-slate-300">
+                      Job posts
+                      <input required min="0" type="number" value={planForm.jobPostsQuota} onChange={event => setPlanForm({ ...planForm, jobPostsQuota: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-300">
+                      Validity / job (days)
+                      <input required min="1" max="365" type="number" value={planForm.jobValidityDays} onChange={event => setPlanForm({ ...planForm, jobValidityDays: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-300">
+                      Plan access (months)
+                      <input required min="1" max="120" type="number" value={planForm.validityMonths} onChange={event => setPlanForm({ ...planForm, validityMonths: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                    </label>
+                  </div>
+
+                  <div className="rounded-2xl border border-cyan-300/12 bg-cyan-300/[.045] p-4">
+                    <div className="flex items-center gap-2 text-sm font-black text-cyan-100">
+                      <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                      Co-Pilot allocation
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="text-xs font-bold text-slate-300">
+                        Co-Pilot jobs included
+                        <input required min="0" type="number" value={planForm.copilotJobsQuota} onChange={event => setPlanForm({ ...planForm, copilotJobsQuota: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/15 px-3 py-3 text-xs font-bold text-slate-300">
+                        <input type="checkbox" checked={planForm.copilotAutoActivate} onChange={event => setPlanForm({ ...planForm, copilotAutoActivate: event.target.checked })} />
+                        Auto-start Co-Pilot when a job is published
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-bold text-slate-300">
+                      Card badge
+                      <input maxLength={80} value={planForm.badge} onChange={event => setPlanForm({ ...planForm, badge: event.target.value })} placeholder="e.g. Most Popular" className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" />
+                    </label>
+                    <div className="grid gap-2">
+                      <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5 text-xs font-bold text-slate-300">
+                        <input type="checkbox" checked={planForm.isFeatured} onChange={event => setPlanForm({ ...planForm, isFeatured: event.target.checked })} />
+                        Featured 3D card
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/15 px-3 py-2.5 text-xs font-bold text-slate-300">
+                        <input type="checkbox" checked={planForm.firstTimeOnly} disabled={planForm.planType === "FREE_TRIAL"} onChange={event => setPlanForm({ ...planForm, firstTimeOnly: event.target.checked })} />
+                        First-time companies only
+                      </label>
+                    </div>
+                  </div>
+
+                  <label className="block text-xs font-bold text-slate-300">
+                    Public benefits <span className="font-normal text-slate-500">(one benefit per line)</span>
+                    <textarea rows={7} value={planForm.benefitsText} onChange={event => setPlanForm({ ...planForm, benefitsText: event.target.value })} className="mt-1.5 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm leading-6 text-white outline-none focus:border-blue-400" />
+                  </label>
+
+                  <div>
+                    <p className="text-xs font-bold text-slate-300">Authoritative feature entitlements</p>
+                    <p className="mt-1 text-[11px] leading-4 text-slate-500">These keys control server-side access. Public benefit copy above is display-only.</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {SUBSCRIPTION_FEATURE_OPTIONS.map(feature => (
+                        <label key={feature.key} className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/8 bg-black/15 p-3 hover:bg-white/[.035]">
+                          <input className="mt-0.5" type="checkbox" checked={planForm.featuresAllowed.includes(feature.key)} onChange={() => toggleFeature(feature.key)} />
+                          <span>
+                            <span className="block text-xs font-bold text-slate-200">{feature.label}</span>
+                            <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{feature.description}</span>
+                          </span>
+                        </label>
                       ))}
                     </div>
                   </div>
-                </div>
-              </>
-            )}
 
-          </div>
-        )}
+                  <button disabled={submitting} type="submit" className="w-full rounded-2xl bg-gradient-to-r from-blue-500 to-violet-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20 disabled:opacity-50">
+                    {submitting ? "Saving…" : editingPlanId ? "Save plan changes" : "Create live plan"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-4">
+                {sortedPlans.map(plan => (
+                  <article key={plan.id} className={`rounded-3xl border p-5 ${plan.isArchived ? "border-white/6 bg-white/[.02] opacity-60" : plan.planType === "COPILOT" ? "border-cyan-300/25 bg-gradient-to-br from-cyan-400/[.07] to-violet-500/[.07]" : "border-white/9 bg-white/[.035]"}`}>
+                    <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-xl font-black">{plan.name}</h3>
+                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-extrabold text-slate-300">{plan.planType}</span>
+                          {plan.badge && <span className="rounded-full bg-blue-400/10 px-2 py-1 text-[10px] font-bold text-blue-200">{plan.badge}</span>}
+                          {plan.isArchived && <span className="rounded-full bg-red-400/10 px-2 py-1 text-[10px] font-bold text-red-200">ARCHIVED</span>}
+                        </div>
+                        <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">{plan.description}</p>
+                      </div>
+                      <div className="text-left lg:text-right">
+                        <p className="text-2xl font-black">{money(plan.price, plan.currency)}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">Order {plan.displayOrder}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                      <div className="rounded-xl bg-black/15 p-3"><p className="text-[10px] text-slate-500">Jobs</p><p className="mt-1 font-black">{plan.jobPostsQuota}</p></div>
+                      <div className="rounded-xl bg-black/15 p-3"><p className="text-[10px] text-slate-500">Per job</p><p className="mt-1 font-black">{plan.jobValidityDays} days</p></div>
+                      <div className="rounded-xl bg-black/15 p-3"><p className="text-[10px] text-slate-500">Co-Pilot jobs</p><p className="mt-1 font-black">{plan.copilotJobsQuota}</p></div>
+                      <div className="rounded-xl bg-black/15 p-3"><p className="text-[10px] text-slate-500">Plan period</p><p className="mt-1 font-black">{plan.validityMonths} mo</p></div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {plan.featuresAllowed.map(feature => <span key={feature} className="rounded-lg border border-white/8 bg-white/[.03] px-2 py-1 text-[10px] font-semibold text-slate-400">{feature}</span>)}
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => editPlan(plan)} className="rounded-xl border border-blue-400/20 bg-blue-400/10 px-4 py-2 text-xs font-bold text-blue-200 hover:bg-blue-400/15">Edit</button>
+                      {!plan.isArchived && (
+                        pendingArchivePlan === plan.id ? (
+                          <>
+                            <button type="button" disabled={submitting} onClick={() => void archivePlan(plan.id)} className="rounded-xl bg-red-500 px-4 py-2 text-xs font-bold text-white">Confirm archive</button>
+                            <button type="button" onClick={() => setPendingArchivePlan(null)} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-slate-300">Cancel</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setPendingArchivePlan(plan.id)} className="rounded-xl border border-red-400/15 bg-red-400/5 px-4 py-2 text-xs font-bold text-red-200">Archive</button>
+                        )
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : activeTab === "promos" ? (
+            <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+              <form onSubmit={createPromo} className="h-fit rounded-3xl border border-white/10 bg-[#111521] p-6">
+                <h2 className="text-xl font-black">Create promotion</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Discounts apply only through verified paid checkout and are capacity-reserved before provider initiation.</p>
+                <div className="mt-5 space-y-4">
+                  <label className="block text-xs font-bold text-slate-300">Code<input required minLength={3} maxLength={64} value={promoCode} onChange={event => setPromoCode(event.target.value.toUpperCase())} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="text-xs font-bold text-slate-300">Type<select value={discountType} onChange={event => setDiscountType(event.target.value as typeof discountType)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0C1019] px-3 py-2.5 text-sm text-white"><option value="PERCENTAGE">Percentage</option><option value="FLAT">Flat</option></select></label>
+                    <label className="text-xs font-bold text-slate-300">Value<input required min="0.01" step="0.01" type="number" value={discountValue} onChange={event => setDiscountValue(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+                  </div>
+                  <label className="block text-xs font-bold text-slate-300">Maximum uses<input required min="1" type="number" value={maxUsage} onChange={event => setMaxUsage(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+                  <label className="block text-xs font-bold text-slate-300">Valid until<input type="datetime-local" value={validUntil} onChange={event => setValidUntil(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+                  <button disabled={submitting} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Create promo</button>
+                </div>
+              </form>
+
+              <div className="space-y-3">
+                {promos.length === 0 && <div className="rounded-2xl border border-white/8 bg-white/[.025] p-8 text-center text-sm text-slate-500">No active promotions.</div>}
+                {promos.map(promo => (
+                  <div key={promo.id} className="flex flex-col justify-between gap-4 rounded-2xl border border-white/8 bg-white/[.03] p-5 sm:flex-row sm:items-center">
+                    <div><p className="font-black">{promo.code}</p><p className="mt-1 text-xs text-slate-500">{promo.discountType === "PERCENTAGE" ? `${promo.discountValue}%` : promo.discountValue} · {promo.usageCount}/{promo.maxUsage} used</p></div>
+                    {pendingArchivePromo === promo.code ? (
+                      <div className="flex gap-2"><button type="button" onClick={() => void archivePromo(promo.code)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold">Confirm</button><button type="button" onClick={() => setPendingArchivePromo(null)} className="rounded-xl border border-white/10 px-3 py-2 text-xs">Cancel</button></div>
+                    ) : <button type="button" onClick={() => setPendingArchivePromo(promo.code)} className="rounded-xl border border-red-400/15 px-3 py-2 text-xs font-bold text-red-200">Archive</button>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[.055] p-4 text-xs leading-5 text-amber-100">
+                <strong>Internal operations only:</strong> these values are not customer per-AI-call prices. Employer billing is controlled exclusively by Subscription Plans and Co-Pilot job allocations above.
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {services.map(service => (
+                  <div key={service.id} className="rounded-2xl border border-white/8 bg-white/[.03] p-5">
+                    <p className="text-sm font-black">{service.serviceName}</p>
+                    <p className="mt-1 font-mono text-[10px] text-slate-500">{service.serviceKey}</p>
+                    <div className="mt-4 flex items-center justify-between text-xs"><span className="text-slate-500">Internal weight</span><span className="font-black">{service.creditCost}</span></div>
+                    <div className="mt-2 flex items-center justify-between text-xs"><span className="text-slate-500">Tracking mode</span><span className="font-bold text-slate-300">{service.billingType}</span></div>
+                    <button type="button" onClick={() => { setEditingService(service); setServiceCost(String(service.creditCost)); setServiceBillingType(service.billingType); }} className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold hover:bg-white/8">Edit internal metadata</button>
+                  </div>
+                ))}
+              </div>
+
+              {editingService && (
+                <form onSubmit={saveInternalCost} className="max-w-xl rounded-2xl border border-white/10 bg-[#111521] p-5">
+                  <div className="flex justify-between gap-4"><div><p className="font-black">{editingService.serviceName}</p><p className="text-[10px] text-slate-500">{editingService.serviceKey}</p></div><button type="button" onClick={() => setEditingService(null)} className="text-xs text-slate-400">Close</button></div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-bold text-slate-300">Internal weight<input required min="0" type="number" value={serviceCost} onChange={event => setServiceCost(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+                    <label className="text-xs font-bold text-slate-300">Tracking mode<select value={serviceBillingType} onChange={event => setServiceBillingType(event.target.value as ServiceCost["billingType"])} className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#0C1019] px-3 py-2.5 text-sm text-white"><option value="INCLUDED">INCLUDED</option><option value="CREDIT_BASED">CREDIT_BASED</option><option value="PAID_ADDON">PAID_ADDON</option></select></label>
+                  </div>
+                  <button disabled={submitting} className="mt-4 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white disabled:opacity-50">Save internal metadata</button>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
