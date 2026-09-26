@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
-    const { jobId } = await readValidatedJson(req, applicationSchema);
+    const { jobId, answers } = await readValidatedJson(req, applicationSchema);
     const [job, candidate] = await Promise.all([
       prisma.jobListing.findUnique({ where: { id: jobId } }),
       prisma.candidateProfile.findUnique({ where: { userId: session.id } }),
@@ -91,6 +91,12 @@ export async function POST(req: NextRequest) {
     // A previous Apply click may already have created a durable validation gate.
     // Resume that exact intent rather than creating a duplicate application.
     if (existingApplication) {
+      if (answers) {
+        await prisma.application.update({
+          where: { id: existingApplication.id },
+          data: { screeningAnswers: answers },
+        });
+      }
       const gate = existingApplication.gates[0];
       if (
         !gate ||
@@ -185,6 +191,7 @@ export async function POST(req: NextRequest) {
           jobId,
           candidateProfileId: candidate.id,
           companyId: job.companyId,
+          screeningAnswers: answers,
         });
       } catch (raceError: any) {
         if (raceError?.name !== "DuplicateApplicationError" && raceError?.code !== "P2002") {
@@ -264,6 +271,7 @@ export async function POST(req: NextRequest) {
         jobId,
         candidateProfileId: candidate.id,
         companyId: job.companyId,
+        screeningAnswers: answers,
       });
 
       await dispatchApplicationReceivedConfirmation({
