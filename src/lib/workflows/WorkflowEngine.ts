@@ -6,6 +6,7 @@ import { RbacGuard } from '@/lib/security/RbacGuard';
 import { writeAgentApprovalAudit } from '@/lib/security/AgentApprovalAudit';
 
 const APPROVER_ROLES: Role[] = [Role.EMPLOYER, Role.RECRUITER, Role.ADMIN];
+const APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
 const MANAGED_HIRING_WORKFLOW_TYPES = new Set(['JOB_REQUIREMENT', 'CANDIDATE_SCREENING', 'SHORTLISTING', 'INTERVIEW_SCHEDULING', 'VIRTUAL_INTERVIEW', 'EMPLOYER_FEEDBACK', 'SELECTION_REJECTION', 'JOINING_ONBOARDING', 'BILLING_HANDOFF', 'NOTIFICATION_HANDOFF']);
 const WORKFLOW_REQUIRED_RESOURCES: Record<string, Array<'jobId' | 'applicationId' | 'candidateId'>> = {
   JOB_REQUIREMENT: ['jobId'],
@@ -200,7 +201,7 @@ export class WorkflowEngine {
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     const approval = await prisma.workflowApproval.findUnique({
       where: { id: params.approvalId },
-      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, requestedBy: true, decidedBy: true, decidedByRole: true, decisionNotes: true, requestedAt: true, decidedAt: true, consumedAt: true,
+      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, requestedBy: true, decidedBy: true, decidedByRole: true, decisionNotes: true, requestedAt: true, expiresAt: true, decidedAt: true, consumedAt: true, revokedAt: true, revokedBy: true, revocationReason: true,
         workflowInstance: { select: { workflowType: true, status: true, currentStep: true, correlationId: true, jobId: true, candidateId: true, applicationId: true } } },
     });
     if (!approval) throw new Error('Approval not found');
@@ -215,14 +216,15 @@ export class WorkflowEngine {
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
     const allowedActionTypes = Object.entries(APPROVAL_ROLE_POLICY).filter(([, roles]) => roles.includes(params.context.userRole)).map(([actionType]) => actionType);
+    const now = new Date();
     const where: Prisma.WorkflowApprovalWhereInput = params.context.userRole === Role.ADMIN
-      ? { decision: 'PENDING' }
-      : { decision: 'PENDING', companyId: params.context.companyId, actionType: { in: allowedActionTypes } };
+      ? { decision: 'PENDING', revokedAt: null, expiresAt: { gt: now } }
+      : { decision: 'PENDING', revokedAt: null, expiresAt: { gt: now }, companyId: params.context.companyId, actionType: { in: allowedActionTypes } };
     return prisma.workflowApproval.findMany({
       where,
       orderBy: { requestedAt: 'asc' },
       take: limit,
-      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, decision: true, requestedBy: true, requestedAt: true, workflowInstance: { select: { workflowType: true, status: true, currentStep: true, correlationId: true } } },
+      select: { id: true, workflowInstanceId: true, companyId: true, stepName: true, actionType: true, decision: true, requestedBy: true, requestedAt: true, expiresAt: true, workflowInstance: { select: { workflowType: true, status: true, currentStep: true, correlationId: true } } },
     });
   }
 
@@ -230,7 +232,7 @@ export class WorkflowEngine {
     const workflow = await prisma.workflowInstance.findUnique({
       where: { id: params.workflowId },
       select: { id: true, companyId: true, workflowType: true, status: true, currentStep: true, failureCount: true, correlationId: true, createdAt: true, updatedAt: true,
-        approvals: { where: { decision: 'PENDING' }, select: { id: true, stepName: true, actionType: true, requestedAt: true } },
+        approvals: { where: { decision: 'PENDING', revokedAt: null }, select: { id: true, stepName: true, actionType: true, requestedAt: true, expiresAt: true } },
         steps: { orderBy: { createdAt: 'desc' }, take: 10, select: { stepName: true, attemptNumber: true, status: true, sideEffectDone: true, errorMessage: true, createdAt: true } } },
     });
     if (!workflow) throw new Error('Workflow not found');
@@ -271,13 +273,15 @@ export class WorkflowEngine {
     const approval = await prisma.$transaction(async (tx) => {
       const existing = await tx.workflowApproval.findUnique({ where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } } });
       if (existing && existing.actionType !== params.actionType) throw new Error('Approval action type does not match the persisted action');
+      if (existing?.revokedAt) throw new Error('This exact consequential approval was revoked and requires workflow reconciliation');
+      if (existing && existing.expiresAt <= new Date()) throw new Error('This exact consequential approval expired and requires workflow reconciliation');
       if (existing?.decision === 'REJECTED') throw new Error('This exact consequential action was already rejected');
       if (existing?.decision === 'APPROVED') return { record: existing, created: false };
       const created = !existing;
       const record = await tx.workflowApproval.upsert({
         where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: digest } },
         update: {},
-        create: { workflowInstanceId: params.workflowId, companyId: workflow.companyId, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, requestedBy: params.context.userId },
+        create: { workflowInstanceId: params.workflowId, companyId: workflow.companyId, stepName: params.stepName, actionType: params.actionType, actionDigest: digest, requestedBy: params.context.userId, expiresAt: new Date(Date.now() + APPROVAL_TTL_MS) },
       });
       if (record.decision !== 'PENDING') throw new Error('This exact consequential action was already decided');
       await tx.workflowInstance.update({ where: { id: params.workflowId }, data: { status: 'PAUSED_FOR_APPROVAL', currentStep: params.stepName } });
@@ -291,14 +295,15 @@ export class WorkflowEngine {
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
     return prisma.$transaction(async (tx) => {
       const approval = await tx.workflowApproval.findUnique({ where: { id: params.approvalId }, include: { workflowInstance: true } });
-      if (!approval || approval.decision !== 'PENDING') throw new Error('Pending approval not found');
+      const now = new Date();
+      if (!approval || approval.decision !== 'PENDING' || approval.revokedAt || approval.expiresAt <= now) throw new Error('Active pending approval not found');
       validateTenantAccess(params.context, approval.companyId);
       const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
       if (!requiredRoles) throw new Error(`Unknown consequential approval action type: ${approval.actionType}`);
       RbacGuard.assertRole(params.context, requiredRoles);
       const updated = await tx.workflowApproval.updateMany({
-        where: { id: approval.id, decision: 'PENDING' },
-        data: { decision: params.decision, decidedBy: params.context.userId, decidedByRole: params.context.userRole, decisionNotes: params.notes?.slice(0, 2000), decidedAt: new Date() },
+        where: { id: approval.id, decision: 'PENDING', revokedAt: null, expiresAt: { gt: now } },
+        data: { decision: params.decision, decidedBy: params.context.userId, decidedByRole: params.context.userRole, decisionNotes: params.notes?.slice(0, 2000), decidedAt: now },
       });
       if (updated.count !== 1) throw new Error('Approval was already decided');
       await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: approval.companyId, action: params.decision === 'APPROVED' ? 'AGENT_APPROVAL_APPROVED' : 'AGENT_APPROVAL_REJECTED', workflowId: approval.workflowInstanceId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
@@ -322,31 +327,64 @@ export class WorkflowEngine {
     });
   }
 
-  static async consumeApprovedAction(params: { workflowId: string; stepName: string; action: unknown; context: TenantContext }): Promise<void> {
-    const workflow = await prisma.workflowInstance.findUnique({ where: { id: params.workflowId } });
+  static async revokeApproval(params: { approvalId: string; reason: string; context: TenantContext }): Promise<void> {
+    RbacGuard.assertRole(params.context, APPROVER_ROLES);
+    const reason = params.reason.trim();
+    if (!reason || reason.length > 1000) throw new Error('A bounded revocation reason is required');
+    await prisma.$transaction(async (tx) => {
+      const approval = await tx.workflowApproval.findUnique({ where: { id: params.approvalId } });
+      if (!approval) throw new Error('Approval not found');
+      validateTenantAccess(params.context, approval.companyId);
+      const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
+      if (!requiredRoles) throw new Error(`Unknown consequential approval action type: ${approval.actionType}`);
+      RbacGuard.assertRole(params.context, requiredRoles);
+      if (approval.consumedAt) throw new Error('Consumed approval cannot be revoked');
+      if (approval.revokedAt) return;
+      const revokedAt = new Date();
+      const updated = await tx.workflowApproval.updateMany({
+        where: { id: approval.id, consumedAt: null, revokedAt: null },
+        data: { revokedAt, revokedBy: params.context.userId, revocationReason: reason },
+      });
+      if (updated.count !== 1) throw new Error('Approval could not be revoked');
+      await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: approval.companyId, action: 'AGENT_APPROVAL_REVOKED', workflowId: approval.workflowInstanceId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
+    });
+  }
+
+  static async consumeApprovedActionInTransaction(
+    tx: Prisma.TransactionClient,
+    params: { workflowId: string; stepName: string; action: unknown; context: TenantContext },
+  ): Promise<void> {
+    const workflow = await tx.workflowInstance.findUnique({ where: { id: params.workflowId } });
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
-    const approval = await prisma.workflowApproval.findUnique({
+    const approval = await tx.workflowApproval.findUnique({
       where: { workflowInstanceId_stepName_actionDigest: { workflowInstanceId: params.workflowId, stepName: params.stepName, actionDigest: actionDigest(params.action) } },
     });
+    const now = new Date();
     if (!approval || approval.decision !== 'APPROVED' || !approval.decidedBy || !approval.decidedAt) throw new Error('Persisted human approval is required for this exact action');
+    if (approval.revokedAt) throw new Error('Approval was revoked before execution');
+    if (approval.expiresAt <= now) throw new Error('Approval expired before execution');
     const requiredRoles = APPROVAL_ROLE_POLICY[approval.actionType];
     if (!requiredRoles || !approval.decidedByRole || !requiredRoles.includes(approval.decidedByRole)) throw new Error('Persisted approval was not granted by an authorized role');
-    const consumedAt = new Date();
-    const consumed = await prisma.$transaction(async (tx) => {
-      const updated = await tx.workflowApproval.updateMany({ where: { id: approval.id, decision: 'APPROVED', consumedAt: null }, data: { consumedAt } });
-      if (updated.count !== 1) throw new Error('Approval has already been consumed');
-      await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_CONSUMED', workflowId: params.workflowId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
-      return updated;
+    const updated = await tx.workflowApproval.updateMany({
+      where: { id: approval.id, decision: 'APPROVED', consumedAt: null, revokedAt: null, expiresAt: { gt: now } },
+      data: { consumedAt: now },
     });
-    if (consumed.count !== 1) throw new Error('Approval consumption failed');
-    const pending = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING' } });
-    const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'APPROVED', consumedAt: null } });
-    const rejected = await prisma.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'REJECTED' } });
-    if (pending === 0 && unconsumed === 0 && rejected === 0) {
-      await prisma.workflowInstance.updateMany({ where: { id: params.workflowId, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
+    if (updated.count !== 1) throw new Error('Approval has already been consumed, revoked, or expired');
+    await writeAgentApprovalAudit(tx, { userId: params.context.userId, companyId: workflow.companyId, action: 'AGENT_APPROVAL_CONSUMED', workflowId: params.workflowId, approvalId: approval.id, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: params.context.userRole });
+
+    const pending = await tx.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'PENDING', revokedAt: null } });
+    const unconsumed = await tx.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'APPROVED', consumedAt: null, revokedAt: null } });
+    const rejected = await tx.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, decision: 'REJECTED' } });
+    const revoked = await tx.workflowApproval.count({ where: { workflowInstanceId: params.workflowId, revokedAt: { not: null }, consumedAt: null } });
+    if (pending === 0 && unconsumed === 0 && rejected === 0 && revoked === 0) {
+      await tx.workflowInstance.updateMany({ where: { id: params.workflowId, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: now } });
     }
+  }
+
+  static async consumeApprovedAction(params: { workflowId: string; stepName: string; action: unknown; context: TenantContext }): Promise<void> {
+    await prisma.$transaction((tx) => WorkflowEngine.consumeApprovedActionInTransaction(tx, params));
   }
 
   static async recoverInterruptedSteps(workflowId: string, context: TenantContext): Promise<number> {
