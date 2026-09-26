@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, handleApiError, ApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { copilotAdminPatchSchema } from "@/lib/copilot/contracts";
+import { assertCurrentCopilotTaxPolicy } from "@/lib/copilot/taxPolicy";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,17 @@ export async function PATCH(req: NextRequest) {
       if (body.type === "PRICE") {
         const current = await tx.copilotRegionalPrice.findUnique({ where: { id: body.priceId } });
         if (!current) throw new ApiError("Copilot regional price not found.", 404);
+        const effective = {
+          regionCode: current.regionCode,
+          countries: body.countries ?? current.countries,
+          taxMode: body.taxMode ?? current.taxMode,
+          taxRateBps: body.taxRateBps ?? current.taxRateBps,
+        };
+        try {
+          assertCurrentCopilotTaxPolicy(effective);
+        } catch (error) {
+          throw new ApiError(error instanceof Error ? error.message : "Invalid Copilot tax policy.", 422);
+        }
 
         const { type: _type, priceId, ...changes } = body;
         const updated = await tx.copilotRegionalPrice.update({ where: { id: priceId }, data: changes });
