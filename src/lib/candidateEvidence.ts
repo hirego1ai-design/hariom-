@@ -3,6 +3,7 @@ type EmployerApplicationEvidence = {
   jobId: string;
   status: string;
   matchScore: number;
+  screeningAnswers?: unknown;
   createdAt: Date;
   updatedAt: Date;
   candidateProfile: {
@@ -46,6 +47,7 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     applicationId: app.id,
     name,
     matchScore: app.matchScore,
+    screeningAnswers: app.screeningAnswers ?? null,
     experience: `${profile.experienceYears}y Exp`,
     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
     stage: app.status === "APPLIED" ? "SCREENING" : app.status,
