@@ -41,6 +41,7 @@ CREATE TABLE "InterviewEvaluation" (
   "strengths" JSONB NOT NULL,
   "concerns" JSONB NOT NULL,
   "summary" TEXT NOT NULL,
+  "supportingEvidence" JSONB NOT NULL DEFAULT '{}',
   "provider" TEXT,
   "model" TEXT,
   "schemaVersion" TEXT NOT NULL DEFAULT '1.0',
