@@ -231,3 +231,51 @@ test("generic managed pipeline cannot directly reject and the controlled endpoin
     tracker.match(/const movableStages = \[([\s\S]*?)\];/)?.[1] ?? "";
   assert.doesNotMatch(movableBlock, /REJECTED/);
 });
+
+
+test("candidate matchmaker is wired to deterministic evidence-first ranking", () => {
+  const agents = fs.readFileSync(
+    new URL("../lib/agents/OperationalAgents.ts", import.meta.url),
+    "utf8",
+  );
+  const pipeline = fs.readFileSync(
+    new URL("../lib/workflows/HiringPipeline.ts", import.meta.url),
+    "utf8",
+  );
+  const readiness = fs.readFileSync(
+    new URL("../app/api/employer/hiring-pipeline/readiness/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  const section = agents.slice(agents.indexOf("// 6. Candidate Matchmaker Agent"));
+  assert.match(section, /computeMatchScore/);
+  assert.match(section, /evaluateCandidateScreening/);
+  assert.match(section, /EVIDENCE_FIRST_NO_AUTO_REJECT/);
+  assert.match(section, /EVIDENCE_FIRST_MEASURED/);
+  assert.doesNotMatch(section, /compatibilityScore:\s*null/);
+  assert.doesNotMatch(section, /rankingStatus:\s*['"]NOT_MEASURED['"]/);
+  assert.match(pipeline, /candidateProfileId: input\.candidateProfileId, jobId: evidence\.jobId/);
+  assert.match(readiness, /deterministic evidence-first compatibility/);
+});
+
+test("job-specific assessment completion advances to screening and never auto-rejects", () => {
+  const submit = fs.readFileSync(
+    new URL("../app/api/assessment/mcq/submit/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(submit, /APPLICATION_ASSESSMENT_COMPLETED/);
+  assert.match(submit, /data: \{ status: "SCREENING" \}/);
+  assert.doesNotMatch(submit, /data: \{ status: "REJECTED" \}/);
+  assert.match(submit, /score,/);
+  assert.match(submit, /passed,/);
+});
+
+test("interview scheduling cannot bypass pending assessment gates and advances the application stage", () => {
+  const schedule = fs.readFileSync(
+    new URL("../app/api/employer/interviews/schedule/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(schedule, /APPLICATION_ASSESSMENT_GATE_PENDING/);
+  assert.match(schedule, /gates: \{ none: \{ status: \{ in: \["REQUIRED", "IN_PROGRESS"\] \} \} \}/);
+  assert.match(schedule, /data: \{ status: "AI_INTERVIEW" \}/);
+});

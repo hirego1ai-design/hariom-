@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       },
       stages: [
         { agentId: 'jd-generator', capability: 'Generate a job description draft' },
-        { agentId: 'candidate-matchmaker', capability: 'List tenant-linked candidates; compatibility ranking is not measured' },
+        { agentId: 'candidate-matchmaker', capability: 'Rank tenant-authorized applicants with deterministic evidence-first compatibility and screening recommendations; no automatic rejection' },
         { agentId: 'resume-evaluator', capability: 'Evaluate a tenant-linked application against a job' },
         { agentId: 'mock-interview-copilot', capability: 'Draft a generic interview question; answer-based assessment is not implemented' },
         { agentId: 'communication-coach', capability: 'Compute transcript pacing and filler-word metrics from supplied measurements' },
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       ],
       blockers: [
         'No application workflow connects all six stages to a verified interview/evidence lifecycle.',
-        'Candidate compatibility ranking and answer-based interview assessment are not implemented.',
+        'Answer-based live interview assessment is not implemented; deterministic candidate compatibility ranking is available but remains advisory and evidence-first.',
         'Proctoring evidence must be linked to the actual interview and independently verified.',
         'Agent recommendations require human review before a hiring decision.',
       ],

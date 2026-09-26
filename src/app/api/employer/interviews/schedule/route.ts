@@ -28,10 +28,16 @@ export async function POST(request: NextRequest) {
       });
       if (blocking > 0) return NextResponse.json({ success: false, error: "Complete your pending mandatory interview feedback before scheduling another interview." }, { status: 409 });
     }
-    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: { include: { company: true } } }, where: { id: body.applicationId } });
+    const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: { include: { company: true } }, gates: { select: { type: true, status: true } } }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
     if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
       return NextResponse.json({ success: false, error: "Interviews cannot be scheduled for an application in a terminal state." }, { status: 409 });
+    }
+    if (application.gates.some((gate) => ["REQUIRED", "IN_PROGRESS"].includes(gate.status))) {
+      return NextResponse.json({
+        success: false,
+        error: "Complete the candidate's required assessment/validation gates before scheduling an interview.",
+      }, { status: 409 });
     }
     if (new Date(body.scheduledAt).getTime() <= Date.now()) {
       return NextResponse.json({ success: false, error: "Interview date and time must be in the future." }, { status: 400 });
@@ -77,9 +83,21 @@ export async function POST(request: NextRequest) {
     const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
     const interview = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${application.id} FOR UPDATE`;
-      const lockedApplication = await tx.application.findUnique({ where: { id: application.id }, select: { status: true } });
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: application.id },
+        select: {
+          status: true,
+          gates: {
+            where: { status: { in: ["REQUIRED", "IN_PROGRESS"] } },
+            select: { id: true },
+          },
+        },
+      });
       if (!lockedApplication || ["HIRED", "REJECTED", "WITHDRAWN"].includes(lockedApplication.status)) {
         throw new Error("APPLICATION_NOT_SCHEDULABLE");
+      }
+      if (lockedApplication.gates.length > 0) {
+        throw new Error("APPLICATION_ASSESSMENT_GATE_PENDING");
       }
       const progress = await tx.interviewRoundProgress.findUnique({
         where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } },
@@ -136,6 +154,17 @@ export async function POST(request: NextRequest) {
         update: { interviewId: created.id, status: "SCHEDULED" },
         create: { applicationId: application.id, roundId: round.id, interviewId: created.id, status: "SCHEDULED" },
       });
+      const advanced = await tx.application.updateMany({
+        where: {
+          id: application.id,
+          status: lockedApplication.status,
+          gates: { none: { status: { in: ["REQUIRED", "IN_PROGRESS"] } } },
+        },
+        data: { status: "AI_INTERVIEW" },
+      });
+      if (advanced.count !== 1) {
+        throw new Error("APPLICATION_STAGE_CHANGED");
+      }
       return created;
     });
     const appNotification = await prisma.notification.create({
@@ -202,6 +231,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
+    if (error instanceof Error && error.message === "APPLICATION_ASSESSMENT_GATE_PENDING") return NextResponse.json({ success: false, error: "Complete the candidate's required assessment/validation gates before scheduling an interview." }, { status: 409 });
+    if (error instanceof Error && error.message === "APPLICATION_STAGE_CHANGED") return NextResponse.json({ success: false, error: "Application stage changed while the interview was being scheduled. Refresh and try again." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
     return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
