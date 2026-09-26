@@ -19,10 +19,14 @@ const bounded = (label: string, max: number) =>
 const optionalText = (max: number) =>
   z.string().trim().max(max).optional().or(z.literal(""));
 
-const optionalMoney = z.preprocess(
-  (value) => value === "" || value === null ? undefined : value,
-  z.coerce.number().finite().nonnegative().max(1_000_000_000).optional(),
-);
+const moneyNumber = z.number().finite().nonnegative().max(1_000_000_000);
+const moneyString = z
+  .string()
+  .trim()
+  .regex(/^\d+(?:\.\d+)?$/, "Money values must be non-negative numbers.")
+  .transform((value) => Number(value))
+  .pipe(moneyNumber);
+const optionalMoney = z.union([moneyNumber, moneyString]).optional();
 
 const requirementInputSchema = z
   .object({
@@ -84,7 +88,6 @@ const requirementInputSchema = z
     jdFileName: optionalText(500),
     jdFileUrl: optionalText(2_000),
 
-    newMandatorySkill: optionalText(200),
     positions: z.array(z.object({
       jobTitle: bounded("Position job title", 200),
       numberOfPositions: z.coerce.number().int().min(1).max(10_000),
