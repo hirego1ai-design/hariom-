@@ -1,17 +1,32 @@
 "use client";
-import React from "react";
-import { PageContainer } from "@/components/employer/LayoutSystem";
 
-export default function E50Page() {
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { PageContainer } from "@/components/employer/LayoutSystem";
+import ProctoringReviewPanel from "@/components/proctoring/ProctoringReviewPanel";
+
+function Content() {
+  const searchParams = useSearchParams();
+  const interviewId = searchParams.get("interviewId") || "";
+
   return (
     <PageContainer>
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-8 bg-[#121215] border border-white/10 rounded-2xl max-w-2xl mx-auto my-12">
-        <span className="material-symbols-outlined text-yellow text-5xl animate-pulse mb-4">construction</span>
-        <h1 className="text-2xl font-bold text-white mb-2">Proctoring Telemetry Monitor</h1>
-        <p className="text-slate-400 text-sm max-w-md leading-relaxed">
-          The live proctoring telemetry monitor is currently in development. This feature will be activated once the production WebRTC and STUN/TURN server configurations are finalized.
-        </p>
+      <div className="mx-auto max-w-5xl space-y-6 py-8">
+        <div>
+          <p className="text-primary text-[10px] font-bold uppercase tracking-[0.2em]">HireGo · Human review</p>
+          <h1 className="mt-2 text-2xl font-bold text-white">Proctoring Telemetry Monitor</h1>
+          <p className="mt-2 text-sm text-slate-400">Live browser-integrity events for the selected interview.</p>
+        </div>
+        <ProctoringReviewPanel interviewId={interviewId} live={true} />
       </div>
     </PageContainer>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<PageContainer><div className="p-8 text-sm text-slate-400">Loading telemetry…</div></PageContainer>}>
+      <Content />
+    </Suspense>
   );
 }
