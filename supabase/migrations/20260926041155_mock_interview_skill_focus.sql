@@ -1,0 +1,1 @@
+ALTER TABLE "MockInterviewSession" ADD COLUMN IF NOT EXISTS "focusSkills" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
