@@ -16,6 +16,7 @@ type PublicPlan = {
     amount: number;
     taxInclusive: boolean;
     taxesMayApplyAtCheckout: boolean;
+    checkoutAvailable: boolean;
   };
 };
 
@@ -31,6 +32,7 @@ type CapacityOffer = {
     amount: number;
     taxInclusive: boolean;
     taxesMayApplyAtCheckout: boolean;
+    checkoutAvailable: boolean;
   };
 };
 
@@ -295,11 +297,11 @@ export default function EmployerCopilotHubPage() {
                   {offer.price.taxesMayApplyAtCheckout ? "Applicable tax may be added at checkout." : "Configured tax treatment is included."}
                 </p>
                 <button
-                  disabled={submitting}
+                  disabled={submitting || !offer.price.checkoutAvailable}
                   onClick={() => void beginCapacityCheckout(offer)}
-                  className="mt-4 w-full rounded-xl border border-[#448AFF]/40 bg-[#448AFF]/10 px-4 py-3 text-xs font-extrabold text-[#A8C7FF] hover:bg-[#448AFF]/20 disabled:opacity-50"
+                  className="mt-4 w-full rounded-xl border border-[#448AFF]/40 bg-[#448AFF]/10 px-4 py-3 text-xs font-extrabold text-[#A8C7FF] hover:bg-[#448AFF]/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Add capacity
+                  {offer.price.checkoutAvailable ? "Add capacity" : "International checkout pending compliance provider"}
                 </button>
               </article>
             ))}
@@ -355,14 +357,19 @@ export default function EmployerCopilotHubPage() {
                       {plan.price.taxInclusive ? "Displayed price includes configured transaction taxes." : "Applicable transaction tax, if required, may be added by the checkout provider."}
                     </p>
                     <button
+                      disabled={!plan.price.checkoutAvailable}
                       onClick={() => {
                         checkoutKey.current = crypto.randomUUID();
                         setCheckoutPlan(plan);
                         setCheckoutError("");
                       }}
-                      className="w-full rounded-xl bg-[#448AFF] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#5B97FF]"
+                      className="w-full rounded-xl bg-[#448AFF] px-4 py-3 text-sm font-extrabold text-white hover:bg-[#5B97FF] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {isCurrent ? "Renew this Copilot plan" : "Choose this Copilot plan"}
+                      {!plan.price.checkoutAvailable
+                        ? "International checkout pending compliance provider"
+                        : isCurrent
+                          ? "Renew this Copilot plan"
+                          : "Choose this Copilot plan"}
                     </button>
                   </div>
                 </article>
