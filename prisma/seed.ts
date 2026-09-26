@@ -79,29 +79,6 @@ async function main() {
       badgeText: "Popular",
       displayOrder: 30,
     },
-    {
-      id: "plan-hiring-sprint",
-      name: "Hiring Sprint",
-      description: "One role with HireGo Co-Pilot included from the start.",
-      price: 799,
-      currency: "INR",
-      jobPostsQuota: 1,
-      resumeUnlocksQuota: 50,
-      aiInterviewsQuota: 50,
-      applicationsQuota: 500,
-      resumeDownloadsQuota: 100,
-      backgroundVerificationsQuota: 10,
-      featuresAllowed: ["JOB_POSTING", "AI_JD_GENERATION", "MATCHING", "ASSESSMENTS", "VIRTUAL_INTERVIEW", "PROCTORING", "COPILOT"],
-      marketingBenefits: ["1 job post", "7-day hiring sprint", "HireGo Co-Pilot included", "Candidate prioritisation", "Assessment coordination", "Interview scheduling", "Reminder follow-ups", "Feedback tracking", "Next-step recommendations", "Human approval at key steps"],
-      validityMonths: 1,
-      jobValidityDays: 7,
-      firstTimeOnly: false,
-      copilotIncluded: true,
-      copilotJobLimit: 1,
-      isFeatured: true,
-      badgeText: "Co-Pilot included",
-      displayOrder: 40,
-    },
   ];
 
   for (const plan of plans) {
@@ -111,22 +88,6 @@ async function main() {
       create: plan,
     });
   }
-
-  await prisma.hiringCopilotConfig.upsert({
-    where: { id: "default" },
-    update: {},
-    create: {
-      id: "default",
-      enabled: true,
-      addonPrice: 499,
-      currency: "INR",
-      addonJobLimit: 1,
-      title: "Add HireGo Co-Pilot",
-      description: "Let HireGo actively assist this hiring workflow.",
-      badgeText: "Recommended",
-      benefits: ["Candidate prioritisation", "Assessment coordination", "Interview scheduling", "Reminder follow-ups", "Feedback tracking", "Next-step recommendations", "Human approval at key steps"],
-    },
-  });
 
   const aiCosts = [
     { serviceKey: "resume_screening", serviceName: "AI Resume Screening", creditCost: 0, billingType: "INCLUDED" },
