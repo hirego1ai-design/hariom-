@@ -3,7 +3,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { handleApiError, readValidatedJson, ApiError } from '@/lib/apiSecurity';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { dispatchAiTask } from '@/utils/aiRouter';
+import { runMockInterviewStructured } from '@/lib/mockInterviewAi';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
 
 const mockInterviewStartSchema = z.object({
@@ -40,19 +40,15 @@ export async function POST(request: Request) {
       'Return strict JSON only: {"nextQuestion": string}.',
     ].join("\n");
 
-    let questionText = '';
-    
+    let questionText = "";
     try {
-      const aiResponse = await dispatchAiTask({
-        task: 'INTERVIEW_EVALUATION',
+      const parsed = await runMockInterviewStructured({
         prompt: promptStr,
+        schema: z.object({
+          nextQuestion: z.string().trim().min(1).max(5_000),
+        }).strict(),
       });
-      const parsed = JSON.parse(aiResponse.resultText) as { nextQuestion?: unknown };
-      if (typeof parsed.nextQuestion === 'string' && parsed.nextQuestion.trim()) {
-        questionText = parsed.nextQuestion.trim();
-      } else {
-        throw new Error('Invalid AI response format');
-      }
+      questionText = parsed.nextQuestion;
     } catch {
       throw new ApiError('Mock interview question service is unavailable. Please try again later.', 503);
     }
