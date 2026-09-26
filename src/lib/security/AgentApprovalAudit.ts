@@ -12,7 +12,7 @@ export async function writeAgentApprovalAudit(
   params: {
     userId: string;
     companyId: string | null;
-    action: 'AGENT_APPROVAL_REQUESTED' | 'AGENT_APPROVAL_APPROVED' | 'AGENT_APPROVAL_REJECTED' | 'AGENT_APPROVAL_CONSUMED';
+    action: 'AGENT_APPROVAL_REQUESTED' | 'AGENT_APPROVAL_APPROVED' | 'AGENT_APPROVAL_REJECTED' | 'AGENT_APPROVAL_REVOKED' | 'AGENT_APPROVAL_CONSUMED';
     workflowId: string;
     approvalId: string;
     stepName: string;
