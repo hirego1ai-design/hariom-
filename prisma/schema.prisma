@@ -1312,6 +1312,7 @@ enum CopilotUsageLedgerStatus {
 }
 
 enum CopilotTaxMode {
+  NO_TAX_COLLECTION
   TAX_EXCLUSIVE
   TAX_INCLUSIVE
   MERCHANT_OF_RECORD
@@ -1351,7 +1352,8 @@ model CopilotRegionalPrice {
   countries     String[]            @default([])
   currency      String
   amountMinor   Int
-  taxMode       CopilotTaxMode      @default(TAX_EXCLUSIVE)
+  taxMode       CopilotTaxMode      @default(NO_TAX_COLLECTION)
+  taxRateBps    Int                 @default(0)
   paymentRoute  CopilotPaymentRoute
   isActive      Boolean             @default(true)
   createdAt     DateTime            @default(now())
@@ -1384,7 +1386,8 @@ model CopilotCapacityOfferPrice {
   countries    String[]            @default([])
   currency     String
   amountMinor  Int
-  taxMode      CopilotTaxMode      @default(TAX_EXCLUSIVE)
+  taxMode      CopilotTaxMode      @default(NO_TAX_COLLECTION)
+  taxRateBps   Int                 @default(0)
   paymentRoute CopilotPaymentRoute
   isActive     Boolean             @default(true)
   createdAt    DateTime            @default(now())
