@@ -51,6 +51,42 @@ async function activeCycle(tx: Prisma.TransactionClient, subscriptionId: string,
   });
 }
 
+async function expireReservedCapacityLocked(
+  tx: Prisma.TransactionClient,
+  billingCycleId: string,
+  now: Date,
+) {
+  const expired = await tx.copilotUsageReservation.findMany({
+    where: {
+      billingCycleId,
+      status: "RESERVED",
+      expiresAt: { lte: now },
+    },
+    select: { id: true, reservedUnits: true },
+  });
+  if (expired.length === 0) return 0;
+
+  let releasedUnits = 0;
+  for (const reservation of expired) {
+    const claimed = await tx.copilotUsageReservation.updateMany({
+      where: { id: reservation.id, status: "RESERVED", expiresAt: { lte: now } },
+      data: {
+        status: "EXPIRED",
+        releasedUnits: reservation.reservedUnits,
+      },
+    });
+    if (claimed.count === 1) releasedUnits += reservation.reservedUnits;
+  }
+
+  if (releasedUnits > 0) {
+    await tx.copilotBillingCycle.update({
+      where: { id: billingCycleId },
+      data: { reservedCapacityUnits: { decrement: releasedUnits } },
+    });
+  }
+  return releasedUnits;
+}
+
 export async function getCopilotCapacityStatus(companyId: string) {
   return prisma.$transaction(async (tx) => {
     const now = new Date();
@@ -61,15 +97,20 @@ export async function getCopilotCapacityStatus(companyId: string) {
     const cycle = await activeCycle(tx, subscription.id, now);
     if (!cycle) throw new ApiError("Copilot billing cycle is unavailable. Contact support.", 503);
 
-    const total = safeUnits(cycle.baseCapacityUnits + cycle.addonCapacityUnits, "Copilot capacity");
-    const used = safeUnits(cycle.consumedCapacityUnits + cycle.reservedCapacityUnits, "Copilot usage");
+    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${cycle.id} FOR UPDATE`;
+    await expireReservedCapacityLocked(tx, cycle.id, now);
+    const currentCycle = await tx.copilotBillingCycle.findUnique({ where: { id: cycle.id } });
+    if (!currentCycle) throw new ApiError("Copilot billing cycle is unavailable. Contact support.", 503);
+
+    const total = safeUnits(currentCycle.baseCapacityUnits + currentCycle.addonCapacityUnits, "Copilot capacity");
+    const used = safeUnits(currentCycle.consumedCapacityUnits + currentCycle.reservedCapacityUnits, "Copilot usage");
     const percentageUsed = total <= 0 ? 100 : Math.min(100, Math.round((used / total) * 100));
 
     return {
       active: true as const,
       plan: { id: subscription.plan.id, code: subscription.plan.code, name: subscription.plan.name },
       subscriptionId: subscription.id,
-      billingCycle: { startsAt: cycle.startsAt, endsAt: cycle.endsAt },
+      billingCycle: { startsAt: currentCycle.startsAt, endsAt: currentCycle.endsAt },
       percentageUsed,
       level: copilotCapacityLevel(percentageUsed, subscription.plan.softWarningPct, subscription.plan.hardWarningPct),
       canStartExpensiveOperation: used < total,
@@ -109,6 +150,7 @@ export async function reserveCopilotCapacity(params: {
     if (!cycle) throw new ApiError("Copilot billing cycle is unavailable. Contact support.", 503);
 
     await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${cycle.id} FOR UPDATE`;
+    await expireReservedCapacityLocked(tx, cycle.id, now);
     const lockedCycle = await tx.copilotBillingCycle.findUnique({ where: { id: cycle.id } });
     if (!lockedCycle) throw new ApiError("Copilot billing cycle is unavailable.", 503);
 
@@ -157,6 +199,10 @@ export async function reconcileCopilotReservation(params: {
 }) {
   const actualQuantity = safeUnits(params.actualQuantity, "actual Copilot quantity");
   return prisma.$transaction(async (tx) => {
+    const initialReservation = await tx.copilotUsageReservation.findUnique({ where: { id: params.reservationId } });
+    if (!initialReservation) throw new ApiError("Copilot reservation not found.", 404);
+
+    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${initialReservation.billingCycleId} FOR UPDATE`;
     const reservation = await tx.copilotUsageReservation.findUnique({ where: { id: params.reservationId } });
     if (!reservation) throw new ApiError("Copilot reservation not found.", 404);
     if (reservation.status === "CONSUMED") {
@@ -164,7 +210,6 @@ export async function reconcileCopilotReservation(params: {
     }
     if (reservation.status !== "RESERVED") throw new ApiError("Copilot reservation is no longer active.", 409);
 
-    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${reservation.billingCycleId} FOR UPDATE`;
     const cycle = await tx.copilotBillingCycle.findUnique({ where: { id: reservation.billingCycleId } });
     if (!cycle) throw new ApiError("Copilot billing cycle is unavailable.", 503);
 
@@ -235,10 +280,12 @@ export async function reconcileCopilotReservation(params: {
 
 export async function releaseCopilotReservation(reservationId: string) {
   return prisma.$transaction(async (tx) => {
+    const initialReservation = await tx.copilotUsageReservation.findUnique({ where: { id: reservationId } });
+    if (!initialReservation) return false;
+    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${initialReservation.billingCycleId} FOR UPDATE`;
     const reservation = await tx.copilotUsageReservation.findUnique({ where: { id: reservationId } });
     if (!reservation) return false;
     if (reservation.status !== "RESERVED") return true;
-    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${reservation.billingCycleId} FOR UPDATE`;
     await tx.copilotBillingCycle.update({
       where: { id: reservation.billingCycleId },
       data: { reservedCapacityUnits: { decrement: reservation.reservedUnits } },
