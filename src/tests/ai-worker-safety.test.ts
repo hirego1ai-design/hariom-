@@ -91,11 +91,11 @@ test('AI execution accounting and worker safety (isolated contracts)', async (t)
     await t.test('budget rejection does not consume a credit', async () => {
       reset(); state.limit = BigInt(5); await assert.rejects(run); assert.equal(state.credits, 3); assert.equal(executeCalls, 0);
     });
-    await t.test('exhausted credits roll back reservation', async () => {
-      reset(); state.credits = 0; await assert.rejects(run); assert.equal(state.held, BigInt(0)); assert.equal(state.reservations.length, 0);
+    await t.test('zero legacy customer AI credits do not block entitled AI assistance', async () => {
+      reset(); state.credits = 0; await run(); assert.equal(state.credits, 0); assert.equal(state.spend, BigInt(7)); assert.equal(executeCalls, 1);
     });
-    await t.test('duplicate execution rolls back credit debit and cannot repeat a provider call', async () => {
-      reset(); await run(); await assert.rejects(run); assert.equal(state.credits, 2); assert.equal(state.spend, BigInt(7)); assert.equal(executeCalls, 1);
+    await t.test('duplicate execution cannot repeat a provider call or mutate customer credits', async () => {
+      reset(); await run(); await assert.rejects(run); assert.equal(state.credits, 3); assert.equal(state.spend, BigInt(7)); assert.equal(executeCalls, 1);
     });
     await t.test('pre-execution persistence failure refunds credit and releases reservation', async () => {
       reset(); lifecycleFailureAt = 'EXECUTING'; await assert.rejects(run); assert.equal(state.credits, 3); assert.equal(state.held, BigInt(0)); assert.equal(executeCalls, 0);
