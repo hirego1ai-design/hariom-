@@ -97,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(interview.roundProgress?.round.interviewers.map((item) => item.userId) || []),
         ].sort();
         for (const participantId of participantIds) {
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`hirego:interview-participant:${participantId}`}))`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`hirego:interview-participant:${participantId}`}))`;
         }
         const end = new Date(nextScheduledAt.getTime() + interview.durationMins * 60_000);
         const possible = await tx.interview.findMany({
