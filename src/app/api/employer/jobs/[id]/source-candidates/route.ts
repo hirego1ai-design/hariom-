@@ -9,7 +9,7 @@ import {
   handleApiError,
   ApiError,
 } from "@/lib/apiSecurity";
-import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 import {
   computeMatchScore,
   evaluateCandidateScreening,
@@ -56,10 +56,11 @@ export async function GET(
         throw new ApiError("Job access denied.", 403);
       }
       await prisma.$transaction((tx) =>
-        requireActiveCompanySubscription(
+        requireCompanyPlanFeature(
           tx,
           company.id,
-          "An active subscription is required to access proactive candidate sourcing.",
+          ["PROACTIVE_SOURCING"],
+          "Your current plan does not include proactive candidate sourcing.",
         )
       );
     }
