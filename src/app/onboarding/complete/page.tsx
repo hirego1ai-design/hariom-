@@ -1,10 +1,35 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 
 export default function OnboardingCompletePage() {
+  const [assessmentId, setAssessmentId] = useState("");
+  const [assessmentStatus, setAssessmentStatus] = useState<"PREPARING" | "READY" | "UNAVAILABLE">("PREPARING");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/candidate/readiness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoAssign: true }),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success || !data.assessmentId) {
+          throw new Error(data?.error || "Skill Validation is temporarily unavailable.");
+        }
+        if (!active) return;
+        setAssessmentId(data.assessmentId);
+        setAssessmentStatus("READY");
+      })
+      .catch(() => {
+        if (active) setAssessmentStatus("UNAVAILABLE");
+      });
+    return () => { active = false; };
+  }, []);
+
   return (
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
@@ -35,17 +60,27 @@ export default function OnboardingCompletePage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold text-text-primary">Your onboarding details are saved</h1>
               <p className="text-xs text-text-muted max-w-[400px] mx-auto leading-relaxed">
-                Continue to Job-Ready assessments if an administrator has configured one for your role and seniority. Completion does not automatically verify your profile or guarantee a job.
+                HireGo prepares a reusable role-based Skill Validation after onboarding. Taking it now is optional; if you apply to a job before completing it, the application flow will require the validation before submission can finish.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link
-                href="/assessment/readiness"
-                className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-base">verified</span> Check Job-Ready assessments
-              </Link>
+              {assessmentStatus === "READY" ? (
+                <Link
+                  href={`/assessment/mcq/active?id=${encodeURIComponent(assessmentId)}`}
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">verified</span> Start Skill Validation
+                </Link>
+              ) : (
+                <Link
+                  href="/assessment/readiness"
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">{assessmentStatus === "PREPARING" ? "hourglass_top" : "refresh"}</span>
+                  {assessmentStatus === "PREPARING" ? "Preparing Skill Validation…" : "Open Skill Validation"}
+                </Link>
+              )}
               <Link
                 href="/dashboard"
                 className="w-full sm:w-auto px-8 py-3 rounded-full bg-yellow text-bg-page font-bold text-xs shadow-[0_0_20px_rgba(255,200,0,0.35)] hover:scale-105 transition-all"
