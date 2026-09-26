@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectCopilotRegionalPrice } from "../lib/copilot/commerce";
+import { calculateCopilotTax, selectCopilotRegionalPrice } from "../lib/copilot/commerce";
 import { copilotCapacityLevel } from "../lib/copilot/capacity";
 import {
   copilotPurchaseSnapshotSchema,
@@ -45,7 +45,12 @@ test("Copilot purchase snapshot binds price, country, tax route and hidden plan 
     currency: "USD",
     amountMinor: 1900,
     amount: 19,
-    taxMode: "TAX_EXCLUSIVE",
+    taxRateBps: 0,
+    taxMinor: 0,
+    taxAmount: 0,
+    totalAmountMinor: 1900,
+    totalAmount: 19,
+    taxMode: "NO_TAX_COLLECTION",
     paymentRoute: "STRIPE",
   }, {
     monthlyCapacityUnits: 300,
@@ -69,8 +74,11 @@ test("Copilot purchase snapshot rejects invalid warning thresholds", () => {
     billingCountry: "US",
     regionCode: "US",
     currency: "USD",
+    baseAmountMinor: 1000,
+    taxMinor: 0,
     amountMinor: 1000,
-    taxMode: "TAX_EXCLUSIVE",
+    taxMode: "NO_TAX_COLLECTION",
+    taxRateBps: 0,
     paymentRoute: "STRIPE",
     validityMonths: 1,
     monthlyCapacityUnits: 100,
@@ -79,4 +87,15 @@ test("Copilot purchase snapshot rejects invalid warning thresholds", () => {
     featuresAllowed: [],
   };
   assert.equal(copilotPurchaseSnapshotSchema.safeParse(invalid).success, false);
+});
+
+
+test("India GST adds 18% while international no-tax collection leaves price unchanged", () => {
+  const india = calculateCopilotTax(39900, "TAX_EXCLUSIVE", 1800);
+  assert.equal(india.taxMinor, 7182);
+  assert.equal(india.totalAmountMinor, 47082);
+
+  const international = calculateCopilotTax(1900, "NO_TAX_COLLECTION", 0);
+  assert.equal(international.taxMinor, 0);
+  assert.equal(international.totalAmountMinor, 1900);
 });
