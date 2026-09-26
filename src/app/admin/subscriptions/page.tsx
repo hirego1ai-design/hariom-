@@ -31,8 +31,7 @@ export default function AdminSubscriptionsPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [promos, setPromos] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
-  const [copilotConfig, setCopilotConfig] = useState<any>(null);
-  const [tab, setTab] = useState<"plans" | "copilot" | "promos" | "internal-ai">("plans");
+  const [tab, setTab] = useState<"plans" | "promos" | "internal-ai">("plans");
   const [plan, setPlan] = useState<any>(emptyPlan);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,7 +53,6 @@ export default function AdminSubscriptionsPage() {
       setPlans(plansBody.plans || []);
       setPromos(settingsBody.promos || []);
       setServices(settingsBody.services || []);
-      setCopilotConfig(settingsBody.copilotConfig || null);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to load subscription settings.");
     } finally {
@@ -107,8 +105,8 @@ export default function AdminSubscriptionsPage() {
         validityMonths: Number(plan.validityMonths),
         jobValidityDays: Number(plan.jobValidityDays),
         firstTimeOnly: Boolean(plan.firstTimeOnly),
-        copilotIncluded: Boolean(plan.copilotIncluded),
-        copilotJobLimit: Number(plan.copilotIncluded ? plan.copilotJobLimit : 0),
+        copilotIncluded: false,
+        copilotJobLimit: 0,
         isFeatured: Boolean(plan.isFeatured),
         badgeText: plan.badgeText.trim() || null,
         displayOrder: Number(plan.displayOrder),
@@ -140,39 +138,6 @@ export default function AdminSubscriptionsPage() {
       await load();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to archive plan.");
-    } finally { setSaving(false); }
-  }
-
-  async function saveCopilot(event: React.FormEvent) {
-    event.preventDefault();
-    if (!copilotConfig) return;
-    setSaving(true);
-    try {
-      const response = await fetch("/api/admin/subscriptions/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "COPILOT_CONFIG",
-          config: {
-            enabled: Boolean(copilotConfig.enabled),
-            addonPrice: Number(copilotConfig.addonPrice),
-            currency: String(copilotConfig.currency).toUpperCase(),
-            addonJobLimit: Number(copilotConfig.addonJobLimit),
-            title: copilotConfig.title,
-            description: copilotConfig.description,
-            badgeText: copilotConfig.badgeText || null,
-            benefits: Array.isArray(copilotConfig.benefits)
-              ? copilotConfig.benefits
-              : String(copilotConfig.benefits || "").split("\n").map((v: string) => v.trim()).filter(Boolean),
-          },
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok || !body.success) throw new Error(body.error || "Unable to save Co-Pilot configuration.");
-      setCopilotConfig(body.copilotConfig);
-      setMessage("Co-Pilot offer updated.");
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Unable to save Co-Pilot configuration.");
     } finally { setSaving(false); }
   }
 
@@ -233,8 +198,8 @@ export default function AdminSubscriptionsPage() {
         <div className="mx-auto max-w-7xl">
           <header className="rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,185,255,.18),transparent_30%),linear-gradient(135deg,#121936,#0b1021)] p-6 shadow-[0_24px_70px_rgba(0,0,0,.35)]">
             <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">Commercial Control Center</p>
-            <h1 className="mt-2 text-3xl font-black">Hiring plans, Co-Pilot & promotions</h1>
-            <p className="mt-2 text-sm text-slate-400">All employer-facing pricing and benefits are authoritative database configuration. Internal AI costs are separate from customer billing.</p>
+            <h1 className="mt-2 text-3xl font-black">Hiring plans, promotions & internal AI costs</h1>
+            <p className="mt-2 text-sm text-slate-400">Employer job-posting pricing is managed here. HireGo Copilot is configured separately in the Copilot Commerce console.</p>
           </header>
 
           {message ? <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-200">{message}</div> : null}
@@ -242,7 +207,6 @@ export default function AdminSubscriptionsPage() {
           <nav className="mt-6 flex flex-wrap gap-2">
             {[
               ["plans","Plans"],
-              ["copilot","Co-Pilot"],
               ["promos","Promos"],
               ["internal-ai","Internal AI Cost"],
             ].map(([key, text]) => (
@@ -289,9 +253,7 @@ export default function AdminSubscriptionsPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 p-3 text-xs font-bold"><input type="checkbox" checked={plan.firstTimeOnly} onChange={e => setPlan({ ...plan, firstTimeOnly: e.target.checked, price: e.target.checked ? "0" : plan.price })} /> First-time only</label>
                     <label className="flex items-center gap-2 rounded-xl border border-white/10 p-3 text-xs font-bold"><input type="checkbox" checked={plan.isFeatured} onChange={e => setPlan({ ...plan, isFeatured: e.target.checked })} /> Featured card</label>
-                    <label className="col-span-2 flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-3 text-xs font-bold"><input type="checkbox" checked={plan.copilotIncluded} onChange={e => setPlan({ ...plan, copilotIncluded: e.target.checked, copilotJobLimit: e.target.checked ? (plan.copilotJobLimit === "0" ? "1" : plan.copilotJobLimit) : "0" })} /> Co-Pilot included</label>
-                  </div>
-                  {plan.copilotIncluded ? <div><label className={label}>Included Co-Pilot jobs</label><input type="number" min="1" className={input} value={plan.copilotJobLimit} onChange={e => setPlan({ ...plan, copilotJobLimit: e.target.value })} /></div> : null}
+                                      </div>
                   <div><label className={label}>Badge</label><input className={input} value={plan.badgeText} onChange={e => setPlan({ ...plan, badgeText: e.target.value })} /></div>
                   <div><label className={label}>Public benefits — one per line</label><textarea rows={8} className={input} value={plan.marketingBenefits} onChange={e => setPlan({ ...plan, marketingBenefits: e.target.value })} /></div>
                   <div><label className={label}>Internal feature keys — one per line</label><textarea rows={5} className={input} value={plan.featuresAllowed} onChange={e => setPlan({ ...plan, featuresAllowed: e.target.value })} /></div>
@@ -318,7 +280,6 @@ export default function AdminSubscriptionsPage() {
                       <span className="rounded-lg bg-white/5 px-2 py-1">{item.jobValidityDays} days/job</span>
                       <span className="rounded-lg bg-white/5 px-2 py-1">{item.validityMonths} month access</span>
                       {item.firstTimeOnly ? <span className="rounded-lg bg-emerald-400/10 px-2 py-1 text-emerald-300">First-time only</span> : null}
-                      {item.copilotIncluded ? <span className="rounded-lg bg-cyan-300/10 px-2 py-1 text-cyan-200">Co-Pilot × {item.copilotJobLimit}</span> : null}
                     </div>
                     <div className="mt-4 flex gap-2">
                       <button onClick={() => editPlan(item)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-black">Edit</button>
@@ -328,25 +289,6 @@ export default function AdminSubscriptionsPage() {
                 ))}
               </section>
             </div>
-          ) : null}
-
-          {!loading && tab === "copilot" && copilotConfig ? (
-            <form onSubmit={saveCopilot} className="mt-6 max-w-3xl rounded-[28px] border border-cyan-300/20 bg-[linear-gradient(145deg,#101b35,#12102e)] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div><h2 className="text-xl font-black">Co-Pilot checkout offer</h2><p className="mt-1 text-xs text-slate-400">This config powers the employer checkout upsell and Co-Pilot benefits UI.</p></div>
-                <label className="flex items-center gap-2 text-xs font-black"><input type="checkbox" checked={copilotConfig.enabled} onChange={e => setCopilotConfig({ ...copilotConfig, enabled: e.target.checked })} /> Enabled</label>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                <div><label className={label}>Add-on price</label><input type="number" min="0" className={input} value={copilotConfig.addonPrice} onChange={e => setCopilotConfig({ ...copilotConfig, addonPrice: e.target.value })} /></div>
-                <div><label className={label}>Currency</label><input className={input} value={copilotConfig.currency} onChange={e => setCopilotConfig({ ...copilotConfig, currency: e.target.value.toUpperCase() })} /></div>
-                <div><label className={label}>Jobs granted</label><input type="number" min="1" className={input} value={copilotConfig.addonJobLimit} onChange={e => setCopilotConfig({ ...copilotConfig, addonJobLimit: e.target.value })} /></div>
-              </div>
-              <div className="mt-4"><label className={label}>Title</label><input className={input} value={copilotConfig.title} onChange={e => setCopilotConfig({ ...copilotConfig, title: e.target.value })} /></div>
-              <div className="mt-4"><label className={label}>Description</label><textarea rows={3} className={input} value={copilotConfig.description} onChange={e => setCopilotConfig({ ...copilotConfig, description: e.target.value })} /></div>
-              <div className="mt-4"><label className={label}>Badge</label><input className={input} value={copilotConfig.badgeText || ""} onChange={e => setCopilotConfig({ ...copilotConfig, badgeText: e.target.value })} /></div>
-              <div className="mt-4"><label className={label}>Benefits — one per line</label><textarea rows={8} className={input} value={(copilotConfig.benefits || []).join("\n")} onChange={e => setCopilotConfig({ ...copilotConfig, benefits: e.target.value.split("\n") })} /></div>
-              <button disabled={saving} className="mt-5 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 disabled:opacity-50">Save Co-Pilot offer</button>
-            </form>
           ) : null}
 
           {!loading && tab === "promos" ? (
