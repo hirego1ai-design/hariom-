@@ -24,6 +24,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "revenue", label: "Revenue & Billing", href: "/admin/revenue", icon: "payments" },
   { id: "invoices", label: "Invoices", href: "/admin/invoices", icon: "receipt_long" },
   { id: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: "autorenew" },
+  { id: "copilot-commerce", label: "Copilot Commerce", href: "/admin/copilot-commerce", icon: "smart_toy" },
   { id: "managed-requests", label: "Managed Hiring Requests", href: "/admin/managed-hiring/requests", icon: "assignment" },
   { id: "managed-pipeline", label: "Managed Hiring Pipeline", href: "/admin/managed-hiring/pipeline", icon: "account_tree" },
   { id: "managed-hiring", label: "Managed Hiring Operations", href: "/admin/managed-hiring/operations", icon: "business_center" },
