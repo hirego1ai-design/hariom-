@@ -2,16 +2,33 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
 
+type BillableAgentConfig = {
+  serviceKey: string;
+  entitlementFeatures: readonly string[];
+};
+
 /**
- * Only agents that can invoke a metered model need a subscription entitlement
- * and an AI credit. Keep this list deliberately small: adding an agent is a
- * billing decision, not just a registry change.
+ * Only agents that can invoke a metered model belong here. Each entry ties the
+ * runtime agent to both a subscription entitlement and an Admin-configured
+ * service cost. Adding an agent is therefore a billing decision.
  */
-const BILLABLE_AGENT_FEATURES: Record<string, readonly string[]> = {
-  "resume-evaluator": ["AI_SCREENING", "BASIC_RESUME_SCREENING"],
-  "jd-generator": ["AI_SCREENING", "AI_JD_GENERATION"],
-  "mock-interview-copilot": ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
-  "live-interview-evaluator": ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
+const BILLABLE_AGENT_CONFIG: Record<string, BillableAgentConfig> = {
+  "resume-evaluator": {
+    serviceKey: "resume_screening",
+    entitlementFeatures: ["AI_SCREENING", "BASIC_RESUME_SCREENING"],
+  },
+  "jd-generator": {
+    serviceKey: "jd_generation",
+    entitlementFeatures: ["AI_SCREENING", "AI_JD_GENERATION"],
+  },
+  "mock-interview-copilot": {
+    serviceKey: "interview_evaluation",
+    entitlementFeatures: ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
+  },
+  "live-interview-evaluator": {
+    serviceKey: "interview_evaluation",
+    entitlementFeatures: ["AI_INTERVIEWS", "AI_INTERVIEW_COPILOT", "VIDEO_INTERVIEWS"],
+  },
 };
 
 export const DIRECT_DISPATCH_AGENT_IDS = ["resume-evaluator", "jd-generator"] as const;
@@ -30,8 +47,17 @@ function normalizedFeature(feature: string): string {
   return feature.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
+function hasEntitlement(
+  featuresAllowed: readonly string[],
+  acceptedFeatures: readonly string[],
+): boolean {
+  const grantedFeatures = new Set(featuresAllowed.map(normalizedFeature));
+  return grantedFeatures.has("ALL_FEATURES")
+    || acceptedFeatures.map(normalizedFeature).some((feature) => grantedFeatures.has(feature));
+}
+
 export function isBillableAiAgent(agentId: string): boolean {
-  return Object.prototype.hasOwnProperty.call(BILLABLE_AGENT_FEATURES, agentId);
+  return Object.prototype.hasOwnProperty.call(BILLABLE_AGENT_CONFIG, agentId);
 }
 
 export async function assertCompanyFeatureEntitlement(
@@ -63,12 +89,8 @@ export async function assertCompanyFeatureEntitlement(
       throw new AiEntitlementError("Your subscription terms are unavailable; contact support.");
     }
 
-    const grantedFeatures = new Set(planSnapshot.featuresAllowed.map(normalizedFeature));
-    const normalizedRequired = requiredFeatures.map(normalizedFeature);
-    const hasFeature = grantedFeatures.has("ALL_FEATURES")
-      || normalizedRequired.some((feature) => grantedFeatures.has(feature));
-    if (!hasFeature) {
-      throw new AiEntitlementError("Your subscription does not include job-specific AI assessments.");
+    if (!hasEntitlement(planSnapshot.featuresAllowed, requiredFeatures)) {
+      throw new AiEntitlementError("Your subscription does not include this feature.");
     }
   };
 
@@ -80,13 +102,21 @@ export async function assertCompanyFeatureEntitlement(
 }
 
 /**
- * Verifies a current paid plan and consumes exactly one agent credit in the
- * same database transaction. There is intentionally no production fallback:
- * an unavailable billing database means a billable model call is denied.
+ * Verifies the active plan, resolves the Admin-configured service billing rule,
+ * and atomically consumes the configured number of AI agent credits.
+ *
+ * CREDIT_BASED: deduct exactly creditCost.
+ * INCLUDED: allow without decrement.
+ * PAID_ADDON: fail closed until a separately verified add-on purchase flow is
+ *             connected; Admin configuration alone never grants paid access.
  */
-export async function assertAndConsumeAiEntitlement(companyId: string, agentId: string, transaction?: Prisma.TransactionClient): Promise<void> {
-  const requiredFeatures = BILLABLE_AGENT_FEATURES[agentId];
-  if (!requiredFeatures) return;
+export async function assertAndConsumeAiEntitlement(
+  companyId: string,
+  agentId: string,
+  transaction?: Prisma.TransactionClient,
+): Promise<void> {
+  const config = BILLABLE_AGENT_CONFIG[agentId];
+  if (!config) return;
 
   const consume = async (tx: Prisma.TransactionClient) => {
     const subscription = await tx.companySubscription.findFirst({
@@ -110,22 +140,50 @@ export async function assertAndConsumeAiEntitlement(companyId: string, agentId: 
     } catch {
       throw new AiEntitlementError("Your subscription terms are unavailable; contact support before using a billed AI agent.");
     }
-    const grantedFeatures = new Set(planSnapshot.featuresAllowed.map(normalizedFeature));
-    const hasFeature = grantedFeatures.has("ALL_FEATURES") || requiredFeatures.some((feature) => grantedFeatures.has(feature));
-    if (!hasFeature) {
+
+    // Admin plan editing stores AI service keys directly in featuresAllowed,
+    // while older seeded plans use human-readable entitlement names. Accept
+    // both representations so existing purchases remain valid.
+    const acceptedFeatures = [...config.entitlementFeatures, config.serviceKey];
+    if (!hasEntitlement(planSnapshot.featuresAllowed, acceptedFeatures)) {
       throw new AiEntitlementError("Your subscription does not include this AI agent.");
     }
 
+    const service = await tx.aiServiceCost.findUnique({
+      where: { serviceKey: config.serviceKey },
+      select: { serviceName: true, creditCost: true, billingType: true },
+    });
+    if (!service) {
+      throw new AiEntitlementError("AI service billing configuration is unavailable. Contact support.");
+    }
+
+    if (service.billingType === "INCLUDED") {
+      return;
+    }
+
+    if (service.billingType === "PAID_ADDON") {
+      throw new AiEntitlementError(
+        `${service.serviceName} requires a separately verified paid add-on. Add-on checkout is not available for this service yet.`,
+      );
+    }
+
+    if (!Number.isSafeInteger(service.creditCost) || service.creditCost <= 0) {
+      throw new AiEntitlementError("AI service credit pricing is invalid. Contact support.");
+    }
+
     // updateMany makes the decrement conditional and atomic. Concurrent
-    // dispatches cannot turn a zero balance negative.
+    // dispatches cannot make a balance negative or partially charge a request.
     const debit = await tx.companyCredits.updateMany({
-      where: { companyId, aiAgentCreditsLeft: { gte: 1 } },
-      data: { aiAgentCreditsLeft: { decrement: 1 } },
+      where: { companyId, aiAgentCreditsLeft: { gte: service.creditCost } },
+      data: { aiAgentCreditsLeft: { decrement: service.creditCost } },
     });
     if (debit.count !== 1) {
-      throw new AiEntitlementError("Your AI agent credits are exhausted.");
+      throw new AiEntitlementError(
+        `Insufficient AI agent credits. ${service.serviceName} requires ${service.creditCost} credit(s).`,
+      );
     }
   };
+
   if (transaction) await consume(transaction);
   else await prisma.$transaction(consume);
 }
