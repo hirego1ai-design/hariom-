@@ -32,9 +32,9 @@ export async function POST(req: NextRequest) {
 
     const allowedCategoriesByRole: Record<string, Set<string>> = {
       CANDIDATE: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "assessment-media"]),
-      EMPLOYER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
+      EMPLOYER: new Set(["avatars", "company-logos", "employer-docs", "offer-documents", "assessment-media"]),
       RECRUITER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
-      ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media"]),
+      ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "offer-documents", "assessment-media"]),
     };
     if (!allowedCategoriesByRole[session.role]?.has(category)) {
       return jsonError("Invalid upload category", 400);
