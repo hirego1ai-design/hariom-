@@ -5,6 +5,37 @@ import { StripeGateway } from "../lib/payments/StripeGateway";
 import { PayUGateway } from "../lib/payments/PayUGateway";
 import { PaymentGatewayController } from "../lib/payments/PaymentGatewayController";
 import { isGateway, AmbiguousPaymentOrderError } from "../lib/payments/PaymentGatewayInterface";
+import { createPlanSchema } from "../lib/payments/planContracts";
+import { createPurchasedPlanSnapshot, parsePurchasedPlanSnapshot } from "../lib/payments/planSnapshot";
+
+test("subscription feature contracts accept admin service keys and legacy human-readable labels", () => {
+  const plan = {
+    id: "plan-contract-regression",
+    name: "Contract Regression",
+    description: "Subscription feature compatibility regression.",
+    price: 999,
+    currency: "INR",
+    jobPostsQuota: 1,
+    resumeUnlocksQuota: 5,
+    aiInterviewsQuota: 10,
+    applicationsQuota: 100,
+    resumeDownloadsQuota: 10,
+    backgroundVerificationsQuota: 2,
+    featuresAllowed: ["resume_screening", "Basic Resume Screening", "AI_INTERVIEW_COPILOT"],
+    validityMonths: 1,
+  };
+
+  assert.equal(createPlanSchema.safeParse({ ...plan, id: undefined }).success, true);
+  const snapshot = createPurchasedPlanSnapshot(plan);
+  assert.deepEqual(parsePurchasedPlanSnapshot(snapshot).featuresAllowed, plan.featuresAllowed);
+
+  const unsafe = createPlanSchema.safeParse({
+    ...plan,
+    id: undefined,
+    featuresAllowed: ["<script>alert(1)</script>"],
+  });
+  assert.equal(unsafe.success, false);
+});
 
 test("Payment architecture accepts only STRIPE and PAYU, rejecting RAZORPAY and PHONEPE", () => {
   assert.equal(isGateway("STRIPE"), true);
