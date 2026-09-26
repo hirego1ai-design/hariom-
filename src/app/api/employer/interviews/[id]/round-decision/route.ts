@@ -28,6 +28,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const company = await getSessionCompany(session);
       if (company.id !== interview.application.job.companyId) throw new ApiError("Interview access denied.", 403);
     }
+    let interviewMetadata: Record<string, unknown> = {};
+    try {
+      interviewMetadata = interview.aiFeedback ? JSON.parse(interview.aiFeedback) : {};
+    } catch {
+      interviewMetadata = {};
+    }
+    const copilotManagedForInterview = interviewMetadata.copilotManaged === true;
+
     const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
     let rejectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "REJECT" } } | null = null;
     let selectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "SELECT" } } | null = null;
@@ -292,8 +300,46 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
     const eventKey = result.action === "PROCEED" ? "INTERVIEW_NEXT_ROUND" : null;
-    if (eventKey && candidate.email) await dispatchCommunication({ eventKey, channel: "EMAIL", audience: "CANDIDATE", recipient: candidate.email, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
-    if (eventKey && candidate.phoneNumber) await dispatchCommunication({ eventKey, channel: "WHATSAPP", audience: "CANDIDATE", recipient: candidate.phoneNumber, variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" }, idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`, correlationId: interview.applicationId, recipientRef: candidate.id }).catch(() => null);
+    if (eventKey && candidate.email) await dispatchCommunication({
+      eventKey,
+      channel: "EMAIL",
+      audience: "CANDIDATE",
+      recipient: candidate.email,
+      variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" },
+      idempotencyKey: `interview:${id}:decision:${result.action}:candidate:email`,
+      correlationId: interview.applicationId,
+      recipientRef: candidate.id,
+      copilotMetering: copilotManagedForInterview ? {
+        companyId: interview.application.job.companyId,
+        idempotencyKey: `copilot-communication:${id}:decision:${result.action}:email`,
+        reference: {
+          jobId: interview.application.jobId,
+          applicationId: interview.applicationId,
+          candidateId: interview.application.candidateProfileId,
+          interviewId: id,
+        },
+      } : undefined,
+    }).catch(() => null);
+    if (eventKey && candidate.phoneNumber) await dispatchCommunication({
+      eventKey,
+      channel: "WHATSAPP",
+      audience: "CANDIDATE",
+      recipient: candidate.phoneNumber,
+      variables: { ...variables, next_round: result.nextRound?.name || "Next interview round" },
+      idempotencyKey: `interview:${id}:decision:${result.action}:candidate:whatsapp`,
+      correlationId: interview.applicationId,
+      recipientRef: candidate.id,
+      copilotMetering: copilotManagedForInterview ? {
+        companyId: interview.application.job.companyId,
+        idempotencyKey: `copilot-communication:${id}:decision:${result.action}:whatsapp`,
+        reference: {
+          jobId: interview.application.jobId,
+          applicationId: interview.applicationId,
+          candidateId: interview.application.candidateProfileId,
+          interviewId: id,
+        },
+      } : undefined,
+    }).catch(() => null);
     return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
   } catch (e) { return handleApiError(e); }
 }
