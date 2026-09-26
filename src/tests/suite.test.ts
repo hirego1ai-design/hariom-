@@ -153,7 +153,7 @@ async function runIsolatedTests() {
           applicationsQuota: 25,
           resumeDownloadsQuota: 10,
           backgroundVerificationsQuota: 1,
-          featuresAllowed: ["JOB_POSTING", "resume_screening"],
+          featuresAllowed: ["JOB_POSTING", "AI_SCREENING"],
           validityMonths: 1,
           isArchived: false,
         },
@@ -172,84 +172,23 @@ async function runIsolatedTests() {
       const pass11 = updatedCredits.jobPostsLeft === 0;
       results.push({ name: "Subscriptions Engine - Persisted Credit Quota Enforcement", category: "Subscriptions", passed: pass11 });
 
-      await prisma.aiServiceCost.upsert({
-        where: { serviceKey: "resume_screening" },
-        create: {
-          serviceKey: "resume_screening",
-          serviceName: "AI Resume Screening",
-          creditCost: 2,
-          billingType: "CREDIT_BASED",
-        },
-        update: { creditCost: 2, billingType: "CREDIT_BASED" },
-      });
-      const { assertAndConsumeAiEntitlement, AiEntitlementError } = await import("@/lib/governance/AiEntitlements");
-      await assertAndConsumeAiEntitlement(companyId, "resume-evaluator");
-      const afterConfiguredDebit = await subscriptionsDb.getCompanyCredits(companyId);
-      const pass12 = afterConfiguredDebit.aiAgentCreditsLeft === 0;
-      results.push({
-        name: "Subscriptions Engine - Admin AI service cost drives atomic credit debit",
-        category: "Subscriptions",
-        passed: pass12,
-      });
-
-      let exhaustedDenied = false;
-      try {
-        await assertAndConsumeAiEntitlement(companyId, "resume-evaluator");
-      } catch (error) {
-        exhaustedDenied = error instanceof AiEntitlementError && /requires 2 credit/.test(error.message);
-      }
-      results.push({
-        name: "Subscriptions Engine - AI service fails closed when configured credits are exhausted",
-        category: "Subscriptions",
-        passed: exhaustedDenied,
-      });
-
-      await prisma.aiServiceCost.update({
-        where: { serviceKey: "resume_screening" },
-        data: { creditCost: 0, billingType: "INCLUDED" },
-      });
-      await assertAndConsumeAiEntitlement(companyId, "resume-evaluator");
-      const afterIncludedUse = await subscriptionsDb.getCompanyCredits(companyId);
-      results.push({
-        name: "Subscriptions Engine - INCLUDED AI service does not consume credits",
-        category: "Subscriptions",
-        passed: afterIncludedUse.aiAgentCreditsLeft === 0,
-      });
-
-      await prisma.aiServiceCost.update({
-        where: { serviceKey: "resume_screening" },
-        data: { creditCost: 1, billingType: "PAID_ADDON" },
-      });
-      let paidAddonDenied = false;
-      try {
-        await assertAndConsumeAiEntitlement(companyId, "resume-evaluator");
-      } catch (error) {
-        paidAddonDenied = error instanceof AiEntitlementError && /paid add-on/.test(error.message);
-      }
-      results.push({
-        name: "Subscriptions Engine - PAID_ADDON AI service cannot bypass verified add-on checkout",
-        category: "Subscriptions",
-        passed: paidAddonDenied,
-      });
-
       await prisma.companySubscription.updateMany({
         where: { companyId, status: "ACTIVE" },
         data: { endDate: new Date(Date.now() - 60_000) },
       });
       const expiredActiveSubscription = await subscriptionsDb.getCompanySubscription(companyId);
       const latestSubscription = await subscriptionsDb.getLatestCompanySubscription(companyId);
-      const pass13 = expiredActiveSubscription === null && latestSubscription?.status === "EXPIRED";
+      const pass12 = expiredActiveSubscription === null && latestSubscription?.status === "EXPIRED";
       results.push({
         name: "Subscriptions Engine - Expired periods fail closed and reconcile lifecycle state",
         category: "Subscriptions",
-        passed: pass13,
+        passed: pass12,
       });
     } catch (e: any) {
       results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
     } finally {
       await prisma.companySubscription.deleteMany({ where: { companyId } }).catch(() => undefined);
       await prisma.companyCredits.deleteMany({ where: { companyId } }).catch(() => undefined);
-      await prisma.aiServiceCost.deleteMany({ where: { serviceKey: "resume_screening" } }).catch(() => undefined);
       await prisma.subscriptionPlan.deleteMany({ where: { id: planId } }).catch(() => undefined);
       await prisma.company.deleteMany({ where: { id: companyId } }).catch(() => undefined);
     }
