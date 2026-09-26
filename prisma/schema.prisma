@@ -882,21 +882,37 @@ model HiringRequirement {
   email                  String
   primaryMobile          String
   secondaryMobile        String?
+  website                String?
+  gstin                  String?
+  pan                    String?
+  billingAddress         String?
   industry               String
   numberOfPositions      Int
+  multipleRoles          Boolean           @default(false)
   jobTitles              String[]          @default([])
+  department             String?
   experienceYears        String
+  employmentType         String?
   skillsRequired         String[]          @default([])
+  preferredSkills        String[]          @default([])
   education              String
   certifications         String?
+  languages              String?
+  tools                  String?
   salaryRangeMin         Float
   salaryRangeMax         Float
   currency               String            @default("INR")
-  workMode               String            @default("Hybrid")
+  variableComponent      String?
+  bonusIncentives        String?
+  benefits               String[]          @default([])
+  workMode               String
   location               String
+  shift                   String?
+  noticePeriod           String?
   joiningTimeline        String
-  hiringPriority         String            @default("Standard")
-  replacementExpectation String            @default("90 Days")
+  hiringPriority         String
+  replacementExpectation String
+  positions              Json?
   additionalNotes        String?
   jdFileUrl              String?
   status                 RequirementStatus @default(SUBMITTED)
