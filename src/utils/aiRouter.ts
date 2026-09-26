@@ -220,16 +220,23 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
   let actualCompletionTokens: number | null = null;
 
   try {
+    const openAiReasoningFamily =
+      request.provider === "openai" && /^gpt-(?:5\.6|6)(?:-|$)/i.test(request.model);
+
     const response = await client.chat.completions.create({
       model: request.model,
       messages: [
         { role: "system", content: AI_SECURITY_SYSTEM_POLICY },
         { role: "user", content: request.prompt },
       ],
-      ...(request.temperature === null || request.temperature === undefined
-        ? {}
-        : { temperature: request.temperature }),
-      max_tokens: maxTokens,
+      ...(!openAiReasoningFamily &&
+      request.temperature !== null &&
+      request.temperature !== undefined
+        ? { temperature: request.temperature }
+        : {}),
+      ...(request.provider === "openai"
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
     });
 
     responseText = response.choices[0]?.message?.content || "";
