@@ -1,81 +1,98 @@
-# HireGo Managed Hiring Audit & Implementation Report
+# HireGo Managed Hiring — Current Production Readiness Report
 
-Date: 2026-08-15
+Date: 2026-09-26
 
-## Product workflow
+## Intended operating model
 
-When an employer selects HireGo Managed Hiring, the service should run:
+HireGo Managed Hiring is a human-gated autonomous hiring workflow:
 
-1. Requirement intake and validation.
-2. Commercial agreement / MSA review and signature.
-3. HireGo agent sourcing and resume screening.
-4. Candidate shortlist and employer review.
-5. Candidate assessments and integrity/proctoring checks.
-6. Interview plan and availability collection.
-7. Online HireGo portal interview or offline in-person interview.
-8. HR, technical, operations/leadership, and final employer rounds.
-9. Candidate scorecards and final employer recommendation.
-10. Offer, joining confirmation, replacement warranty, and invoice.
+Requirement → signed commercial agreement → production job creation → talent-pool/inbound sourcing → evidence-first screening → assessment when evidence is incomplete → shortlist recommendation → interview scheduling → live interview → transcript/evidence evaluation → panel feedback → controlled round progression → final human decision → offer → candidate acceptance → joining confirmation → PPH billing.
 
-## Existing implementation found
+Selection, rejection, offer, financial actions, destructive actions, and joining confirmation remain authorized human boundaries. This is deliberate product policy, not an unfinished automation gap.
 
-### Already present
+## Implemented and wired
 
-- Managed hiring requirement wizard with six intake steps.
-- Hiring requirement, agreement, agreement event, invoice, interview, notification, and application database models.
-- Agreement and requirement repositories with Prisma plus memory fallback.
-- Admin revenue and invoice screens.
-- Resume evaluator, candidate matchmaker, interview copilot, security judge, communication coach, and other operational agents.
-- Side-effect tools for email, WhatsApp placeholder dispatch, application status, interview scheduling, and invoice generation.
-- In-app notification API.
-- Interview room signaling API.
+### Requirement and commercial boundary
 
-### Implemented in this pass
+- Managed-hiring requirement intake is authenticated, tenant-bound, and validated.
+- Critical requirement fields no longer use fabricated production fallbacks.
+- Requirement activation requires a linked signed ACTIVE commercial agreement.
+- Activation atomically creates or reconciles traceable ACTIVE JobListing records.
+- Managed jobs retain requirement ID, agreement ID, and a stable managed role key.
+- Job content is derived from authoritative requirement data rather than invented business values.
+- Job creation publishes durable outbox events.
 
-- Added a managed-hiring service plan screen at `/employer/managed-hiring/service-plan`.
-- Added the four-round default plan: HR, Technical, Operations/Leadership, Final Employer.
-- Added online/offline interview logistics guidance and notification-channel selection UI.
-- Added authenticated employer interview scheduling API with round, mode, date/time, duration, offline address/contact, and email/in-app notification creation.
-- Added a real browser media interview room with camera/microphone access, local/remote video elements, screen sharing, peer connection setup, ICE signaling, room polling, and end-session handling.
-- Mounted the WebRTC room in the employer live interview page.
-- Added room interview ID handoff to the final-feedback route.
-- Added authentication to managed-hiring requirement and contract API endpoints.
+### Sourcing and screening
 
-## Important limitations still remaining
+- Activated managed jobs automatically enter safe HireGo talent-pool discovery through the durable outbox worker.
+- Automatic sourcing only creates SOURCED relationships. It does not invite candidates, create applications, select, or reject.
+- Proactive sourcing requires recent candidate availability confirmation and respects Job Ready gates when configured.
+- Inbound applications remain supported independently.
+- Candidate matching is deterministic and evidence-first.
+- Missing profile evidence is not treated as proof of mismatch.
+- Preferred skills are supporting signals, not mandatory rejection criteria.
+- Automatic rejection is disabled.
+- Rejection requires explicit human approval and an auditable reason.
 
-### WebRTC
+### Assessment and application progression
 
-The previous component was only a visual mock. It is now connected to browser media and peer-connection signaling, and both employer and candidate room screens use the room ID. The signaling store is still process memory, so production still requires Redis or another shared signaling store, TURN servers, connection authorization, room expiry, and a two-browser validation run.
+- Universal validation and job-specific MCQ assessment gates are persisted.
+- Required assessment gates block interview scheduling until completed.
+- Assessment completion advances the application back into screening and emits a durable event.
+- Assessment results do not automatically select or reject candidates.
 
-### Notifications
+### Interview lifecycle
 
-- In-app notification persistence is available.
-- Email notification is now queued by the scheduling API.
-- WhatsApp delivery now uses a Meta Graph API adapter when `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are configured; without those values it safely reports that delivery is not configured.
-- Calendar `.ics` download, cancel, and reschedule APIs/screens are implemented. A production outbox/provider should still be used for reliable retries and calendar-provider synchronization.
+- Persisted configurable interview rounds, assigned interviewers, mandatory feedback, HOLD, proceed, and controlled reject/select boundaries are implemented.
+- Interview scheduling is tenant-authorized, conflict checked, gate aware, and advances the application to the interview stage atomically.
+- WebRTC signaling is database-backed rather than process memory.
+- Production requires TURN_URL, TURN_USERNAME, and TURN_CREDENTIAL and fails closed when they are absent.
+- Live-room start and completion timestamps are persisted for runtime evidence.
+- Candidate browser proctoring telemetry is linked to the actual interview and remains explicitly client-reported advisory evidence.
 
-### Candidate tracking
+### Live answer-based interview evaluation
 
-The managed-hiring tracker now reads the real employer candidate/application API and persists stage changes through an authenticated endpoint. It supports screening, assessment, interview, shortlisted, joined, and rejected columns, scheduling, and the joining/invoice action. A requirement-scoped pipeline relation is still recommended for multiple concurrent managed-hiring requests.
+- A trusted internal transcript callback persists the completed live interview transcript with provider/model/version/confidence provenance.
+- Finalized transcript evidence is immutable through the callback; corrections require a separate audited path.
+- A dedicated Live Interview Evaluator agent evaluates the persisted transcript against the tenant-owned job.
+- The agent uses strict bounded JSON output, protected-trait restrictions, budget/entitlement controls, lifecycle evaluation, and workflow idempotency.
+- Low-confidence transcripts are blocked from AI evaluation.
+- The result is persisted separately from interviewer feedback.
+- AI interview output is advisory only and cannot automatically select or reject a candidate.
 
-### Interview rounds
+### Communications and durable events
 
-The default four-round plan is visible and the scheduler creates real `Interview` records for an existing application. A persisted, configurable interview-plan record and automatic requirement-to-shortlist linking are still recommended for multi-request production operations.
+- Communication delivery state, retryability, provider IDs, delivered/read/failure timestamps, and idempotency are persisted.
+- Production outbox consumers are registered by an authenticated scheduled outbox worker.
+- The worker processes durable application, assessment, job, workflow, and managed-job activation events.
+- Vercel cron scheduling for the durable outbox worker is included.
 
-### Invoice automation
+### Offer, joining, and billing
 
-Invoice models, repository, admin API, and an agent tool exist. The new managed-hiring join screen/API marks the application hired and creates an idempotent invoice from the submitted commercial values. The remaining production hardening is to source fee, tax, currency, and warranty rules directly from the signed agreement and emit the same action from a domain `CANDIDATE_JOINED` event.
+- Offer draft/send/private document/candidate accept-decline lifecycle is persisted.
+- Final interview selection/rejection uses controlled approval boundaries.
+- Joining requires a persisted accepted offer.
+- Joining CTC must match the accepted offer.
+- PPH placement/invoice terms are tied to the signed commercial agreement and are idempotent.
+- Managed-hiring agreements fail early when their commercial model cannot complete the supported production billing workflow.
 
-## Recommended production sequence
+## Current code-level release status
 
-1. Add a shared Redis signaling layer, TURN credentials, room authorization, and room expiry.
-2. Create a managed-hiring candidate pipeline relation for requirement-scoped tracking.
-3. Persist configurable interview-plan rounds and event history.
-4. Connect email, in-app, WhatsApp, and calendar adapters through a retryable outbox.
-5. Source invoice terms from the signed agreement and emit a domain `CANDIDATE_JOINED` event.
-6. Expand admin queue buttons into agent assignment, shortlist approval, escalation, and warranty actions.
-7. Run two-browser online interview tests, offline scheduling tests, cancellation/reschedule tests, provider delivery tests, tenant-isolation tests, and duplicate-event tests.
+The internal Managed Hiring workflow is code-complete for the human-gated operating model described above. The application now has durable boundaries from authoritative requirement intake through joining/billing, with automated discovery and advisory AI where safe.
 
-## Release verdict
+The following items are deployment/provider evidence rather than missing internal workflow code:
 
-The managed-hiring experience now has the requested employer screens and core server flows: service-plan selection, interview scheduling, online/offline logistics, candidate room, WebRTC media, feedback, tracking, cancel/reschedule, calendar invite, joining, invoice generation, and admin operations visibility. It is **code-complete for the requested workflow but not infrastructure-complete** until shared signaling/TURN, provider credentials/outbox delivery, agreement-driven invoice terms, and full browser/E2E validation are completed.
+1. External job-board/ATS sourcing requires approved provider APIs, contracts, and credentials. HireGo talent-pool and inbound sourcing work without those providers.
+2. Email, WhatsApp, external AI, transcription, TURN, storage/scanning, Redis, and other configured providers require valid production secrets and live provider-side smoke tests.
+3. Browser proctoring telemetry is intentionally advisory and must be reviewed by a human; it is not an independently attested cheating verdict.
+4. A final production-like end-to-end run must be executed after deployment: requirement → agreement → job → sourcing/application → assessment → interview → transcript/evaluation → feedback/decision → offer → acceptance → joining → PPH billing.
+5. Production load testing is a separate release gate and should be run against the deployed environment rather than fabricated inside unit CI.
+
+## Release rule
+
+Do not claim live-provider production readiness until:
+- branch/main CI, Phase 5 verification, security checks, dependency audit, migrations, and production build are green;
+- production provider credentials are configured;
+- the end-to-end staging/production-like proof is recorded;
+- external provider failures/retries are observed safely;
+- no consequential hiring action bypasses its human approval boundary.
