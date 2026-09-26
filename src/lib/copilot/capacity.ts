@@ -273,3 +273,89 @@ export async function reserveCopilotCapacityIfActive(params: {
   if (!active) return null;
   return reserveCopilotCapacity(params);
 }
+
+
+/**
+ * Records usage for an external/paid side effect that has already happened.
+ * This deliberately permits the cycle to move beyond 100% so provider cost is
+ * never erased merely because the included capacity was exhausted while the
+ * operation was in flight. New expensive operations will still be blocked by
+ * reserveCopilotCapacity().
+ */
+export async function recordCopilotUsageAfterExecutionIfActive(params: {
+  companyId: string;
+  actionKey: string;
+  quantity: number;
+  idempotencyKey: string;
+  provider?: string;
+  model?: string;
+  reference?: CopilotUsageReference;
+  metadata?: Prisma.InputJsonValue;
+}) {
+  const quantity = safeUnits(params.quantity, "Copilot quantity");
+  if (quantity < 1) throw new ApiError("Copilot usage quantity must be at least 1.", 400);
+  if (!/^[A-Z0-9_]{2,100}$/.test(params.actionKey)) throw new ApiError("Invalid Copilot action.", 400);
+  if (params.idempotencyKey.length < 16 || params.idempotencyKey.length > 160) {
+    throw new ApiError("Invalid Copilot idempotency key.", 400);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.copilotUsageLedger.findUnique({
+      where: { idempotencyKey: params.idempotencyKey },
+    });
+    if (existing) {
+      if (
+        existing.companyId !== params.companyId ||
+        existing.actionKey !== params.actionKey ||
+        existing.quantity !== quantity
+      ) {
+        throw new ApiError("Copilot usage idempotency key was already used for a different operation.", 409);
+      }
+      return existing;
+    }
+
+    const now = new Date();
+    const subscription = await activeSubscription(tx, params.companyId, now);
+    if (!subscription) return null;
+    const cycle = await activeCycle(tx, subscription.id, now);
+    if (!cycle) return null;
+
+    await tx.$queryRaw`SELECT "id" FROM "CopilotBillingCycle" WHERE "id" = ${cycle.id} FOR UPDATE`;
+    const lockedCycle = await tx.copilotBillingCycle.findUnique({ where: { id: cycle.id } });
+    if (!lockedCycle) return null;
+
+    const rule = await tx.copilotUsageRule.findUnique({ where: { actionKey: params.actionKey } });
+    if (!rule || !rule.active) return null;
+
+    const capacityUnits = safeUnits(rule.unitsPerQuantity * quantity, "Copilot usage");
+    const estimatedCostMinor = safeUnits(rule.estimatedCostMinor * quantity, "Copilot estimated cost");
+
+    const ledger = await tx.copilotUsageLedger.create({
+      data: {
+        subscriptionId: subscription.id,
+        billingCycleId: lockedCycle.id,
+        companyId: params.companyId,
+        actionKey: params.actionKey,
+        quantity,
+        capacityUnits,
+        estimatedCostMinor,
+        costCurrency: rule.estimatedCostCurrency,
+        idempotencyKey: params.idempotencyKey,
+        jobId: params.reference?.jobId,
+        applicationId: params.reference?.applicationId,
+        candidateId: params.reference?.candidateId,
+        interviewId: params.reference?.interviewId,
+        provider: params.provider,
+        model: params.model,
+        metadata: params.metadata ?? params.reference?.metadata,
+        status: "CONSUMED",
+      },
+    });
+
+    await tx.copilotBillingCycle.update({
+      where: { id: lockedCycle.id },
+      data: { consumedCapacityUnits: { increment: capacityUnits } },
+    });
+    return ledger;
+  });
+}
