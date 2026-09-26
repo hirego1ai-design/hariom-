@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import { AiCompanyBudget, BudgetReservation } from '@prisma/client';
-import { assertAndConsumeAiEntitlement } from './AiEntitlements';
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
@@ -30,7 +29,6 @@ export class BudgetManager {
     correlationId: string;
     estimatedMinor: bigint;
     ttlSeconds?: number;
-    billableAgentId?: string;
   }): Promise<BudgetReservation> {
     const { companyId, executionId, correlationId, estimatedMinor, ttlSeconds = 3600 } = params;
     if (estimatedMinor < BigInt(0) || !Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
@@ -59,11 +57,8 @@ export class BudgetManager {
           }
         }
 
-        // Debit and reservation share a transaction. Rejected budgets and
-        // duplicate execution IDs must never consume an additional AI credit.
-        if (params.billableAgentId) {
-          await assertAndConsumeAiEntitlement(companyId, params.billableAgentId, tx);
-        }
+        // This budget is HireGo's internal provider-spend control. Customer
+        // subscription quotas are handled separately and are never debited here.
 
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
@@ -129,7 +124,7 @@ export class BudgetManager {
       });
   }
 
-  public static async releaseBudget(executionId: string, refundAiCredit = false): Promise<void> {
+  public static async releaseBudget(executionId: string): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const reservations = await tx.$queryRaw<BudgetReservation[]>`
         SELECT * FROM "BudgetReservation" WHERE "executionId" = ${executionId} AND "status" = 'HELD' FOR UPDATE
@@ -161,14 +156,6 @@ export class BudgetManager {
           });
       }
 
-      // Match reservation's budget -> credits lock order. Only the execution
-      // owner requests this before execution; the HELD lock prevents repeats.
-      if (refundAiCredit) {
-        await tx.companyCredits.update({
-          where: { companyId: reservation.companyId },
-          data: { aiAgentCreditsLeft: { increment: 1 } },
-        });
-      }
     });
   }
 
