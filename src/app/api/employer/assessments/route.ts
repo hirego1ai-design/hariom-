@@ -4,6 +4,7 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { z } from "zod";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 
 const createAssessmentSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
       if (job.companyId !== companyId) {
         throw new ApiError("Forbidden: Job listing does not belong to your company", 403);
       }
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, companyId!, ["ASSESSMENTS"], "Your current plan does not include assessment tools.")
+      );
     } else {
       companyId = job.companyId;
     }
@@ -76,6 +80,9 @@ export async function GET(request: Request) {
 
     if (session.role !== "ADMIN") {
       const company = await getSessionCompany(session);
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, company.id, ["ASSESSMENTS"], "Your current plan does not include assessment tools.")
+      );
       whereClause = {
         jobListing: {
           companyId: company.id,
