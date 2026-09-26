@@ -40,10 +40,8 @@ function assertSameCheckout(order: PaymentOrder, input: {
     throw new ApiError("Idempotency key was already used with a different payment provider.", 409);
   }
   const snap = parsePurchasedPlanSnapshot(order.planSnapshot);
-  if (Boolean(input.addCopilot) !== Boolean(snap.copilotIncluded && snap.copilotJobLimit > 0 && !snap.featuresAllowed.includes("COPILOT_PLAN_NATIVE"))) {
-    // Native Co-Pilot plans do not count as checkout add-ons.
-    const nativePlan = snap.featuresAllowed.includes("COPILOT_PLAN_NATIVE");
-    if (!nativePlan) throw new ApiError("Idempotency key was already used with different Co-Pilot add-on terms.", 409);
+  if (Boolean(input.addCopilot) !== snap.featuresAllowed.includes("COPILOT_ADDON")) {
+    throw new ApiError("Idempotency key was already used with different Co-Pilot add-on terms.", 409);
   }
 }
 
@@ -226,7 +224,7 @@ export async function POST(req: NextRequest) {
     }
     const effectivePlan: CheckoutPlan = {
       ...plan,
-      featuresAllowed: addCopilot ? [...new Set([...plan.featuresAllowed, "COPILOT"])] : plan.featuresAllowed,
+      featuresAllowed: addCopilot ? [...new Set([...plan.featuresAllowed, "COPILOT", "COPILOT_ADDON"])] : plan.featuresAllowed,
       copilotIncluded: plan.copilotIncluded || addCopilot,
       copilotJobLimit: plan.copilotJobLimit + (addCopilot ? (copilotConfig?.addonJobLimit ?? 0) : 0),
     };
