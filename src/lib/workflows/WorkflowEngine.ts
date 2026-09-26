@@ -232,7 +232,7 @@ export class WorkflowEngine {
     const workflow = await prisma.workflowInstance.findUnique({
       where: { id: params.workflowId },
       select: { id: true, companyId: true, workflowType: true, status: true, currentStep: true, failureCount: true, correlationId: true, createdAt: true, updatedAt: true,
-        approvals: { where: { decision: 'PENDING', revokedAt: null }, select: { id: true, stepName: true, actionType: true, requestedAt: true, expiresAt: true } },
+        approvals: { where: { decision: 'PENDING', revokedAt: null, expiresAt: { gt: new Date() } }, select: { id: true, stepName: true, actionType: true, requestedAt: true, expiresAt: true } },
         steps: { orderBy: { createdAt: 'desc' }, take: 10, select: { stepName: true, attemptNumber: true, status: true, sideEffectDone: true, errorMessage: true, createdAt: true } } },
     });
     if (!workflow) throw new Error('Workflow not found');
@@ -313,9 +313,6 @@ export class WorkflowEngine {
       // still pending. Rejection remains terminal for the workflow.
       let nextStatus: 'RUNNING' | 'PAUSED_FOR_APPROVAL' | 'CANCELLED' = 'CANCELLED';
       if (params.decision === 'APPROVED') {
-        const remainingPending = await tx.workflowApproval.count({
-          where: { workflowInstanceId: approval.workflowInstanceId, decision: 'PENDING' },
-        });
         // Approval is authorization, not execution. Keep the workflow paused
         // until the exact approved action has been durably consumed/executed.
         nextStatus = 'PAUSED_FOR_APPROVAL';
