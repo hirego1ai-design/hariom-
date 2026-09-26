@@ -91,7 +91,11 @@ export async function GET(req: NextRequest) {
       room: {
         roomId,
         interviewId: interview.id,
-        status: interview.status === "COMPLETED" ? "COMPLETED" : "ACTIVE",
+        status: interview.status === "COMPLETED"
+          ? "COMPLETED"
+          : interview.status === "CANCELLED"
+            ? "CLOSED"
+            : "ACTIVE",
         participantCount: participantIds.size,
         participantId: session.id,
         authorizedParticipantIds,
@@ -123,7 +127,9 @@ export async function POST(req: NextRequest) {
       });
       if (blocking > 0) throw new ApiError("Complete your pending mandatory interview feedback before joining another interview.", 409);
     }
-    if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
+    if (interview.status === "COMPLETED" || interview.status === "CANCELLED") {
+      throw new ApiError("Interview room is closed", 409);
+    }
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);

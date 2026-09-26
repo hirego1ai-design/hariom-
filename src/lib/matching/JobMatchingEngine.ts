@@ -48,7 +48,8 @@ export function computeMatchScore(candidate: any, job: any) {
   
   const candSkillsLower = candSkills.map((s: string) => s.toLowerCase());
   
-  if (jobReqs.length > 0) {
+  const hasSkillRequirements = jobReqs.length > 0;
+  if (hasSkillRequirements) {
     for (const req of jobReqs) {
       if (candSkillsLower.includes(req.toLowerCase())) {
         matchingSkills.push(req);
@@ -59,8 +60,6 @@ export function computeMatchScore(candidate: any, job: any) {
       }
     }
     skillScore = (matchingSkills.length / jobReqs.length) * 100;
-  } else {
-    skillScore = 100;
   }
   
   let requiredExp = 0;
@@ -69,10 +68,9 @@ export function computeMatchScore(candidate: any, job: any) {
     requiredExp = parseInt(expMatch[1], 10);
   }
   
+  const hasExperienceRequirement = requiredExp > 0;
   let experienceScore = 0;
-  if (requiredExp === 0) {
-    experienceScore = 100;
-  } else {
+  if (hasExperienceRequirement) {
     const candExp = candidate.experienceYears || 0;
     if (candExp >= requiredExp) {
       experienceScore = 100;
@@ -81,16 +79,17 @@ export function computeMatchScore(candidate: any, job: any) {
     }
   }
   
-  // No education requirement is stored for this job, so it is not scored.
+  // Only dimensions with an explicit job requirement are scored. Missing job
+  // evidence must never become a perfect compatibility signal.
   const educationScore = null;
   const weightedDimensions = [
-    { score: skillScore, weight: Math.max(0, config.weightSkills) },
-    { score: experienceScore, weight: Math.max(0, config.weightExperience) },
+    ...(hasSkillRequirements ? [{ score: skillScore, weight: Math.max(0, config.weightSkills) }] : []),
+    ...(hasExperienceRequirement ? [{ score: experienceScore, weight: Math.max(0, config.weightExperience) }] : []),
   ].filter((dimension) => dimension.weight > 0);
   const totalWeight = weightedDimensions.reduce((total, dimension) => total + dimension.weight, 0);
-  const rawScore = (
-    weightedDimensions.reduce((total, dimension) => total + dimension.score * dimension.weight, 0)
-  ) / (totalWeight || 1);
+  const rawScore = totalWeight > 0
+    ? weightedDimensions.reduce((total, dimension) => total + dimension.score * dimension.weight, 0) / totalWeight
+    : 0;
   
   const matchScore = Math.round(rawScore);
   
@@ -102,7 +101,8 @@ export function computeMatchScore(candidate: any, job: any) {
     missingSkills,
     verificationCoverage: jobReqs.length > 0
       ? Math.round((verifiedMatchingSkills.length / jobReqs.length) * 100)
-      : 100,
+      : 0,
+    evidenceAvailable: hasSkillRequirements || hasExperienceRequirement,
     breakdown: {
       skillScore: Math.round(skillScore),
       experienceScore: Math.round(experienceScore),
