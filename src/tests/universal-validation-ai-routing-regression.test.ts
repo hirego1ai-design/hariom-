@@ -144,3 +144,11 @@ test("OpenAI reasoning-family Chat Completions uses current completion-token par
   assert.ok(dispatcher.includes("openAiReasoningFamily"));
   assert.ok(dispatcher.includes("max_tokens: maxTokens"), "OpenAI-compatible non-OpenAI providers retain max_tokens");
 });
+
+
+test("production AI accounting fails closed before provider I/O", () => {
+  const dispatcher = read("src/utils/aiRouter.ts");
+  const accountingCheck = dispatcher.indexOf('requiredPositiveNumber("AI_BUDGET_USD_TO_INR", 83)');
+  const providerClient = dispatcher.indexOf("const client = createProviderClient");
+  assert.ok(accountingCheck >= 0 && providerClient > accountingCheck, "currency accounting must be validated before creating/provider calling the client");
+});
