@@ -169,7 +169,7 @@ function candidateSkillEvidence(candidate: any) {
   ];
 
   const all = new Set(
-    names.map(normalizeSkillName).filter((name): name is string => Boolean(name)),
+    names.map(normalizeSkillName).filter((name: string) => Boolean(name)),
   );
   const now = Date.now();
   const verified = new Set(
