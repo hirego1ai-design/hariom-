@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
+import { consumeJobPublicationEntitlement } from "@/lib/subscriptionAccess";
 
 const updateJobSchema = z.object({
   title: z.string().min(3).optional(),
@@ -101,17 +102,24 @@ export async function PUT(
 
     const updatedJob = isPublishingDraft
       ? await prisma.$transaction(async (tx) => {
-          if (session.role !== "ADMIN") {
-            const debited = await tx.companyCredits.updateMany({
-              where: { companyId: companyId!, jobPostsLeft: { gt: 0 } },
-              data: { jobPostsLeft: { decrement: 1 } },
-            });
-            if (debited.count !== 1) {
-              throw new ApiError("Insufficient job posting credits. Please subscribe to a plan.", 402);
-            }
-          }
+          const publication = session.role !== "ADMIN"
+            ? await consumeJobPublicationEntitlement(tx, companyId!)
+            : null;
 
-          const updated = await tx.jobListing.update({ where: { id }, data: updateData });
+          const updated = await tx.jobListing.update({
+            where: { id },
+            data: {
+              ...updateData,
+              ...(publication ? {
+                publishedAt: publication.publishedAt,
+                expiresAt: publication.expiresAt,
+                copilotEnabled: publication.copilotEnabled,
+                copilotActivatedAt: publication.copilotEnabled ? publication.publishedAt : null,
+              } : {
+                publishedAt: new Date(),
+              }),
+            },
+          });
           await OutboxPublisher.publish({
             eventType: "JOB_LISTING_CREATED",
             payload: {
