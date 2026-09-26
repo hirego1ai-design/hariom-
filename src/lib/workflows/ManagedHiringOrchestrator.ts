@@ -109,7 +109,7 @@ export async function resolveManagedHiringNextAction(
   };
 
   if (
-    !["SHORTLISTED", "INTERVIEW", "OFFERED"].includes(application.status) &&
+    !["SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED", "SELECTED", "OFFERED"].includes(application.status) &&
     screening.disposition === "ASSESSMENT_RECOMMENDED"
   ) {
     return {
@@ -122,7 +122,7 @@ export async function resolveManagedHiringNextAction(
   }
 
   if (
-    !["SHORTLISTED", "INTERVIEW", "OFFERED"].includes(application.status) &&
+    !["SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED", "SELECTED", "OFFERED"].includes(application.status) &&
     screening.disposition === "HUMAN_REVIEW_REQUIRED"
   ) {
     return {
@@ -135,7 +135,7 @@ export async function resolveManagedHiringNextAction(
   }
 
   if (
-    !["SHORTLISTED", "INTERVIEW", "OFFERED"].includes(application.status) &&
+    !["SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEW_COMPLETED", "SELECTED", "OFFERED"].includes(application.status) &&
     screening.disposition === "SHORTLIST_RECOMMENDED"
   ) {
     return {
@@ -171,7 +171,7 @@ export async function resolveManagedHiringNextAction(
         reason: `Interview round ${round.sequence} (${round.name}) has not been completed.`,
       };
     }
-    if (["IN_PROGRESS", "AWAITING_FEEDBACK", "ROUND_COMPLETE"].includes(progress.status)) {
+    if (["LIVE", "ENDED_PENDING_FEEDBACK", "ROUND_COMPLETE"].includes(progress.status)) {
       return {
         ...screenedBase,
         nextAction:
