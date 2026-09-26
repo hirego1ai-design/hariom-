@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 export async function GET(req: NextRequest) {
   try {
+    await reconcileExpiredJobs(prisma);
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q") || "";
     const location = searchParams.get("location") || "";
