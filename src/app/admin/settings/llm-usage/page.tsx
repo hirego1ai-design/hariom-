@@ -174,7 +174,7 @@ export default function AdminLlmUsagePage() {
                 <h2 className="text-xl font-bold">Provider usage</h2>
                 <p className="mt-1 text-xs text-text-muted">Configured status is server-derived. It does not mean every model under that provider is enabled.</p>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {data.providers.map((provider) => (
                   <article key={provider.provider} className="rounded-2xl border border-white/10 bg-[#121215] p-4">
                     <div className="flex items-center justify-between gap-2">
