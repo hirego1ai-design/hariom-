@@ -25,6 +25,16 @@ type Plan = {
   regionalPrices: RegionalPrice[];
 };
 
+type CapacityOffer = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  capacityUnits: number;
+  isArchived: boolean;
+  regionalPrices: RegionalPrice[];
+};
+
 type UsageRule = {
   actionKey: string;
   displayName: string;
@@ -39,6 +49,7 @@ type UsageRule = {
 export default function AdminCopilotCommercePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [rules, setRules] = useState<UsageRule[]>([]);
+  const [capacityOffers, setCapacityOffers] = useState<CapacityOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
@@ -47,11 +58,17 @@ export default function AdminCopilotCommercePage() {
     setLoading(true);
     setMessage("");
     try {
-      const res = await fetch("/api/admin/copilot/commerce", { cache: "no-store" });
+      const [res, offersRes] = await Promise.all([
+        fetch("/api/admin/copilot/commerce", { cache: "no-store" }),
+        fetch("/api/admin/copilot/capacity-offers", { cache: "no-store" }),
+      ]);
       const data = await res.json();
+      const offersData = await offersRes.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Unable to load Copilot commerce.");
+      if (!offersRes.ok || !offersData.success) throw new Error(offersData.error || "Unable to load Copilot capacity offers.");
       setPlans(data.plans || []);
       setRules(data.usageRules || []);
+      setCapacityOffers(offersData.offers || []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load Copilot commerce.");
     } finally {
@@ -60,6 +77,49 @@ export default function AdminCopilotCommercePage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function createCapacityOffer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const countries = String(form.get("countries") || "")
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean);
+    const payload = {
+      code: String(form.get("code") || "").trim().toUpperCase(),
+      name: String(form.get("name") || "").trim(),
+      description: String(form.get("description") || "").trim(),
+      capacityUnits: Number(form.get("capacityUnits")),
+      prices: [{
+        regionCode: String(form.get("regionCode") || "").trim().toUpperCase(),
+        countries,
+        currency: String(form.get("currency") || "").trim().toUpperCase(),
+        amountMinor: Number(form.get("amountMinor")),
+        taxMode: String(form.get("taxMode") || "TAX_EXCLUSIVE"),
+        paymentRoute: String(form.get("paymentRoute") || "STRIPE"),
+        isActive: true,
+      }],
+    };
+
+    setSaving("create-capacity-offer");
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/copilot/capacity-offers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Unable to create capacity offer.");
+      event.currentTarget.reset();
+      setMessage("Capacity offer created.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to create capacity offer.");
+    } finally {
+      setSaving("");
+    }
+  }
 
   async function patch(payload: Record<string, unknown>, key: string) {
     setSaving(key);
@@ -202,6 +262,72 @@ export default function AdminCopilotCommercePage() {
                 </div>
               </article>
             ))}
+          </section>
+
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-xl font-extrabold text-white">Capacity add-on offers</h2>
+              <p className="mt-1 text-xs text-[#94A3B8]">
+                Create customer-facing add-capacity packages while keeping the actual internal capacity units visible only to admins.
+              </p>
+            </div>
+
+            <form onSubmit={createCapacityOffer} className="grid gap-3 rounded-[24px] border border-white/10 bg-[#16161B] p-5 md:grid-cols-2 lg:grid-cols-4">
+              <input name="code" required placeholder="Code, e.g. BOOST_SMALL" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <input name="name" required placeholder="Customer name, e.g. Small Boost" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <input name="description" required placeholder="Customer-facing description" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white lg:col-span-2" />
+              <input name="capacityUnits" required type="number" min={1} placeholder="Internal capacity units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <input name="regionCode" required placeholder="Region, e.g. IN" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
+              <input name="countries" required placeholder="Countries, e.g. IN or DE,FR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
+              <input name="currency" required maxLength={3} placeholder="INR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
+              <input name="amountMinor" required type="number" min={1} placeholder="Amount in minor units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <select name="taxMode" defaultValue="TAX_EXCLUSIVE" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+                <option value="TAX_EXCLUSIVE">Tax exclusive</option>
+                <option value="TAX_INCLUSIVE">Tax inclusive</option>
+              </select>
+              <select name="paymentRoute" defaultValue="STRIPE" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+                <option value="STRIPE">Stripe</option>
+                <option value="PAYU">PayU</option>
+              </select>
+              <button
+                disabled={saving === "create-capacity-offer"}
+                className="rounded-xl bg-[#448AFF] px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
+              >
+                Create offer
+              </button>
+            </form>
+
+            {capacityOffers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-5 text-xs text-[#94A3B8]">
+                No add-capacity offers configured. Employers will not see an Add Capacity purchase option until an offer is created.
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {capacityOffers.map((offer) => (
+                  <article key={offer.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#7FB0FF]">{offer.code}</p>
+                        <h3 className="mt-1 text-lg font-extrabold text-white">{offer.name}</h3>
+                        <p className="mt-2 text-xs text-[#94A3B8]">{offer.description}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+                        <p className="text-[10px] uppercase text-[#64748B]">Internal units</p>
+                        <p className="font-mono text-lg font-bold text-white">{offer.capacityUnits}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {offer.regionalPrices.map((price) => (
+                        <div key={price.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
+                          <span className="font-bold text-[#D5DBE5]">{price.regionCode} · {price.currency}</span>
+                          <span className="text-[#94A3B8]">{price.amountMinor} minor units · {price.paymentRoute}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="space-y-4">
