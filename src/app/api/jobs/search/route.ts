@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib";
 import { prisma } from "@/lib/prisma";
+import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 export async function GET(req: NextRequest) {
   try {
+    await reconcileExpiredJobs(prisma);
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q") || "";
     const location = searchParams.get("location") || "";
@@ -13,15 +15,19 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit")) || 10));
     const skip = (page - 1) * limit;
 
+    const now = new Date();
     const where: any = {
       status: "ACTIVE",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     };
 
       if (query) {
-        where.OR = [
-          { title: { contains: query, mode: "insensitive" } },
-          { description: { contains: query, mode: "insensitive" } },
-        ];
+        where.AND = [{
+          OR: [
+            { title: { contains: query, mode: "insensitive" } },
+            { description: { contains: query, mode: "insensitive" } },
+          ],
+        }];
       }
 
       if (location) {
@@ -41,7 +47,7 @@ export async function GET(req: NextRequest) {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
         include: {
           company: {
             select: {

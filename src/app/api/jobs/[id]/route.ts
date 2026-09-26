@@ -6,7 +6,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     const job = await prisma.jobListing.findFirst({
-      where: { id, status: "ACTIVE" },
+      where: {
+        id,
+        status: "ACTIVE",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
       include: {
         company: {
           select: { id: true, name: true, logoUrl: true, description: true, location: true, website: true },

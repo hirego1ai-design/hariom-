@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
+import { getJobPublicationTerms } from "@/lib/jobPlanEntitlements";
 
 const updateJobSchema = z.object({
   title: z.string().min(3).optional(),
@@ -111,7 +112,11 @@ export async function PUT(
             }
           }
 
-          const updated = await tx.jobListing.update({ where: { id }, data: updateData });
+          const terms = await getJobPublicationTerms(tx, oldJob.companyId);
+          const updated = await tx.jobListing.update({
+            where: { id },
+            data: { ...updateData, publishedAt: terms.publishedAt, expiresAt: terms.expiresAt },
+          });
           await OutboxPublisher.publish({
             eventType: "JOB_LISTING_CREATED",
             payload: {

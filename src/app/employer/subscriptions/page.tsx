@@ -1,593 +1,348 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+
+type Plan = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  jobPostsQuota: number;
+  jobValidityDays: number;
+  marketingBenefits: string[];
+  copilotIncluded: boolean;
+  copilotJobLimit: number;
+  isFeatured: boolean;
+  badgeText?: string | null;
+  displayOrder: number;
+  eligible?: boolean;
+  eligibilityReason?: string | null;
+};
+
+type CopilotConfig = {
+  enabled: boolean;
+  addonPrice: number;
+  currency: string;
+  addonJobLimit: number;
+  title: string;
+  description: string;
+  badgeText?: string | null;
+  benefits: string[];
+};
+
 export default function EmployerSubscriptionsStorePage() {
-  const router = useRouter();
-  const formatMoney = (amount: number, currency = "INR") =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(amount);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [credits, setCredits] = useState<any | null>(null);
-  const [activeSub, setActiveSub] = useState<any | null>(null);
-  const [activePlan, setActivePlan] = useState<any | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [credits, setCredits] = useState<any>(null);
+  const [activePlan, setActivePlan] = useState<any>(null);
+  const [subscriptionState, setSubscriptionState] = useState<any>(null);
+  const [gatewayConfig, setGatewayConfig] = useState<any>(null);
+  const [copilotConfig, setCopilotConfig] = useState<CopilotConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [checkoutPlan, setCheckoutPlan] = useState<any | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+  const [addCopilot, setAddCopilot] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState("STRIPE");
+  const [promoCode, setPromoCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const checkoutRequestKey = useRef<string | null>(null);
-  const checkoutInFlight = useRef(false);
-  const [gatewayConfig, setGatewayConfig] = useState<any>({
-    mode: "AUTO",
-    primaryGateway: "STRIPE",
-    allowEmployerSelection: true,
-    gatewaysStatus: {
-      STRIPE: "HEALTHY",
-      PAYU: "HEALTHY",
-    },
-  });
-  const [selectedGateway, setSelectedGateway] = useState<string>("STRIPE");
 
-  // Promo Code state
-  const [couponCode, setCouponCode] = useState("");
-  const [promoDetails, setPromoDetails] = useState<any | null>(null);
-  const [promoError, setPromoError] = useState<string | null>(null);
-
-  const [subscriptionState, setSubscriptionState] = useState<any | null>(null);
-  const [quotas, setQuotas] = useState<any | null>(null);
-
-  async function fetchBillingData() {
+  async function load() {
     try {
-      const res = await fetch("/api/employer/subscribe");
-      const data = await res.json();
-      
-      if (data.success) {
-        setPlans(data.plans || []);
-        setCredits(data.credits || null);
-        setActiveSub(data.activeSubscription || null);
-        setActivePlan(data.activePlan || null);
-        setSubscriptionState(data.subscriptionState || null);
-        setQuotas(data.quotas || null);
-      }
-      if (data.success) {
-        setServices(data.services || []);
-      }
-      if (data.success && data.gatewayConfig) {
-        setGatewayConfig(data.gatewayConfig);
-        setSelectedGateway(data.gatewayConfig.primaryGateway);
-      }
-    } catch (err) {
-      console.error("Failed to fetch employer subscription info", err);
+      setMessage(null);
+      const response = await fetch("/api/employer/subscribe", { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to load hiring plans.");
+      setPlans((body.plans || []).sort((a: Plan, b: Plan) => a.displayOrder - b.displayOrder));
+      setCredits(body.credits || null);
+      setActivePlan(body.activePlan || null);
+      setSubscriptionState(body.subscriptionState || null);
+      setGatewayConfig(body.gatewayConfig || null);
+      setCopilotConfig(body.copilotConfig || null);
+      setSelectedGateway(body.gatewayConfig?.primaryGateway || "STRIPE");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Unable to load hiring plans.");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    fetchBillingData();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
-  const handleApplyCoupon = async () => {
-    if (!couponCode.trim() || !checkoutPlan) return;
-    setPromoError(null);
-    setPromoDetails(null);
+  const money = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 
-    try {
-      const res = await fetch(
-        `/api/employer/promo/validate?code=${couponCode.toUpperCase()}&planId=${checkoutPlan.id}`
-      );
-      const data = await res.json();
-      if (data.success) {
-        setPromoDetails(data);
-      } else {
-        setPromoError(data.error || "Invalid coupon code");
-      }
-    } catch (err) {
-      console.error(err);
-      setPromoError("Failed to validate promo code");
+  const checkoutTotal = useMemo(() => {
+    if (!checkoutPlan) return 0;
+    return checkoutPlan.price + (addCopilot && copilotConfig ? copilotConfig.addonPrice : 0);
+  }, [checkoutPlan, addCopilot, copilotConfig]);
+
+  async function choosePlan(plan: Plan) {
+    setMessage(null);
+    if (plan.eligible === false) {
+      setMessage(plan.eligibilityReason || "This plan is not available for your account.");
+      return;
     }
-  };
+    if (plan.price === 0) {
+      setSubmitting(true);
+      try {
+        const response = await fetch("/api/employer/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId: plan.id }),
+        });
+        const body = await response.json();
+        if (!response.ok || !body.success) throw new Error(body.error || "Unable to activate free plan.");
+        setMessage("Free plan activated successfully.");
+        await load();
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : "Unable to activate free plan.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    checkoutRequestKey.current = crypto.randomUUID();
+    setAddCopilot(false);
+    setPromoCode("");
+    setCheckoutPlan(plan);
+  }
 
-  const handleSubscribe = async () => {
-    if (!checkoutPlan || checkoutInFlight.current) return;
-    checkoutInFlight.current = true;
-    checkoutRequestKey.current ||= crypto.randomUUID();
+  async function checkout() {
+    if (!checkoutPlan || submitting) return;
     setSubmitting(true);
-
+    setMessage(null);
     try {
-      const res = await fetch("/api/payments/checkout", {
+      const response = await fetch("/api/payments/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": checkoutRequestKey.current },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": checkoutRequestKey.current || crypto.randomUUID(),
+        },
         body: JSON.stringify({
           planId: checkoutPlan.id,
-          promoCode: couponCode ? couponCode.trim().toUpperCase() : undefined,
-          paymentMethod: gatewayConfig.allowEmployerSelection ? selectedGateway : undefined,
+          paymentMethod: gatewayConfig?.allowEmployerSelection ? selectedGateway : undefined,
+          promoCode: promoCode.trim() || undefined,
+          addCopilot,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.order) {
-        throw new Error(data.error || "Failed to initiate payment gateway checkout");
+      const body = await response.json();
+      if (!response.ok || !body.success || !body.order) throw new Error(body.error || "Unable to start payment.");
+      const order = body.order;
+      if (order.gateway === "PAYU" && order.checkoutParams && order.checkoutUrl) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = order.checkoutUrl;
+        Object.entries(order.checkoutParams).forEach(([key, value]) => {
+          if (value == null) return;
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = key;
+          input.value = String(value);
+          form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+        return;
       }
-
-      const order = data.order;
-
-      if (order.gateway === "STRIPE") {
-        if (!order.checkoutUrl || !order.checkoutUrl.startsWith("http")) {
-          throw new Error("Stripe checkout failed to generate an authoritative session URL.");
-        }
-        window.location.href = order.checkoutUrl;
-      } else if (order.gateway === "PAYU") {
-        if (!order.checkoutUrl || !order.checkoutUrl.startsWith("http")) {
-          throw new Error("PayU checkout failed to generate an authoritative gateway initiation URL.");
-        }
-        if (order.checkoutParams && typeof order.checkoutParams === "object") {
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = order.checkoutUrl;
-          Object.entries(order.checkoutParams).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              const input = document.createElement("input");
-              input.type = "hidden";
-              input.name = key;
-              input.value = String(value);
-              form.appendChild(input);
-            }
-          });
-          document.body.appendChild(form);
-          form.submit();
-        } else {
-          window.location.href = order.checkoutUrl;
-        }
-      } else {
-        throw new Error("This payment provider is not supported by this checkout screen.");
-      }
-    } catch (err: any) {
-      console.error("Checkout initiation error:", err);
-      alert("Checkout error: " + err.message);
-    } finally {
-      checkoutInFlight.current = false;
+      if (!order.checkoutUrl) throw new Error("Payment provider did not return a checkout URL.");
+      window.location.href = order.checkoutUrl;
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Unable to start payment.");
       setSubmitting(false);
     }
-  };
-
-  const trialPlan = plans.find(p => p.price === 0 && !p.isArchived);
-  const paidPlans = plans.filter(p => p.price > 0 && !p.isArchived);
+  }
 
   return (
-    <div className="max-w-6xl mx-auto py-6 font-[family-name:var(--font-body)]">
-      {/* Header */}
-      <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="material-symbols-outlined text-[#448AFF] text-3xl">credit_score</span>
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-extrabold tracking-tight text-white">
-              Self-Service Subscription Hub
+    <div className="min-h-screen bg-[#080b18] px-4 py-8 text-white md:px-8">
+      <div className="mx-auto max-w-[1480px]">
+        <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[radial-gradient(circle_at_10%_15%,rgba(105,70,255,.26),transparent_30%),radial-gradient(circle_at_86%_12%,rgba(58,187,255,.24),transparent_28%),linear-gradient(135deg,#111937,#091023_55%,#101532)] px-6 py-10 shadow-[0_35px_90px_rgba(0,0,0,.45)] md:px-10">
+          <div className="pointer-events-none absolute -left-20 top-24 h-48 w-48 rounded-full bg-violet-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute right-10 top-10 h-44 w-44 rounded-full bg-cyan-400/15 blur-3xl" />
+          <div className="relative text-center">
+            <span className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.22em] text-cyan-200">
+              Simple pricing. Powerful hiring.
+            </span>
+            <h1 className="mx-auto mt-5 max-w-4xl text-4xl font-black tracking-[-.04em] md:text-6xl">
+              Choose the right <span className="bg-gradient-to-r from-cyan-300 to-violet-400 bg-clip-text text-transparent">hiring plan</span>
             </h1>
-          </div>
-          <p className="text-[#CBD5E1] text-sm max-w-xl">
-            Choose a prepaid subscription plan for self-service hiring. Verified payment activates the plan period and its included usage credits.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/employer/revenue-and-billing-management"
-            className="px-5 py-2.5 rounded-full border border-white/10 bg-white/5 text-xs font-bold flex items-center gap-2 text-white hover:bg-white/10 transition-all"
-          >
-            <span className="material-symbols-outlined text-[16px]">receipt_long</span>
-            Revenue & Billing
-          </Link>
-          <button
-            onClick={() => router.push("/employer/employer-subscription-and-plans")}
-            className="btn-3d-blue px-5 py-2.5 rounded-full text-xs font-bold flex items-center gap-2 text-white shadow-[var(--shadow-btn-blue)] transition-all hover:scale-105"
-          >
-            <span className="material-symbols-outlined text-[16px]">handshake</span>
-            Managed Hiring (SLA Contracts)
-          </button>
-        </div>
-      </header>
-
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
-        </div>
-      ) : (
-        <div className="space-y-10">
-          
-          {/* Active Quota Widget Grid */}
-          <div className="glass-card p-6 bg-[#16161B] border border-white/10 rounded-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-[#448AFF]/5 rounded-full blur-[120px] -mr-40 -mt-40"></div>
-            
-            <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
-              <div>
-                <p className="text-xs text-[#94A3B8] font-bold uppercase tracking-wider mb-1">Current Active Plan</p>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-[family-name:var(--font-display)] font-extrabold text-white">
-                    {activePlan ? activePlan.name : "No active subscription"}
-                  </h2>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-extrabold tracking-wider border ${
-                    subscriptionState?.status === "ACTIVE"
-                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
-                      : subscriptionState?.status === "EXPIRING"
-                      ? "bg-amber-500/15 text-amber-400 border-amber-500/20"
-                      : subscriptionState?.status === "EXPIRED"
-                      ? "bg-red-500/15 text-red-400 border-red-500/20"
-                      : "bg-white/5 text-[#94A3B8] border-white/10"
-                  }`}>
-                    {subscriptionState?.status || "INACTIVE"}
-                  </span>
-                </div>
-                {activePlan && (
-                  <p className="text-xs text-[#CBD5E1] mt-1 font-mono">
-                    {formatMoney(activePlan.price, activePlan.currency)} / {activePlan.validityMonths || 1} Month(s)
-                  </p>
-                )}
-              </div>
-
-              {activeSub && (
-                <div className="text-right text-xs text-[#CBD5E1]">
-                  <p className="text-[#94A3B8] mb-1">Subscription Expiry</p>
-                  <p className="font-bold text-white font-mono">{new Date(activeSub.endDate).toLocaleDateString()}</p>
-                  <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
-                    {subscriptionState?.daysRemaining ?? 0} Days Remaining
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {subscriptionState?.creditAccess === "LOCKED" && (
-              <div className="relative z-10 mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-                Remaining credits are locked because there is no active subscription period. Purchase or renew a plan to use subscription features.
-              </div>
-            )}
-
-            {/* Configured Credit Balances */}
-            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-white/5">
-              <div className="bg-white/3 p-4 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">Job Posts</span>
-                  <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.jobPostsLeft ?? 0} / {quotas?.jobPosts?.total ?? 0}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
-                  <div
-                    className="h-full bg-red rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.jobPostsLeft ?? 0) / Math.max(1, quotas?.jobPosts?.total ?? 0)) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white/3 p-4 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">Candidate Unlocks</span>
-                  <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.resumeUnlocksLeft ?? 0} / {quotas?.resumeUnlocks?.total ?? 0}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
-                  <div
-                    className="h-full bg-blue rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.resumeUnlocksLeft ?? 0) / Math.max(1, quotas?.resumeUnlocks?.total ?? 0)) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white/3 p-4 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">AI Interviews</span>
-                  <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.aiInterviewsLeft ?? 0} / {quotas?.aiInterviews?.total ?? 0}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
-                  <div
-                    className="h-full bg-purple rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.aiInterviewsLeft ?? 0) / Math.max(1, quotas?.aiInterviews?.total ?? 0)) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+            <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
+              AI-assisted hiring tools for employers, from job creation and matching to assessments, virtual interviews and structured feedback.
+            </p>
           </div>
 
-          {/* Zero-price plans are displayed in the catalog but are not directly activated here; activation must use an audited server workflow. */}
+          {message ? (
+            <div className="relative mx-auto mt-6 max-w-3xl rounded-2xl border border-white/10 bg-white/[.07] px-4 py-3 text-center text-sm text-slate-200">
+              {message}
+            </div>
+          ) : null}
 
-          {/* Pricing Comparison Grid */}
-          <div>
-            <h3 className="font-[family-name:var(--font-display)] text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#FF5252]">storefront</span>
-              Startup Subscriptions Store
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {paidPlans.map((p) => {
-                const isCurrent = activeSub?.planId === p.id;
-                
-                // Color tags based on startup tier names
-                let accentColor = "from-[#448AFF] to-[#1565C0]"; // Blue default
-                let textColor = "text-[#448AFF]";
-                let borderColor = "border-white/10";
-                
-                if (p.name.toLowerCase().includes("bootstrap")) {
-                  accentColor = "from-[#90A4AE] to-[#455A64]"; // Gray
-                  textColor = "text-[#90A4AE]";
-                } else if (p.name.toLowerCase().includes("growth") || p.name.toLowerCase().includes("hyper")) {
-                  accentColor = "from-[#FF5252] to-[#D32F2F]"; // Red/Coral
-                  textColor = "text-[#FF5252]";
-                  borderColor = "border-[#FF5252]/30";
-                } else if (p.name.toLowerCase().includes("unicorn")) {
-                  accentColor = "from-[#8E24AA] to-[#5E35B1]"; // Purple/Gold
-                  textColor = "text-purple-400";
-                  borderColor = "border-purple-500/30";
-                }
-
-                return (
-                  <div
-                    key={p.id}
-                    className={`glass-card p-6 bg-[#16161B] rounded-2xl flex flex-col justify-between border relative overflow-hidden transition-all duration-300 hover:scale-102 ${
-                      isCurrent ? "border-[#4CAF50] ring-1 ring-[#4CAF50]" : borderColor
-                    }`}
-                  >
-                    {isCurrent && (
-                      <div className="absolute top-0 right-0 bg-[#4CAF50] text-[#1a1a1a] font-bold text-[9px] uppercase tracking-wider py-1 px-4 rounded-bl-xl z-20">
-                        Current Active Plan
-                      </div>
-                    )}
-
-                    <div className="relative z-10">
-                      <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${textColor}`}>
-                        {p.name}
-                      </p>
-                      <h4 className="text-3xl font-[family-name:var(--font-display)] font-extrabold text-white tracking-tight mb-4">
-                        {formatMoney(p.price, p.currency)}
-                        <span className="text-xs text-[#94A3B8] font-normal font-sans"> / {p.validityMonths || 1} month{(p.validityMonths || 1) === 1 ? "" : "s"}</span>
-                      </h4>
-                      
-                      <p className="text-xs text-[#CBD5E1] mb-6 leading-relaxed">
-                        {p.description}
-                      </p>
-
-                      <hr className="border-white/5 my-4" />
-
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] mb-3">Credits Included:</p>
-                      <ul className="space-y-3 mb-6 text-xs text-[#CBD5E1]">
-                        <li className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                          {p.jobPostsQuota === 9999 ? "Unlimited" : `${p.jobPostsQuota}`} Job Post Slots
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                          {p.resumeUnlocksQuota === 9999 ? "Unlimited" : `${p.resumeUnlocksQuota}`} Vetted Profiles Unlocked
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                          {p.aiInterviewsQuota === 9999 ? "Unlimited" : `${p.aiInterviewsQuota}`} AI Video Screening Credits
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                          {p.applicationsQuota} Applications Limits
-                        </li>
-                      </ul>
+          <div className="relative mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {loading ? (
+              <div className="col-span-full rounded-[30px] border border-white/10 bg-white/[.05] p-12 text-center text-slate-400">Loading live plans…</div>
+            ) : plans.map((plan, index) => {
+              const isCopilot = plan.copilotIncluded;
+              const isCurrent = activePlan?.id === plan.id;
+              return (
+                <article
+                  key={plan.id}
+                  className={`group relative min-h-[570px] overflow-hidden rounded-[30px] border p-5 transition duration-300 hover:-translate-y-2 md:p-6 ${
+                    isCopilot
+                      ? "border-cyan-300/35 bg-[linear-gradient(155deg,#102e54,#102647_45%,#24155d)] shadow-[0_26px_55px_rgba(31,132,255,.25),inset_0_1px_0_rgba(255,255,255,.15)]"
+                      : plan.isFeatured
+                      ? "border-violet-300/25 bg-[linear-gradient(155deg,rgba(255,255,255,.98),rgba(241,244,255,.96))] text-slate-950 shadow-[0_24px_55px_rgba(83,69,180,.22)]"
+                      : "border-white/15 bg-[linear-gradient(155deg,rgba(255,255,255,.97),rgba(239,245,255,.95))] text-slate-950 shadow-[0_20px_45px_rgba(0,0,0,.2)]"
+                  }`}
+                  style={{ transform: `perspective(1200px) rotateY(${index % 2 === 0 ? "-1deg" : "1deg"})` }}
+                >
+                  <div className={`absolute inset-x-8 top-0 h-px ${isCopilot ? "bg-gradient-to-r from-transparent via-cyan-300 to-transparent" : "bg-gradient-to-r from-transparent via-blue-400/50 to-transparent"}`} />
+                  <div className="relative flex h-full flex-col">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-2xl shadow-lg ${isCopilot ? "bg-cyan-300/15 text-cyan-200" : "bg-blue-600/10 text-blue-600"}`}>✦</div>
+                      {plan.badgeText ? (
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-black ${isCopilot ? "bg-cyan-300 text-slate-950" : "bg-blue-600/10 text-blue-700"}`}>
+                          {plan.badgeText}
+                        </span>
+                      ) : null}
                     </div>
 
+                    <h2 className="mt-5 text-2xl font-black tracking-tight">{plan.name}</h2>
+                    <p className={`mt-2 min-h-12 text-sm leading-5 ${isCopilot ? "text-slate-300" : "text-slate-600"}`}>{plan.description}</p>
+                    <div className="mt-5 flex items-end gap-2">
+                      <span className="text-4xl font-black">{money(plan.price, plan.currency)}</span>
+                    </div>
+                    <div className={`mt-5 grid grid-cols-2 gap-2 rounded-2xl p-3 text-xs ${isCopilot ? "bg-white/[.07]" : "bg-blue-600/[.06]"}`}>
+                      <div><span className="block font-black">{plan.jobPostsQuota}</span><span className={isCopilot ? "text-slate-400" : "text-slate-500"}>job post{plan.jobPostsQuota === 1 ? "" : "s"}</span></div>
+                      <div><span className="block font-black">{plan.jobValidityDays} days</span><span className={isCopilot ? "text-slate-400" : "text-slate-500"}>per job</span></div>
+                    </div>
+
+                    <ul className="mt-5 flex-1 space-y-2.5">
+                      {(plan.marketingBenefits || []).map(benefit => (
+                        <li key={benefit} className="flex gap-2 text-sm">
+                          <span className={isCopilot ? "text-cyan-300" : "text-emerald-500"}>●</span>
+                          <span className={isCopilot ? "text-slate-200" : "text-slate-700"}>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+
                     <button
-                      onClick={() => {
-                        checkoutRequestKey.current = crypto.randomUUID();
-                        setCheckoutPlan(p);
-                        setPromoDetails(null);
-                        setCouponCode("");
-                        setPromoError(null);
-                      }}
-                      className={`w-full py-3 rounded-full text-xs font-extrabold tracking-wider transition-all relative z-10 ${
-                        isCurrent
-                          ? "bg-[#4CAF50]/10 border border-[#4CAF50]/40 text-[#4CAF50] hover:bg-[#4CAF50]/15"
-                          : `bg-gradient-to-tr ${accentColor} text-white font-bold hover:shadow-lg hover:scale-102`
+                      type="button"
+                      disabled={submitting || plan.eligible === false}
+                      onClick={() => void choosePlan(plan)}
+                      className={`mt-6 w-full rounded-2xl px-4 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                        isCopilot
+                          ? "bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 text-slate-950 shadow-[0_12px_30px_rgba(65,189,255,.25)]"
+                          : "bg-[#1769ff] text-white shadow-[0_12px_26px_rgba(23,105,255,.28)]"
                       }`}
                     >
-                      {isCurrent ? "Renew Current Plan" : "Purchase Plan"}
+                      {plan.eligible === false ? plan.eligibilityReason : isCurrent ? "Renew plan" : plan.price === 0 ? "Start free" : `Choose ${plan.name}`}
                     </button>
                   </div>
-                );
-              })}
-            </div>
+                </article>
+              );
+            })}
           </div>
 
-          {/* AI Services Credits Costs Checklist */}
-          <div className="glass-card bg-[#16161B] border border-white/10 rounded-2xl p-6">
-            <h3 className="font-[family-name:var(--font-display)] text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#40C4FF]">check_circle</span>
-              AI Recruitment Services Catalog
-            </h3>
-            <p className="text-xs text-[#94A3B8] mb-6">
-              Below is the list of modular AI recruiting agents and background check verification tools. Check costs and consume credits self-service.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {services.map(s => (
-                <div key={s.serviceKey} className="p-4 bg-white/2 border border-white/5 rounded-xl flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-white mb-0.5">{s.serviceName}</h4>
-                    <p className="text-[10px] text-[#94A3B8] font-mono">Service Key: {s.serviceKey}</p>
-                  </div>
-                  
-                  <div className="text-right">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase inline-block mb-1.5 border ${
-                      s.billingType === "INCLUDED"
-                        ? "bg-green/10 text-green border-green/20"
-                        : s.billingType === "CREDIT_BASED"
-                        ? "bg-[#448AFF]/15 text-[#448AFF] border-[#448AFF]/20"
-                        : "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                    }`}>
-                      {s.billingType.replace("_", " ")}
-                    </span>
-                    <p className="text-[11px] font-bold text-white">
-                      {s.billingType === "INCLUDED" ? "Free (Included)" : `${s.creditCost} Credits`}
-                    </p>
-                  </div>
-                </div>
-              ))}
+          <div className="relative mt-6 grid gap-3 rounded-[28px] border border-white/10 bg-[#0e1732]/85 p-5 shadow-[0_22px_45px_rgba(0,0,0,.3)] md:grid-cols-[1.2fr_repeat(6,1fr)] md:items-center">
+            <div>
+              <p className="text-lg font-black">Everything you need to hire, in one place</p>
+              <p className="mt-1 text-xs text-slate-400">Plan benefits are controlled from Admin and loaded live.</p>
             </div>
+            {["AI JD","Matching","Assessments","Virtual Interview","Proctoring","Feedback"].map(label => (
+              <div key={label} className="rounded-2xl border border-white/10 bg-white/[.05] p-3 text-center text-xs font-bold text-slate-200">{label}</div>
+            ))}
           </div>
+        </section>
 
+        <div className="mt-6 flex justify-center gap-3 text-xs text-slate-400">
+          <Link href="/employer/revenue-and-billing-management" className="hover:text-white">Billing & receipts</Link>
+          <span>•</span>
+          <Link href="/employer/ai-hiring-copilot-hub" className="hover:text-white">Co-Pilot hub</Link>
+          <span>•</span>
+          <Link href="/employer/employer-subscription-and-plans" className="hover:text-white">Managed Hiring</Link>
         </div>
-      )}
+      </div>
 
-      {/* Payment checkout modal backed by /api/payments/checkout */}
-      {checkoutPlan && (
-        <div className="fixed inset-0 bg-[#000000]/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="glass-card bg-[#16161B] border border-white/10 rounded-3xl p-6 w-full max-w-md relative overflow-hidden animate-in fade-in-50 zoom-in-95 duration-200">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#448AFF]/5 rounded-full blur-[90px]"></div>
-
-            <div className="flex justify-between items-center mb-6 relative z-10">
-              <h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-white">
-                HireGo AI Secure Checkout
-              </h3>
-              <button
-                onClick={() => setCheckoutPlan(null)}
-                className="material-symbols-outlined text-[#94A3B8] hover:text-white transition-colors"
-              >
-                close
-              </button>
-            </div>
-
-            {/* Dynamic Price Calculation Summary */}
-            <div className="p-4 bg-white/3 rounded-2xl border border-white/5 mb-4 relative z-10">
-              <p className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider">Purchase Summary</p>
-              
-              <div className="mt-2 space-y-2 text-xs">
-                <div className="flex justify-between items-center text-[#CBD5E1]">
-                  <span>Original Price ({checkoutPlan.name})</span>
-                  <span>{formatMoney(checkoutPlan.price, checkoutPlan.currency)}</span>
-                </div>
-                
-                {promoDetails && (
-                  <div className="flex justify-between items-center text-green-400 font-medium">
-                    <span>Discount Applied ({promoDetails.code})</span>
-                    <span>- {formatMoney(promoDetails.savings, checkoutPlan.currency)}</span>
-                  </div>
-                )}
-
-                <div className="border-t border-white/5 my-2 pt-2 flex justify-between items-center font-bold text-sm text-white">
-                  <span>Final Price</span>
-                  <span className="text-lg text-[#FF5252]">{formatMoney(promoDetails ? promoDetails.finalPrice : checkoutPlan.price, checkoutPlan.currency)}</span>
-                </div>
+      {checkoutPlan ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-end bg-black/60 p-3 backdrop-blur-sm">
+          <button aria-label="Close checkout" className="absolute inset-0" onClick={() => !submitting && setCheckoutPlan(null)} />
+          <aside className="relative h-full w-full max-w-[520px] overflow-y-auto rounded-[32px] border border-white/15 bg-[linear-gradient(180deg,#f8fbff,#eef3ff)] p-6 text-slate-950 shadow-[0_30px_100px_rgba(0,0,0,.5)] md:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600">Secure checkout</p>
+                <h2 className="mt-1 text-2xl font-black">{checkoutPlan.name}</h2>
+                <p className="mt-1 text-sm text-slate-600">{checkoutPlan.jobPostsQuota} job post{checkoutPlan.jobPostsQuota === 1 ? "" : "s"} · {checkoutPlan.jobValidityDays}-day validity per job</p>
               </div>
+              <button onClick={() => !submitting && setCheckoutPlan(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/5 text-xl">×</button>
             </div>
 
-            {/* Promo Code Engine Input */}
-            <div className="mb-6 relative z-10">
-              <label className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider mb-2">
-                Apply Promotion Coupon / Referral Code
-              </label>
-              
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. WELCOME50"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  className="flex-1 bg-[#1A1A20] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-[#448AFF]"
-                />
+            {!checkoutPlan.copilotIncluded && copilotConfig?.enabled ? (
+              <div className="mt-6 rounded-[26px] border border-blue-200 bg-white p-4 shadow-[0_20px_45px_rgba(64,105,190,.14)]">
+                <div className="flex gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-200 to-violet-200 text-xl">✦</div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-black">{copilotConfig.title}</h3>
+                      {copilotConfig.badgeText ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black text-violet-700">{copilotConfig.badgeText}</span> : null}
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">{copilotConfig.description}</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {copilotConfig.benefits.slice(0, 6).map(benefit => (
+                    <div key={benefit} className="rounded-xl bg-slate-50 p-2.5 text-[11px] font-bold text-slate-700">✓ {benefit}</div>
+                  ))}
+                </div>
                 <button
-                  onClick={handleApplyCoupon}
-                  className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-xs font-bold text-white transition-colors"
+                  type="button"
+                  onClick={() => setAddCopilot(value => !value)}
+                  className={`mt-4 flex w-full items-center justify-between rounded-2xl border p-3 text-left transition ${addCopilot ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
                 >
-                  Apply
+                  <span>
+                    <span className="block text-sm font-black">{addCopilot ? "Co-Pilot added" : "Add Co-Pilot"}</span>
+                    <span className="text-xs text-slate-500">{copilotConfig.addonJobLimit} hiring workflow entitlement</span>
+                  </span>
+                  <span className="font-black text-blue-700">+{money(copilotConfig.addonPrice, copilotConfig.currency)}</span>
                 </button>
               </div>
-              
-              {promoError && (
-                <p className="text-[10px] text-[#FF5252] mt-1.5 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">error</span>
-                  {promoError}
-                </p>
-              )}
-              {promoDetails && (
-                <p className="text-[10px] text-[#4CAF50] mt-1.5 flex items-center gap-1 font-bold">
-                  <span className="material-symbols-outlined text-[12px]">check_circle</span>
-                  Promo Code Applied! You saved {formatMoney(promoDetails.savings, checkoutPlan.currency)}!
-                </p>
-              )}
-            </div>
+            ) : checkoutPlan.copilotIncluded ? (
+              <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-bold text-cyan-900">Co-Pilot is already included in this plan.</div>
+            ) : null}
 
-            {/* Payment Gateway Selection */}
-            <div className="space-y-3 mb-6 relative z-10">
-              <div className="flex justify-between items-center">
-                <label className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider">
-                  Payment Gateway
-                </label>
-                {!gatewayConfig.allowEmployerSelection && (
-                  <span className="text-[9px] text-[#448AFF] bg-[#448AFF]/10 border border-[#448AFF]/20 px-2 py-0.5 rounded-full font-bold">
-                    Auto-Selected: {gatewayConfig.primaryGateway}
-                  </span>
-                )}
-              </div>
-
-              {gatewayConfig.allowEmployerSelection ? (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {["STRIPE", "PAYU"]
-                    .filter((gw) => gatewayConfig.gatewaysStatus?.[gw] !== "DISABLED")
-                    .map((gw) => (
-                      <button
-                        key={gw}
-                        type="button"
-                        onClick={() => setSelectedGateway(gw)}
-                        className={`p-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 ${
-                          selectedGateway === gw
-                            ? "bg-[#448AFF]/15 border-[#448AFF] text-white shadow"
-                            : "bg-white/3 border-white/5 text-[#CBD5E1] hover:bg-white/5"
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {gw === "STRIPE" ? "credit_card" : "account_balance"}
-                        </span>
-                        <span className="font-mono text-[11px]">{gw}</span>
-                      </button>
+            <div className="mt-6 space-y-4">
+              {gatewayConfig?.allowEmployerSelection ? (
+                <div>
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-500">Payment provider</label>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {["STRIPE","PAYU"].filter(g => gatewayConfig?.gatewaysStatus?.[g] !== "DISABLED").map(g => (
+                      <button key={g} onClick={() => setSelectedGateway(g)} className={`rounded-xl border px-3 py-2 text-xs font-black ${selectedGateway === g ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-white"}`}>{g}</button>
                     ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="p-3 bg-white/3 rounded-xl border border-white/5 text-xs text-slate-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#448AFF] text-[18px]">lock</span>
-                  <span>Payment will be securely routed via <strong>{gatewayConfig.primaryGateway}</strong> per Admin policy.</span>
-                </div>
-              )}
+              ) : null}
+              <div>
+                <label className="text-xs font-black uppercase tracking-wider text-slate-500">Promo code</label>
+                <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Optional" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500" />
+              </div>
             </div>
 
-            <div className="flex gap-3 relative z-10">
-              <button
-                onClick={handleSubscribe}
-                disabled={submitting}
-                className="flex-1 btn-3d-blue py-3 rounded-full text-xs font-extrabold text-white shadow-[var(--shadow-btn-blue)] flex items-center justify-center gap-2"
-              >
-                {submitting ? (
-                  <>
-                    <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
-                    Securing payment gateway...
-                  </>
-                ) : (
-                  `Proceed to Secure Checkout`
-                )}
-              </button>
-              <button
-                onClick={() => setCheckoutPlan(null)}
-                disabled={submitting}
-                className="px-5 py-3 rounded-full border border-white/10 hover:bg-white/5 text-xs font-semibold text-[#CBD5E1]"
-              >
-                Cancel
-              </button>
+            <div className="mt-6 rounded-2xl bg-slate-950 p-4 text-white">
+              <div className="flex justify-between text-sm"><span>Plan</span><span className="font-bold">{money(checkoutPlan.price, checkoutPlan.currency)}</span></div>
+              {addCopilot && copilotConfig ? <div className="mt-2 flex justify-between text-sm"><span>Co-Pilot</span><span className="font-bold">{money(copilotConfig.addonPrice, copilotConfig.currency)}</span></div> : null}
+              <div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-lg font-black"><span>Checkout total</span><span>{money(checkoutTotal, checkoutPlan.currency)}</span></div>
+              <p className="mt-2 text-[11px] text-slate-400">Any valid promo discount is applied server-side before payment.</p>
             </div>
-            
-            <p className="text-[10px] text-center text-[#94A3B8] mt-4">
-              One-time prepaid purchase for the configured plan period. HireGo does not automatically renew or debit this subscription.
-            </p>
-            <p className="text-[10px] text-center text-[#94A3B8] mt-2 flex items-center justify-center gap-1">
-              <span className="material-symbols-outlined text-[12px] text-green-500">verified_user</span>
-              Payment confirmation is applied only after a verified provider webhook.
-            </p>
-          </div>
+
+            <button disabled={submitting} onClick={() => void checkout()} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_14px_30px_rgba(62,76,210,.25)] disabled:opacity-50">
+              {submitting ? "Starting secure checkout…" : "Continue to payment"}
+            </button>
+            {!checkoutPlan.copilotIncluded && copilotConfig?.enabled && !addCopilot ? (
+              <p className="mt-3 text-center text-[11px] text-slate-500">You can continue without Co-Pilot and activate it later from an eligible plan/add-on.</p>
+            ) : null}
+          </aside>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
