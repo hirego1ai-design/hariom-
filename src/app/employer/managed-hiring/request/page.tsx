@@ -53,8 +53,8 @@ export default function ManagedHiringRequirementWizard() {
     jobTitles: "",
     department: "",
     experienceYears: "",
-    employmentType: "Full-time",
-    workMode: "On-site",
+    employmentType: "",
+    workMode: "",
     location: "",
     shift: "",
     noticePeriod: "",
@@ -89,7 +89,7 @@ export default function ManagedHiringRequirementWizard() {
       jobTitle: "",
       numberOfPositions: "1",
       experienceYears: "",
-      workMode: "On-site",
+      workMode: "",
       location: "",
     },
   ]);
@@ -136,8 +136,8 @@ export default function ManagedHiringRequirementWizard() {
         id: Date.now(),
         jobTitle: "",
         numberOfPositions: "1",
-        experienceYears: "3-5 Years",
-        workMode: "Hybrid",
+        experienceYears: "",
+        workMode: "",
         location: ""
       }
     ]);
@@ -204,13 +204,20 @@ export default function ManagedHiringRequirementWizard() {
 
       const payload = {
         ...formData,
-        numberOfPositions: totalPositions || 1,
+        numberOfPositions: totalPositions,
         jobTitles: allJobTitles,
         experienceYears: allExperiences,
         workMode: allWorkModes,
         location: allLocations,
-        salaryRangeMin: parseFloat(formData.budgetMin) || 0,
-        salaryRangeMax: parseFloat(formData.budgetMax) || 0,
+        positions: positions.map((position) => ({
+          jobTitle: String(position.jobTitle || "").trim(),
+          numberOfPositions: Number.parseInt(String(position.numberOfPositions), 10),
+          experienceYears: String(position.experienceYears || "").trim(),
+          workMode: String(position.workMode || "").trim(),
+          location: String(position.location || "").trim(),
+        })),
+        salaryRangeMin: formData.budgetMin === "" ? undefined : Number(formData.budgetMin),
+        salaryRangeMax: formData.budgetMax === "" ? undefined : Number(formData.budgetMax),
       };
 
       const res = await fetch("/api/agreements/requirements", {
