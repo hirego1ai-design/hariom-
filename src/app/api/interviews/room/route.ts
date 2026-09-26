@@ -133,11 +133,41 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
+      const endedAt = new Date();
       await prisma.$transaction(async (tx) => {
-        await tx.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
-        if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
+        await tx.interview.update({
+          where: { id: interview.id },
+          data: {
+            status: "COMPLETED",
+            completedAt: endedAt,
+            ...(interview.startedAt ? {} : { startedAt: endedAt }),
+          },
+        });
+        if (interview.roundProgress) {
+          await tx.interviewRoundProgress.update({
+            where: { id: interview.roundProgress.id },
+            data: {
+              status: interview.roundProgress.round.mandatoryFeedback
+                ? "ENDED_PENDING_FEEDBACK"
+                : "ROUND_COMPLETE",
+              completedAt: interview.roundProgress.round.mandatoryFeedback
+                ? null
+                : endedAt,
+            },
+          });
+        }
       });
     } else {
+      if (!interview.startedAt) {
+        await prisma.interview.updateMany({
+          where: {
+            id: interview.id,
+            startedAt: null,
+            status: { in: ["SCHEDULED", "RESCHEDULED", "LIVE"] },
+          },
+          data: { startedAt: new Date(), status: "LIVE" },
+        });
+      }
       if (body.targetId) {
         const candidateUserId = interview.application.candidateProfile?.userId;
         const assignedIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
