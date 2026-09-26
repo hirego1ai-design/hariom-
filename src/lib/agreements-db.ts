@@ -3,6 +3,7 @@
 // Single Source of Truth for Hiring Requirements, Templates & Contracts
 // ============================================================================
 
+import { randomUUID } from "node:crypto";
 import {
   HiringRequirementRecord,
   AgreementTemplateRecord,
@@ -32,6 +33,73 @@ export const initialRequirements: HiringRequirementRecord[] = [];
 export const initialAgreements: CommercialAgreementRecord[] = [];
 export const initialEvents: AgreementEventRecord[] = [];
 
+function requirementRecord(r: any, activeAgreementId?: string): HiringRequirementRecord {
+  const positions = Array.isArray(r.positions)
+    ? r.positions
+        .filter((item: unknown) => item && typeof item === "object" && !Array.isArray(item))
+        .map((item: any) => ({
+          jobTitle: String(item.jobTitle || ""),
+          numberOfPositions: Number(item.numberOfPositions || 0),
+          experienceYears: String(item.experienceYears || ""),
+          workMode: String(item.workMode || ""),
+          location: String(item.location || ""),
+        }))
+        .filter((item: { jobTitle: string; numberOfPositions: number }) =>
+          Boolean(item.jobTitle) && item.numberOfPositions > 0,
+        )
+    : undefined;
+
+  return {
+    id: r.id,
+    referenceCode: r.referenceCode,
+    companyId: r.companyId || undefined,
+    companyName: r.companyName,
+    contactPerson: r.contactPerson,
+    email: r.email,
+    primaryMobile: r.primaryMobile,
+    secondaryMobile: r.secondaryMobile || undefined,
+    website: r.website || undefined,
+    gstin: r.gstin || undefined,
+    pan: r.pan || undefined,
+    billingAddress: r.billingAddress || undefined,
+    industry: r.industry,
+    numberOfPositions: r.numberOfPositions,
+    multipleRoles: Boolean(r.multipleRoles),
+    jobTitles: r.jobTitles,
+    department: r.department || undefined,
+    experienceYears: r.experienceYears,
+    employmentType: r.employmentType || undefined,
+    skillsRequired: r.skillsRequired,
+    mandatorySkills: r.skillsRequired,
+    preferredSkills: r.preferredSkills || [],
+    education: r.education,
+    certifications: r.certifications || undefined,
+    languages: r.languages || undefined,
+    tools: r.tools || undefined,
+    salaryRangeMin: r.salaryRangeMin,
+    salaryRangeMax: r.salaryRangeMax,
+    currency: r.currency,
+    variableComponent: r.variableComponent || undefined,
+    bonusIncentives: r.bonusIncentives || undefined,
+    benefits: r.benefits || [],
+    workMode: r.workMode,
+    location: r.location,
+    shift: r.shift || undefined,
+    noticePeriod: r.noticePeriod || undefined,
+    joiningTimeline: r.joiningTimeline,
+    hiringPriority: r.hiringPriority,
+    replacementExpectation: r.replacementExpectation,
+    positions,
+    additionalNotes: r.additionalNotes || undefined,
+    jdFileName: r.jdFileName || undefined,
+    jdFileUrl: r.jdFileUrl || undefined,
+    status: r.status as RequirementStatus,
+    assignedSalesLead: r.assignedSalesLead || undefined,
+    activeAgreementId,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
 
 // ----------------------------------------------------------------------------
 // SINGLETON IN-MEMORY DATABASE STORE WITH DUAL PRISMA LOGIC
@@ -48,47 +116,17 @@ class AgreementsStore {
     try {
       const records = await prisma.hiringRequirement.findMany({
         orderBy: { createdAt: "desc" },
-        include: { agreements: true }
+        include: { agreements: true },
       });
       if (records && records.length > 0) {
         return records.map((r) => {
-          const activeAgreement = r.agreements.find(a => a.status === "ACTIVE" || a.status === "SENT_TO_EMPLOYER" || a.status === "AMENDMENT_REQUESTED");
-          return {
-            id: r.id,
-            referenceCode: r.referenceCode,
-            companyId: r.companyId || undefined,
-            companyName: r.companyName,
-            contactPerson: r.contactPerson,
-            email: r.email,
-            primaryMobile: r.primaryMobile,
-            secondaryMobile: r.secondaryMobile || undefined,
-            industry: r.industry,
-            numberOfPositions: r.numberOfPositions,
-            jobTitles: r.jobTitles,
-            experienceYears: r.experienceYears,
-            skillsRequired: r.skillsRequired,
-            education: r.education,
-            certifications: r.certifications || undefined,
-            salaryRangeMin: r.salaryRangeMin,
-            salaryRangeMax: r.salaryRangeMax,
-            currency: r.currency,
-            workMode: r.workMode,
-            location: r.location,
-            joiningTimeline: r.joiningTimeline,
-            hiringPriority: r.hiringPriority,
-            replacementExpectation: r.replacementExpectation,
-            additionalNotes: r.additionalNotes || undefined,
-            jdFileUrl: r.jdFileUrl || undefined,
-            status: r.status as RequirementStatus,
-            assignedSalesLead: r.assignedSalesLead || undefined,
-            activeAgreementId: activeAgreement?.id || undefined,
-            createdAt: r.createdAt.toISOString(),
-            updatedAt: r.updatedAt.toISOString(),
-          };
+          const activeAgreement = r.agreements.find((a) =>
+            ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(a.status),
+          );
+          return requirementRecord(r, activeAgreement?.id);
         });
       }
     } catch (error) {
-      // Development/test fallback only.
       if (process.env.NODE_ENV === "production") throw error;
     }
     return this.requirements;
@@ -98,54 +136,25 @@ class AgreementsStore {
     try {
       const r = await prisma.hiringRequirement.findFirst({
         where: { OR: [{ id }, { referenceCode: id }] },
-        include: { agreements: true }
+        include: { agreements: true },
       });
       if (r) {
-        const activeAgreement = r.agreements.find(a => a.status === "ACTIVE" || a.status === "SENT_TO_EMPLOYER" || a.status === "AMENDMENT_REQUESTED");
-        return {
-          id: r.id,
-          referenceCode: r.referenceCode,
-          companyId: r.companyId || undefined,
-          companyName: r.companyName,
-          contactPerson: r.contactPerson,
-          email: r.email,
-          primaryMobile: r.primaryMobile,
-          secondaryMobile: r.secondaryMobile || undefined,
-          industry: r.industry,
-          numberOfPositions: r.numberOfPositions,
-          jobTitles: r.jobTitles,
-          experienceYears: r.experienceYears,
-          skillsRequired: r.skillsRequired,
-          education: r.education,
-          certifications: r.certifications || undefined,
-          salaryRangeMin: r.salaryRangeMin,
-          salaryRangeMax: r.salaryRangeMax,
-          currency: r.currency,
-          workMode: r.workMode,
-          location: r.location,
-          joiningTimeline: r.joiningTimeline,
-          hiringPriority: r.hiringPriority,
-          replacementExpectation: r.replacementExpectation,
-          additionalNotes: r.additionalNotes || undefined,
-          jdFileUrl: r.jdFileUrl || undefined,
-          status: r.status as RequirementStatus,
-          assignedSalesLead: r.assignedSalesLead || undefined,
-          activeAgreementId: activeAgreement?.id || undefined,
-          createdAt: r.createdAt.toISOString(),
-          updatedAt: r.updatedAt.toISOString(),
-        };
+        const activeAgreement = r.agreements.find((a) =>
+          ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(a.status),
+        );
+        return requirementRecord(r, activeAgreement?.id);
       }
     } catch (error) {
-      // Development/test fallback only.
       if (process.env.NODE_ENV === "production") throw error;
     }
     return this.requirements.find((r) => r.id === id || r.referenceCode === id) || null;
   }
 
-  async createRequirement(payload: Omit<HiringRequirementRecord, "id" | "referenceCode" | "status" | "createdAt" | "updatedAt">): Promise<HiringRequirementRecord> {
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const id = `req-${Date.now()}`;
-    const referenceCode = `REQ-2026-${randomNum}`;
+  async createRequirement(
+    payload: Omit<HiringRequirementRecord, "id" | "referenceCode" | "status" | "createdAt" | "updatedAt">,
+  ): Promise<HiringRequirementRecord> {
+    const id = randomUUID();
+    const referenceCode = `REQ-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
     const newReq: HiringRequirementRecord = {
       ...payload,
       id,
@@ -160,36 +169,52 @@ class AgreementsStore {
         data: {
           id,
           referenceCode,
-          companyId: payload.companyId || null,
+          companyId: payload.companyId ?? null,
           companyName: payload.companyName,
           contactPerson: payload.contactPerson,
           email: payload.email,
           primaryMobile: payload.primaryMobile,
           secondaryMobile: payload.secondaryMobile || null,
+          website: payload.website || null,
+          gstin: payload.gstin || null,
+          pan: payload.pan || null,
+          billingAddress: payload.billingAddress || null,
           industry: payload.industry,
           numberOfPositions: payload.numberOfPositions,
+          multipleRoles: payload.multipleRoles ?? false,
           jobTitles: payload.jobTitles,
+          department: payload.department || null,
           experienceYears: payload.experienceYears,
+          employmentType: payload.employmentType || null,
           skillsRequired: payload.skillsRequired,
+          preferredSkills: payload.preferredSkills || [],
           education: payload.education,
           certifications: payload.certifications || null,
+          languages: payload.languages || null,
+          tools: payload.tools || null,
           salaryRangeMin: payload.salaryRangeMin,
           salaryRangeMax: payload.salaryRangeMax,
-          currency: payload.currency || "INR",
-          workMode: payload.workMode || "Hybrid",
+          currency: payload.currency,
+          variableComponent: payload.variableComponent || null,
+          bonusIncentives: payload.bonusIncentives || null,
+          benefits: payload.benefits || [],
+          workMode: payload.workMode,
           location: payload.location,
+          shift: payload.shift || null,
+          noticePeriod: payload.noticePeriod || null,
           joiningTimeline: payload.joiningTimeline,
-          hiringPriority: payload.hiringPriority || "Standard",
-          replacementExpectation: payload.replacementExpectation || "90 Days",
+          hiringPriority: payload.hiringPriority,
+          replacementExpectation: payload.replacementExpectation,
+          positions: payload.positions ?? undefined,
           additionalNotes: payload.additionalNotes || null,
+          jdFileName: payload.jdFileName || null,
           jdFileUrl: payload.jdFileUrl || null,
-          status: "SUBMITTED"
-        }
+          status: "SUBMITTED",
+        },
       });
       newReq.createdAt = r.createdAt.toISOString();
       newReq.updatedAt = r.updatedAt.toISOString();
     } catch (error) {
-      // Development/test fallback only.
       if (process.env.NODE_ENV === "production") throw error;
     }
 
@@ -197,22 +222,28 @@ class AgreementsStore {
     return newReq;
   }
 
-  async updateRequirementStatus(id: string, status: RequirementStatus, assignedSalesLead?: string, activeAgreementId?: string): Promise<HiringRequirementRecord | null> {
+  async updateRequirementStatus(
+    id: string,
+    status: RequirementStatus,
+    assignedSalesLead?: string,
+    activeAgreementId?: string,
+  ): Promise<HiringRequirementRecord | null> {
     try {
       const req = await prisma.hiringRequirement.findFirst({
-        where: { OR: [{ id }, { referenceCode: id }] }
+        where: { OR: [{ id }, { referenceCode: id }] },
       });
       if (req) {
-        const updateData: any = { status };
-        if (assignedSalesLead) updateData.assignedSalesLead = assignedSalesLead;
-        // activeAgreementId relation is managed via CommercialAgreement.requirementId database side, so no direct column update needed.
         const r = await prisma.hiringRequirement.update({
           where: { id: req.id },
-          data: updateData
+          data: {
+            status,
+            ...(assignedSalesLead ? { assignedSalesLead } : {}),
+          },
         });
-        
-        // Sync local memory fallback as well
-        const memReq = this.requirements.find((mr) => mr.id === req.id || mr.referenceCode === req.referenceCode);
+
+        const memReq = this.requirements.find(
+          (item) => item.id === req.id || item.referenceCode === req.referenceCode,
+        );
         if (memReq) {
           memReq.status = status;
           if (assignedSalesLead) memReq.assignedSalesLead = assignedSalesLead;
@@ -220,45 +251,13 @@ class AgreementsStore {
           memReq.updatedAt = r.updatedAt.toISOString();
         }
 
-        return {
-          id: r.id,
-          referenceCode: r.referenceCode,
-          companyId: r.companyId || undefined,
-          companyName: r.companyName,
-          contactPerson: r.contactPerson,
-          email: r.email,
-          primaryMobile: r.primaryMobile,
-          secondaryMobile: r.secondaryMobile || undefined,
-          industry: r.industry,
-          numberOfPositions: r.numberOfPositions,
-          jobTitles: r.jobTitles,
-          experienceYears: r.experienceYears,
-          skillsRequired: r.skillsRequired,
-          education: r.education,
-          certifications: r.certifications || undefined,
-          salaryRangeMin: r.salaryRangeMin,
-          salaryRangeMax: r.salaryRangeMax,
-          currency: r.currency,
-          workMode: r.workMode,
-          location: r.location,
-          joiningTimeline: r.joiningTimeline,
-          hiringPriority: r.hiringPriority,
-          replacementExpectation: r.replacementExpectation,
-          additionalNotes: r.additionalNotes || undefined,
-          jdFileUrl: r.jdFileUrl || undefined,
-          status: r.status as RequirementStatus,
-          assignedSalesLead: r.assignedSalesLead || undefined,
-          activeAgreementId: activeAgreementId,
-          createdAt: r.createdAt.toISOString(),
-          updatedAt: r.updatedAt.toISOString(),
-        };
+        return requirementRecord(r, activeAgreementId);
       }
     } catch (error) {
-      // Development/test fallback only.
       if (process.env.NODE_ENV === "production") throw error;
     }
 
-    const req = this.requirements.find((r) => r.id === id || r.referenceCode === id);
+    const req = this.requirements.find((item) => item.id === id || item.referenceCode === id);
     if (req) {
       req.status = status;
       if (assignedSalesLead) req.assignedSalesLead = assignedSalesLead;
@@ -561,7 +560,10 @@ class AgreementsStore {
     return this.agreements.find((a) => a.id === id || a.agreementNumber === id) || null;
   }
 
-  async createAgreement(payload: Omit<CommercialAgreementRecord, "id" | "agreementNumber" | "status" | "createdAt" | "updatedAt">): Promise<CommercialAgreementRecord> {
+  async createAgreement(
+    payload: Omit<CommercialAgreementRecord, "id" | "agreementNumber" | "status" | "createdAt" | "updatedAt">,
+    performedBy = "SYSTEM",
+  ): Promise<CommercialAgreementRecord> {
     const rand = Math.floor(1000 + Math.random() * 9000);
     const id = `agr-${Date.now()}`;
     const agreementNumber = `HGO-CMA-2026-${rand}`;
@@ -594,11 +596,11 @@ class AgreementsStore {
           replacementDays: payload.replacementDays,
           validityStartDate: payload.validityStartDate ? new Date(payload.validityStartDate) : new Date(),
           validityEndDate: payload.validityEndDate ? new Date(payload.validityEndDate) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          advancePaymentAmount: payload.advancePaymentAmount || 0,
-          discountPercentage: payload.discountPercentage || 0,
-          creditDays: payload.creditDays || 15,
-          taxRatePct: payload.taxRatePct || 18.0,
-          customClauses: payload.customClauses || [],
+          advancePaymentAmount: payload.advancePaymentAmount ?? 0,
+          discountPercentage: payload.discountPercentage ?? 0,
+          creditDays: payload.creditDays ?? 0,
+          taxRatePct: payload.taxRatePct ?? 0,
+          customClauses: payload.customClauses ?? [],
           commercialNotes: payload.commercialNotes || null,
           salesExecutiveNotes: payload.salesExecutiveNotes || null,
         }
@@ -613,7 +615,7 @@ class AgreementsStore {
     this.agreements.unshift(newAgr);
 
     // Event log
-    await this.addEvent(newAgr.id, "CREATED", "Sales/Admin", "Agreement initialized from template.");
+    await this.addEvent(newAgr.id, "CREATED", performedBy, "Agreement initialized from approved commercial terms.");
 
     // Update parent requirement if linked
     if (payload.requirementId) {

@@ -84,8 +84,8 @@ function BuilderContent() {
   };
 
   const handleDraftAndSend = async () => {
-    if (!formData.companyName || !formData.clientEmail || !formData.templateId) {
-      alert("Please fill required fields (Company, Email, Template)");
+    if (!requirement?.companyId || !formData.companyName || !formData.clientEmail || !formData.templateId) {
+      alert("Load a valid managed-hiring requirement and fill Company, Email, and Template.");
       return;
     }
 
@@ -93,8 +93,15 @@ function BuilderContent() {
     try {
       const payload = {
         ...formData,
+        companyId: requirement?.companyId,
         requirementId: reqId || undefined,
-        customClauses: formData.customClauses.split("\n").filter((c: string) => c.trim() !== ""),
+        feeValue: Number(formData.feeValue),
+        replacementDays: Number(formData.replacementDays),
+        creditDays: Number(formData.creditDays),
+        customClauses: formData.customClauses
+          .split("\n")
+          .map((clause: string) => clause.trim())
+          .filter(Boolean),
       };
 
       const res = await fetch("/api/agreements/contracts", {
@@ -110,7 +117,7 @@ function BuilderContent() {
         await fetch(`/api/agreements/contracts/${data.agreement.id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_to_employer", performedBy: "Sales Admin" })
+          body: JSON.stringify({ action: "send_to_employer" })
         });
 
         if (reqId) {
