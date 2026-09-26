@@ -30,6 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
     let rejectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "REJECT" } } | null = null;
+    let selectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "SELECT" } } | null = null;
 
     if (["TRANSFERRED", "FINAL_ROUND_COMPLETE"].includes(interview.roundProgress.status) && body.action === "PROCEED") {
       const nextRound = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: interview.roundProgress.round.processId, sequence: interview.roundProgress.round.sequence + 1 } }, include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } } });
@@ -52,6 +53,98 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (held.count !== 1) throw new ApiError("This interview round decision changed before HOLD could be saved.", 409);
       await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD (persisted)" });
       return NextResponse.json({ success: true, action: "HOLD", applicationId: interview.applicationId, message: "Candidate is on hold after this round. Proceed or reject later to resume the workflow." });
+    }
+
+    if (body.action === "PROCEED") {
+      const nextRoundPreview = await prisma.interviewRound.findUnique({
+        where: {
+          processId_sequence: {
+            processId: interview.roundProgress.round.processId,
+            sequence: interview.roundProgress.round.sequence + 1,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!nextRoundPreview) {
+        const expectedAction = { interviewId: id, applicationId: interview.applicationId, action: "SELECT" as const };
+        const correlationId = `interview-selection:${id}`;
+        let workflow = await prisma.workflowInstance.findUnique({ where: { correlationId } });
+        if (!workflow) {
+          workflow = await WorkflowEngine.startWorkflow({
+            workflowType: "SHORTLISTING",
+            companyId: interview.application.job.companyId,
+            jobId: interview.application.jobId,
+            candidateId: interview.application.candidateProfileId,
+            applicationId: interview.applicationId,
+            correlationId,
+            initiatedBy: session.id,
+            initialStep: "FINAL_ROUND_SELECTION",
+            checkpointState: { interviewId: id, source: "round-decision" },
+            context: tenantContext,
+          });
+        }
+        if (workflow.applicationId !== interview.applicationId || workflow.companyId !== interview.application.job.companyId) {
+          throw new ApiError("Existing selection workflow does not match this candidate application.", 409);
+        }
+        if (!["RUNNING", "PAUSED_FOR_APPROVAL"].includes(workflow.status)) {
+          throw new ApiError("Existing selection workflow requires reconciliation before another decision.", 409);
+        }
+
+        if (!body.approvalId || !body.workflowId) {
+          let approval = await prisma.workflowApproval.findFirst({
+            where: {
+              workflowInstanceId: workflow.id,
+              actionType: "CANDIDATE_SELECTION",
+              decision: { in: ["PENDING", "APPROVED"] },
+              consumedAt: null,
+              revokedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+            orderBy: { requestedAt: "desc" },
+          });
+          if (!approval) {
+            if (workflow.status !== "RUNNING") throw new ApiError("Selection workflow is paused without an active approval request.", 409);
+            const requested = await WorkflowEngine.requestConsequentialAction({
+              workflowId: workflow.id,
+              stepName: "FINAL_ROUND_SELECTION",
+              actionType: "CANDIDATE_SELECTION",
+              action: expectedAction,
+              context: tenantContext,
+            });
+            approval = await prisma.workflowApproval.findUnique({ where: { id: requested.approvalId } });
+          }
+          if (!approval) throw new ApiError("Unable to persist candidate-selection approval request.", 500);
+          return NextResponse.json({
+            success: true,
+            action: "PROCEED",
+            finalRound: true,
+            requiresConfirmation: true,
+            approvalId: approval.id,
+            workflowId: workflow.id,
+            message: "Final selection approval has been persisted. Confirm once more to shortlist the candidate.",
+          }, { status: 202 });
+        }
+
+        if (body.workflowId !== workflow.id) throw new ApiError("Selection workflow does not match this interview.", 409);
+        let approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
+        if (approval.workflowInstanceId !== workflow.id || approval.actionType !== "CANDIDATE_SELECTION" || approval.consumedAt || approval.revokedAt) {
+          throw new ApiError("Valid unconsumed candidate-selection approval is required.", 409);
+        }
+        if (approval.workflowInstance.applicationId !== interview.applicationId) throw new ApiError("Approval does not belong to this candidate application.", 403);
+        if (approval.decision === "PENDING") {
+          if (!body.confirmApproval) throw new ApiError("Explicit confirmation is required to approve final candidate selection.", 409);
+          await WorkflowEngine.decideApproval({
+            approvalId: approval.id,
+            decision: "APPROVED",
+            notes: "Confirmed from final interview round decision UI.",
+            context: tenantContext,
+          });
+          approval = await WorkflowEngine.getApprovalDetails({ approvalId: approval.id, context: tenantContext });
+        }
+        if (approval.decision !== "APPROVED") throw new ApiError("Candidate selection approval is not approved.", 409);
+        selectionAuthorization = { workflowId: workflow.id, stepName: approval.stepName, expectedAction };
+      }
     }
 
     if (body.action === "REJECT") {
@@ -164,6 +257,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } },
       });
       if (!nextRound) {
+        if (!selectionAuthorization) throw new ApiError("Approved final selection authorization is required.", 409);
+        await WorkflowEngine.consumeApprovedActionInTransaction(tx, {
+          workflowId: selectionAuthorization.workflowId,
+          stepName: selectionAuthorization.stepName,
+          action: selectionAuthorization.expectedAction,
+          context: tenantContext,
+        });
         const claimed = await tx.interviewRoundProgress.updateMany({
           where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "ON_HOLD"] } },
           data: { status: "FINAL_ROUND_COMPLETE", completedAt: interview.roundProgress!.completedAt || now },
