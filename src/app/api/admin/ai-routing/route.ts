@@ -48,7 +48,9 @@ export async function PUT(request: NextRequest) {
   try {
     const session = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_ai_routing_write:${session.id}`, 10, 60_000);
-    const { config, reason } = await readValidatedJson(request, updateSchema, 256 * 1024);
+    const payload = await readValidatedJson(request, updateSchema, 256 * 1024);
+    const config = aiRoutingConfigSchema.parse(payload.config);
+    const reason = payload.reason;
 
     const previous = await getAiRoutingConfig();
     await saveAiRoutingConfig(config);
