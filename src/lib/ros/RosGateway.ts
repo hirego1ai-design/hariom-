@@ -7,7 +7,7 @@ import { OutboxPublisher } from '../events/Outbox';
 import { ApplicationGateType, ApplicationGateStatus, JobStatus, Role, KillSwitchType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
-import { computeMatchScore } from '@/lib/matching/JobMatchingEngine';
+import { computeMatchScore, evaluateCandidateScreening } from '@/lib/matching/JobMatchingEngine';
 import { ensureJobSpecificAssessment } from '@/lib/jobSpecificAssessment';
 
 export interface DispatchJobCreationParams {
@@ -150,9 +150,19 @@ export class RosGateway {
 
   private static deterministicApplicationMatch(candidate: any, job: any) {
     const match = computeMatchScore(candidate, job);
+    const screening = evaluateCandidateScreening(match);
     return {
       matchScore: match.matchScore,
-      summary: `Rules-based match score: ${match.matchScore}%. Matched ${match.matchingSkills.length} requirement(s); verified evidence coverage ${match.verificationCoverage}%.`,
+      screening,
+      summary: [
+        `Evidence-first recommendation: ${screening.disposition}.`,
+        `Rules-based compatibility: ${match.matchScore}%.`,
+        `Required skills evidenced: ${match.matchingRequiredSkills.length}/${match.requiredSkills.length}.`,
+        match.notEvidencedRequiredSkills.length
+          ? `Required skills not yet evidenced: ${match.notEvidencedRequiredSkills.join(", ")}.`
+          : "No required-skill evidence gaps recorded.",
+        "Missing profile evidence never authorizes automatic rejection.",
+      ].join(" "),
     };
   }
 
@@ -365,7 +375,7 @@ export class RosGateway {
         await tx.application.update({
           where: { id: application.id },
           data: {
-            status: jobSpecificAssessment ? "ASSESSMENT" : "APPLIED",
+            status: jobSpecificAssessment ? "ASSESSMENT" : "SCREENING",
             matchScore: match.matchScore,
             aiSummary: match.summary,
           },
@@ -398,6 +408,7 @@ export class RosGateway {
     application: { id: string; jobId: string; candidateProfileId: string; status: string; matchScore: number; aiSummary: string | null };
     evaluation: "COMPLETED";
     jobSpecificAssessmentId: string | null;
+    screening: ReturnType<typeof evaluateCandidateScreening>;
   }> {
     const { candidate, job } = await this.authorizedApplicationInputs(params);
     const match = this.deterministicApplicationMatch(candidate, job);
@@ -416,7 +427,7 @@ export class RosGateway {
           data: {
             jobId: job.id,
             candidateProfileId: candidate.id,
-            status: jobSpecificAssessment ? "ASSESSMENT" : "APPLIED",
+            status: jobSpecificAssessment ? "ASSESSMENT" : "SCREENING",
             matchScore: match.matchScore,
             aiSummary: match.summary,
             ...(jobSpecificAssessment
@@ -458,6 +469,7 @@ export class RosGateway {
         application,
         evaluation: "COMPLETED",
         jobSpecificAssessmentId: jobSpecificAssessment?.id ?? null,
+        screening: match.screening,
       };
     } catch (error: any) {
       if (error?.code === "P2002") throw new DuplicateApplicationError();

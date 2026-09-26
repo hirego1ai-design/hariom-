@@ -290,6 +290,7 @@ export async function POST(req: NextRequest) {
         success: true,
         application: submission.application,
         evaluation: submission.evaluation,
+        screening: submission.screening,
         assessmentRequired: Boolean(submission.jobSpecificAssessmentId),
         assessmentType: submission.jobSpecificAssessmentId ? "JOB_SPECIFIC_ASSESSMENT" : null,
         assessmentId: submission.jobSpecificAssessmentId,
