@@ -12,7 +12,12 @@ export async function POST(req: NextRequest) {
     try {
       body = JSON.parse(rawBody);
     } catch {
-      throw new ApiError("Invalid JSON payload", 400);
+      // PayU posts form-encoded callbacks, while Stripe posts JSON. Preserve
+      // the exact raw body for cryptographic verification in both cases.
+      body = Object.fromEntries(new URLSearchParams(rawBody).entries());
+      if (!body || Object.keys(body).length === 0) {
+        throw new ApiError("Invalid payment webhook payload", 400);
+      }
     }
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
@@ -137,10 +142,15 @@ export async function POST(req: NextRequest) {
           if (gatewayTxId) {
             await tx.paymentTransaction.upsert({
               where: { gatewayTxId },
-              update: { status: "FAILED", errorMessage: "Payment gateway failed event received" },
+              update: {
+                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
+                status: "FAILED",
+                errorMessage: "Payment gateway failed event received",
+              },
               create: {
                 gatewayTxId,
                 companyId: failCompanyId,
+                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
                 planId: currentOrder?.planId || paymentOrder?.planId || null,
                 amount: verification.amount || 0,
                 status: "FAILED",
@@ -197,6 +207,35 @@ export async function POST(req: NextRequest) {
       const planId = paymentOrder.planId;
       const expectedAmount = paymentOrder.expectedAmount;
 
+      if (paymentOrder.productType === "COPILOT") {
+        const { fulfillCopilotPayment } = await import("@/lib/copilot/paymentFulfillment");
+        const fulfillment = await fulfillCopilotPayment({
+          paymentOrder,
+          verification,
+          provider: providerHeader,
+          gatewayTxId,
+          rawPayload: body,
+        });
+
+        if (fulfillment.duplicate) {
+          return NextResponse.json({
+            success: true,
+            duplicate: true,
+            product: "COPILOT",
+            message: "Copilot payment was already fulfilled.",
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          received: true,
+          product: "COPILOT",
+          status: "ACTIVE",
+          subscriptionId: fulfillment.subscriptionId,
+          billingCycleId: fulfillment.billingCycleId,
+        });
+      }
+
       let planSnapshot;
       try {
         planSnapshot = parsePurchasedPlanSnapshot(paymentOrder.planSnapshot);
@@ -231,7 +270,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (Math.abs(verification.amount - expectedAmount) > 0.01) {
-        throw new ApiError(`Payment amount mismatch. Gateway: ₹${verification.amount}, Plan: ₹${expectedAmount}`, 400);
+        throw new ApiError(`Payment amount mismatch. Gateway: ${verification.amount} ${planSnapshot.currency}, Plan: ${expectedAmount} ${planSnapshot.currency}`, 400);
       }
 
       // =========================================================================
