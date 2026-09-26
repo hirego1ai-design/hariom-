@@ -118,6 +118,22 @@ export async function POST(
       });
     }
 
+    const checkpoint =
+      workflow.checkpointState &&
+      typeof workflow.checkpointState === "object" &&
+      !Array.isArray(workflow.checkpointState)
+        ? (workflow.checkpointState as Record<string, unknown>)
+        : {};
+    if (
+      typeof checkpoint.reason === "string" &&
+      checkpoint.reason !== body.reason
+    ) {
+      throw new ApiError(
+        "The persisted rejection approval was created for a different reason. Reconcile or revoke that approval before changing the rejection reason.",
+        409,
+      );
+    }
+
     if (
       workflow.applicationId !== applicationId ||
       workflow.companyId !== application.job.companyId
