@@ -136,6 +136,22 @@ export async function runManagedHiringJoinTests(): Promise<{
         },
       });
 
+      await prisma.offer.create({
+        data: {
+          applicationId: application.id,
+          companyId: companyA.id,
+          createdById: employerA.id,
+          title: "Accepted CI Offer",
+          compensationAmount: 2000000,
+          currency: "INR",
+          expiresAt: new Date(Date.now() + 7 * 86400000),
+          terms: { source: "managed-hiring-join-test" },
+          status: "ACCEPTED",
+          sentAt: new Date(Date.now() - 2 * 3600000),
+          acceptedAt: new Date(Date.now() - 3600000),
+        },
+      });
+
       // Agreements
       agreementA = await prisma.commercialAgreement.create({
         data: {
@@ -275,6 +291,22 @@ export async function runManagedHiringJoinTests(): Promise<{
           jobId: jobListing.id,
           status: "SHORTLISTED",
           annualCtc: 3000000, // 30 Lakhs CTC
+        },
+      });
+
+      await prisma.offer.create({
+        data: {
+          applicationId: application2.id,
+          companyId: companyA.id,
+          createdById: employerA.id,
+          title: "Accepted Concurrent CI Offer",
+          compensationAmount: 3000000,
+          currency: "INR",
+          expiresAt: new Date(Date.now() + 7 * 86400000),
+          terms: { source: "managed-hiring-join-concurrency-test" },
+          status: "ACCEPTED",
+          sentAt: new Date(Date.now() - 2 * 3600000),
+          acceptedAt: new Date(Date.now() - 3600000),
         },
       });
 
