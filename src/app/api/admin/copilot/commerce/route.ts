@@ -57,11 +57,6 @@ export async function PATCH(req: NextRequest) {
         if (!current) throw new ApiError("Copilot regional price not found.", 404);
 
         const { type: _type, priceId, ...changes } = body;
-        if (changes.paymentRoute === "MERCHANT_OF_RECORD") {
-          // A tax mode may be prepared in configuration, but a live MoR route
-          // must not be enabled until an approved provider adapter exists.
-          throw new ApiError("Merchant-of-record checkout is not yet connected to an approved provider.", 409);
-        }
         const updated = await tx.copilotRegionalPrice.update({ where: { id: priceId }, data: changes });
         return { entity: "PRICE", updated };
       }
