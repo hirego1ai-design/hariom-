@@ -189,7 +189,8 @@ export class RosGateway {
           const existingGate = existing.gates[0];
           if (
             existingGate &&
-            [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(existingGate.status)
+            (existingGate.status === ApplicationGateStatus.REQUIRED ||
+              existingGate.status === ApplicationGateStatus.IN_PROGRESS)
           ) {
             return {
               application: {
@@ -325,7 +326,8 @@ export class RosGateway {
         const currentGate = await tx.applicationGate.findUnique({ where: { id: gate.id } });
         if (
           !currentGate ||
-          ![ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(currentGate.status)
+          (currentGate.status !== ApplicationGateStatus.REQUIRED &&
+            currentGate.status !== ApplicationGateStatus.IN_PROGRESS)
         ) {
           return;
         }
