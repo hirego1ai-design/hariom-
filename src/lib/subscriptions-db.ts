@@ -24,7 +24,7 @@ export interface SubscriptionPlanRecord {
   copilotIncluded: boolean;
   copilotJobLimit: number;
   isFeatured: boolean;
-  badgeText?: string | null;
+  badgeText: string | null;
   displayOrder: number;
   isArchived: boolean;
   createdAt: string;
