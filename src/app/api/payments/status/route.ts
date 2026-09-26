@@ -36,6 +36,38 @@ export async function GET(req: NextRequest) {
       ? await prisma.paymentTransaction.findFirst({ where: { companyId, gatewayTxId: paymentOrder.gatewayTxId } })
       : null;
 
+    if (paymentOrder.productType === "COPILOT") {
+      const { getCopilotCapacityStatus } = await import("@/lib/copilot/capacity");
+      const capacity = await getCopilotCapacityStatus(companyId);
+      if (!transaction) {
+        return NextResponse.json({
+          success: true,
+          product: "COPILOT",
+          status: paymentOrder.status === "FAILED" ? "FAILED" : "PENDING",
+          message: paymentOrder.status === "FAILED"
+            ? "Copilot payment attempt failed."
+            : "Copilot payment is awaiting gateway confirmation.",
+          transaction: null,
+          capacity,
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        product: "COPILOT",
+        status: transaction.status,
+        transaction: {
+          id: transaction.id,
+          gatewayTxId: transaction.gatewayTxId,
+          provider: transaction.provider,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          status: transaction.status,
+          createdAt: transaction.createdAt,
+        },
+        capacity,
+      });
+    }
+
     const [subscription, credits] = await Promise.all([
       prisma.$transaction(async (tx) => {
         const now = new Date();
