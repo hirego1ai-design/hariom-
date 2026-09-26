@@ -349,10 +349,10 @@ export async function POST(req: NextRequest) {
             jobPostsLeft: { increment: planSnapshot.jobPostsQuota },
             resumeUnlocksLeft: { increment: planSnapshot.resumeUnlocksQuota },
             aiInterviewsLeft: { increment: planSnapshot.aiInterviewsQuota },
-            aiAgentCreditsLeft: { increment: planSnapshot.aiInterviewsQuota },
             applicationsLeft: { increment: quotaCredits.applicationsLeft },
             resumeDownloadsLeft: { increment: quotaCredits.resumeDownloadsLeft },
             backgroundVerificationsLeft: { increment: quotaCredits.backgroundVerificationsLeft },
+            copilotJobsLeft: { increment: quotaCredits.copilotJobsLeft },
           },
           create: {
             companyId,
