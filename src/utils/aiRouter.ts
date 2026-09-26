@@ -166,9 +166,11 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     throw new Error(`AI model ${request.modelConfig.key} is disabled.`);
   }
 
-  // Production makes no billable request unless cost accounting metadata exists.
+  // Production makes no billable request unless both model pricing and
+  // currency accounting are configured. This must happen before provider I/O.
   if (process.env.NODE_ENV === "production") {
     assertCostMetadata(request.modelConfig);
+    requiredPositiveNumber("AI_BUDGET_USD_TO_INR", 83);
   }
 
   const cacheKey = `${effectiveTaskType}:${request.provider}:${request.model}:${request.prompt.trim().toLowerCase()}`;
