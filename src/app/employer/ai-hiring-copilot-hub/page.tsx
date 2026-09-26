@@ -19,6 +19,21 @@ type PublicPlan = {
   };
 };
 
+type CapacityOffer = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  price: {
+    countryCode: string;
+    regionCode: string;
+    currency: string;
+    amount: number;
+    taxInclusive: boolean;
+    taxesMayApplyAtCheckout: boolean;
+  };
+};
+
 type CapacityState = {
   active: boolean;
   percentageUsed: number;
@@ -55,6 +70,7 @@ export default function EmployerCopilotHubPage() {
   const [country, setCountry] = useState("");
   const [plans, setPlans] = useState<PublicPlan[]>([]);
   const [capacity, setCapacity] = useState<CapacityState | null>(null);
+  const [offers, setOffers] = useState<CapacityOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutPlan, setCheckoutPlan] = useState<PublicPlan | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
@@ -66,17 +82,21 @@ export default function EmployerCopilotHubPage() {
     setCheckoutError("");
     try {
       const suffix = countryOverride ? `?country=${encodeURIComponent(countryOverride.toUpperCase())}` : "";
-      const [plansRes, capacityRes] = await Promise.all([
+      const [plansRes, capacityRes, offersRes] = await Promise.all([
         fetch(`/api/copilot/plans${suffix}`, { cache: "no-store" }),
         fetch("/api/employer/copilot/capacity", { cache: "no-store" }),
+        fetch(`/api/copilot/capacity-offers${suffix}`, { cache: "no-store" }),
       ]);
       const plansData = await plansRes.json();
       const capacityData = await capacityRes.json();
+      const offersData = await offersRes.json();
       if (!plansRes.ok || !plansData.success) throw new Error(plansData.error || "Unable to load Copilot plans.");
       setPlans(plansData.plans || []);
       setCountry(plansData.countryCode || countryOverride || "US");
       if (capacityRes.ok && capacityData.success) setCapacity(capacityData.capacity);
       else setCapacity(null);
+      if (offersRes.ok && offersData.success) setOffers(offersData.offers || []);
+      else setOffers([]);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Unable to load HireGo Copilot.");
     } finally {
@@ -142,6 +162,58 @@ export default function EmployerCopilotHubPage() {
     }
   }
 
+  async function beginCapacityCheckout(offer: CapacityOffer) {
+    if (submitting) return;
+    const normalizedCountry = country.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(normalizedCountry)) {
+      setCheckoutError("Enter a valid two-letter billing country code before adding capacity.");
+      return;
+    }
+
+    const key = crypto.randomUUID();
+    setSubmitting(true);
+    setCheckoutError("");
+    try {
+      const res = await fetch("/api/payments/copilot/add-capacity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": key,
+        },
+        body: JSON.stringify({ offerId: offer.id, countryCode: normalizedCountry }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.order) throw new Error(data.error || "Unable to start add-capacity checkout.");
+
+      const order = data.order;
+      if (!order.checkoutUrl || typeof order.checkoutUrl !== "string" || !order.checkoutUrl.startsWith("http")) {
+        throw new Error("Payment provider did not return a valid checkout destination.");
+      }
+
+      if (order.gateway === "PAYU" && order.checkoutParams && typeof order.checkoutParams === "object") {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = order.checkoutUrl;
+        for (const [keyName, value] of Object.entries(order.checkoutParams)) {
+          if (value === undefined || value === null) continue;
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = keyName;
+          input.value = String(value);
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
+      window.location.assign(order.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Unable to start add-capacity checkout.");
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <section className="rounded-[28px] border border-white/10 bg-[#141418] p-6 md:p-8">
@@ -200,6 +272,37 @@ export default function EmployerCopilotHubPage() {
               </div>
               <p className="mt-2 text-[11px] text-[#64748B]">Hire counts are not capped. Expensive automation pauses only when the plan capacity is reached.</p>
             </div>
+          </div>
+        </section>
+      )}
+
+      {capacity?.active && offers.length > 0 && (
+        <section className="rounded-[24px] border border-white/10 bg-[#16161B] p-6">
+          <div className="mb-5">
+            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#7FB0FF]">Add Capacity</p>
+            <h2 className="mt-1 text-xl font-extrabold text-white">Add capacity for the current plan period</h2>
+            <p className="mt-2 text-xs leading-5 text-[#94A3B8]">
+              Add-ons increase automation capacity only until the current Copilot billing period ends. Internal usage units remain hidden.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {offers.map((offer) => (
+              <article key={offer.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                <h3 className="font-extrabold text-white">{offer.name}</h3>
+                <p className="mt-2 min-h-10 text-xs leading-5 text-[#94A3B8]">{offer.description}</p>
+                <p className="mt-4 text-2xl font-extrabold text-white">{money(offer.price.amount, offer.price.currency)}</p>
+                <p className="mt-1 text-[11px] text-[#64748B]">
+                  {offer.price.taxesMayApplyAtCheckout ? "Applicable tax may be added at checkout." : "Configured tax treatment is included."}
+                </p>
+                <button
+                  disabled={submitting}
+                  onClick={() => void beginCapacityCheckout(offer)}
+                  className="mt-4 w-full rounded-xl border border-[#448AFF]/40 bg-[#448AFF]/10 px-4 py-3 text-xs font-extrabold text-[#A8C7FF] hover:bg-[#448AFF]/20 disabled:opacity-50"
+                >
+                  Add capacity
+                </button>
+              </article>
+            ))}
           </div>
         </section>
       )}
