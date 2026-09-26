@@ -346,10 +346,11 @@ export async function POST(req: NextRequest) {
         const credits = await tx.companyCredits.upsert({
           where: { companyId },
           update: {
-            jobPostsLeft: { increment: planSnapshot.jobPostsQuota },
-            resumeUnlocksLeft: { increment: planSnapshot.resumeUnlocksQuota },
-            aiInterviewsLeft: { increment: planSnapshot.aiInterviewsQuota },
-            aiAgentCreditsLeft: { increment: planSnapshot.aiInterviewsQuota },
+            jobPostsLeft: { increment: quotaCredits.jobPostsLeft },
+            resumeUnlocksLeft: { increment: quotaCredits.resumeUnlocksLeft },
+            aiInterviewsLeft: { increment: quotaCredits.aiInterviewsLeft },
+            aiAgentCreditsLeft: { increment: quotaCredits.aiAgentCreditsLeft },
+            copilotJobsLeft: { increment: quotaCredits.copilotJobsLeft },
             applicationsLeft: { increment: quotaCredits.applicationsLeft },
             resumeDownloadsLeft: { increment: quotaCredits.resumeDownloadsLeft },
             backgroundVerificationsLeft: { increment: quotaCredits.backgroundVerificationsLeft },
@@ -408,7 +409,7 @@ export async function POST(req: NextRequest) {
             companyId,
             action: "PAYMENT_AND_REFERRAL_COMMITTED",
             resource: "/api/payments/webhook",
-            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ${expectedAmount} ${planSnapshot.currency}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
           },
         });
 
