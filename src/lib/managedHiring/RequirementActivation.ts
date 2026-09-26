@@ -105,6 +105,7 @@ export async function activateManagedHiringRequirement(params: {
   requirementId: string;
   activeAgreementId?: string;
   assignedSalesLead?: string;
+  activatedById: string;
 }) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "HiringRequirement" WHERE id = ${params.requirementId} FOR UPDATE`;
@@ -214,6 +215,21 @@ export async function activateManagedHiringRequirement(params: {
             correlationId: `managed-requirement:${requirement.id}`,
             companyId: requirement.companyId,
             idempotencyKey: `managed-requirement:${requirement.id}:job:${managedRoleKey}`,
+          },
+          tx,
+        );
+        await OutboxPublisher.publish(
+          {
+            eventType: "MANAGED_JOB_ACTIVATED",
+            payload: {
+              jobId: job.id,
+              managedRequirementId: requirement.id,
+              managedAgreementId: agreement.id,
+              activatedById: params.activatedById,
+            },
+            correlationId: `managed-requirement:${requirement.id}`,
+            companyId: requirement.companyId,
+            idempotencyKey: `managed-requirement:${requirement.id}:safe-sourcing:${managedRoleKey}`,
           },
           tx,
         );
