@@ -202,7 +202,7 @@ test("Payment controller rejects unsupported providers and safely migrates legac
 
 test("production payment routing preserves an all-disabled gateway configuration", () => {
   const previousNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = "production";
+  Reflect.set(process.env, "NODE_ENV", "production");
   try {
     const normalized = (PaymentGatewayController as any).normalizeConfig({
       primaryGateway: "STRIPE",
@@ -212,8 +212,8 @@ test("production payment routing preserves an all-disabled gateway configuration
     assert.equal(normalized.gatewaysStatus.STRIPE, "DISABLED");
     assert.equal(normalized.gatewaysStatus.PAYU, "DISABLED");
   } finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousNodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+    else Reflect.set(process.env, "NODE_ENV", previousNodeEnv);
   }
 });
 
