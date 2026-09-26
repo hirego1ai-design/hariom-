@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
-import { GatewayName } from "@/lib/payments/PaymentGatewayInterface";
-import { subscriptionCredits, subscriptionExpiry } from "@/lib/payments/subscriptionCredits";
-import { parsePurchasedPlanSnapshot } from "@/lib/payments/planSnapshot";
+import { isGateway } from "@/lib/payments/PaymentGatewayInterface";
 
 const BATCH_SIZE = 50;
 const STALE_PENDING_MINUTES = 10;
@@ -11,8 +9,12 @@ const STALE_PENDING_MINUTES = 10;
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const header = request.headers.get("authorization") || "";
-  const supplied = header.startsWith("Bearer ") ? header.slice(7).trim() : request.headers.get("x-cron-secret")?.trim();
-  return secret ? supplied === secret : process.env.NODE_ENV !== "production" && supplied === "dev-cron-secret";
+  const supplied = header.startsWith("Bearer ")
+    ? header.slice(7).trim()
+    : request.headers.get("x-cron-secret")?.trim();
+  return secret
+    ? supplied === secret
+    : process.env.NODE_ENV !== "production" && supplied === "dev-cron-secret";
 }
 
 export async function POST(request: NextRequest) {
@@ -24,84 +26,111 @@ export async function GET(request: NextRequest) {
 }
 
 async function handleCron(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
+  if (!authorized(request)) {
+    return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
+  }
 
-  const now = new Date();
-  const staleBefore = new Date(now.getTime() - STALE_PENDING_MINUTES * 60_000);
-
+  const staleBefore = new Date(Date.now() - STALE_PENDING_MINUTES * 60_000);
   const pendingOrders = await prisma.paymentOrder.findMany({
     where: {
-      status: "PENDING",
+      status: "CREATED",
       createdAt: { lt: staleBefore },
-      provider: { not: null },
-      gatewayTxId: { not: null },
+      gateway: { not: null },
+      gatewayOrderId: { not: null },
     },
     take: BATCH_SIZE,
     orderBy: { createdAt: "asc" },
   });
 
-  const results = [];
+  const results: Array<Record<string, unknown>> = [];
 
   for (const order of pendingOrders) {
-    if (!order.provider || !order.gatewayTxId) continue;
-    
+    if (!order.gateway || !isGateway(order.gateway) || !order.gatewayOrderId) {
+      results.push({ orderId: order.orderId, status: "INVALID_GATEWAY_BINDING" });
+      continue;
+    }
+
     try {
-      const statusRes = await PaymentGatewayController.getPaymentStatus(order.provider as GatewayName, order.gatewayTxId);
-      
-      if (statusRes.status === "SUCCESS") {
+      // Stripe accepts its Checkout Session id here; PayU accepts txnid.
+      const providerStatus = await PaymentGatewayController.getPaymentStatus(
+        order.gateway,
+        order.gatewayOrderId,
+      );
+
+      if (providerStatus.status === "FAILED") {
         await prisma.$transaction(async (tx) => {
-          const updated = await tx.paymentOrder.updateMany({
-            where: { id: order.id, status: "PENDING" },
-            data: { status: "SUCCESS" }
+          const claim = await tx.paymentOrder.updateMany({
+            where: { id: order.id, status: "CREATED" },
+            data: { status: "FAILED" },
           });
+          if (claim.count !== 1) return;
 
-          if (updated.count > 0 && order.companyId && order.planId) {
-            const plan = await tx.subscriptionPlan.findUnique({ where: { id: order.planId } });
-            if (plan) {
-              const snapshot = parsePurchasedPlanSnapshot(plan);
-              const credits = subscriptionCredits(plan.billingCycle, snapshot);
-              const expires = subscriptionExpiry(plan.billingCycle);
-
-              const activeSub = await tx.companySubscription.findFirst({
-                where: { companyId: order.companyId, status: "ACTIVE" },
-                orderBy: { createdAt: "desc" }
+          if (order.promoReservationState === "RESERVED" && order.promoCode) {
+            const promos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
+              SELECT "id", "reservedUsage"
+              FROM "PromoCode"
+              WHERE "code" = ${order.promoCode}
+              FOR UPDATE
+            `;
+            const promo = promos[0];
+            if (promo?.reservedUsage && promo.reservedUsage > 0) {
+              await tx.promoCode.update({
+                where: { id: promo.id },
+                data: { reservedUsage: { decrement: 1 } },
               });
-
-              if (!activeSub) {
-                await tx.companySubscription.create({
-                  data: {
-                    companyId: order.companyId,
-                    planId: plan.id,
-                    status: "ACTIVE",
-                    periodEnd: expires,
-                    credits: credits.total,
-                    usedCredits: 0,
-                  }
-                });
-              } else {
-                await tx.companySubscription.update({
-                  where: { id: activeSub.id },
-                  data: {
-                    periodEnd: expires,
-                    credits: { increment: credits.total }
-                  }
-                });
-              }
             }
+            await tx.paymentOrder.update({
+              where: { id: order.id },
+              data: { promoReservationState: "RELEASED" },
+            });
           }
+
+          await tx.auditLog.create({
+            data: {
+              userId: null,
+              companyId: order.companyId,
+              action: "PAYMENT_RECONCILIATION_FAILED",
+              resource: `PaymentOrder:${order.orderId}`,
+              details: `Provider ${order.gateway} reported failed payment for stale checkout.`,
+            },
+          });
         });
-        results.push({ orderId: order.id, status: "SUCCESS" });
-      } else if (statusRes.status === "FAILED") {
-        await prisma.paymentOrder.updateMany({
-          where: { id: order.id, status: "PENDING" },
-          data: { status: "FAILED" }
-        });
-        results.push({ orderId: order.id, status: "FAILED" });
-      } else {
-        results.push({ orderId: order.id, status: "PENDING" });
+        results.push({ orderId: order.orderId, status: "FAILED" });
+        continue;
       }
-    } catch (error: any) {
-      results.push({ orderId: order.id, status: "ERROR", error: error.message });
+
+      if (providerStatus.status === "SUCCESS") {
+        // Do not synthesize fulfillment here. The verified webhook owns the
+        // atomic subscription/promo/ledger transition. Preserve CREATED so a
+        // delayed/replayed verified webhook can still claim and fulfill it.
+        await prisma.systemEvent.upsert({
+          where: { idempotencyKey: `payment-reconciliation-success:${order.orderId}` },
+          update: {},
+          create: {
+            scope: "TENANT",
+            companyId: order.companyId,
+            eventType: "PAYMENT_RECONCILIATION_SUCCESS_DETECTED",
+            correlationId: order.orderId,
+            idempotencyKey: `payment-reconciliation-success:${order.orderId}`,
+            payload: {
+              orderId: order.orderId,
+              gateway: order.gateway,
+              gatewayOrderId: order.gatewayOrderId,
+              actionRequired: "VERIFIED_WEBHOOK_FULFILLMENT",
+            },
+          },
+        });
+        results.push({ orderId: order.orderId, status: "SUCCESS_AWAITING_VERIFIED_WEBHOOK" });
+        continue;
+      }
+
+      results.push({ orderId: order.orderId, status: "PENDING" });
+    } catch (error) {
+      results.push({
+        orderId: order.orderId,
+        status: "ERROR",
+        error: error instanceof Error ? error.message : "Payment reconciliation failed",
+      });
     }
   }
 
