@@ -4,11 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
+import { assignUniversalAssessment, getCandidateTargetRole, UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 
 const selectReadinessSchema = z.object({
   roleTitle: z.string().trim().min(1).max(120),
   seniority: z.string().trim().min(1).max(80),
 }).strict();
+
+const readinessRequestSchema = z.union([
+  selectReadinessSchema,
+  z.object({ autoAssign: z.literal(true) }).strict(),
+]);
 
 async function candidateProfile(request: NextRequest) {
   const session = await getCurrentSession(request.headers);
@@ -63,8 +69,25 @@ export async function POST(request: NextRequest) {
   try {
     await enforceRateLimit(request, "candidate_readiness", 60, 60_000);
     const profile = await candidateProfile(request);
-    const { roleTitle, seniority } = await readValidatedJson(request, selectReadinessSchema, 4 * 1024);
+    const payload = await readValidatedJson(request, readinessRequestSchema, 4 * 1024);
 
+    if ("autoAssign" in payload) {
+      const targetRole = getCandidateTargetRole(profile.preferences);
+      if (!targetRole) {
+        throw new ApiError("Choose a target role before generating HireGo Skill Validation.", 409);
+      }
+      const assignment = await assignUniversalAssessment(profile.id, targetRole);
+      return NextResponse.json({
+        success: true,
+        readiness: assignment.readiness,
+        assessmentId: assignment.assessment.id,
+        roleTitle: targetRole,
+        seniority: UNIVERSAL_VALIDATION_SENIORITY,
+        generatedOrAssigned: true,
+      });
+    }
+
+    const { roleTitle, seniority } = payload;
     const candidates = await prisma.mcqAssessment.findMany({
       where: { scope: "PLATFORM_READINESS", isActive: true, roleTitle, seniority },
       select: {
