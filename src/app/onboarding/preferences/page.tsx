@@ -22,6 +22,8 @@ export default function PreferencesPage() {
   const [interviewLanguage, setInterviewLanguage] = useState("");
   const [salaryCurrency, setSalaryCurrency] = useState("");
   const [salaryExpectation, setSalaryExpectation] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   React.useEffect(() => {
     fetch("/api/candidate/profile")
@@ -72,25 +74,35 @@ export default function PreferencesPage() {
       salaryCurrency,
       salaryExpectation,
     };
-    updateState({});
-    await fetch("/api/candidate/profile", {
+
+    const response = await fetch("/api/candidate/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preferences }),
     });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(result?.error || "We could not save your preferences. Please try again.");
+    }
+    updateState({});
   };
 
-  const handleNext = async () => {
-    await savePreferences();
-    markStepComplete(9);
-    router.push("/onboarding/baseline-assessment");
+  const continueAfterSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      await savePreferences();
+      markStepComplete(9);
+      router.push("/onboarding/baseline-assessment");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "We could not save your preferences. Please try again.");
+      setIsSaving(false);
+    }
   };
 
-  const handleSkip = async () => {
-    await savePreferences();
-    markStepComplete(9);
-    router.push("/onboarding/baseline-assessment");
-  };
+  const handleNext = continueAfterSave;
+  const handleSkip = continueAfterSave;
 
   return (
     <div
@@ -160,6 +172,11 @@ export default function PreferencesPage() {
 
         {/* Main Workspace Body */}
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          {saveError && (
+            <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {saveError}
+            </div>
+          )}
           {/* Main Preferences Bento Card */}
           <div
             className="rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl relative overflow-hidden"
@@ -384,20 +401,22 @@ export default function PreferencesPage() {
             <button
               type="button"
               onClick={handleSkip}
-              className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
+              disabled={isSaving}
+              className="px-5 h-11 rounded-full font-bold text-xs border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
             >
               Skip for now
             </button>
             <button
               onClick={handleNext}
-              className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+              disabled={isSaving}
+              className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                 boxShadow: "var(--shadow-btn-red)",
               }}
             >
-              <span>Next: AI Baseline Assessment</span>
+              <span>{isSaving ? "Saving..." : "Next: AI Baseline Assessment"}</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
             </div>
