@@ -56,6 +56,25 @@ test("durable outbox worker is scheduled and registers production consumers", ()
   assert.match(vercel, /\/api\/cron\/events-outbox/);
 });
 
+test("new managed hiring evidence tables remain server-only behind RLS", () => {
+  const migration = read(
+    "../../prisma/migrations/20260926200000_offer_interview_evaluation_rls/migration.sql",
+  );
+
+  assert.match(migration, /ALTER TABLE public\."Offer" ENABLE ROW LEVEL SECURITY/);
+  assert.match(
+    migration,
+    /ALTER TABLE public\."InterviewEvaluation" ENABLE ROW LEVEL SECURITY/,
+  );
+  assert.match(migration, /REVOKE ALL PRIVILEGES ON TABLE public\."Offer" FROM PUBLIC/);
+  assert.match(
+    migration,
+    /REVOKE ALL PRIVILEGES ON TABLE public\."InterviewEvaluation" FROM PUBLIC/,
+  );
+  assert.match(migration, /FROM anon/);
+  assert.match(migration, /FROM authenticated/);
+});
+
 test("live interview answer evaluation is provenance-bound, advisory, and human-gated", () => {
   const schema = read("../../prisma/schema.prisma");
   const agents = read("../lib/agents/OperationalAgents.ts");
