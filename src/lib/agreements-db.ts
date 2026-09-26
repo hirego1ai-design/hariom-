@@ -44,7 +44,7 @@ function requirementRecord(r: any, activeAgreementId?: string): HiringRequiremen
           workMode: String(item.workMode || ""),
           location: String(item.location || ""),
         }))
-        .filter((item: HiringRequirementRecord["positions"] extends Array<infer T> ? T : never) =>
+        .filter((item: { jobTitle: string; numberOfPositions: number }) =>
           Boolean(item.jobTitle) && item.numberOfPositions > 0,
         )
     : undefined;
