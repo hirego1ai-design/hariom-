@@ -4,7 +4,7 @@ import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonErro
 import { prisma } from "@/lib/prisma";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
 import { assignUniversalAssessment, getCandidateTargetRole, getUniversalValidationState } from "@/lib/universalSkillValidation";
-import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
+import { ApplicationGateStatus, ApplicationGateType, Prisma } from "@prisma/client";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const applicationSchema = z.object({
@@ -20,9 +20,12 @@ type ScreeningAnswers = z.infer<typeof applicationSchema>["answers"];
 
 async function persistScreeningAnswers(applicationId: string, answers: ScreeningAnswers) {
   if (!answers) return;
+  const normalized = Object.fromEntries(
+    Object.entries(answers).filter(([, value]) => value !== undefined),
+  ) as Prisma.InputJsonValue;
   await prisma.application.update({
     where: { id: applicationId },
-    data: { screeningAnswers: answers },
+    data: { screeningAnswers: normalized },
   });
 }
 
@@ -162,8 +165,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      await persistScreeningAnswers(pending.application.id, answers);
-
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
         await RosGateway.attachUniversalAssessment({
@@ -243,6 +244,8 @@ export async function POST(req: NextRequest) {
           },
         };
       }
+
+      await persistScreeningAnswers(pending.application.id, answers);
 
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
