@@ -29,6 +29,7 @@ async function run(request: NextRequest) {
   const staleBefore = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60_000);
   const jobs = await prisma.recordedAssessmentAnalysisJob.findMany({
     where: {
+      completedAt: null,
       OR: [
         { status: { in: ["PENDING", "BLOCKED_INFRA", "FAILED"] } },
         { status: "PROCESSING", OR: [{ startedAt: { lt: staleBefore } }, { startedAt: null }] },
@@ -40,7 +41,12 @@ async function run(request: NextRequest) {
   });
   const results = [];
   for (const job of jobs) {
-    if (job.attempts >= job.maxAttempts) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "max-attempts" }); continue; }
+    if (job.attempts >= job.maxAttempts) { 
+      // F03 Fix: Mark exhausted jobs with completedAt so they no longer starve the queue
+      await prisma.recordedAssessmentAnalysisJob.update({ where: { id: job.id }, data: { completedAt: new Date(), status: "FAILED" } });
+      results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "max-attempts" }); 
+      continue; 
+    }
     if (job.status !== "PROCESSING" && now.getTime() - job.updatedAt.getTime() < retryDelayMs(job.attempts)) { results.push({ jobId: job.id, responseId: job.responseId, dispatched: false, reason: "backoff" }); continue; }
     if (job.status === "PROCESSING") {
       const claimed = await prisma.recordedAssessmentAnalysisJob.updateMany({

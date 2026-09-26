@@ -157,19 +157,23 @@ export async function verifyOtpCode(
       await prisma.otpVerification.update({ where: { id: record.id }, data: { verified: true } });
       return { valid: false, error: "Invalid or expired verification code." };
     } else if (!otpMatches(record.otp, otpDigest(normalizedEmail, type, otp))) {
-      const nextAttempts = record.attempts + 1;
-      await prisma.otpVerification.update({
+      const updated = await prisma.otpVerification.update({
         where: { id: record.id },
-        data: {
-          attempts: { increment: 1 },
-          lockedUntil: nextAttempts >= OTP_MAX_ATTEMPTS ? new Date(Date.now() + OTP_LOCKOUT_MS) : null,
-        },
+        data: { attempts: { increment: 1 } },
+        select: { attempts: true, id: true }
       });
+      
+      if (updated.attempts >= OTP_MAX_ATTEMPTS) {
+        await prisma.otpVerification.update({
+          where: { id: updated.id },
+          data: { lockedUntil: new Date(Date.now() + OTP_LOCKOUT_MS) },
+        });
+        return { valid: false, error: "Too many attempts. Please request a new verification code later." };
+      }
+      
       return {
         valid: false,
-        error: nextAttempts >= OTP_MAX_ATTEMPTS
-          ? "Too many attempts. Please request a new verification code later."
-          : "Invalid or expired verification code.",
+        error: "Invalid or expired verification code.",
       };
     } else {
       if (!consume) {
