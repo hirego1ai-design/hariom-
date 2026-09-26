@@ -59,3 +59,12 @@ No item is 100% without evidence appropriate to that item. Provider, staging, re
 - Never report fabricated provider success.
 - Never weaken tenant, RBAC, approval, payment, quarantine, rate-limit, or audit controls to make a gate pass.
 - Database rollback evidence means a tested recovery strategy; do not invent destructive down migrations.
+
+## Final evidence trigger
+
+The repository's `Production Load Test` workflow is intentionally protected from running on every push. It runs only on manual dispatch or when the main-branch commit message contains `[load-test]`.
+
+For the final production-readiness evidence run, merge the dedicated release-gate PR with `[load-test]` in the merge commit message. The workflow performs the existing safe, read-only production load test against `https://www.hiregoai.com` and uploads `load-test-results.json` as retained evidence.
+
+A skipped load-test job is not a pass. Final release sign-off requires an actual successful run plus the normal CI, Phase 5, security, migration, deployment, and provider checks.
+
