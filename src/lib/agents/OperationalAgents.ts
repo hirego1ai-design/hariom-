@@ -26,7 +26,8 @@ const mockInterviewSchema = z.object({
 export class ResumeEvaluatorAgent extends BaseAgent {
   public readonly agentId = 'resume-evaluator';
   public readonly name = 'Resume HireScore Evaluator Agent';
-  public readonly description = 'Evaluates candidate resumes against job requirements and computes HireGo scores.';
+  public readonly description = 'Evaluates authorized candidate/job evidence and produces a bounded AI-assisted resume analysis.';
+  public readonly routingTaskType = 'resume-screening';
   public readonly allowedTools = ['parseResume', 'extractSkills', 'computeHireScore', 'readCandidateProfile'];
 
   public async execute(
@@ -178,7 +179,8 @@ export class ResumeEvaluatorAgent extends BaseAgent {
 export class MockInterviewCopilotAgent extends BaseAgent {
   public readonly agentId = 'mock-interview-copilot';
   public readonly name = 'Mock Interview Copilot Agent';
-  public readonly description = 'Generates adaptive interview questions and evaluates candidate answers in real-time.';
+  public readonly description = 'Generates and evaluates text-only Mock Interview practice turns.';
+  public readonly routingTaskType = 'mock-interview';
   public readonly allowedTools = ['generateQuestion', 'evaluateResponse', 'recordTranscript'];
 
   public async execute(
@@ -238,7 +240,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
 export class SecurityJudgeAgent extends BaseAgent {
   public readonly agentId = 'security-judge';
   public readonly name = 'Security & Integrity Judge Agent';
-  public readonly description = 'Monitors proctoring streams and flags integrity or security violations.';
+  public readonly description = 'Evaluates explicit integrity signals supplied by an authorized workflow; it does not itself monitor camera, microphone, screen, or browser tabs.';
   public readonly allowedTools = ['logViolation', 'readProctoringStream', 'flagCandidate'];
 
   public async execute(
@@ -287,7 +289,7 @@ export class SecurityJudgeAgent extends BaseAgent {
 export class CommunicationCoachAgent extends BaseAgent {
   public readonly agentId = 'communication-coach';
   public readonly name = 'Communication Coach Agent';
-  public readonly description = 'Analyzes audio transcripts for WPM, filler words, clarity, and vocal confidence.';
+  public readonly description = 'Analyzes an authorized text transcript and measured duration for deterministic pacing and filler-word indicators.';
   public readonly allowedTools = ['analyzeAudio', 'computeWPM', 'countFillers', 'generateFeedback'];
 
   public async execute(
@@ -324,7 +326,8 @@ export class CommunicationCoachAgent extends BaseAgent {
 export class JdGeneratorAgent extends BaseAgent {
   public readonly agentId = 'jd-generator';
   public readonly name = 'Job Description Generator Agent';
-  public readonly description = 'Drafts high-converting, bias-free job descriptions based on company requirements.';
+  public readonly description = 'Drafts job descriptions from bounded employer requirements and runs fairness checks.';
+  public readonly routingTaskType = 'jd-generator';
   public readonly allowedTools = ['generateJobDescription', 'readCompanyProfile', 'readJobTemplate'];
 
   public async execute(
@@ -375,7 +378,7 @@ export class JdGeneratorAgent extends BaseAgent {
 export class CandidateMatchmakerAgent extends BaseAgent {
   public readonly agentId = 'candidate-matchmaker';
   public readonly name = 'Candidate Matchmaker Agent';
-  public readonly description = 'Matches candidates to job listings using multi-dimensional compatibility scoring.';
+  public readonly description = 'Surfaces tenant-authorized candidate relationships; authoritative match percentages are calculated by the deterministic matching engine.';
   public readonly allowedTools = ['searchCandidates', 'computeCompatibility', 'readJobRequirements'];
 
   public async execute(
