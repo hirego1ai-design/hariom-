@@ -98,9 +98,11 @@ test("missing experience data is not silently converted into a failed zero-exper
   assert.equal(match.experienceEvidenceAvailable, false);
   assert.equal(match.candidateExperienceYears, null);
   assert.equal(match.experienceMeetsRequirement, null);
-  // The known skill evidence can still produce a compatibility signal, but the
-  // screening disposition must route the unknown experience to validation.
-  assert.equal(match.matchScore, 100);
+  // The known skill evidence can still produce a compatibility signal. The
+  // missing preferred AWS evidence can lower ranking, but unknown experience
+  // must not be scored as a failed zero-experience dimension.
+  assert.equal(match.breakdown.experienceScore, null);
+  assert.equal(match.matchScore, 80);
   assert.equal(
     evaluateCandidateScreening(match).disposition,
     "ASSESSMENT_RECOMMENDED",
