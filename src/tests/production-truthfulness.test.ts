@@ -313,9 +313,14 @@ test("public candidate sharing and unavailable AI surfaces cannot be falsely cer
     assert.doesNotMatch(publicProfile, pattern);
   }
 
+  const copilot = read("src/app/employer/ai-hiring-copilot-hub/page.tsx");
+  for (const marker of ["/api/copilot/plans", "/api/employer/copilot/capacity", "/api/payments/copilot/checkout"]) {
+    assert.ok(copilot.includes(marker), `Copilot hub must be wired to authoritative API: ${marker}`);
+  }
+  assert.doesNotMatch(copilot, /UNAVAILABLE|mock page has been removed|Waiting for real API integration/i);
+
   const inventory = JSON.parse(read("production-wiring-inventory.json"));
   const unavailableRoutes = new Set([
-    "/employer/ai-hiring-copilot-hub",
     "/employer/ai-evaluation-scores",
     "/employer/ai-candidate-ranking-explanation",
   ]);
