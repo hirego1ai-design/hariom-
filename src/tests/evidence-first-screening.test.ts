@@ -228,6 +228,6 @@ test("generic managed pipeline cannot directly reject and the controlled endpoin
   assert.match(tracker, /Request human approval/);
   assert.match(tracker, /Confirm rejection/);
   const movableBlock =
-    tracker.match(/const movableStages = \\[([\\s\\S]*?)\\];/)?.[1] ?? "";
+    tracker.match(/const movableStages = \[([\s\S]*?)\];/)?.[1] ?? "";
   assert.doesNotMatch(movableBlock, /REJECTED/);
 });
