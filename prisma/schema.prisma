@@ -751,6 +751,7 @@ model InterviewEvaluation {
   strengths           Json
   concerns             Json
   summary              String
+  supportingEvidence   Json      @default("{}")
   provider             String?
   model                String?
   schemaVersion        String    @default("1.0")
