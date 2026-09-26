@@ -99,6 +99,17 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       status: "ACTIVE",
     },
   });
+  await prisma.candidateReadiness.create({
+    data: {
+      candidateProfileId: candidate.id,
+      roleTitle: job.title,
+      seniority: "UNIVERSAL",
+      status: "JOB_READY",
+      score: 80,
+      assessedAt: new Date(),
+      validUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    },
+  });
   let submittedApplicationId: string | undefined;
 
   try {
