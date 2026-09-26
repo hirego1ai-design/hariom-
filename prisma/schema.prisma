@@ -39,6 +39,14 @@ enum ApplicationGateStatus {
   CANCELLED
 }
 
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
 enum JobStatus {
   DRAFT
   ACTIVE
@@ -504,6 +512,7 @@ model Application {
   updatedAt          DateTime          @updatedAt
   annualCtc          Float?
   pphPlacement       PphPlacement?
+  offer              Offer?
 
   interviews    Interview[]
   roundProgress InterviewRoundProgress[]
@@ -513,6 +522,28 @@ model Application {
 
   @@unique([candidateProfileId, jobId])
   @@index([jobId])
+}
+
+model Offer {
+  id                    String      @id @default(uuid())
+  applicationId         String      @unique
+  application           Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  companyId             String
+  createdById           String
+  title                 String
+  terms                 Json
+  documentFileId        String?
+  status                OfferStatus @default(DRAFT)
+  sentAt                DateTime?
+  acceptedAt            DateTime?
+  declinedAt            DateTime?
+  revokedAt             DateTime?
+  responseNote          String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model AssessmentNoticeAcknowledgement {
