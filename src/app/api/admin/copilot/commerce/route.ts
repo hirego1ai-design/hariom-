@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, handleApiError, ApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
@@ -79,7 +78,7 @@ export async function PATCH(req: NextRequest) {
           // Deliberately record which keys changed without copying values that
           // could later contain provider-sensitive configuration.
           fields: Object.keys(body).filter((key) => !["type", "planId", "priceId", "actionKey"].includes(key)),
-        }) as unknown as Prisma.InputJsonValue as unknown as string,
+        }),
       },
     });
 
