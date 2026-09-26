@@ -9,6 +9,7 @@ import { dispatchAiTask, markAiExecutionValidationFailure } from '@/utils/aiRout
 import { validateTenantAccess, TenantAccessError } from '../security/TenantContext';
 import { z } from 'zod';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
+import { computeMatchScore, evaluateCandidateScreening } from '@/lib/matching/JobMatchingEngine';
 
 const resumeEvaluationSchema = z.object({
   score: z.number().int().min(0).max(100),
@@ -378,7 +379,7 @@ export class JdGeneratorAgent extends BaseAgent {
 export class CandidateMatchmakerAgent extends BaseAgent {
   public readonly agentId = 'candidate-matchmaker';
   public readonly name = 'Candidate Matchmaker Agent';
-  public readonly description = 'Surfaces tenant-authorized candidate relationships; authoritative match percentages are calculated by the deterministic matching engine.';
+  public readonly description = 'Ranks tenant-authorized applicants with the deterministic evidence-first matching engine. It never auto-rejects candidates.';
   public readonly allowedTools = ['searchCandidates', 'computeCompatibility', 'readJobRequirements'];
 
   public async execute(
@@ -386,32 +387,97 @@ export class CandidateMatchmakerAgent extends BaseAgent {
     context: ToolExecutionContext
   ): Promise<Record<string, unknown>> {
     const companyId = context.tenantContext.companyId;
-    let candidateProfiles: any[] = [];
-    if (!companyId) throw new Error('Company context is required for candidate matching.');
+    if (!companyId) throw new TenantAccessError('Company context is required for candidate matching.');
 
-    try {
-      candidateProfiles = await prisma.candidateProfile.findMany({
-        where: { applications: { some: { job: { companyId } } } },
-        take: 5,
-        include: { user: true },
-      });
-    } catch (error) {
-      throw error;
+    const jobId = z.string().trim().min(1).max(128).parse(taskInput.jobId);
+    const candidateProfileId =
+      typeof taskInput.candidateProfileId === 'string' && taskInput.candidateProfileId.trim()
+        ? z.string().trim().min(1).max(128).parse(taskInput.candidateProfileId)
+        : null;
+
+    const job = await prisma.jobListing.findFirst({
+      where: { id: jobId, companyId },
+      select: {
+        id: true,
+        companyId: true,
+        title: true,
+        description: true,
+        requirements: true,
+        skillRequirements: true,
+        matchingConfig: true,
+      },
+    });
+    if (!job) throw new TenantAccessError('Tenant-owned job listing was not found.');
+
+    const candidateProfiles = await prisma.candidateProfile.findMany({
+      where: {
+        ...(candidateProfileId ? { id: candidateProfileId } : {}),
+        applications: { some: { jobId, job: { companyId } } },
+      },
+      take: candidateProfileId ? 1 : 100,
+      include: {
+        user: { select: { name: true } },
+        candidateSkills: {
+          where: { isVisible: true },
+          select: {
+            name: true,
+            normalizedName: true,
+            verificationStatus: true,
+            validUntil: true,
+            isVisible: true,
+          },
+        },
+      },
+    });
+
+    if (candidateProfileId && candidateProfiles.length !== 1) {
+      throw new TenantAccessError('Candidate is not authorized for this tenant-owned job.');
     }
 
-    const matches = candidateProfiles.map((c, index) => ({
-      candidateProfileId: c.id,
-      candidateName: c.user?.name || `Candidate ${index + 1}`,
-      compatibilityScore: null,
-      scoreStatus: 'NOT_MEASURED',
-    }));
+    const dispositionPriority = {
+      SHORTLIST_RECOMMENDED: 0,
+      ASSESSMENT_RECOMMENDED: 1,
+      HUMAN_REVIEW_REQUIRED: 2,
+    } as const;
+
+    const matches = candidateProfiles.map((candidate, index) => {
+      const match = computeMatchScore(candidate, job);
+      const screening = evaluateCandidateScreening(match);
+      return {
+        candidateProfileId: candidate.id,
+        candidateName: candidate.user?.name || `Candidate ${index + 1}`,
+        compatibilityScore: match.matchScore,
+        scoreStatus: match.evidenceAvailable ? 'MEASURED_FROM_AVAILABLE_EVIDENCE' : 'INSUFFICIENT_EVIDENCE',
+        screeningDisposition: screening.disposition,
+        assessmentRecommended: screening.assessmentRecommended,
+        humanReviewRequired: screening.humanReviewRequired,
+        automaticRejectionAllowed: false,
+        requiredSkills: match.requiredSkills,
+        matchingRequiredSkills: match.matchingRequiredSkills,
+        notEvidencedRequiredSkills: match.notEvidencedRequiredSkills,
+        verificationCoverage: match.verificationCoverage,
+        reasons: screening.reasons,
+      };
+    }).sort((a, b) => {
+      const dispositionDelta =
+        dispositionPriority[a.screeningDisposition] -
+        dispositionPriority[b.screeningDisposition];
+      if (dispositionDelta !== 0) return dispositionDelta;
+      if (b.verificationCoverage !== a.verificationCoverage) {
+        return b.verificationCoverage - a.verificationCoverage;
+      }
+      return b.compatibilityScore - a.compatibilityScore;
+    });
 
     return {
       agentId: this.agentId,
       status: 'SUCCESS',
+      jobId,
       matchedCandidateCount: matches.length,
       topMatches: matches,
-      rankingStatus: 'NOT_MEASURED',
+      rankingStatus: 'EVIDENCE_FIRST_MEASURED',
+      policy: 'EVIDENCE_FIRST_NO_AUTO_REJECT',
+      actualCostMinorUnits: 0,
     };
   }
 }

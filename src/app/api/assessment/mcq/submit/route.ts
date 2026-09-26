@@ -14,6 +14,7 @@ import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyVali
 import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
 import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
+import { OutboxPublisher } from "@/lib/events/Outbox";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -255,7 +256,16 @@ export async function POST(req: NextRequest) {
           assessmentId: assessment.id,
           application: { candidateProfileId: candidateProfile.id },
         },
-        select: { id: true, applicationId: true },
+        select: {
+          id: true,
+          applicationId: true,
+          application: {
+            select: {
+              jobId: true,
+              job: { select: { companyId: true } },
+            },
+          },
+        },
       });
 
       for (const gate of gates) {
@@ -273,14 +283,36 @@ export async function POST(req: NextRequest) {
           });
           if (claim.count !== 1) return false;
 
-          await tx.application.updateMany({
+          const advanced = await tx.application.updateMany({
             where: {
               id: gate.applicationId,
               candidateProfileId: candidateProfile.id,
               status: "ASSESSMENT",
             },
-            data: { status: "APPLIED" },
+            data: { status: "SCREENING" },
           });
+          if (advanced.count !== 1) {
+            throw new ApiError(
+              "Application stage changed before the completed assessment could enter screening.",
+              409,
+            );
+          }
+
+          await OutboxPublisher.publish({
+            eventType: "APPLICATION_ASSESSMENT_COMPLETED",
+            payload: {
+              applicationId: gate.applicationId,
+              jobId: gate.application.jobId,
+              assessmentId: assessment.id,
+              attemptId,
+              score,
+              passed,
+              assessmentScope: assessment.scope,
+            },
+            correlationId: `assessment:${attemptId}`,
+            companyId: gate.application.job.companyId,
+            idempotencyKey: `application-assessment-completed:${gate.applicationId}:${attemptId}`,
+          }, tx);
           return true;
         });
 

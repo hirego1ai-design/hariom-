@@ -36,6 +36,65 @@ export async function applicationSubmitted(event: SystemEvent) {
   });
 }
 
+export async function applicationAssessmentCompleted(event: SystemEvent) {
+  const payload = z.object({
+    applicationId: id,
+    jobId: id,
+    assessmentId: id,
+    attemptId: id,
+    score: z.number().int().min(0).max(100),
+    passed: z.boolean(),
+    assessmentScope: z.literal('EMPLOYER_JOB'),
+  }).parse(event.payload);
+
+  await prisma.$transaction(async tx => {
+    const companyId = company(event);
+    const application = await tx.application.findFirst({
+      where: {
+        id: payload.applicationId,
+        jobId: payload.jobId,
+        job: { companyId },
+      },
+      select: {
+        status: true,
+        candidateProfile: { select: { user: { select: { name: true } } } },
+        job: { select: { title: true } },
+      },
+    });
+    if (!application) {
+      throw new Error('Assessment event has no matching tenant-owned application.');
+    }
+
+    const recipients = await tx.employerProfile.findMany({
+      where: {
+        companyId,
+        user: { role: { in: ['EMPLOYER', 'RECRUITER'] } },
+      },
+      select: { userId: true },
+      take: 101,
+      orderBy: { userId: 'asc' },
+    });
+    if (!recipients.length || recipients.length > 100) {
+      throw new Error('Assessment notification recipient set requires operator review.');
+    }
+
+    const candidateName = application.candidateProfile.user.name || 'Candidate';
+    const message =
+      `${candidateName} completed the job-specific assessment for ${application.job.title} with a recorded score of ${payload.score}/100. Review the evidence before the next hiring action; this result did not automatically select or reject the candidate.`;
+
+    await tx.notification.createMany({
+      skipDuplicates: true,
+      data: recipients.map(({ userId }) => ({
+        id: eventNotificationId(event.idempotencyKey, userId),
+        userId,
+        type: 'ASSESSMENT',
+        title: 'Candidate assessment completed',
+        message,
+      })),
+    });
+  });
+}
+
 export async function jobListingCreated(event: SystemEvent) {
   const payload = z.object({ jobId: id }).parse(event.payload);
   await prisma.$transaction(async tx => {
@@ -60,10 +119,13 @@ export async function hiringPipelineCompleted(event: SystemEvent) {
   await prisma.$transaction(async tx => {
     const companyId = company(event);
     const workflow = await tx.workflowInstance.findFirst({
-      where: { id: payload.workflowId, companyId, correlationId: event.correlationId, status: 'COMPLETED', workflowType: 'END_TO_END_HIRING' },
-      select: { initiatedBy: true },
+      where: { id: payload.workflowId, companyId, correlationId: event.correlationId, status: 'COMPLETED', workflowType: 'CANDIDATE_SCREENING' },
+      select: { initiatedBy: true, checkpointState: true },
     });
     if (!workflow) throw new Error('Workflow event has no matching completed tenant-owned record.');
+    const checkpoint = workflow.checkpointState && typeof workflow.checkpointState === 'object' && !Array.isArray(workflow.checkpointState)
+      ? workflow.checkpointState as Record<string, unknown> : {};
+    if (checkpoint.mode !== 'ADVISORY_ONLY') throw new Error('Completed pipeline event is not an advisory workflow.');
     const actor = await tx.user.findFirst({
       where: { id: workflow.initiatedBy, OR: [{ role: 'ADMIN' }, { role: { in: ['EMPLOYER', 'RECRUITER'] }, employerProfile: { companyId } }] },
       select: { id: true },
@@ -79,6 +141,7 @@ export async function hiringPipelineCompleted(event: SystemEvent) {
 
 export function registerProductionConsumers() {
   ConsumerRegistry.register('APPLICATION_SUBMITTED', 'application-receipt-v1', applicationSubmitted);
+  ConsumerRegistry.register('APPLICATION_ASSESSMENT_COMPLETED', 'assessment-completed-employer-notification-v1', applicationAssessmentCompleted);
   ConsumerRegistry.register('JOB_LISTING_CREATED', 'job-created-notification-v1', jobListingCreated);
   ConsumerRegistry.register('HIRING_PIPELINE_COMPLETED', 'advisory-completed-notification-v1', hiringPipelineCompleted);
 }

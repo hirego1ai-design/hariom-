@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { SystemEvent } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { ConsumerRegistry } from '../lib/events/ConsumerRegistry';
-import { applicationSubmitted, jobListingCreated, hiringPipelineCompleted, eventNotificationId, registerProductionConsumers } from '../lib/events/ProductionConsumers';
+import { applicationSubmitted, applicationAssessmentCompleted, jobListingCreated, hiringPipelineCompleted, eventNotificationId, registerProductionConsumers } from '../lib/events/ProductionConsumers';
 
 const event: SystemEvent = { id: 'event', scope: 'TENANT', companyId: 'tenant', eventType: 'APPLICATION_SUBMITTED', eventVersion: 1,
   actorId: null, correlationId: 'correlation', idempotencyKey: 'application:a', payload: { applicationId: 'a', jobId: 'j' }, createdAt: new Date() };
@@ -14,7 +14,7 @@ function fixture(t: TestContext, options: { missing?: boolean; recipients?: numb
   const tx = {
     application: { findFirst: async ({ where }: any) => {
       assert.equal(where.job.companyId, 'tenant'); assert.equal(where.id, 'a'); assert.equal(where.jobId, 'j');
-      return options.missing ? null : { candidateProfile: { userId: 'candidate' }, job: { title: 'Engineer' } };
+      return options.missing ? null : { status: 'SCREENING', candidateProfile: { userId: 'candidate', user: { name: 'Candidate' } }, job: { title: 'Engineer' } };
     } },
     jobListing: { findFirst: async ({ where }: any) => { assert.equal(where.companyId, 'tenant'); return options.missing ? null : { title: 'Engineer' }; } },
     employerProfile: { findMany: async ({ where, take }: any) => {
@@ -23,7 +23,7 @@ function fixture(t: TestContext, options: { missing?: boolean; recipients?: numb
     } },
     workflowInstance: { findFirst: async ({ where }: any) => {
       assert.equal(where.companyId, 'tenant'); assert.equal(where.status, 'COMPLETED'); assert.equal(where.correlationId, event.correlationId);
-      return options.missing ? null : { initiatedBy: 'initiator' };
+      return options.missing ? null : { initiatedBy: 'initiator', checkpointState: { mode: 'ADVISORY_ONLY' } };
     } },
     user: { findFirst: async ({ where }: any) => { assert.equal(where.OR[1].employerProfile.companyId, 'tenant'); return options.unauthorized ? null : { id: 'initiator' }; } },
     notification: {
@@ -46,9 +46,9 @@ function fixture(t: TestContext, options: { missing?: boolean; recipients?: numb
   return notifications;
 }
 
-test('production registration is repeatable and covers all three published domain types', () => {
+test('production registration is repeatable and covers all published domain types', () => {
   registerProductionConsumers(); registerProductionConsumers();
-  for (const type of ['APPLICATION_SUBMITTED', 'JOB_LISTING_CREATED', 'HIRING_PIPELINE_COMPLETED']) assert.equal(ConsumerRegistry.getConsumers(type).length, 1);
+  for (const type of ['APPLICATION_SUBMITTED', 'APPLICATION_ASSESSMENT_COMPLETED', 'JOB_LISTING_CREATED', 'HIRING_PIPELINE_COMPLETED']) assert.equal(ConsumerRegistry.getConsumers(type).length, 1);
   assert.equal(ConsumerRegistry.getConsumers('unknown.event').length, 0);
 });
 test('notification IDs are deterministic valid UUIDs and isolate events and recipients', () => {
@@ -77,6 +77,29 @@ test('invalid event evidence and persistence errors propagate for retry', async 
 test('job recipients come from company membership and duplicate delivery is harmless', async t => {
   const rows = fixture(t);
   await jobListingCreated(event); await jobListingCreated(event); assert.equal(rows.size, 2);
+});
+test('job-specific assessment completion notifies the hiring team without making a hiring decision', async t => {
+  const rows = fixture(t);
+  const assessmentEvent = {
+    ...event,
+    eventType: 'APPLICATION_ASSESSMENT_COMPLETED',
+    idempotencyKey: 'assessment:a',
+    payload: {
+      applicationId: 'a',
+      jobId: 'j',
+      assessmentId: 'assessment-a',
+      attemptId: 'attempt-a',
+      score: 82,
+      passed: true,
+      assessmentScope: 'EMPLOYER_JOB',
+    },
+  };
+  await applicationAssessmentCompleted(assessmentEvent);
+  assert.equal(rows.size, 2);
+  for (const row of rows.values()) {
+    assert.match(row.message, /82\/100/);
+    assert.match(row.message, /did not automatically select or reject/);
+  }
 });
 test('oversized job notification fanout is not silently acknowledged', async t => {
   const rows = fixture(t, { recipients: 101 });

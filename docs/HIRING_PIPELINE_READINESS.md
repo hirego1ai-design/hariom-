@@ -18,7 +18,7 @@ The response identifies the existing `/api/agents/dispatch` capabilities (`jd-ge
 
 ## Remaining product work
 
-Candidate matching currently lists linked candidates without measured compatibility ranking. The mock-interview agent drafts a generic question and does not evaluate real candidate answers. Communication metrics use supplied transcript/timing; security flags use supplied telemetry and do not independently attest its authenticity. A verified interview/evidence lifecycle and human review are needed before exposing a full pipeline trigger. This inspection endpoint does not implement those missing features.
+Candidate matching now uses the deterministic evidence-first engine for tenant-authorized applicants and returns measured compatibility plus shortlist/assessment/human-review recommendations; it never authorizes automatic rejection. Job-specific assessment completion advances an application into SCREENING, and interview scheduling is blocked while required assessment gates remain open and advances the application into AI_INTERVIEW when scheduling commits. The mock-interview agent still drafts a generic question and does not evaluate a real live-interview answer lifecycle. Communication metrics use supplied transcript/timing; security flags use supplied telemetry and do not independently attest its authenticity. Human-controlled selection/rejection/offer actions remain required before a full automatic end-to-end trigger can be exposed.
 
 ## Verification
 

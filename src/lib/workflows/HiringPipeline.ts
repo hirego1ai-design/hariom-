@@ -129,7 +129,7 @@ export class HiringPipeline {
       async () => {
         return ExecutionLoop.runTask({
           agentId: 'candidate-matchmaker',
-          taskInput: { candidateProfileId: input.candidateProfileId },
+          taskInput: { candidateProfileId: input.candidateProfileId, jobId: evidence.jobId },
           context: { ...executionContext, agentId: 'candidate-matchmaker', executionId: `${workflow.id}:candidate-matchmaker:1` },
           companyId: input.companyId,
           estimatedSpendMinor: BigInt(3000),
