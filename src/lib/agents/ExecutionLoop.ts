@@ -74,7 +74,6 @@ export class ExecutionLoop {
       executionId: params.context.executionId,
       correlationId: params.context.correlationId,
       estimatedMinor,
-      billableAgentId: billable ? params.agentId : undefined,
     });
 
     let executionStarted = false;
@@ -195,7 +194,7 @@ export class ExecutionLoop {
       // Every path after reservation settles, including evaluation/logging
       // failures. Unknown provider spend remains conservatively accounted for.
       if (!executionStarted) {
-        await BudgetManager.releaseBudget(params.context.executionId, billable);
+        await BudgetManager.releaseBudget(params.context.executionId);
       } else {
         const actualSpend = result?.actualCostMinorUnits;
         const knownSpend = (typeof actualSpend === 'bigint' && actualSpend >= BigInt(0)) ||
