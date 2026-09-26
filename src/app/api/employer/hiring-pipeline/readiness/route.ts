@@ -50,15 +50,16 @@ export async function GET(request: Request) {
       },
       stages: [
         { agentId: 'jd-generator', capability: 'Generate a job description draft' },
-        { agentId: 'candidate-matchmaker', capability: 'List tenant-linked candidates; compatibility ranking is not measured' },
+        { agentId: 'candidate-matchmaker', capability: 'Rank tenant-authorized applicants with deterministic evidence-first compatibility and screening recommendations; no automatic rejection' },
         { agentId: 'resume-evaluator', capability: 'Evaluate a tenant-linked application against a job' },
         { agentId: 'mock-interview-copilot', capability: 'Draft a generic interview question; answer-based assessment is not implemented' },
         { agentId: 'communication-coach', capability: 'Compute transcript pacing and filler-word metrics from supplied measurements' },
         { agentId: 'security-judge', capability: 'Produce advisory flags from supplied telemetry; not a verified integrity assessment' },
       ],
       blockers: [
+        'No unattended end-to-end executor currently advances every hiring stage without a human-triggered boundary.',
+        'Answer-based live interview assessment is not implemented; deterministic candidate compatibility ranking is available but remains advisory and evidence-first.',
         'External job-board/ATS sourcing requires approved provider integrations and credentials; HireGo talent-pool and inbound application sourcing are available.',
-        'The safe next-action orchestrator does not bypass human approval for selection, rejection, offer, or joining confirmation.',
         'Proctoring evidence must remain linked to the actual interview and independently verified before it can support a decision.',
         'A production-like end-to-end runtime proof is still required before claiming fully autonomous production readiness.',
       ],
