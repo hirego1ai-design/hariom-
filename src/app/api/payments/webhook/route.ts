@@ -207,6 +207,34 @@ export async function POST(req: NextRequest) {
       const planId = paymentOrder.planId;
       const expectedAmount = paymentOrder.expectedAmount;
 
+      if (paymentOrder.productType === "COPILOT_ADDON") {
+        const { fulfillCopilotCapacityAddon } = await import("@/lib/copilot/capacityAddonFulfillment");
+        const fulfillment = await fulfillCopilotCapacityAddon({
+          paymentOrder,
+          verification,
+          provider: providerHeader,
+          gatewayTxId,
+          rawPayload: body,
+        });
+
+        if (fulfillment.duplicate) {
+          return NextResponse.json({
+            success: true,
+            duplicate: true,
+            product: "COPILOT_ADDON",
+            message: "Copilot add-capacity payment was already fulfilled.",
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          received: true,
+          product: "COPILOT_ADDON",
+          status: "ACTIVE",
+          addonId: fulfillment.addonId,
+        });
+      }
+
       if (paymentOrder.productType === "COPILOT") {
         const { fulfillCopilotPayment } = await import("@/lib/copilot/paymentFulfillment");
         const fulfillment = await fulfillCopilotPayment({
