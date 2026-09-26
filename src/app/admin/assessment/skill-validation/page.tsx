@@ -6,17 +6,17 @@ import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
 type Policy = {
-  passingPercentage: number;
-  validityDays: number;
-  retakeCooldownHours: number;
+  passingPercentage: string;
+  validityDays: string;
+  retakeCooldownHours: string;
   feedbackEnabled: boolean;
   mockInterviewRecommendationEnabled: boolean;
 };
 
 type JobSpecificPolicy = {
-  passingPercentage: number;
-  validityDays: number;
-  retakeCooldownHours: number;
+  passingPercentage: string;
+  validityDays: string;
+  retakeCooldownHours: string;
 };
 
 type Template = {
@@ -63,20 +63,34 @@ export default function AdminSkillValidationPage() {
         throw new Error(jobSpecificData.error || "Could not load job-specific assessment policy.");
       }
       setConfigured(Boolean(data.configured));
-      setPolicy(data.policy ?? {
-        passingPercentage: 70,
-        validityDays: 180,
-        retakeCooldownHours: 24,
-        feedbackEnabled: true,
-        mockInterviewRecommendationEnabled: true,
-      });
+      setPolicy(data.policy
+        ? {
+            passingPercentage: String(data.policy.passingPercentage),
+            validityDays: String(data.policy.validityDays),
+            retakeCooldownHours: String(data.policy.retakeCooldownHours),
+            feedbackEnabled: Boolean(data.policy.feedbackEnabled),
+            mockInterviewRecommendationEnabled: Boolean(data.policy.mockInterviewRecommendationEnabled),
+          }
+        : {
+            passingPercentage: "",
+            validityDays: "",
+            retakeCooldownHours: "",
+            feedbackEnabled: false,
+            mockInterviewRecommendationEnabled: false,
+          });
       setTemplates(data.templates ?? []);
       setJobSpecificConfigured(Boolean(jobSpecificData.configured));
-      setJobSpecificPolicy(jobSpecificData.policy ?? {
-        passingPercentage: 70,
-        validityDays: 90,
-        retakeCooldownHours: 24,
-      });
+      setJobSpecificPolicy(jobSpecificData.policy
+        ? {
+            passingPercentage: String(jobSpecificData.policy.passingPercentage),
+            validityDays: String(jobSpecificData.policy.validityDays),
+            retakeCooldownHours: String(jobSpecificData.policy.retakeCooldownHours),
+          }
+        : {
+            passingPercentage: "",
+            validityDays: "",
+            retakeCooldownHours: "",
+          });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load Skill Validation policy.");
     } finally {
@@ -90,6 +104,10 @@ export default function AdminSkillValidationPage() {
 
   const save = async () => {
     if (!policy || saving) return;
+    if (!policy.passingPercentage || !policy.validityDays || policy.retakeCooldownHours === "") {
+      setError("Enter all Universal Skill Validation policy values before saving.");
+      return;
+    }
     setSaving(true);
     setError("");
     setNotice("");
@@ -97,11 +115,26 @@ export default function AdminSkillValidationPage() {
       const response = await fetch("/api/admin/skill-validation-policy", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ policy, reason: reason.trim() || undefined }),
+        body: JSON.stringify({
+          policy: {
+            passingPercentage: Number(policy.passingPercentage),
+            validityDays: Number(policy.validityDays),
+            retakeCooldownHours: Number(policy.retakeCooldownHours),
+            feedbackEnabled: policy.feedbackEnabled,
+            mockInterviewRecommendationEnabled: policy.mockInterviewRecommendationEnabled,
+          },
+          reason: reason.trim() || undefined,
+        }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || "Could not save Skill Validation policy.");
-      setPolicy(data.policy);
+      setPolicy({
+        passingPercentage: String(data.policy.passingPercentage),
+        validityDays: String(data.policy.validityDays),
+        retakeCooldownHours: String(data.policy.retakeCooldownHours),
+        feedbackEnabled: Boolean(data.policy.feedbackEnabled),
+        mockInterviewRecommendationEnabled: Boolean(data.policy.mockInterviewRecommendationEnabled),
+      });
       setConfigured(true);
       setReason("");
       setNotice("Skill Validation policy saved and audited.");
@@ -115,6 +148,10 @@ export default function AdminSkillValidationPage() {
 
   const saveJobSpecific = async () => {
     if (!jobSpecificPolicy || jobSpecificSaving) return;
+    if (!jobSpecificPolicy.passingPercentage || !jobSpecificPolicy.validityDays || jobSpecificPolicy.retakeCooldownHours === "") {
+      setError("Enter all job-specific assessment policy values before saving.");
+      return;
+    }
     setJobSpecificSaving(true);
     setError("");
     setNotice("");
@@ -123,7 +160,11 @@ export default function AdminSkillValidationPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          policy: jobSpecificPolicy,
+          policy: {
+            passingPercentage: Number(jobSpecificPolicy.passingPercentage),
+            validityDays: Number(jobSpecificPolicy.validityDays),
+            retakeCooldownHours: Number(jobSpecificPolicy.retakeCooldownHours),
+          },
           reason: reason.trim() || undefined,
         }),
       });
@@ -131,7 +172,11 @@ export default function AdminSkillValidationPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Could not save job-specific assessment policy.");
       }
-      setJobSpecificPolicy(data.policy);
+      setJobSpecificPolicy({
+        passingPercentage: String(data.policy.passingPercentage),
+        validityDays: String(data.policy.validityDays),
+        retakeCooldownHours: String(data.policy.retakeCooldownHours),
+      });
       setJobSpecificConfigured(true);
       setReason("");
       setNotice("Job-specific assessment policy saved and audited.");
@@ -188,7 +233,7 @@ export default function AdminSkillValidationPage() {
                       min={0}
                       max={100}
                       value={policy.passingPercentage}
-                      onChange={(event) => setPolicy({ ...policy, passingPercentage: Number(event.target.value) })}
+                      onChange={(event) => setPolicy({ ...policy, passingPercentage: event.target.value })}
                       className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                     />
                   </label>
@@ -199,7 +244,7 @@ export default function AdminSkillValidationPage() {
                       min={1}
                       max={3650}
                       value={policy.validityDays}
-                      onChange={(event) => setPolicy({ ...policy, validityDays: Number(event.target.value) })}
+                      onChange={(event) => setPolicy({ ...policy, validityDays: event.target.value })}
                       className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                     />
                   </label>
@@ -210,7 +255,7 @@ export default function AdminSkillValidationPage() {
                       min={0}
                       max={8760}
                       value={policy.retakeCooldownHours}
-                      onChange={(event) => setPolicy({ ...policy, retakeCooldownHours: Number(event.target.value) })}
+                      onChange={(event) => setPolicy({ ...policy, retakeCooldownHours: event.target.value })}
                       className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                     />
                   </label>
@@ -278,7 +323,7 @@ export default function AdminSkillValidationPage() {
                         min={0}
                         max={100}
                         value={jobSpecificPolicy.passingPercentage}
-                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, passingPercentage: Number(event.target.value) })}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, passingPercentage: event.target.value })}
                         className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                       />
                     </label>
@@ -289,7 +334,7 @@ export default function AdminSkillValidationPage() {
                         min={1}
                         max={3650}
                         value={jobSpecificPolicy.validityDays}
-                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, validityDays: Number(event.target.value) })}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, validityDays: event.target.value })}
                         className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                       />
                     </label>
@@ -300,7 +345,7 @@ export default function AdminSkillValidationPage() {
                         min={0}
                         max={8760}
                         value={jobSpecificPolicy.retakeCooldownHours}
-                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, retakeCooldownHours: Number(event.target.value) })}
+                        onChange={(event) => setJobSpecificPolicy({ ...jobSpecificPolicy, retakeCooldownHours: event.target.value })}
                         className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                       />
                     </label>
