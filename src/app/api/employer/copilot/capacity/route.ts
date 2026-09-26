@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { getCopilotCapacityStatus } from "@/lib/copilot/capacity";
+import { reconcileExpiredCopilotReservations } from "@/lib/copilot/reservationReconciliation";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
       throw Object.assign(new Error("Administrator capacity reads require an explicitly scoped admin endpoint."), { status: 400 });
     }
     const company = await getSessionCompany(session);
+    await reconcileExpiredCopilotReservations({ companyId: company.id, limit: 100 });
     const capacity = await getCopilotCapacityStatus(company.id);
 
     return NextResponse.json({
