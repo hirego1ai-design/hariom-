@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import ProctoringEngine from "@/components/proctoring/ProctoringEngine";
 
 interface WebRTCInterviewRoomProps {
   roundTitle?: string;
@@ -11,7 +12,7 @@ interface WebRTCInterviewRoomProps {
 }
 
 type Signal = { id: string; senderId: string; targetId?: string | null; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; isHost: boolean; status: "ACTIVE" | "COMPLETED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
+type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; isHost: boolean; isCandidate: boolean; status: "ACTIVE" | "COMPLETED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
 
 async function readRoom(roomId: string): Promise<RoomSnapshot> {
   const response = await fetch(`/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, { cache: "no-store" });
@@ -30,6 +31,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const localVideo = useRef<HTMLVideoElement>(null);
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const stream = useRef<MediaStream | null>(null);
+  const screenTrack = useRef<MediaStreamTrack | null>(null);
   const seenSignals = useRef(new Set<string>());
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const reconnectAttempts = useRef(new Map<string, number>());
@@ -44,6 +46,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const [error, setError] = useState("");
   const [interviewId, setInterviewId] = useState("");
   const [isHost, setIsHost] = useState(false);
+  const [isCandidate, setIsCandidate] = useState(false);
 
   const signal = async (action: string, targetId?: string, payload: Record<string, unknown> = {}) => {
     const res = await fetch("/api/interviews/room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, action, ...(targetId ? { targetId } : {}), ...payload }) });
@@ -95,6 +98,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         selfId.current = room.participantId;
         hostRef.current = room.isHost;
         setIsHost(room.isHost);
+        setIsCandidate(room.isCandidate);
         iceServersRef.current = room.iceServers;
         setInterviewId(room.interviewId);
 
@@ -144,7 +148,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
             if (answer.targetId !== selfId.current || answer.senderId === selfId.current || seenSignals.current.has(answer.id) || !answer.sdp) continue;
             seenSignals.current.add(answer.id);
             const connection = ensurePeer(answer.senderId);
-            if (!connection.currentRemoteDescription) {
+            if (connection.signalingState === "have-local-offer") {
               await connection.setRemoteDescription(answer.sdp);
               const queued = pendingIce.current.get(answer.senderId) || [];
               for (const ice of queued) await connection.addIceCandidate(ice).catch(() => undefined);
@@ -175,6 +179,8 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
       peers.current.clear();
       pendingIce.current.clear();
       reconnectAttempts.current.clear();
+      screenTrack.current?.stop();
+      screenTrack.current = null;
       stream.current?.getTracks().forEach(track => track.stop());
     };
   }, [roomId]);
@@ -194,18 +200,36 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         const sender = connection.getSenders().find(item => item.track?.kind === "video");
         if (sender && camera) await sender.replaceTrack(camera);
       }));
+      screenTrack.current?.stop();
+      screenTrack.current = null;
+      if (isCandidate && interviewId) {
+        fetch("/api/proctoring/telemetry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ interviewId, violationType: "SCREEN_SHARE_STOPPED" }),
+        }).catch(() => undefined);
+      }
       setSharing(false);
       return;
     }
     const display = await navigator.mediaDevices.getDisplayMedia({ video: true }).catch(() => null);
     const screen = display?.getVideoTracks()[0];
     if (!screen) return;
+    screenTrack.current = screen;
     await Promise.all([...peers.current.values()].map(async connection => {
       const sender = connection.getSenders().find(item => item.track?.kind === "video");
       if (sender) await sender.replaceTrack(screen);
     }));
     screen.onended = () => {
       if (camera) [...peers.current.values()].forEach(connection => connection.getSenders().find(item => item.track?.kind === "video")?.replaceTrack(camera).catch(() => undefined));
+      screenTrack.current = null;
+      if (isCandidate && interviewId) {
+        fetch("/api/proctoring/telemetry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ interviewId, violationType: "SCREEN_SHARE_STOPPED" }),
+        }).catch(() => undefined);
+      }
       setSharing(false);
     };
     setSharing(true);
@@ -213,10 +237,18 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
 
   const finish = async () => {
     if (!hostRef.current) return;
-    await signal("COMPLETE").catch(() => undefined);
-    peers.current.forEach(connection => connection.close());
-    stream.current?.getTracks().forEach(track => track.stop());
-    onComplete?.(interviewId || undefined);
+    setError("");
+    try {
+      await signal("COMPLETE");
+      peers.current.forEach(connection => connection.close());
+      screenTrack.current?.stop();
+      screenTrack.current = null;
+      stream.current?.getTracks().forEach(track => track.stop());
+      onComplete?.(interviewId || undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Interview completion could not be saved.");
+      setStatus("Interview still active — completion was not saved");
+    }
   };
 
   const remotes = Object.entries(remoteStreams);
@@ -227,6 +259,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
       {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={interviewerName} />)}
       <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{candidateName} (You)</span></div>
     </div>
+    {isCandidate && interviewId && <div className="px-4 pb-3"><ProctoringEngine interviewId={interviewId} /></div>}
     <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{isHost && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
   </div>;
 }
