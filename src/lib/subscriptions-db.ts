@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { randomUUID } from "node:crypto";
 import { createPurchasedPlanSnapshot, type PurchasedPlanSnapshot } from "./payments/planSnapshot";
+import type { CompanySubscription } from "@prisma/client";
+import { findActiveCompanySubscription, reconcileExpiredCompanySubscriptions } from "./subscriptionAccess";
 
 export interface SubscriptionPlanRecord {
   id: string;
@@ -69,6 +71,23 @@ export interface AiServiceCostRecord {
   billingType: "INCLUDED" | "CREDIT_BASED" | "PAID_ADDON";
   createdAt: string;
   updatedAt: string;
+}
+
+function mapCompanySubscriptionRecord(record: CompanySubscription): CompanySubscriptionRecord {
+  return {
+    id: record.id,
+    companyId: record.companyId,
+    planId: record.planId,
+    entitlementSnapshot: record.entitlementSnapshot
+      ? record.entitlementSnapshot as PurchasedPlanSnapshot
+      : undefined,
+    startDate: record.startDate.toISOString(),
+    endDate: record.endDate.toISOString(),
+    status: record.status as CompanySubscriptionRecord["status"],
+    paymentId: record.paymentId || undefined,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
 }
 
 class SubscriptionsDb {
@@ -293,23 +312,21 @@ class SubscriptionsDb {
   }
 
   public async getCompanySubscription(companyId: string): Promise<CompanySubscriptionRecord | null> {
-    const r = await prisma.companySubscription.findFirst({
-      where: { companyId, status: "ACTIVE" },
-      orderBy: { createdAt: "desc" },
+    const record = await prisma.$transaction((tx) =>
+      findActiveCompanySubscription(tx, companyId)
+    );
+    return record ? mapCompanySubscriptionRecord(record) : null;
+  }
+
+  public async getLatestCompanySubscription(companyId: string): Promise<CompanySubscriptionRecord | null> {
+    const record = await prisma.$transaction(async (tx) => {
+      await reconcileExpiredCompanySubscriptions(tx, companyId);
+      return tx.companySubscription.findFirst({
+        where: { companyId },
+        orderBy: { endDate: "desc" },
+      });
     });
-    if (!r) return null;
-    return {
-      id: r.id,
-      companyId: r.companyId,
-      planId: r.planId,
-      entitlementSnapshot: r.entitlementSnapshot as PurchasedPlanSnapshot | undefined,
-      startDate: r.startDate.toISOString(),
-      endDate: r.endDate.toISOString(),
-      status: r.status as CompanySubscriptionRecord["status"],
-      paymentId: r.paymentId || undefined,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-    };
+    return record ? mapCompanySubscriptionRecord(record) : null;
   }
 
   public async cancelCompanySubscription(companyId: string): Promise<boolean> {
