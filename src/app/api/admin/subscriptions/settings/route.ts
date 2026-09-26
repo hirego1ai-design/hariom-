@@ -16,15 +16,7 @@ const serviceCostSchema = z.object({
   serviceKey: z.string().trim().min(1).max(100),
   creditCost: z.number().int().min(0).max(1000000),
   billingType: z.enum(["CREDIT_BASED", "INCLUDED", "PAID_ADDON"]),
-}).strict().superRefine((value, ctx) => {
-  if (value.billingType === "CREDIT_BASED" && value.creditCost < 1) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["creditCost"],
-      message: "Credit-based services must cost at least 1 credit. Use INCLUDED for zero-cost access.",
-    });
-  }
-});
+}).strict();
 
 async function requireAdmin(request: NextRequest) {
   const session = await getCurrentSession(request.headers);
