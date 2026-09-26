@@ -106,6 +106,7 @@ export async function GET(request: NextRequest) {
         jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota ?? 0 },
         resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota ?? 0 },
         aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota ?? 0 },
+        aiAgentCredits: { left: credits.aiAgentCreditsLeft, total: activePlan?.aiInterviewsQuota ?? 0 },
       },
     });
   } catch (error) { return handleApiError(error); }
