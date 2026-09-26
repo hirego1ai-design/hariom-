@@ -57,7 +57,7 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
     // Serialize confirmations for the application, independently of client retry keys.
     await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${body.applicationId} FOR UPDATE`;
     const app = await tx.application.findUnique({ where: { id: body.applicationId },
-      include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
+      include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } }, offer: true } });
     if (!app) throw new ApiError("Application not found.", 404);
     authorizeBilling(actor, app.job.companyId);
     const existing = await tx.pphPlacement.findUnique({ where: { applicationId: app.id } });
@@ -66,6 +66,15 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
       return { duplicate: true, placement: existing };
     }
     if (app.status !== "SHORTLISTED") throw new ApiError("Only a shortlisted application can enter this joining flow. Existing hires require billing reconciliation.", 409);
+    if (!app.offer || app.offer.status !== "ACCEPTED") {
+      throw new ApiError("Candidate acceptance of the persisted offer is required before joining can be confirmed.", 409);
+    }
+    if (app.offer.currency !== "INR") {
+      throw new ApiError("PPH joining currently requires an accepted INR offer.", 409);
+    }
+    if (!app.offer.annualCompensation.equals(annualCtc)) {
+      throw new ApiError("Joining CTC must exactly match the candidate-accepted offer. Amend and re-accept the offer before joining if compensation changed.", 409);
+    }
     await tx.$queryRaw`SELECT id FROM "CommercialAgreement" WHERE id = ${body.agreementId} FOR SHARE`;
     const agreement = await tx.commercialAgreement.findUnique({ where: { id: body.agreementId } });
     if (!agreement || agreement.companyId !== app.job.companyId) throw new ApiError("Agreement does not belong to this company.", 403);
