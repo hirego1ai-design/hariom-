@@ -23,7 +23,7 @@ export function normalizeCountryCode(value: string): string {
   return countryCodeSchema.parse(value);
 }
 
-function selectRegionalPrice<T extends { regionCode: string; countries: string[]; isActive: boolean }>(
+export function selectCopilotRegionalPrice<T extends { regionCode: string; countries: string[]; isActive: boolean }>(
   prices: T[],
   countryCode: string,
 ): T | null {
@@ -40,7 +40,7 @@ export async function resolveCopilotPrice(planId: string, countryInput: string):
   });
   if (!plan || plan.isArchived) throw new ApiError("Copilot plan not found.", 404);
 
-  const price = selectRegionalPrice(plan.regionalPrices, countryCode);
+  const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
   if (!price) throw new ApiError("Copilot is not currently available for this billing country.", 409);
 
   return {
@@ -70,7 +70,7 @@ export async function listPublicCopilotPlans(countryInput: string) {
   });
 
   return plans.flatMap((plan) => {
-    const price = selectRegionalPrice(plan.regionalPrices, countryCode);
+    const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
     if (!price) return [];
     return [{
       id: plan.id,
