@@ -914,6 +914,7 @@ model HiringRequirement {
   replacementExpectation String
   positions              Json?
   additionalNotes        String?
+  jdFileName             String?
   jdFileUrl              String?
   status                 RequirementStatus @default(SUBMITTED)
   assignedSalesLead      String?
