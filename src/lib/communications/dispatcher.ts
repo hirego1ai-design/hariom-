@@ -11,6 +11,10 @@ import { sendWhatsAppTemplateMessage, type WhatsAppTemplateComponent } from "@/l
 import { sendZeptoMailTemplate } from "@/lib/email";
 import { isWhatsAppMessagingAllowed } from "@/lib/whatsapp-identity";
 import { writeAgentApprovalAudit } from "@/lib/security/AgentApprovalAudit";
+import {
+  recordCopilotUsageAfterExecutionIfActive,
+  type CopilotUsageReference,
+} from "@/lib/copilot/capacity";
 
 type ConsequentialAuthorization = { approvedByUserId: string; approvalId: string; workflowId: string };
 
@@ -36,7 +40,41 @@ export type DispatchCommunicationInput = {
   recipientRef?: string;
   locale?: string;
   authorizationProof?: ConsequentialAuthorization;
+  copilotMetering?: {
+    companyId: string;
+    idempotencyKey: string;
+    reference?: CopilotUsageReference;
+  };
 };
+
+async function meterCopilotCommunicationAttempt(input: DispatchCommunicationInput) {
+  if (!input.copilotMetering) return;
+  const actionKey = input.channel === "WHATSAPP" ? "WHATSAPP_NOTIFICATION" : "EMAIL_NOTIFICATION";
+  try {
+    await recordCopilotUsageAfterExecutionIfActive({
+      companyId: input.copilotMetering.companyId,
+      actionKey,
+      quantity: 1,
+      idempotencyKey: input.copilotMetering.idempotencyKey,
+      reference: input.copilotMetering.reference,
+      metadata: {
+        eventKey: input.eventKey,
+        channel: input.channel,
+        audience: input.audience,
+        correlationId: input.correlationId || null,
+      },
+    });
+  } catch (error) {
+    await prisma.auditLog.create({
+      data: {
+        companyId: input.copilotMetering.companyId,
+        action: "COPILOT_COMMUNICATION_METERING_FAILED",
+        resource: `Communication:${input.eventKey}:${input.channel}`,
+        details: error instanceof Error ? error.message.slice(0, 500) : "Unknown Copilot communication metering failure",
+      },
+    }).catch(() => undefined);
+  }
+}
 
 function addressHash(value: string) {
   const secret = process.env.COMMUNICATION_HASH_SECRET;
@@ -91,7 +129,12 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
   if (input.channel === "WHATSAPP") await assertWhatsAppConsent(input.recipient);
 
   const existing = await prisma.communicationDelivery.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-  if (existing) return existing;
+  if (existing) {
+    if (input.copilotMetering && ["ACCEPTED", "DELIVERED", "READ", "FAILED"].includes(existing.status)) {
+      await meterCopilotCommunicationAttempt(input);
+    }
+    return existing;
+  }
 
   const template = await prisma.communicationTemplate.findFirst({
     where: {
@@ -139,8 +182,10 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
     },
   });
 
+  let providerAttempted = false;
   try {
     let result: { sent?: boolean; success?: boolean; messageId?: string; reason?: string };
+    providerAttempted = true;
     if (input.channel === "WHATSAPP") {
       if (!template.providerAlias) throw new Error("Active WhatsApp template has no Meta template name.");
       const configuredOrder = Array.isArray(template.providerParameterOrder)
@@ -163,17 +208,20 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
     }
 
     const successful = result.sent === true || result.success === true;
-    return await prisma.communicationDelivery.update({
+    const updated = await prisma.communicationDelivery.update({
       where: { id: delivery.id },
       data: successful
         ? { status: "ACCEPTED", providerMessageId: result.messageId, acceptedAt: new Date() }
         : (() => { const failure = safeRetryClassification(result.reason); return { status: "FAILED", lastErrorCode: failure.code, lastError: result.reason || "Provider rejected communication.", failedAt: new Date(), retryable: !definition.consequential && failure.retryable, nextAttemptAt: !definition.consequential && failure.retryable ? new Date(Date.now() + 60_000) : null }; })(),
     });
+    if (providerAttempted) await meterCopilotCommunicationAttempt(input);
+    return updated;
   } catch (error) {
     await prisma.communicationDelivery.update({
       where: { id: delivery.id },
       data: { status: "FAILED", lastErrorCode: "AMBIGUOUS_PROVIDER_ERROR", lastError: safeProviderError(error), failedAt: new Date(), retryable: false, nextAttemptAt: null },
     });
+    if (providerAttempted) await meterCopilotCommunicationAttempt(input);
     throw error;
   }
 }

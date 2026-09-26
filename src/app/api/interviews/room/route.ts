@@ -3,6 +3,11 @@ import { z } from "zod";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getOptionalEnv, requireProductionEnv } from "@/lib/env";
+import {
+  reconcileCopilotReservation,
+  releaseCopilotReservation,
+  reserveCopilotCapacityIfActive,
+} from "@/lib/copilot/capacity";
 
 const SIGNAL_TTL_MS = 10 * 60 * 1_000;
 const roomActionSchema = z.object({
@@ -134,6 +139,7 @@ export async function POST(req: NextRequest) {
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
       const endedAt = new Date();
+      const effectiveStartedAt = interview.startedAt || endedAt;
       await prisma.$transaction(async (tx) => {
         await tx.interview.update({
           where: { id: interview.id },
@@ -157,8 +163,70 @@ export async function POST(req: NextRequest) {
           });
         }
       });
+
+      // Never strand a completed interview because metering reconciliation is
+      // unavailable. The reservation was made before the room started; actual
+      // usage is reconciled afterward and unavoidable overage is recorded.
+      const actualMinutes = Math.max(1, Math.ceil((endedAt.getTime() - effectiveStartedAt.getTime()) / 60_000));
+      const reservations = await prisma.copilotUsageReservation.findMany({
+        where: {
+          companyId: interview.application.job.companyId,
+          interviewId: interview.id,
+          idempotencyKey: { in: [
+            `live-interview:${interview.id}:video`,
+            `live-interview:${interview.id}:proctoring`,
+          ] },
+        },
+      });
+      for (const reservation of reservations) {
+        try {
+          await reconcileCopilotReservation({
+            reservationId: reservation.id,
+            actualQuantity: reservation.actionKey === "VIDEO_INTERVIEW_MINUTE" ? actualMinutes : 1,
+            allowOverage: true,
+            metadata: {
+              scheduledDurationMins: interview.durationMins,
+              actualDurationMins: actualMinutes,
+              completedAt: endedAt.toISOString(),
+            },
+          });
+        } catch (meterError) {
+          await prisma.auditLog.create({
+            data: {
+              companyId: interview.application.job.companyId,
+              action: "COPILOT_USAGE_RECONCILIATION_FAILED",
+              resource: `Interview:${interview.id}`,
+              details: meterError instanceof Error ? meterError.message.slice(0, 500) : "Unknown metering reconciliation failure",
+            },
+          }).catch(() => undefined);
+        }
+      }
     } else {
       if (!interview.startedAt) {
+        let videoReservationId: string | null = null;
+        try {
+          const videoReservation = await reserveCopilotCapacityIfActive({
+            companyId: interview.application.job.companyId,
+            actionKey: "VIDEO_INTERVIEW_MINUTE",
+            quantity: Math.max(1, interview.durationMins),
+            idempotencyKey: `live-interview:${interview.id}:video`,
+            reference: { interviewId: interview.id, applicationId: interview.applicationId },
+            expiresAt: new Date(Date.now() + Math.max(4 * 60 * 60_000, interview.durationMins * 60_000 + 60 * 60_000)),
+          });
+          videoReservationId = videoReservation?.id || null;
+          await reserveCopilotCapacityIfActive({
+            companyId: interview.application.job.companyId,
+            actionKey: "PROCTORING_SESSION",
+            quantity: 1,
+            idempotencyKey: `live-interview:${interview.id}:proctoring`,
+            reference: { interviewId: interview.id, applicationId: interview.applicationId },
+            expiresAt: new Date(Date.now() + Math.max(4 * 60 * 60_000, interview.durationMins * 60_000 + 60 * 60_000)),
+          });
+        } catch (meterError) {
+          if (videoReservationId) await releaseCopilotReservation(videoReservationId).catch(() => undefined);
+          throw meterError;
+        }
+
         await prisma.interview.updateMany({
           where: {
             id: interview.id,

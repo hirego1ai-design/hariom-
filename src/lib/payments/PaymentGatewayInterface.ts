@@ -20,6 +20,9 @@ export interface CreateOrderParams {
   planName: string;
   planId?: string;
   companyId: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
 }
 
 export interface CreateOrderResult {

@@ -16,6 +16,7 @@ export interface NavRailItem {
 const employerNavItems: NavRailItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/employer/dashboard", icon: "dashboard" },
   { id: "jobs", label: "Job Listings", href: "/employer/job-listings-management", icon: "work" },
+  { id: "copilot", label: "HireGo Copilot", href: "/employer/ai-hiring-copilot-hub", icon: "smart_toy" },
   { id: "pipeline", label: "Hiring Pipeline", href: "/employer/hiring-pipeline", icon: "view_kanban" },
   { id: "candidate-search", label: "Candidate Search", href: "/employer/proactive-candidate-search", icon: "person_search" },
   { id: "interviews", label: "Live Interviews", href: "/employer/upcoming-interviews-list", icon: "video_call" },
