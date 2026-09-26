@@ -171,6 +171,19 @@ async function runIsolatedTests() {
       const updatedCredits = await subscriptionsDb.updateCompanyCredits(companyId, -1, 0, 0);
       const pass11 = updatedCredits.jobPostsLeft === 0;
       results.push({ name: "Subscriptions Engine - Persisted Credit Quota Enforcement", category: "Subscriptions", passed: pass11 });
+
+      await prisma.companySubscription.updateMany({
+        where: { companyId, status: "ACTIVE" },
+        data: { endDate: new Date(Date.now() - 60_000) },
+      });
+      const expiredActiveSubscription = await subscriptionsDb.getCompanySubscription(companyId);
+      const latestSubscription = await subscriptionsDb.getLatestCompanySubscription(companyId);
+      const pass12 = expiredActiveSubscription === null && latestSubscription?.status === "EXPIRED";
+      results.push({
+        name: "Subscriptions Engine - Expired periods fail closed and reconcile lifecycle state",
+        category: "Subscriptions",
+        passed: pass12,
+      });
     } catch (e: any) {
       results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
     } finally {

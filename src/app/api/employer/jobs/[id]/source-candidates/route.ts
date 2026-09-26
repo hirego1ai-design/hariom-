@@ -9,6 +9,7 @@ import {
   handleApiError,
   ApiError,
 } from "@/lib/apiSecurity";
+import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
 import {
   computeMatchScore,
   evaluateCandidateScreening,
@@ -54,6 +55,13 @@ export async function GET(
       if (company.id !== job.companyId) {
         throw new ApiError("Job access denied.", 403);
       }
+      await prisma.$transaction((tx) =>
+        requireActiveCompanySubscription(
+          tx,
+          company.id,
+          "An active subscription is required to access proactive candidate sourcing.",
+        )
+      );
     }
 
     const cutoff = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 86_400_000);

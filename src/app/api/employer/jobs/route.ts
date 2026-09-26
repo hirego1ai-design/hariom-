@@ -4,11 +4,11 @@ import { db } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
-import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
 import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
+import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
@@ -123,11 +123,11 @@ export async function POST(request: Request) {
 
               let remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
               if (job.status !== JobStatus.ACTIVE) {
-                const sub = await tx.companySubscription.findFirst({ where: { companyId } });
-                const subStatus = (sub?.status as string) || "";
-                if (sub && (subStatus === "EXPIRED" || subStatus === "CANCELLED" || new Date(sub.endDate) < new Date())) {
-                  throw new ApiError("Subscription has expired. Please renew your plan to publish jobs.", 403);
-                }
+                await requireActiveCompanySubscription(
+                  tx,
+                  companyId,
+                  "An active subscription is required to publish jobs. Please purchase or renew a plan.",
+                );
                 const debit = await tx.companyCredits.updateMany({
                   where: { companyId, jobPostsLeft: { gt: 0 } },
                   data: { jobPostsLeft: { decrement: 1 } },
@@ -194,11 +194,11 @@ export async function POST(request: Request) {
       }
 
       if (isPublishing) {
-        const sub = await tx.companySubscription.findFirst({ where: { companyId } });
-        const subStatus = (sub?.status as string) || "";
-        if (sub && (subStatus === "EXPIRED" || subStatus === "CANCELLED" || new Date(sub.endDate) < new Date())) {
-          throw new ApiError("Subscription has expired. Please renew your plan to publish jobs.", 403);
-        }
+        await requireActiveCompanySubscription(
+          tx,
+          companyId,
+          "An active subscription is required to publish jobs. Please purchase or renew a plan.",
+        );
 
         if (!requiresGeneratedAssessment) {
           const updateResult = await tx.companyCredits.updateMany({
@@ -270,6 +270,11 @@ export async function POST(request: Request) {
       try {
         await ensureJobSpecificAssessment(result.jobId, companyId);
         const finalPayload = await prisma.$transaction(async (tx) => {
+          await requireActiveCompanySubscription(
+            tx,
+            companyId,
+            "An active subscription is required to publish jobs. Please purchase or renew a plan.",
+          );
           const debit = await tx.companyCredits.updateMany({
             where: { companyId, jobPostsLeft: { gt: 0 } },
             data: { jobPostsLeft: { decrement: 1 } },

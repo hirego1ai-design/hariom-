@@ -200,6 +200,23 @@ test("Payment controller rejects unsupported providers and safely migrates legac
 });
 
 
+test("production payment routing preserves an all-disabled gateway configuration", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  Reflect.set(process.env, "NODE_ENV", "production");
+  try {
+    const normalized = (PaymentGatewayController as any).normalizeConfig({
+      primaryGateway: "STRIPE",
+      gatewaysStatus: { STRIPE: "DISABLED", PAYU: "DISABLED" },
+      priorities: ["STRIPE", "PAYU"],
+    });
+    assert.equal(normalized.gatewaysStatus.STRIPE, "DISABLED");
+    assert.equal(normalized.gatewaysStatus.PAYU, "DISABLED");
+  } finally {
+    if (previousNodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+    else Reflect.set(process.env, "NODE_ENV", previousNodeEnv);
+  }
+});
+
 test("Stripe checkout completed without paid status remains nonterminal", async () => {
   const stripe = new StripeGateway();
   const secret = "mock_webhook_secret_unpaid_checkout";

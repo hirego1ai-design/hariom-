@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
+import { reconcileExpiredCompanySubscriptions } from "@/lib/subscriptionAccess";
 
 const querySchema = z.object({
   orderId: z.string().trim().min(8).max(160).optional(),
@@ -36,7 +37,20 @@ export async function GET(req: NextRequest) {
       : null;
 
     const [subscription, credits] = await Promise.all([
-      prisma.companySubscription.findFirst({ where: { companyId, status: "ACTIVE" }, include: { plan: true } }),
+      prisma.$transaction(async (tx) => {
+        const now = new Date();
+        await reconcileExpiredCompanySubscriptions(tx, companyId, now);
+        return tx.companySubscription.findFirst({
+          where: {
+            companyId,
+            status: "ACTIVE",
+            startDate: { lte: now },
+            endDate: { gt: now },
+          },
+          include: { plan: true },
+          orderBy: { endDate: "desc" },
+        });
+      }),
       prisma.companyCredits.findUnique({ where: { companyId } }),
     ]);
 

@@ -62,11 +62,17 @@ export class PaymentGatewayController {
     const suppliedPriorities = Array.isArray(raw.priorities) ? raw.priorities.filter(isGateway) : [];
     const priorities = [...new Set(suppliedPriorities), ...providerNames.filter((gw) => !suppliedPriorities.includes(gw))];
     const active = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
-    if (active.length === 0) gatewaysStatus.STRIPE = "HEALTHY";
+    // Development can recover to a local-safe default, but production must
+    // preserve an all-disabled configuration and fail checkout closed.
+    if (active.length === 0 && process.env.NODE_ENV !== "production") {
+      gatewaysStatus.STRIPE = "HEALTHY";
+    }
 
     const activeAfterFallback = providerNames.filter((gw) => gatewaysStatus[gw] !== "DISABLED");
     let primaryGateway = isGateway(raw.primaryGateway) ? raw.primaryGateway : "STRIPE";
-    if (gatewaysStatus[primaryGateway] === "DISABLED") primaryGateway = activeAfterFallback[0];
+    if (gatewaysStatus[primaryGateway] === "DISABLED" && activeAfterFallback.length > 0) {
+      primaryGateway = activeAfterFallback[0];
+    }
 
     return {
       mode: raw.mode === "MANUAL" ? "MANUAL" : "AUTO",
