@@ -4,6 +4,8 @@ import { getCurrentSession } from "@/lib/auth";
 import { handleApiError, ApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { z } from "zod";
+import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
+import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 
 const StartAssessmentSchema = z.object({
   assessmentId: z.string().uuid("Invalid assessment ID"),
@@ -29,6 +31,7 @@ export async function POST(req: NextRequest) {
     const assessment = await prisma.mcqAssessment.findUnique({
       where: { id: assessmentId },
       include: {
+        jobListing: { select: { title: true, department: true } },
         questions: {
           orderBy: { orderIndex: 'asc' },
           include: {
@@ -48,6 +51,42 @@ export async function POST(req: NextRequest) {
 
     if (!assessment.questions || assessment.questions.length === 0) {
       throw new ApiError("Assessment has no questions configured and cannot be started", 400);
+    }
+
+    const screeningValidation = validateKnowledgeScreeningAssessment({
+      roleTitle: assessment.roleTitle ?? assessment.jobListing?.title,
+      department: assessment.jobListing?.department,
+      questions: assessment.questions.map((question) => ({
+        category: question.category,
+        skillTags: question.skillTags,
+      })),
+    });
+    if (!screeningValidation.valid) {
+      throw new ApiError(
+        "This assessment does not meet HireGo Skill Validation policy and cannot be started.",
+        409,
+      );
+    }
+
+    if (
+      assessment.scope === "PLATFORM_READINESS" &&
+      assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY
+    ) {
+      const acknowledgement = await prisma.assessmentNoticeAcknowledgement.findUnique({
+        where: {
+          candidateProfileId_assessmentId: {
+            candidateProfileId: candidateProfile.id,
+            assessmentId: assessment.id,
+          },
+        },
+        select: { noticeVersion: true },
+      });
+      if (!acknowledgement || acknowledgement.noticeVersion !== "universal-skill-validation-v1") {
+        throw new ApiError(
+          "Review and acknowledge the Universal Skill Validation notice before starting.",
+          428,
+        );
+      }
     }
 
     if (assessment.scope === "EMPLOYER_JOB") {

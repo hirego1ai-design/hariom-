@@ -33,6 +33,51 @@ export function isBillableAiAgent(agentId: string): boolean {
   return Object.prototype.hasOwnProperty.call(BILLABLE_AGENT_FEATURES, agentId);
 }
 
+export async function assertCompanyFeatureEntitlement(
+  companyId: string,
+  requiredFeatures: readonly string[],
+  transaction?: Prisma.TransactionClient,
+): Promise<void> {
+  if (!requiredFeatures.length) throw new AiEntitlementError("At least one entitlement feature is required.");
+
+  const verify = async (tx: Prisma.TransactionClient) => {
+    const subscription = await tx.companySubscription.findFirst({
+      where: {
+        companyId,
+        status: "ACTIVE",
+        startDate: { lte: new Date() },
+        endDate: { gt: new Date() },
+      },
+      select: { entitlementSnapshot: true },
+      orderBy: { endDate: "desc" },
+    });
+    if (!subscription) {
+      throw new AiEntitlementError("An active subscription is required for this feature.");
+    }
+
+    let planSnapshot;
+    try {
+      planSnapshot = parsePurchasedPlanSnapshot(subscription.entitlementSnapshot);
+    } catch {
+      throw new AiEntitlementError("Your subscription terms are unavailable; contact support.");
+    }
+
+    const grantedFeatures = new Set(planSnapshot.featuresAllowed.map(normalizedFeature));
+    const normalizedRequired = requiredFeatures.map(normalizedFeature);
+    const hasFeature = grantedFeatures.has("ALL_FEATURES")
+      || normalizedRequired.some((feature) => grantedFeatures.has(feature));
+    if (!hasFeature) {
+      throw new AiEntitlementError("Your subscription does not include job-specific AI assessments.");
+    }
+  };
+
+  if (transaction) {
+    await verify(transaction);
+  } else {
+    await prisma.$transaction(verify);
+  }
+}
+
 /**
  * Verifies a current paid plan and consumes exactly one agent credit in the
  * same database transaction. There is intentionally no production fallback:

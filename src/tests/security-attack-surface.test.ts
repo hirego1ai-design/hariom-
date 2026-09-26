@@ -95,8 +95,8 @@ test("security headers block framing, MIME sniffing and object embedding", () =>
 test("AI router blocks common secret material at prompt and output boundaries", () => {
   const router = read("src/utils/aiRouter.ts");
   assert.match(router, /SECRET_PATTERNS/);
-  assert.match(router, /assertNoSecretMaterial\(request\.prompt, 'prompt'\)/);
-  assert.match(router, /assertNoSecretMaterial\(responseText, 'output'\)/);
+  assert.match(router, /assertNoSecretMaterial\(request\.prompt,\s*["']prompt["']\)/);
+  assert.match(router, /assertNoSecretMaterial\(responseText,\s*["']output["']\)/);
 });
 
 test("Supabase-facing public schema remains protected by RLS", () => {

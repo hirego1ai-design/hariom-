@@ -13,10 +13,10 @@ const callbackSchema = z.object({
   claimToken: z.string().uuid(),
   status: z.enum(["COMPLETED", "FAILED", "BLOCKED_INFRA"]),
   error: z.string().nullable().optional(),
-  modelName: z.string().optional(),
-  modelVersion: z.string().optional(),
-  workerVersion: z.string().optional(),
-  analysisVersion: z.string().optional(),
+  modelName: z.string().trim().min(1).max(160).optional(),
+  modelVersion: z.string().trim().min(1).max(160).optional(),
+  workerVersion: z.string().trim().min(1).max(160).optional(),
+  analysisVersion: z.string().trim().min(1).max(160).optional(),
   result: z
     .object({
       transcript: z.string().max(30_000).optional(),
@@ -30,6 +30,17 @@ const callbackSchema = z.object({
       actualDurationSeconds: z.number().finite().min(0).max(121).optional(),
     })
     .optional(),
+}).superRefine((value, ctx) => {
+  if (value.status !== "COMPLETED") return;
+  for (const field of ["modelName", "modelVersion", "workerVersion", "analysisVersion"] as const) {
+    if (!value[field]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: `${field} is required for a completed analysis callback.`,
+      });
+    }
+  }
 });
 
 export async function POST(request: NextRequest) {
@@ -112,10 +123,10 @@ export async function POST(request: NextRequest) {
             contentStructureScore: null,
             strengths: Prisma.JsonNull,
             improvementSuggestions: res.lowConfidence ? ["The transcript may be inaccurate. Review the recording directly."] : [],
-            modelName: body.modelName || "whisper-small",
-            modelVersion: body.modelVersion || "1.0.0",
-            workerVersion: body.workerVersion || "1.0.0",
-            analysisVersion: body.analysisVersion || "v1",
+            modelName: body.modelName!,
+            modelVersion: body.modelVersion!,
+            workerVersion: body.workerVersion!,
+            analysisVersion: body.analysisVersion!,
             completedAt: now,
             analysisError: null,
           },

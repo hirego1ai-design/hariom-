@@ -5,10 +5,15 @@ import { handleApiError, ApiError, readValidatedJson, enforceRateLimit } from "@
 import { logAuditEvent } from "@/lib/auditLogger";
 import {
   McqQuestionResult,
+  aggregateMcqSkillEvidence,
   persistMcqSkillEvidence,
   qualifiesMcqSkillEvidence,
 } from "@/lib/skillValidation";
 import { z } from "zod";
+import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
+import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
+import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -57,6 +62,15 @@ export async function POST(req: NextRequest) {
     }
 
     const { assessment } = attempt;
+    const validation = validateKnowledgeScreeningAssessment({
+      roleTitle: assessment.roleTitle,
+      questions: assessment.questions.map((question) => ({
+        category: question.category,
+        skillTags: question.skillTags,
+      })),
+    });
+    const qualifiesForSkillValidation = validation.valid;
+
     const durationLimitMs = (assessment.durationMinutes * 60 + 60) * 1000;
     if (Date.now() - attempt.startedAt.getTime() > durationLimitMs) {
       throw new ApiError("Assessment duration has expired. Submission rejected.", 400);
@@ -129,16 +143,24 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const skillEvidence = await persistMcqSkillEvidence(tx, {
-        candidateProfileId: candidateProfile.id,
-        assessmentId: assessment.id,
-        attemptId,
-        roleTitle: assessment.roleTitle,
-        seniority: assessment.seniority,
-        passingPercentage: assessment.passingPercentage,
-        validityDays: assessment.validityDays,
-        questionResults,
-      });
+      // Only the universal PLATFORM_READINESS assessment can change reusable
+      // CandidateSkill verification evidence. Employer/job-specific assessment
+      // results remain scoped to that application and must never overwrite the
+      // candidate's universal historical validation.
+      const skillEvidence = qualifiesForSkillValidation
+        ? assessment.scope === "PLATFORM_READINESS"
+          ? await persistMcqSkillEvidence(tx, {
+              candidateProfileId: candidateProfile.id,
+              assessmentId: assessment.id,
+              attemptId,
+              roleTitle: assessment.roleTitle,
+              seniority: assessment.seniority,
+              passingPercentage: assessment.passingPercentage,
+              validityDays: assessment.validityDays,
+              questionResults,
+            })
+          : aggregateMcqSkillEvidence(questionResults)
+        : [];
 
       const updatedAttempt = await tx.mcqAttempt.findUniqueOrThrow({
         where: { id: attemptId },
@@ -146,7 +168,7 @@ export async function POST(req: NextRequest) {
       return { updatedAttempt, skillEvidence };
     }, { maxWait: 15000, timeout: 20000 });
 
-    if (assessment.scope === "PLATFORM_READINESS" && assessment.roleTitle && assessment.seniority) {
+    if (qualifiesForSkillValidation && assessment.scope === "PLATFORM_READINESS" && assessment.roleTitle && assessment.seniority) {
       const validUntil = assessment.validityDays
         ? new Date(Date.now() + assessment.validityDays * 24 * 60 * 60 * 1000)
         : null;
@@ -164,6 +186,106 @@ export async function POST(req: NextRequest) {
           validUntil: passed ? validUntil : null,
         },
       });
+    }
+
+    const isUniversalSkillValidation =
+      assessment.scope === "PLATFORM_READINESS" &&
+      assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY;
+
+    let releasedApplicationIds: string[] = [];
+    const pendingJobSpecificAssessments: Array<{
+      applicationId: string;
+      assessmentId: string;
+      assessmentUrl: string;
+    }> = [];
+    if (
+      qualifiesForSkillValidation &&
+      isUniversalSkillValidation
+    ) {
+      const { RosGateway } = await import("@/lib/ros/RosGateway");
+      releasedApplicationIds = await RosGateway.releaseUniversalValidationApplications({
+        userId: session.id,
+        candidateProfileId: candidateProfile.id,
+        assessmentId: assessment.id,
+      });
+
+      if (releasedApplicationIds.length > 0) {
+        const releasedApplications = await prisma.application.findMany({
+          where: {
+            id: { in: releasedApplicationIds },
+            candidateProfileId: candidateProfile.id,
+          },
+          select: {
+            id: true,
+            jobId: true,
+            gates: {
+              where: {
+                type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+                status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+              },
+              select: { assessmentId: true },
+              take: 1,
+            },
+          },
+        });
+        for (const application of releasedApplications) {
+          const jobSpecificAssessmentId = application.gates[0]?.assessmentId ?? null;
+          if (jobSpecificAssessmentId) {
+            pendingJobSpecificAssessments.push({
+              applicationId: application.id,
+              assessmentId: jobSpecificAssessmentId,
+              assessmentUrl: `/assessment/mcq/active?id=${encodeURIComponent(jobSpecificAssessmentId)}`,
+            });
+          }
+          await dispatchApplicationReceivedConfirmation({
+            applicationId: application.id,
+            userId: session.id,
+            jobId: application.jobId,
+          });
+        }
+      }
+    }
+
+    const completedJobSpecificApplicationIds: string[] = [];
+    if (qualifiesForSkillValidation && assessment.scope === "EMPLOYER_JOB") {
+      const gates = await prisma.applicationGate.findMany({
+        where: {
+          type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+          status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+          assessmentId: assessment.id,
+          application: { candidateProfileId: candidateProfile.id },
+        },
+        select: { id: true, applicationId: true },
+      });
+
+      for (const gate of gates) {
+        const completed = await prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM "ApplicationGate" WHERE id = ${gate.id} FOR UPDATE`;
+          const claim = await tx.applicationGate.updateMany({
+            where: {
+              id: gate.id,
+              status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+            },
+            data: {
+              status: ApplicationGateStatus.COMPLETED,
+              completedAt: new Date(),
+            },
+          });
+          if (claim.count !== 1) return false;
+
+          await tx.application.updateMany({
+            where: {
+              id: gate.applicationId,
+              candidateProfileId: candidateProfile.id,
+              status: "ASSESSMENT",
+            },
+            data: { status: "APPLIED" },
+          });
+          return true;
+        });
+
+        if (completed) completedJobSpecificApplicationIds.push(gate.applicationId);
+      }
     }
 
     await logAuditEvent({
@@ -185,9 +307,25 @@ export async function POST(req: NextRequest) {
       },
       results: {
         score: submission.updatedAttempt.score,
+        validationEligible: qualifiesForSkillValidation,
+        validationNote: qualifiesForSkillValidation
+          ? null
+          : "This legacy assessment result is retained for history but is not eligible for HireGo Skill Validation evidence.",
         correctCount,
         incorrectCount: assessment.questions.length - correctCount,
         passed: submission.updatedAttempt.passed,
+        assessmentScope: assessment.scope,
+        isUniversalSkillValidation,
+        releasedApplicationIds,
+        pendingJobSpecificAssessments,
+        applicationContinuation: pendingJobSpecificAssessments.length > 0
+          ? "JOB_SPECIFIC_ASSESSMENT_REQUIRED"
+          : releasedApplicationIds.length > 0
+            ? "SUBMITTED"
+            : completedJobSpecificApplicationIds.length > 0
+              ? "JOB_SPECIFIC_ASSESSMENT_COMPLETED"
+              : "NO_PENDING_APPLICATION",
+        completedJobSpecificApplicationIds,
         skillEvidence: submission.skillEvidence.map((item) => ({
           name: item.name,
           score: item.score,

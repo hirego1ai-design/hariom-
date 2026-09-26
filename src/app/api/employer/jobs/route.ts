@@ -6,6 +6,9 @@ import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@
 import { logAuditEvent } from "@/lib/auditLogger";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { prisma } from "@/lib/prisma";
+import { JobStatus } from "@prisma/client";
+import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
+import { OutboxPublisher } from "@/lib/events/Outbox";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
@@ -17,6 +20,7 @@ const jobSchema = z.object({
   requirements: z.array(z.string().trim().min(1).max(120)).max(100).optional(),
   screeningQuestions: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
   aiFocusAreas: z.string().trim().max(2_000).optional(),
+  requiresJobSpecificAssessment: z.boolean().optional().default(false),
   skillRequirements: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     priority: z.enum(["required", "preferred"]),
@@ -70,19 +74,19 @@ export async function POST(request: Request) {
       throw new ApiError("Forbidden: Employer or recruiter role required.", 403);
     }
 
-    // Resolve authoritative companyId
     const profile = await prisma.employerProfile.findUnique({
       where: { userId: session.id },
     });
     if (!profile?.companyId) {
       throw new ApiError("Employer profile not found. Please complete employer setup.", 403);
     }
-    const companyId = profile.companyId!;
+    const companyId = profile.companyId;
 
     const body = await readValidatedJson(request, jobSchema);
-    const isPublishing = body.status === "ACTIVE";
+    const requestedStatus = body.status ?? "ACTIVE";
+    const isPublishing = requestedStatus === "ACTIVE";
+    const requiresGeneratedAssessment = isPublishing && body.requiresJobSpecificAssessment;
 
-    // 1. Idempotency Key Inspection
     const idempotencyKey = request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key");
     let requestHash = "";
 
@@ -95,28 +99,91 @@ export async function POST(request: Request) {
       });
 
       if (existingRecord) {
+        if (existingRecord.requestHash !== requestHash) {
+          throw new ApiError("Idempotency key already used with a different request payload.", 409);
+        }
         if (existingRecord.status === "SUCCESS" && existingRecord.responsePayload) {
-          if (existingRecord.requestHash !== requestHash) {
-            throw new ApiError("Idempotency key already used with a different request payload.", 409);
-          }
-          // Idempotent Return: Return cached response without re-executing credit deduction or job creation
           return NextResponse.json(existingRecord.responsePayload as any, { status: 201 });
         }
         if (existingRecord.status === "PROCESSING") {
           throw new ApiError("A request with this idempotency key is currently processing.", 409);
         }
+        if (
+          existingRecord.status === "FAILED" &&
+          existingRecord.jobId &&
+          requiresGeneratedAssessment
+        ) {
+          try {
+            await ensureJobSpecificAssessment(existingRecord.jobId, companyId);
+            const resumed = await prisma.$transaction(async (tx) => {
+              const job = await tx.jobListing.findFirst({
+                where: { id: existingRecord.jobId!, companyId },
+              });
+              if (!job) throw new ApiError("Draft job could not be resumed.", 404);
+
+              let remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+              if (job.status !== JobStatus.ACTIVE) {
+                const sub = await tx.companySubscription.findFirst({ where: { companyId } });
+                const subStatus = (sub?.status as string) || "";
+                if (sub && (subStatus === "EXPIRED" || subStatus === "CANCELLED" || new Date(sub.endDate) < new Date())) {
+                  throw new ApiError("Subscription has expired. Please renew your plan to publish jobs.", 403);
+                }
+                const debit = await tx.companyCredits.updateMany({
+                  where: { companyId, jobPostsLeft: { gt: 0 } },
+                  data: { jobPostsLeft: { decrement: 1 } },
+                });
+                if (debit.count !== 1) {
+                  throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
+                }
+                remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+                await tx.jobListing.update({
+                  where: { id: job.id },
+                  data: { status: JobStatus.ACTIVE },
+                });
+                await OutboxPublisher.publish({
+                  eventType: "JOB_LISTING_CREATED",
+                  payload: { jobId: job.id, companyId, title: job.title, status: JobStatus.ACTIVE },
+                  correlationId: job.id,
+                  companyId,
+                  idempotencyKey: `job-published:${job.id}`,
+                }, tx);
+              }
+
+              const activeJob = await tx.jobListing.findUniqueOrThrow({ where: { id: job.id } });
+              const responsePayload = {
+                success: true,
+                job: activeJob,
+                jobPostsLeft: remainingCredits,
+                jobSpecificAssessment: "READY",
+                message: `Job published successfully with job-specific assessment. 1 Job Post Credit consumed (${remainingCredits} remaining).`,
+              };
+              await tx.idempotencyRecord.update({
+                where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+                data: { status: "SUCCESS", jobId: job.id, responsePayload: responsePayload as any },
+              });
+              return responsePayload;
+            });
+            return NextResponse.json(resumed, { status: 201 });
+          } catch (resumeError) {
+            await prisma.idempotencyRecord.update({
+              where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+              data: { status: "FAILED" },
+            }).catch(() => null);
+            throw resumeError;
+          }
+        }
       }
     }
 
-    // 2. UNIFIED ATOMIC TRANSACTION: Subscription Check + Credit Reservation + Job Creation + Outbox + Trace + Idempotency
-    const result = await prisma.$transaction(async (tx) => {
-      let remainingCredits = 999;
+    const initialStatus = requiresGeneratedAssessment ? JobStatus.DRAFT : requestedStatus as JobStatus;
 
-      // Reserve Idempotency Record status PROCESSING inside transaction
+    const result = await prisma.$transaction(async (tx) => {
+      let remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+
       if (idempotencyKey) {
         await tx.idempotencyRecord.upsert({
           where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
-          update: { status: "PROCESSING", requestHash },
+          update: { status: "PROCESSING", requestHash, responsePayload: undefined },
           create: {
             companyId,
             idempotencyKey,
@@ -126,29 +193,25 @@ export async function POST(request: Request) {
         });
       }
 
-      if (isPublishing && session.role !== "ADMIN") {
-        // A. Check Subscription Expiry
+      if (isPublishing) {
         const sub = await tx.companySubscription.findFirst({ where: { companyId } });
         const subStatus = (sub?.status as string) || "";
         if (sub && (subStatus === "EXPIRED" || subStatus === "CANCELLED" || new Date(sub.endDate) < new Date())) {
           throw new ApiError("Subscription has expired. Please renew your plan to publish jobs.", 403);
         }
 
-        // B. Atomic Conditional Update: Only decrement if jobPostsLeft > 0
-        const updateResult = await tx.companyCredits.updateMany({
-          where: { companyId, jobPostsLeft: { gt: 0 } },
-          data: { jobPostsLeft: { decrement: 1 } },
-        });
-
-        if (updateResult.count === 0) {
-          throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
+        if (!requiresGeneratedAssessment) {
+          const updateResult = await tx.companyCredits.updateMany({
+            where: { companyId, jobPostsLeft: { gt: 0 } },
+            data: { jobPostsLeft: { decrement: 1 } },
+          });
+          if (updateResult.count === 0) {
+            throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
+          }
+          remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
         }
-
-        const updatedCredits = await tx.companyCredits.findUnique({ where: { companyId } });
-        remainingCredits = updatedCredits?.jobPostsLeft ?? 0;
       }
 
-      // C. Process Job Creation through ROS Gateway (PASSING tx CONTEXT FOR SINGLE ATOMIC COMMIT)
       const { RosGateway } = await import("@/lib/ros/RosGateway");
       const { job: newJob } = await RosGateway.handleJobCreation(
         {
@@ -159,6 +222,8 @@ export async function POST(request: Request) {
           salaryRange: body.salary,
           location: body.location,
           type: body.type ?? "Full-time",
+          status: initialStatus,
+          requiresJobSpecificAssessment: body.requiresJobSpecificAssessment,
           matchingConfig: body.matchingConfig,
           department: body.department,
           requirements: body.requirements,
@@ -166,21 +231,23 @@ export async function POST(request: Request) {
           aiFocusAreas: body.aiFocusAreas,
           skillRequirements: body.skillRequirements,
         },
-        tx
+        tx,
       );
 
+      const jobObj = newJob as any;
       const responsePayload = {
         success: true,
         job: newJob,
         jobPostsLeft: remainingCredits,
-        message: isPublishing
-          ? `Job published successfully! 1 Job Post Credit consumed (${remainingCredits} remaining).`
-          : "Draft saved successfully.",
+        jobSpecificAssessment: requiresGeneratedAssessment ? "GENERATING" : "NOT_REQUIRED",
+        message: requiresGeneratedAssessment
+          ? "Job draft created. HireGo is generating the required job-specific assessment before publication."
+          : isPublishing
+            ? `Job published successfully! 1 Job Post Credit consumed (${remainingCredits} remaining).`
+            : "Draft saved successfully.",
       };
 
-      // D. Finalize Idempotency Record status SUCCESS
-      if (idempotencyKey) {
-        const jobObj = newJob as any;
+      if (idempotencyKey && !requiresGeneratedAssessment) {
         await tx.idempotencyRecord.update({
           where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
           data: {
@@ -189,16 +256,97 @@ export async function POST(request: Request) {
             responsePayload: responsePayload as any,
           },
         });
+      } else if (idempotencyKey) {
+        await tx.idempotencyRecord.update({
+          where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+          data: { jobId: jobObj?.id || null },
+        });
       }
 
-      return { responsePayload, remainingCredits };
+      return { responsePayload, remainingCredits, jobId: jobObj?.id as string };
     });
 
-    logAuditEvent({
+    if (requiresGeneratedAssessment) {
+      try {
+        await ensureJobSpecificAssessment(result.jobId, companyId);
+        const finalPayload = await prisma.$transaction(async (tx) => {
+          const debit = await tx.companyCredits.updateMany({
+            where: { companyId, jobPostsLeft: { gt: 0 } },
+            data: { jobPostsLeft: { decrement: 1 } },
+          });
+          if (debit.count !== 1) {
+            throw new ApiError("Insufficient job posting credits. Job remains a draft.", 402);
+          }
+          const remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+          const activeJob = await tx.jobListing.update({
+            where: { id: result.jobId },
+            data: { status: JobStatus.ACTIVE },
+          });
+          await OutboxPublisher.publish({
+            eventType: "JOB_LISTING_CREATED",
+            payload: { jobId: activeJob.id, companyId, title: activeJob.title, status: JobStatus.ACTIVE },
+            correlationId: activeJob.id,
+            companyId,
+            idempotencyKey: `job-published:${activeJob.id}`,
+          }, tx);
+
+          const responsePayload = {
+            success: true,
+            job: activeJob,
+            jobPostsLeft: remainingCredits,
+            jobSpecificAssessment: "READY",
+            message: `Job published successfully with job-specific assessment. 1 Job Post Credit consumed (${remainingCredits} remaining).`,
+          };
+          if (idempotencyKey) {
+            await tx.idempotencyRecord.update({
+              where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+              data: {
+                status: "SUCCESS",
+                jobId: activeJob.id,
+                responsePayload: responsePayload as any,
+              },
+            });
+          }
+          return responsePayload;
+        });
+
+        await logAuditEvent({
+          userId: session.id,
+          companyId,
+          action: "JOB_CREATE",
+          resource: `JobListing:${result.jobId}`,
+          details: "Published job with automatically generated job-specific assessment.",
+        });
+        return NextResponse.json(finalPayload, { status: 201 });
+      } catch (generationError) {
+        if (idempotencyKey) {
+          await prisma.idempotencyRecord.update({
+            where: { companyId_idempotencyKey: { companyId, idempotencyKey } },
+            data: { status: "FAILED", jobId: result.jobId },
+          }).catch(() => null);
+        }
+        await logAuditEvent({
+          userId: session.id,
+          companyId,
+          action: "JOB_SPECIFIC_ASSESSMENT_GENERATION_FAILED",
+          resource: `JobListing:${result.jobId}`,
+          details: generationError instanceof Error ? generationError.message.slice(0, 1_000) : "Unknown authoring failure",
+        }).catch(() => null);
+
+        if (generationError && typeof (generationError as any).status === "number") throw generationError;
+        throw new ApiError(
+          "Job was saved as a draft because the required job-specific assessment could not be generated. Retry publishing after AI routing and assessment policy are available.",
+          503,
+        );
+      }
+    }
+
+    await logAuditEvent({
       userId: session.id,
+      companyId,
       action: "JOB_CREATE",
-      resource: "/api/employer/jobs",
-      details: `Created job listing ${body.title} via ROS Gateway. Credits left: ${result.remainingCredits}`,
+      resource: `JobListing:${result.jobId}`,
+      details: `Created ${requestedStatus.toLowerCase()} job listing via ROS Gateway. Credits left: ${result.remainingCredits}`,
     });
 
     return NextResponse.json(result.responsePayload, { status: 201 });
@@ -206,3 +354,4 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+

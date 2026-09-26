@@ -86,7 +86,7 @@ export default function MockInterviewActivePage() {
 
   const handleSubmitAnswer = async () => {
     if (!answerText.trim()) {
-      setErrorMessage("Please write your technical answer before submitting.");
+      setErrorMessage("Please write your answer before submitting.");
       return;
     }
 
@@ -112,9 +112,12 @@ export default function MockInterviewActivePage() {
         throw new Error(data.error || "Evaluation failed. Please try again.");
       }
 
+      if (typeof data.turnScore !== "number" || typeof data.feedback !== "string") {
+        throw new Error("The evaluation service returned an incomplete result.");
+      }
       setTurnEvaluation({
-        score: data.evaluation?.score ?? 75,
-        feedback: data.evaluation?.feedback || "Answer recorded successfully.",
+        score: data.turnScore,
+        feedback: data.feedback,
       });
 
       if (data.isComplete || !data.nextQuestion) {
@@ -249,7 +252,7 @@ export default function MockInterviewActivePage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/70 font-bold">
               <BookOpen className="w-3.5 h-3.5 text-[#4285F4]" />
-              Structured Technical Response
+              Structured Response
             </div>
             <div className="flex items-center gap-3 text-xs text-white/50 font-mono">
               <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
@@ -262,13 +265,13 @@ export default function MockInterviewActivePage() {
             value={answerText}
             onChange={(e) => setAnswerText(e.target.value)}
             disabled={isSubmitting}
-            placeholder="Type your structured technical response here. Outline your rationale, approach, architecture, and edge-case handling..."
+            placeholder="Type your structured response here. Explain your reasoning, examples, tradeoffs, or practical approach where relevant."
             className="flex-1 min-h-[220px] w-full text-sm leading-relaxed bg-black/40 border border-white/10 rounded-xl p-4 text-white placeholder-white/25 focus:outline-none focus:border-[#C5221F] transition-colors resize-none mb-4 font-sans"
           />
 
           <div className="flex items-center justify-between pt-2 border-t border-white/5">
             <p className="text-xs text-white/40">
-              Clear, structured responses with concrete technical rationale score highest.
+              Clear, relevant, well-structured responses provide better practice evidence.
             </p>
 
             <button

@@ -60,6 +60,9 @@ function detectProvider(text) {
   if (/gemini|google/i.test(text)) providers.push("Google Gemini");
   if (/deepseek/i.test(text)) providers.push("DeepSeek");
   if (/kimi|moonshot/i.test(text)) providers.push("Kimi/Moonshot");
+  if (/qwen|dashscope/i.test(text)) providers.push("Qwen");
+  if (/self[_ -]?hosted[_ -]?llm|SELF_HOSTED_LLM/i.test(text)) providers.push("Self-hosted LLM");
+  if (/whisper|video_analysis_worker/i.test(text)) providers.push("Private media analysis worker");
   if (/whatsapp/i.test(text)) providers.push("WhatsApp Cloud API");
   if (/payu/i.test(text)) providers.push("PayU");
   if (/stripe/i.test(text)) providers.push("Stripe");

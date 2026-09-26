@@ -1,13 +1,20 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, Mic, Volume2, ShieldCheck, ArrowRight, Clock, History, AlertCircle } from "lucide-react";
+import { Sparkles, ShieldCheck, ArrowRight, Clock, History, AlertCircle } from "lucide-react";
 
 export default function MockInterviewSetupPage() {
   const router = useRouter();
-  const [roleTarget, setRoleTarget] = useState("Full Stack Engineer");
+  const searchParams = useSearchParams();
+  const roleFromAssessment = searchParams.get("role")?.trim() || "";
+  const focusSkills = (searchParams.get("focus") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  const [roleTarget, setRoleTarget] = useState(roleFromAssessment || "Full Stack Engineer");
   const [seniority, setSeniority] = useState("Senior");
   const [totalQuestions, setTotalQuestions] = useState(3);
   const [isStarting, setIsStarting] = useState(false);
@@ -53,6 +60,7 @@ export default function MockInterviewSetupPage() {
         body: JSON.stringify({
           roleTarget: fullRoleTarget,
           totalQuestions: Number(totalQuestions),
+          focusSkills,
         }),
       });
 
@@ -102,7 +110,7 @@ export default function MockInterviewSetupPage() {
             Technical Mock Interview Setup
           </h1>
           <p className="text-sm text-white/60 max-w-2xl">
-            Prepare for real engineering interviews with AI-generated technical challenges. Type your answers, receive instant turn-by-turn evaluation, and track your practice progression.
+            Practice role-relevant interview questions in a text-only session. Type your answers, receive structured turn-by-turn feedback, and track your practice progression.
           </p>
         </div>
 
@@ -112,6 +120,22 @@ export default function MockInterviewSetupPage() {
             <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#C5221F]" /> Interview Parameters
             </h2>
+
+            {focusSkills.length > 0 && (
+              <div className="mb-6 rounded-xl border border-[#4285F4]/30 bg-[#4285F4]/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#8AB4F8]">Practice focus from Skill Validation</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {focusSkills.map((skill) => (
+                    <span key={skill} className="rounded-full border border-[#4285F4]/30 bg-black/20 px-3 py-1.5 text-xs text-white">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-[11px] leading-relaxed text-white/50">
+                  These focus areas guide practice questions only. Mock Interview performance does not rewrite your historical Skill Validation score.
+                </p>
+              </div>
+            )}
 
             {errorMessage && (
               <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-3">
@@ -124,7 +148,7 @@ export default function MockInterviewSetupPage() {
               {/* Role Target */}
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Target Technical Role
+                  Target Role
                 </label>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   {[
@@ -217,9 +241,9 @@ export default function MockInterviewSetupPage() {
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-white">Text-Based Technical Evaluation</div>
+                  <div className="text-xs font-bold text-white">Text-Based Practice Evaluation</div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
-                    Questions are generated adaptively based on your selected target role and skills. Type your solutions into the structured technical editor to receive rigorous scoring on technical accuracy, design tradeoffs, and clarity.
+                    Questions are generated based on your selected role, claimed skills, and optional Skill Validation focus areas. Type your answers to receive structured practice feedback.
                   </div>
                 </div>
               </div>

@@ -383,13 +383,13 @@ test("production wiring inventory preserves router action names", () => {
   assert(inventory.records.some(
     (record) => record.record_type === "user_action" && record.user_action === "router.push handler"
   ));
-  const llmUsageCall = inventory.records.find(
+  const aiRoutingCall = inventory.records.find(
     (record) =>
       record.record_type === "frontend_api_call" &&
-      (record as { api_endpoint?: string }).api_endpoint === "/api/admin/llm-usage"
+      (record as { api_endpoint?: string }).api_endpoint === "/api/admin/ai-routing"
   ) as { method?: string; user_action?: string } | undefined;
-  assert.equal(llmUsageCall?.method, "GET");
-  assert.equal(llmUsageCall?.user_action, "fetch GET /api/admin/llm-usage");
+  assert.equal(aiRoutingCall?.method, "GET");
+  assert.equal(aiRoutingCall?.user_action, "fetch GET /api/admin/ai-routing");
 });
 
 test("previously yellow production endpoints are backed by real sources or explicit tombstones", () => {

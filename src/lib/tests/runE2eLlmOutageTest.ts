@@ -1,4 +1,4 @@
-import { ModelRouter, LlmProviderName } from '@/lib/ai/ModelRouter';
+import { ModelRouter } from '@/lib/ai/ModelRouter';
 import { CircuitBreaker, CircuitBreakerOpenError } from '@/lib/ai/CircuitBreaker';
 import { KillSwitchManager, KillSwitchActiveError } from '@/lib/security/KillSwitchManager';
 import { KillSwitchType, Role } from '@prisma/client';
@@ -118,7 +118,7 @@ async function runLlmOutageTests() {
   let passedScenarios = 0;
 
   // Helper to reset CircuitBreaker states between test scenarios
-  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k', 'google:gemini-1.5-pro', 'openai:gpt-4o', 'deepseek:deepseek-r1', 'kimi:moonshot-v1-32k'].forEach(k => CircuitBreaker.reset(k));
+  ['gemini:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k', 'gemini:gemini-1.5-pro', 'openai:gpt-4o', 'deepseek:deepseek-r1', 'kimi:moonshot-v1-32k'].forEach(k => CircuitBreaker.reset(k));
 
   // ----------------------------------------------------------------
   // Scenario 1: Gemini rate limit -> verify fallback to OpenAI
@@ -127,8 +127,10 @@ async function runLlmOutageTests() {
   try {
     const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
-      fn: async (provider, model) => {
-        if (provider === 'google') {
+      fn: async (endpoint) => {
+        const provider = endpoint.provider;
+        const model = endpoint.model;
+        if (provider === 'gemini') {
           throw new Error('429 Too Many Requests: Rate limit exceeded on Gemini');
         }
         return `Response from ${provider} (${model})`;
@@ -152,8 +154,10 @@ async function runLlmOutageTests() {
   try {
     const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
-      fn: async (provider, model) => {
-        if (provider === 'google' || provider === 'openai') {
+      fn: async (endpoint) => {
+        const provider = endpoint.provider;
+        const model = endpoint.model;
+        if (provider === 'gemini' || provider === 'openai') {
           throw new Error(`429 Too Many Requests on ${provider}`);
         }
         return `Response from ${provider} (${model})`;
@@ -177,8 +181,10 @@ async function runLlmOutageTests() {
   try {
     const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
-      fn: async (provider, model) => {
-        if (provider === 'google' || provider === 'openai' || provider === 'deepseek') {
+      fn: async (endpoint) => {
+        const provider = endpoint.provider;
+        const model = endpoint.model;
+        if (provider === 'gemini' || provider === 'openai' || provider === 'deepseek') {
           throw new Error(`503 Service Unavailable on ${provider}`);
         }
         return `Response from ${provider} (${model})`;
@@ -202,7 +208,8 @@ async function runLlmOutageTests() {
   try {
     await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
-      fn: async (provider) => {
+      fn: async (endpoint) => {
+        const provider = endpoint.provider;
         throw new Error(`500 Internal Error on ${provider}`);
       },
     });
@@ -217,7 +224,7 @@ async function runLlmOutageTests() {
   }
 
   // Reset circuit breakers after scenario 4 failures
-  ['google:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k'].forEach(k => CircuitBreaker.reset(k));
+  ['gemini:gemini-1.5-flash', 'openai:gpt-4o-mini', 'deepseek:deepseek-v3', 'kimi:moonshot-v1-8k'].forEach(k => CircuitBreaker.reset(k));
 
   // ----------------------------------------------------------------
   // Scenario 5: Repeated 429 responses -> bounded retries helper
@@ -350,8 +357,9 @@ async function runLlmOutageTests() {
     // 2. Simulate primary provider failure & fallback success
     await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
-      fn: async (provider) => {
-        if (provider === 'google') throw new Error('Gemini Outage');
+      fn: async (endpoint) => {
+        const provider = endpoint.provider;
+        if (provider === 'gemini') throw new Error('Gemini Outage');
         return 'Success on fallback';
       },
     });

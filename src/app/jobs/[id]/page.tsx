@@ -33,6 +33,7 @@ export default function JobDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
@@ -61,7 +62,9 @@ export default function JobDetailPage() {
   }, [jobId]);
 
   const handleApply = async () => {
-    if (!jobId || isApplied) return;
+    if (!jobId || isApplied || isApplying) return;
+    setIsApplying(true);
+    setFeedbackMessage(null);
     try {
       const response = await fetch("/api/applications", {
         method: "POST",
@@ -69,11 +72,25 @@ export default function JobDetailPage() {
         body: JSON.stringify({ jobId }),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "Application could not be submitted.");
+
+      if (response.status === 202 && data.success && data.assessmentRequired && data.noticeUrl) {
+        router.push(data.noticeUrl);
+        return;
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Application could not be submitted.");
+      }
+
       setIsApplied(true);
-      setFeedbackMessage("Application submitted successfully!");
+      if (data.assessmentRequired && data.assessmentType === "JOB_SPECIFIC_ASSESSMENT" && data.assessmentUrl) {
+        router.push(data.assessmentUrl);
+        return;
+      }
+      setFeedbackMessage("Application submitted successfully.");
     } catch (cause) {
       setFeedbackMessage(cause instanceof Error ? cause.message : "Application could not be submitted.");
+      setIsApplying(false);
     }
   };
 
@@ -238,7 +255,7 @@ export default function JobDetailPage() {
             <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3 shadow-xl">
               <button
                 onClick={handleApply}
-                disabled={isApplied}
+                disabled={isApplied || isApplying}
                 className={`w-full h-12 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                   isApplied
                     ? "bg-green-500/20 text-green-400 border border-green-500/30"
@@ -249,6 +266,11 @@ export default function JobDetailPage() {
                   <>
                     <span className="material-symbols-outlined text-[18px]">check</span>
                     <span>Application Submitted</span>
+                  </>
+                ) : isApplying ? (
+                  <>
+                    <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                    <span>Checking requirements…</span>
                   </>
                 ) : (
                   <>
