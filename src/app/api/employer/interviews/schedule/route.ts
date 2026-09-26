@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
 
       const participantIds = [application.candidateProfile.userId, ...round.interviewers.map((item) => item.userId)].sort();
       for (const participantId of participantIds) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`hirego:interview-participant:${participantId}`}))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`hirego:interview-participant:${participantId}`}))`;
       }
       const possibleConflicts = await tx.interview.findMany({
         where: {
