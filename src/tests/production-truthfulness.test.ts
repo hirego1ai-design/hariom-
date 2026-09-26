@@ -280,11 +280,13 @@ test("shared employer state does not invent an authenticated identity", () => {
 });
 
 test("privileged page guard, OTP hashing, and security headers remain enabled", () => {
-  const proxy = read("proxy.ts");
-  for (const marker of ["/admin/:path*", "/employer/:path*", "/candidate/:path*", "/dashboard"]) {
-    assert.ok(proxy.includes(marker), `proxy route guard missing: ${marker}`);
+  const middleware = read("src/middleware.ts");
+  for (const marker of ['pathname.startsWith("/admin")', 'pathname.startsWith("/employer")', 'pathname.startsWith("/candidate")', '"/dashboard"']) {
+    assert.ok(middleware.includes(marker), `middleware route guard missing: ${marker}`);
   }
-  assert.match(proxy, /jwt\.verify/);
+  assert.match(middleware, /crypto\.subtle\.verify/);
+  assert.match(middleware, /AUTH_COOKIE_NAME/);
+  assert.match(middleware, /getDistributedSessionState/);
 
   const otp = read("src/lib/otp.ts");
   assert.match(otp, /otpDigest/);
@@ -315,11 +317,13 @@ test("public candidate sharing and unavailable AI surfaces cannot be falsely cer
 
   const inventory = JSON.parse(read("production-wiring-inventory.json"));
   const unavailableRoutes = new Set([
-    "/employer/ai-hiring-copilot-hub",
     "/employer/ai-evaluation-scores",
     "/employer/ai-candidate-ranking-explanation",
   ]);
   const records = Array.isArray(inventory.records) ? inventory.records : [];
+  const copilotScreen = records.find((record: any) => record.record_type === "screen" && record.route === "/employer/ai-hiring-copilot-hub");
+  assert.ok(copilotScreen, "wiring inventory is missing the production Co-Pilot hub");
+  assert.equal(copilotScreen.status, "GREEN", "production Co-Pilot hub must remain connected to authoritative APIs");
   for (const route of unavailableRoutes) {
     const screen = records.find((record: any) => record.record_type === "screen" && record.route === route);
     assert.ok(screen, `wiring inventory is missing unavailable screen ${route}`);

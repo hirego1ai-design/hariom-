@@ -161,14 +161,9 @@ export class BudgetManager {
           });
       }
 
-      // Match reservation's budget -> credits lock order. Only the execution
-      // owner requests this before execution; the HELD lock prevents repeats.
-      if (refundAiCredit) {
-        await tx.companyCredits.update({
-          where: { companyId: reservation.companyId },
-          data: { aiAgentCreditsLeft: { increment: 1 } },
-        });
-      }
+      // Customer subscription AI assistance is not credit-metered. The
+      // refundAiCredit argument is retained for call-site compatibility only.
+      void refundAiCredit;
     });
   }
 

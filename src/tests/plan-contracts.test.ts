@@ -10,7 +10,16 @@ const plan = {
   name: "Contract test", description: "Not a live plan", price: 100, currency: "INR",
   jobPostsQuota: 0, resumeUnlocksQuota: 0, aiInterviewsQuota: 0,
   applicationsQuota: 0, resumeDownloadsQuota: 0, backgroundVerificationsQuota: 0,
-  featuresAllowed: ["JOB_POSTING"], validityMonths: 1,
+  featuresAllowed: ["JOB_POSTING"],
+  marketingBenefits: ["Job posting"],
+  validityMonths: 1,
+  jobValidityDays: 7,
+  firstTimeOnly: false,
+  copilotIncluded: false,
+  copilotJobLimit: 0,
+  isFeatured: false,
+  badgeText: null,
+  displayOrder: 10,
 };
 
 test("checkout accepts existing legacy and new UUID plan identifiers", () => {
@@ -35,7 +44,7 @@ test("plan validation rejects invalid prices, quotas, validity and unknown mutab
   for (const change of [
     { price: -1 }, { price: Infinity }, { jobPostsQuota: -1 }, { aiInterviewsQuota: 1.5 },
     { validityMonths: 0 }, { resumeDownloadsQuota: 2147483648 }, { currency: "inr" },
-    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["bad feature"] },
+    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["<script>"] },
   ]) assert.equal(createPlanSchema.safeParse({ ...plan, ...change }).success, false);
 });
 
