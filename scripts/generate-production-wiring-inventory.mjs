@@ -107,7 +107,11 @@ function detectServices(text) {
 }
 
 function hasMock(text) {
-  return /\b(mockData|mockUser|dummyData|fakeData|demoData|sampleData|simulatedData|hardcodedData|staticData|rawHtml)\b|\b(simulated|fabricated)\s+(response|result|record|profile|job|notification)/i.test(text);
+  return /\b(mockData|mockUser|dummyData|fakeData|demoData|sampleData|simulatedData|hardcodedData|staticData|rawHtml)\b|\b(simulated|fabricated|fake|hardcoded)\s+(response|result|record|profile|candidate|job|notification|score)|localhost:\d+\/profile\/public/i.test(text);
+}
+
+function hasUnavailableCapability(text) {
+  return /currently in development|configuration not connected|\bnot connected\b|\bnot implemented\b|\bunavailable\b|material-symbols-outlined[^\n]{0,100}construction/i.test(text);
 }
 
 function hasErrorHandling(text) {
@@ -132,7 +136,8 @@ function hasIdempotency(text) {
 
 function classify(text, kind, hasAction = false) {
   if (hasMock(text)) return { status: "RED", severity: "HIGH" };
-  if (kind === "screen" && !hasAction) return { status: "GREEN", severity: "LOW" };
+  if (hasUnavailableCapability(text)) return { status: "YELLOW", severity: "MEDIUM" };
+  if (kind === "screen" && !hasAction) return { status: "YELLOW", severity: "MEDIUM" };
   if (kind === "endpoint") {
     const wired = detectDbModels(text).length > 0 || detectServices(text).length > 0 || detectProvider(text).length > 0;
     return wired && hasErrorHandling(text)
@@ -217,7 +222,11 @@ for (const file of pages) {
     evidence: fileLineEvidence(file, 1, `screen route ${route}`),
     file: relativeFile,
     line: 1,
-    notes: hasAction ? "Interactive handlers detected; action-level rows follow." : "No interactive handler detected by static scan.",
+    notes: hasUnavailableCapability(text)
+      ? "Capability is explicitly unavailable/not connected; do not classify as production-wired."
+      : hasAction
+        ? "Interactive handlers detected; action-level rows follow."
+        : "No interactive handler detected; runtime wiring is not proven.",
   }));
 
   const events = allMatches(text, /\b(onClick|onSubmit|onChange|onKeyDown|onBlur)\s*=|\b(router\.(push|replace))\s*\(/g);
