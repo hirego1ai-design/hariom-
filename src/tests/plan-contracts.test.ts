@@ -87,6 +87,9 @@ test("production catalog reconciliation creates all launch plans and keeps Co-Pi
     assert.match(migration, new RegExp(planId));
   }
   assert.match(migration, /ALTER TABLE "HiringCopilotConfig" ENABLE ROW LEVEL SECURITY/);
-  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon, authenticated/);
+  assert.match(migration, /rolname = 'anon'/);
+  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon/);
+  assert.match(migration, /rolname = 'authenticated'/);
+  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM authenticated/);
   assert.match(migration, /ON CONFLICT \("id"\) DO UPDATE SET/);
 });
