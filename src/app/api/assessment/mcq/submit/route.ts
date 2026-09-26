@@ -188,11 +188,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const isUniversalSkillValidation =
+      assessment.scope === "PLATFORM_READINESS" &&
+      assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY;
+
     let releasedApplicationIds: string[] = [];
+    let pendingJobSpecificAssessments: Array<{
+      applicationId: string;
+      assessmentId: string;
+      assessmentUrl: string;
+    }> = [];
     if (
       qualifiesForSkillValidation &&
-      assessment.scope === "PLATFORM_READINESS" &&
-      assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY
+      isUniversalSkillValidation
     ) {
       const { RosGateway } = await import("@/lib/ros/RosGateway");
       releasedApplicationIds = await RosGateway.releaseUniversalValidationApplications({
@@ -207,9 +215,28 @@ export async function POST(req: NextRequest) {
             id: { in: releasedApplicationIds },
             candidateProfileId: candidateProfile.id,
           },
-          select: { id: true, jobId: true },
+          select: {
+            id: true,
+            jobId: true,
+            gates: {
+              where: {
+                type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+                status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+              },
+              select: { assessmentId: true },
+              take: 1,
+            },
+          },
         });
         for (const application of releasedApplications) {
+          const jobSpecificAssessmentId = application.gates[0]?.assessmentId ?? null;
+          if (jobSpecificAssessmentId) {
+            pendingJobSpecificAssessments.push({
+              applicationId: application.id,
+              assessmentId: jobSpecificAssessmentId,
+              assessmentUrl: `/assessment/mcq/active?id=${encodeURIComponent(jobSpecificAssessmentId)}`,
+            });
+          }
           await dispatchApplicationReceivedConfirmation({
             applicationId: application.id,
             userId: session.id,
@@ -287,12 +314,17 @@ export async function POST(req: NextRequest) {
         correctCount,
         incorrectCount: assessment.questions.length - correctCount,
         passed: submission.updatedAttempt.passed,
+        assessmentScope: assessment.scope,
+        isUniversalSkillValidation,
         releasedApplicationIds,
-        applicationContinuation: releasedApplicationIds.length > 0
-          ? "SUBMITTED"
-          : completedJobSpecificApplicationIds.length > 0
-            ? "JOB_SPECIFIC_ASSESSMENT_COMPLETED"
-            : "NO_PENDING_APPLICATION",
+        pendingJobSpecificAssessments,
+        applicationContinuation: pendingJobSpecificAssessments.length > 0
+          ? "JOB_SPECIFIC_ASSESSMENT_REQUIRED"
+          : releasedApplicationIds.length > 0
+            ? "SUBMITTED"
+            : completedJobSpecificApplicationIds.length > 0
+              ? "JOB_SPECIFIC_ASSESSMENT_COMPLETED"
+              : "NO_PENDING_APPLICATION",
         completedJobSpecificApplicationIds,
         skillEvidence: submission.skillEvidence.map((item) => ({
           name: item.name,
