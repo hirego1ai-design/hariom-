@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
     const body = await readValidatedJson(req, copilotCapacityOfferCreateSchema);
     for (const price of body.prices) {
       try {
-        assertCurrentCopilotTaxPolicy(price);
+        assertCurrentCopilotTaxPolicy({
+          regionCode: price.regionCode,
+          countries: price.countries,
+          taxMode: price.taxMode,
+          taxRateBps: price.taxRateBps ?? 0,
+        });
       } catch (error) {
         throw new ApiError(error instanceof Error ? error.message : "Invalid Copilot tax policy.", 422);
       }
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
           currency: price.currency,
           amountMinor: price.amountMinor,
           taxMode: price.taxMode,
-          taxRateBps: price.taxRateBps,
+          taxRateBps: price.taxRateBps ?? 0,
           paymentRoute: price.paymentRoute,
           isActive: price.isActive,
         })),
