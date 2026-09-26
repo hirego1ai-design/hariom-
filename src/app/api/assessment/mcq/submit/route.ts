@@ -15,6 +15,7 @@ import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
 import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 import { OutboxPublisher } from "@/lib/events/Outbox";
+import { recordCopilotUsageAfterExecutionIfActive } from "@/lib/copilot/capacity";
 
 const SubmitAssessmentSchema = z.object({
   attemptId: z.string().uuid("Invalid attempt ID"),
@@ -316,7 +317,37 @@ export async function POST(req: NextRequest) {
           return true;
         });
 
-        if (completed) completedJobSpecificApplicationIds.push(gate.applicationId);
+        if (completed) {
+          completedJobSpecificApplicationIds.push(gate.applicationId);
+          await recordCopilotUsageAfterExecutionIfActive({
+            companyId: gate.application.job.companyId,
+            actionKey: "ASSESSMENT_EVALUATION",
+            quantity: 1,
+            idempotencyKey: `copilot-assessment:${attemptId}:${gate.applicationId}`,
+            reference: {
+              jobId: gate.application.jobId,
+              applicationId: gate.applicationId,
+              candidateId: candidateProfile.id,
+            },
+            metadata: {
+              assessmentId: assessment.id,
+              attemptId,
+              score,
+              passed,
+              assessmentScope: assessment.scope,
+            },
+          }).catch(async (meterError) => {
+            await prisma.auditLog.create({
+              data: {
+                userId: session.id,
+                companyId: gate.application.job.companyId,
+                action: "COPILOT_ASSESSMENT_METERING_FAILED",
+                resource: `McqAttempt:${attemptId}`,
+                details: meterError instanceof Error ? meterError.message.slice(0, 500) : "Unknown assessment metering failure",
+              },
+            }).catch(() => undefined);
+          });
+        }
       }
     }
 
