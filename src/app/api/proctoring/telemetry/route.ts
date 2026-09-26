@@ -3,12 +3,10 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { getLiveInterviewProctoringPolicy, isLiveInterviewProctorEventEnabled } from "@/lib/liveInterviewProctoringPolicy";
 
 const violationTypeSchema = z.enum([
   "TAB_SWITCH",
-  "FACE_NOT_DETECTED",
-  "MULTIPLE_FACES",
-  "AUDIO_ANOMALY",
   "SCREEN_SHARE_STOPPED",
   "BROWSER_UNFOCUSED",
   "COPY_PASTE_DETECTED",
@@ -26,10 +24,7 @@ type Severity = "low" | "medium" | "high";
 
 const SERVER_SEVERITY: Record<ViolationType, Severity> = {
   TAB_SWITCH: "medium",
-  FACE_NOT_DETECTED: "high",
-  MULTIPLE_FACES: "high",
-  AUDIO_ANOMALY: "low",
-  SCREEN_SHARE_STOPPED: "high",
+  SCREEN_SHARE_STOPPED: "medium",
   BROWSER_UNFOCUSED: "low",
   COPY_PASTE_DETECTED: "medium",
 };
@@ -160,6 +155,16 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     });
     if (!consent) throw new ApiError("Interview monitoring consent is required before telemetry can be recorded.", 428);
+
+    const policy = await getLiveInterviewProctoringPolicy();
+    if (!isLiveInterviewProctorEventEnabled(policy, body.violationType)) {
+      return NextResponse.json({
+        success: true,
+        ignored: true,
+        reason: policy.enabled ? "This event is disabled by the active proctoring policy." : "Live interview proctoring is disabled.",
+      });
+    }
+
     const severity = severityForProctoringEvent(body.violationType);
 
     // Do not let a client inflate the advisory score by replaying the same
