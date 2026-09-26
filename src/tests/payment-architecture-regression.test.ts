@@ -25,7 +25,8 @@ test("subscription feature contracts accept admin service keys and legacy human-
     validityMonths: 1,
   };
 
-  const { id: _planId, ...planFields } = plan;
+  const planFields: Omit<typeof plan, "id"> = { ...plan };
+  delete (planFields as Partial<typeof plan>).id;
   assert.equal(createPlanSchema.safeParse(planFields).success, true);
   const snapshot = createPurchasedPlanSnapshot(plan);
   assert.deepEqual(parsePurchasedPlanSnapshot(snapshot).featuresAllowed, plan.featuresAllowed);
