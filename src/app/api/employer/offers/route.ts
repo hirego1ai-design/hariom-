@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 
 const createSchema = z.object({
   applicationId: z.string().uuid(),
@@ -79,6 +80,11 @@ export async function POST(request: NextRequest) {
     });
     if (!application) throw new ApiError("Application not found.", 404);
     if (session.role !== "ADMIN" && application.job.companyId !== companyId) throw new ApiError("Application access denied.", 403);
+    if (session.role !== "ADMIN") {
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, application.job.companyId, ["OFFER_WORKFLOW"], "Your current plan does not include the offer workflow.")
+      );
+    }
     if (application.status !== "SHORTLISTED") throw new ApiError("An offer can only be created for a selected/shortlisted application.", 409);
 
     const activeOffer = await prisma.offer.findFirst({
