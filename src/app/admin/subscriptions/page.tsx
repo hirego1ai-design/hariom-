@@ -16,6 +16,7 @@ export default function AdminSubscriptionsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [currency, setCurrency] = useState("INR");
   const [jobPostsQuota, setJobPostsQuota] = useState("");
   const [resumeUnlocksQuota, setResumeUnlocksQuota] = useState("");
   const [aiInterviewsQuota, setAiInterviewsQuota] = useState("");
@@ -74,7 +75,7 @@ export default function AdminSubscriptionsPage() {
         name,
         description,
         price: parseFloat(price),
-        currency: "INR",
+        currency: currency.trim().toUpperCase(),
         jobPostsQuota: parseInt(jobPostsQuota),
         resumeUnlocksQuota: parseInt(resumeUnlocksQuota),
         aiInterviewsQuota: parseInt(aiInterviewsQuota),
@@ -209,6 +210,7 @@ export default function AdminSubscriptionsPage() {
     setName(plan.name);
     setDescription(plan.description);
     setPrice(plan.price.toString());
+    setCurrency(plan.currency || "INR");
     setJobPostsQuota(plan.jobPostsQuota.toString());
     setResumeUnlocksQuota(plan.resumeUnlocksQuota.toString());
     setAiInterviewsQuota(plan.aiInterviewsQuota.toString());
@@ -230,6 +232,7 @@ export default function AdminSubscriptionsPage() {
     setName("");
     setDescription("");
     setPrice("");
+    setCurrency("INR");
     setJobPostsQuota("");
     setResumeUnlocksQuota("");
     setAiInterviewsQuota("");
@@ -254,7 +257,7 @@ export default function AdminSubscriptionsPage() {
             </h1>
           </div>
           <p className="text-[#CBD5E1] text-sm">
-            Control subscription plans, trial parameters, coupon promotions, and AI service credit values globally.
+            Control subscription pricing, validity, entitlements, coupon promotions, and AI service credit values globally.
           </p>
         </header>
 
@@ -317,7 +320,7 @@ export default function AdminSubscriptionsPage() {
                         <input
                           type="text"
                           required
-                          placeholder="e.g., Free Trial, Unicorn Mode"
+                          placeholder="e.g., Starter, Growth, Enterprise"
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#448AFF]"
@@ -338,10 +341,10 @@ export default function AdminSubscriptionsPage() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
-                            Price (INR)
+                            Price
                           </label>
                           <input
                             type="number"
@@ -351,6 +354,22 @@ export default function AdminSubscriptionsPage() {
                             value={price}
                             onChange={(e) => setPrice(e.target.value)}
                             className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#448AFF]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-[#CBD5E1] uppercase tracking-wider mb-2">
+                            Currency
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            minLength={3}
+                            maxLength={3}
+                            pattern="[A-Za-z]{3}"
+                            placeholder="INR"
+                            value={currency}
+                            onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                            className="w-full bg-[#1A1A20] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm uppercase focus:outline-none focus:border-[#448AFF]"
                           />
                         </div>
                         <div>
@@ -496,7 +515,7 @@ export default function AdminSubscriptionsPage() {
                           <h3 className="font-bold text-white text-base font-[family-name:var(--font-display)]">{p.name}</h3>
                           {p.price === 0 && (
                             <span className="px-2 py-0.5 rounded bg-green/10 text-green border border-green/20 text-[9px] uppercase tracking-wider font-extrabold">
-                              Dynamic Trial Mode
+                              Zero-Price Plan
                             </span>
                           )}
                           {p.isArchived && (
@@ -529,8 +548,8 @@ export default function AdminSubscriptionsPage() {
 
                       <div className="flex md:flex-col items-end gap-2 w-full md:w-auto border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
                         <p className="font-semibold text-lg text-[#FF5252] tracking-tight">
-                          ₹{p.price}
-                          <span className="text-[10px] text-[#94A3B8]"> /mo</span>
+                          {new Intl.NumberFormat("en-IN", { style: "currency", currency: p.currency || "INR" }).format(p.price)}
+                          <span className="text-[10px] text-[#94A3B8]"> / {p.validityMonths || 1} month{(p.validityMonths || 1) === 1 ? "" : "s"}</span>
                         </p>
                         <div className="flex gap-2">
                           <button
