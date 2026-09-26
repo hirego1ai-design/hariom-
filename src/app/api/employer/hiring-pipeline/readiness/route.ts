@@ -30,12 +30,17 @@ export async function GET(request: Request) {
       success: true,
       applicationId: parsedId.data ?? null,
       automaticHiringPipeline: {
+        available: false,
+        status: 'NOT_IMPLEMENTED',
+        note: 'No unattended end-to-end executor is enabled. Consequential hiring actions remain human-controlled.',
+      },
+      safeStateOrchestration: {
         available: true,
         status: 'STATE_ORCHESTRATION_AVAILABLE',
         mode: 'SAFE_NEXT_ACTION',
         endpoint: '/api/employer/candidates/:applicationId/orchestration',
         automaticRejection: false,
-        note: 'The orchestrator resolves the next safe application step. Consequential selection, rejection, offer, and joining actions remain human-controlled.',
+        note: 'The orchestrator resolves the next safe application step without executing consequential selection, rejection, offer, or joining actions.',
       },
       supportedAgentDispatch: {
         endpoint: '/api/agents/dispatch',
