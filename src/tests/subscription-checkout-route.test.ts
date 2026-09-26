@@ -51,7 +51,8 @@ test("checkout rejects nonexistent and archived plans in every environment", asy
     id: "archived-plan", name: "Archived", description: "Archived plan", price: 100,
     currency: "INR", jobPostsQuota: 1, resumeUnlocksQuota: 1, aiInterviewsQuota: 1,
     applicationsQuota: 1, resumeDownloadsQuota: 1, backgroundVerificationsQuota: 1,
-    featuresAllowed: [], validityMonths: 1, isArchived: true, createdAt: new Date(), updatedAt: new Date(),
+    featuresAllowed: [], marketingBenefits: ["Test benefit"], validityMonths: 1, jobValidityDays: 7,
+    firstTimeOnly: false, copilotIncluded: false, copilotJobLimit: 0, isFeatured: false, badgeText: null, displayOrder: 1, isArchived: true, createdAt: new Date(), updatedAt: new Date(),
   };
   const archived = await POST(checkoutRequest({ planId: "archived-plan", paymentMethod: "STRIPE" }));
   assert.equal(archived.status, 400);
@@ -89,7 +90,8 @@ test("zero-price and full-discount checkout never creates a payment order or cal
     id: "plan", name: "Plan", description: "Plan", price, currency: "INR",
     jobPostsQuota: 1, resumeUnlocksQuota: 1, aiInterviewsQuota: 1,
     applicationsQuota: 1, resumeDownloadsQuota: 1, backgroundVerificationsQuota: 1,
-    featuresAllowed: [], validityMonths: 1, isArchived: false, createdAt: new Date(), updatedAt: new Date(),
+    featuresAllowed: [], marketingBenefits: ["Test benefit"], validityMonths: 1, jobValidityDays: 7,
+    firstTimeOnly: false, copilotIncluded: false, copilotJobLimit: 0, isFeatured: false, badgeText: null, displayOrder: 1, isArchived: false, createdAt: new Date(), updatedAt: new Date(),
   })) as unknown as typeof originalPlan;
   prisma.paymentOrder.findUnique = (async () => null) as unknown as typeof originalFindOrder;
   prisma.$transaction = (async (callback: (tx: unknown) => Promise<unknown>) => callback({
@@ -148,7 +150,8 @@ test("a retry with the same key reuses the created provider order without anothe
     id: "plan", name: "Plan", description: "Plan", price: 100, currency: "INR",
     jobPostsQuota: 1, resumeUnlocksQuota: 1, aiInterviewsQuota: 1,
     applicationsQuota: 1, resumeDownloadsQuota: 1, backgroundVerificationsQuota: 1,
-    featuresAllowed: [], validityMonths: 1, isArchived: false, createdAt: new Date(), updatedAt: new Date(),
+    featuresAllowed: [], marketingBenefits: ["Test benefit"], validityMonths: 1, jobValidityDays: 7,
+    firstTimeOnly: false, copilotIncluded: false, copilotJobLimit: 0, isFeatured: false, badgeText: null, displayOrder: 1, isArchived: false, createdAt: new Date(), updatedAt: new Date(),
   };
   const { createPurchasedPlanSnapshot } = await import("../lib/payments/planSnapshot");
   const existing = {
