@@ -5,9 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { getOptionalEnv, requireProductionEnv } from "@/lib/env";
 
 const SIGNAL_TTL_MS = 10 * 60 * 1_000;
+const ROOM_EARLY_JOIN_MS = 30 * 60 * 1_000;
+const ROOM_GRACE_MS = 90 * 60 * 1_000;
+
 const roomActionSchema = z.object({
   roomId: z.string().min(1).max(256),
-  action: z.enum(["OFFER", "ANSWER", "ICE_CANDIDATE", "COMPLETE"]),
+  action: z.enum(["OFFER", "ANSWER", "ICE_CANDIDATE", "COMPLETE", "CONSENT"]),
   targetId: z.string().uuid().optional(),
   sdp: z.object({ type: z.string().max(32), sdp: z.string().max(50_000) }).optional(),
   candidate: z.object({
@@ -31,21 +34,44 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
       OR: [
         { id: roomId },
         { aiFeedback: { contains: `"roomId":"${roomId}"` } },
-        // Backward compatibility for interviews scheduled before room IDs were
-        // persisted in metadata.
         { roomUrl: `/employer/active-video-interview-interviewer-view?roomId=${roomId}` },
       ],
     },
-    include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
+    include: {
+      application: { include: { candidateProfile: true, job: true } },
+      roundProgress: { include: { round: { include: { interviewers: true } } } },
+    },
   });
   if (!interview) return null;
   const candidateUserId = interview.application.candidateProfile?.userId;
   if (session.role === "CANDIDATE") return session.id === candidateUserId ? interview : null;
-  if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") return null;
+  if (!["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return null;
   if (!interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id)) return null;
-  if (session.role === "ADMIN") return interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id) ? interview : null;
+  if (session.role === "ADMIN") return interview;
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
+}
+
+function assertRoomState(interview: { status: string; scheduledAt: Date; durationMins: number }) {
+  if (interview.status === "CANCELLED") throw new ApiError("This interview was cancelled.", 409);
+  if (["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status)) throw new ApiError("Interview room is closed.", 409);
+  const now = Date.now();
+  const opensAt = interview.scheduledAt.getTime() - ROOM_EARLY_JOIN_MS;
+  const closesAt = interview.scheduledAt.getTime() + interview.durationMins * 60_000 + ROOM_GRACE_MS;
+  if (now < opensAt) throw new ApiError("Interview room is not open yet.", 409);
+  if (now > closesAt) throw new ApiError("Interview room access window has ended.", 409);
+}
+
+async function hasCandidateConsent(interviewId: string, userId: string) {
+  const record = await prisma.auditLog.findFirst({
+    where: {
+      userId,
+      action: "INTERVIEW_PROCTORING_CONSENT",
+      resource: `Interview:${interviewId}`,
+    },
+    select: { id: true },
+  });
+  return Boolean(record);
 }
 
 function iceServers() {
@@ -70,8 +96,29 @@ export async function GET(req: NextRequest) {
     if (!session) return jsonError("Unauthorized access", 401);
     const roomId = new URL(req.url).searchParams.get("roomId");
     if (!roomId || roomId.length > 256) return jsonError("roomId is required", 400);
+
     const interview = await findAuthorizedInterview(session, roomId);
     if (!interview) return jsonError("Forbidden: You are not an authorized participant for this interview.", 403);
+    assertRoomState(interview);
+
+    if (session.role === "CANDIDATE" && !(await hasCandidateConsent(interview.id, session.id))) {
+      throw new ApiError("Interview monitoring consent is required before joining the room.", 428);
+    }
+
+    if (interview.status === "SCHEDULED" || interview.status === "RESCHEDULED") {
+      await prisma.$transaction(async (tx) => {
+        await tx.interview.updateMany({
+          where: { id: interview.id, status: { in: ["SCHEDULED", "RESCHEDULED"] } },
+          data: { status: "IN_PROGRESS" },
+        });
+        if (interview.roundProgress) {
+          await tx.interviewRoundProgress.updateMany({
+            where: { id: interview.roundProgress.id, status: "SCHEDULED" },
+            data: { status: "LIVE", startedAt: new Date() },
+          });
+        }
+      });
+    }
 
     const now = new Date();
     await prisma.interviewSignal.deleteMany({ where: { interviewId: interview.id, expiresAt: { lte: now } } });
@@ -81,6 +128,7 @@ export async function GET(req: NextRequest) {
       select: { id: true, senderId: true, type: true, payload: true },
       take: 300,
     });
+
     const candidateUserId = interview.application.candidateProfile?.userId;
     const assignedInterviewerIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
     const authorizedParticipantIds = [candidateUserId, ...assignedInterviewerIds].filter((id): id is string => Boolean(id));
@@ -91,11 +139,12 @@ export async function GET(req: NextRequest) {
       room: {
         roomId,
         interviewId: interview.id,
-        status: interview.status === "COMPLETED" ? "COMPLETED" : "ACTIVE",
+        status: "ACTIVE",
         participantCount: participantIds.size,
         participantId: session.id,
         authorizedParticipantIds,
         isHost: session.role !== "CANDIDATE",
+        isCandidate: session.role === "CANDIDATE",
         iceServers: iceServers(),
         signaling: {
           offers: signals.filter((signal) => signal.type === "OFFER").map((signal) => ({ id: signal.id, senderId: signal.senderId, ...(signal.payload as object) })),
@@ -117,19 +166,64 @@ export async function POST(req: NextRequest) {
     const body = await readValidatedJson(req, roomActionSchema, 64 * 1024);
     const interview = await findAuthorizedInterview(session, body.roomId);
     if (!interview) return jsonError("Forbidden: Unauthorized room signaling action.", 403);
+    assertRoomState(interview);
+
+    if (body.action === "CONSENT") {
+      if (session.role !== "CANDIDATE") throw new ApiError("Only the candidate can record interview monitoring consent.", 403);
+      if (!(await hasCandidateConsent(interview.id, session.id))) {
+        await prisma.auditLog.create({
+          data: {
+            userId: session.id,
+            action: "INTERVIEW_PROCTORING_CONSENT",
+            resource: `Interview:${interview.id}`,
+            details: JSON.stringify({
+              scope: "browser-integrity-events",
+              events: ["tab-switch", "clipboard", "browser-unfocused", "screen-share-stopped"],
+              automatedHiringDecision: false,
+              recordedAt: new Date().toISOString(),
+            }),
+          },
+        });
+      }
+      return NextResponse.json({ success: true, roomId: body.roomId, consentRecorded: true });
+    }
+
+    if (session.role === "CANDIDATE" && !(await hasCandidateConsent(interview.id, session.id))) {
+      throw new ApiError("Interview monitoring consent is required before signaling.", 428);
+    }
+
     if (body.action !== "COMPLETE" && session.role !== "CANDIDATE") {
       const blocking = await prisma.interviewRoundProgress.count({
-        where: { status: "ENDED_PENDING_FEEDBACK", interviewId: { not: interview.id }, round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
+        where: {
+          status: "ENDED_PENDING_FEEDBACK",
+          interviewId: { not: interview.id },
+          round: {
+            mandatoryFeedback: true,
+            interviewers: { some: { userId: session.id, required: true } },
+          },
+          feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } },
+        },
       });
       if (blocking > 0) throw new ApiError("Complete your pending mandatory interview feedback before joining another interview.", 409);
     }
-    if (interview.status === "COMPLETED") throw new ApiError("Interview room is closed", 409);
 
     if (body.action === "COMPLETE") {
       if (session.role === "CANDIDATE") throw new ApiError("Only an assigned interviewer can end the interview.", 403);
       await prisma.$transaction(async (tx) => {
-        await tx.interview.update({ where: { id: interview.id }, data: { status: "COMPLETED" } });
-        if (interview.roundProgress) await tx.interviewRoundProgress.update({ where: { id: interview.roundProgress.id }, data: { status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE", completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date() } });
+        const changed = await tx.interview.updateMany({
+          where: { id: interview.id, status: { notIn: ["CANCELLED", "COMPLETED", "FEEDBACK_SUBMITTED"] } },
+          data: { status: "COMPLETED" },
+        });
+        if (changed.count !== 1) throw new ApiError("Interview state changed; reload the room.", 409);
+        if (interview.roundProgress) {
+          await tx.interviewRoundProgress.update({
+            where: { id: interview.roundProgress.id },
+            data: {
+              status: interview.roundProgress.round.mandatoryFeedback ? "ENDED_PENDING_FEEDBACK" : "ROUND_COMPLETE",
+              completedAt: interview.roundProgress.round.mandatoryFeedback ? null : new Date(),
+            },
+          });
+        }
       });
     } else {
       if (body.targetId) {
@@ -143,10 +237,21 @@ export async function POST(req: NextRequest) {
         ? { candidate: body.candidate, targetId: body.targetId || null }
         : { sdp: body.sdp, targetId: body.targetId || null };
       await prisma.interviewSignal.create({
-        data: { interviewId: interview.id, senderId: session.id, type: body.action, payload, expiresAt: new Date(Date.now() + SIGNAL_TTL_MS) },
+        data: {
+          interviewId: interview.id,
+          senderId: session.id,
+          type: body.action,
+          payload,
+          expiresAt: new Date(Date.now() + SIGNAL_TTL_MS),
+        },
       });
     }
-    return NextResponse.json({ success: true, roomId: body.roomId, status: body.action === "COMPLETE" ? "COMPLETED" : "ACTIVE" });
+
+    return NextResponse.json({
+      success: true,
+      roomId: body.roomId,
+      status: body.action === "COMPLETE" ? "COMPLETED" : "ACTIVE",
+    });
   } catch (error) {
     return handleApiError(error);
   }
