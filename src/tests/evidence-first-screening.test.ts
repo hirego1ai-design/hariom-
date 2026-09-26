@@ -227,8 +227,7 @@ test("generic managed pipeline cannot directly reject and the controlled endpoin
   assert.match(tracker, /Start controlled rejection/);
   assert.match(tracker, /Request human approval/);
   assert.match(tracker, /Confirm rejection/);
-  assert.doesNotMatch(
-    tracker,
-    /movableStages[\s\S]{0,300}["']REJECTED["']/,
-  );
+  const movableBlock =
+    tracker.match(/const movableStages = \\[([\\s\\S]*?)\\];/)?.[1] ?? "";
+  assert.doesNotMatch(movableBlock, /REJECTED/);
 });
