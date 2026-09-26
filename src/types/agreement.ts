@@ -33,6 +33,7 @@ export interface HiringRequirementRecord {
   primaryMobile: string;
   secondaryMobile?: string;
   alternatePhone?: string;
+  website?: string;
   gstin?: string;
   pan?: string;
   billingAddress?: string;
@@ -42,6 +43,7 @@ export interface HiringRequirementRecord {
   jobTitles: string[];
   department?: string;
   experienceYears: string;
+  employmentType?: string;
   skillsRequired: string[];
   mandatorySkills?: string[];
   preferredSkills?: string[];
@@ -60,10 +62,18 @@ export interface HiringRequirementRecord {
   workMode: "Remote" | "Hybrid" | "Onsite" | string;
   location: string;
   shift?: string;
+  noticePeriod?: string;
   joiningTimeline: string;
   hiringPriority: "Standard" | "High" | "Urgent" | "Urgent / Critical" | string;
   replacementExpectation: string;
   additionalNotes?: string;
+  positions?: Array<{
+    jobTitle: string;
+    numberOfPositions: number;
+    experienceYears: string;
+    workMode: string;
+    location: string;
+  }>;
   jdFileName?: string;
   jdFileUrl?: string;
   status: RequirementStatus;
