@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
+import { assertCurrentCopilotTaxPolicy } from "@/lib/copilot/taxPolicy";
 import {
   copilotCapacityOfferCreateSchema,
   copilotCapacityOfferPatchSchema,
@@ -28,6 +29,13 @@ export async function POST(req: NextRequest) {
     await enforceRateLimit(req, "admin_copilot_capacity_offers_write", 20, 60_000);
     const session = await requireAdminSession(req);
     const body = await readValidatedJson(req, copilotCapacityOfferCreateSchema);
+    for (const price of body.prices) {
+      try {
+        assertCurrentCopilotTaxPolicy(price);
+      } catch (error) {
+        throw new ApiError(error instanceof Error ? error.message : "Invalid Copilot tax policy.", 422);
+      }
+    }
 
     const offer = await prisma.$transaction(async (tx) => {
       const created = await tx.copilotCapacityOffer.create({
@@ -46,6 +54,7 @@ export async function POST(req: NextRequest) {
           currency: price.currency,
           amountMinor: price.amountMinor,
           taxMode: price.taxMode,
+          taxRateBps: price.taxRateBps,
           paymentRoute: price.paymentRoute,
           isActive: price.isActive,
         })),
@@ -90,6 +99,17 @@ export async function PATCH(req: NextRequest) {
 
       const current = await tx.copilotCapacityOfferPrice.findUnique({ where: { id: body.priceId } });
       if (!current) throw new ApiError("Copilot capacity price not found.", 404);
+      const effective = {
+        regionCode: current.regionCode,
+        countries: body.countries ?? current.countries,
+        taxMode: body.taxMode ?? current.taxMode,
+        taxRateBps: body.taxRateBps ?? current.taxRateBps,
+      };
+      try {
+        assertCurrentCopilotTaxPolicy(effective);
+      } catch (error) {
+        throw new ApiError(error instanceof Error ? error.message : "Invalid Copilot tax policy.", 422);
+      }
       const { type: _type, priceId, ...changes } = body;
       return {
         entity: "PRICE",
