@@ -27,6 +27,15 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
 enum ApplicationGateType {
   UNIVERSAL_SKILL_VALIDATION
   JOB_SPECIFIC_ASSESSMENT
@@ -254,6 +263,7 @@ model Company {
   candidateCollections EmployerCandidateCollection[]
 
   sourcingRelationships CandidateSourcingRelationship[]
+  offers                Offer[]
 }
 
 enum InvitationStatus {
@@ -499,6 +509,7 @@ model Application {
   status             ApplicationStatus @default(APPLIED)
   matchScore         Int               @default(0)
   aiSummary          String?
+  screeningAnswers   Json?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   annualCtc          Float?
@@ -509,9 +520,39 @@ model Application {
   employerNotes EmployerCandidateNote[]
   employerTags  EmployerCandidateTag[]
   gates         ApplicationGate[]
+  offers        Offer[]
 
   @@unique([candidateProfileId, jobId])
   @@index([jobId])
+}
+
+model Offer {
+  id                 String      @id @default(uuid())
+  applicationId      String
+  application        Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  companyId          String
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById        String
+  title              String
+  compensationAmount Decimal?    @db.Decimal(18, 2)
+  currency           String      @default("INR")
+  startDate          DateTime?
+  expiresAt          DateTime
+  terms              Json
+  documentFileId     String?
+  documentFile       StoredFile? @relation(fields: [documentFileId], references: [id], onDelete: SetNull)
+  status             OfferStatus @default(DRAFT)
+  sentAt             DateTime?
+  acceptedAt         DateTime?
+  declinedAt         DateTime?
+  withdrawnAt        DateTime?
+  candidateResponseNote String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([applicationId, status])
+  @@index([companyId, status, createdAt])
+  @@index([documentFileId])
 }
 
 model AssessmentNoticeAcknowledgement {
@@ -794,6 +835,7 @@ model StoredFile {
   scanDetail                 String?
   createdAt                  DateTime                     @default(now())
   RecordedAssessmentResponse RecordedAssessmentResponse[]
+  offerDocuments             Offer[]
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
@@ -1335,8 +1377,12 @@ model WorkflowApproval {
   decidedByRole      Role?
   decisionNotes      String?
   requestedAt        DateTime                 @default(now())
+  expiresAt          DateTime
   decidedAt          DateTime?
   consumedAt         DateTime?
+  revokedAt          DateTime?
+  revokedBy          String?
+  revocationReason   String?
 
   @@unique([workflowInstanceId, stepName, actionDigest])
   @@index([companyId, decision, requestedAt])
@@ -1568,6 +1614,7 @@ enum InterviewRoundProgressStatus {
   ROUND_COMPLETE
   TRANSFERRED
   FINAL_ROUND_COMPLETE
+  ON_HOLD
   CANCELLED
 }
 
