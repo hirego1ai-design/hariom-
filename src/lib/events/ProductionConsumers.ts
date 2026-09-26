@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { SystemEvent } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ConsumerRegistry } from './ConsumerRegistry';
+import { sourceManagedJobCandidates } from '@/lib/managedHiring/SourcingOrchestrator';
 
 const id = z.string().min(1).max(128);
 const company = (event: SystemEvent) => id.parse(event.companyId);
@@ -114,6 +115,36 @@ export async function jobListingCreated(event: SystemEvent) {
   });
 }
 
+export async function managedJobActivated(event: SystemEvent) {
+  const payload = z.object({
+    jobId: id,
+    managedRequirementId: id,
+    managedAgreementId: id,
+    activatedById: id,
+  }).parse(event.payload);
+  const companyId = company(event);
+
+  const job = await prisma.jobListing.findFirst({
+    where: {
+      id: payload.jobId,
+      companyId,
+      managedRequirementId: payload.managedRequirementId,
+      managedAgreementId: payload.managedAgreementId,
+      status: 'ACTIVE',
+    },
+    select: { id: true },
+  });
+  if (!job) {
+    throw new Error('Managed job activation event has no matching active tenant-owned job.');
+  }
+
+  await sourceManagedJobCandidates({
+    jobId: payload.jobId,
+    companyId,
+    sourcedById: payload.activatedById,
+  });
+}
+
 export async function hiringPipelineCompleted(event: SystemEvent) {
   const payload = z.object({ workflowId: id }).parse(event.payload);
   await prisma.$transaction(async tx => {
@@ -143,5 +174,6 @@ export function registerProductionConsumers() {
   ConsumerRegistry.register('APPLICATION_SUBMITTED', 'application-receipt-v1', applicationSubmitted);
   ConsumerRegistry.register('APPLICATION_ASSESSMENT_COMPLETED', 'assessment-completed-employer-notification-v1', applicationAssessmentCompleted);
   ConsumerRegistry.register('JOB_LISTING_CREATED', 'job-created-notification-v1', jobListingCreated);
+  ConsumerRegistry.register('MANAGED_JOB_ACTIVATED', 'managed-job-safe-sourcing-v1', managedJobActivated);
   ConsumerRegistry.register('HIRING_PIPELINE_COMPLETED', 'advisory-completed-notification-v1', hiringPipelineCompleted);
 }
