@@ -83,7 +83,8 @@ export async function POST(request: Request) {
     const companyId = profile.companyId;
 
     const body = await readValidatedJson(request, jobSchema);
-    const isPublishing = body.status === "ACTIVE";
+    const requestedStatus = body.status ?? "ACTIVE";
+    const isPublishing = requestedStatus === "ACTIVE";
     const requiresGeneratedAssessment = isPublishing && body.requiresJobSpecificAssessment;
 
     const idempotencyKey = request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key");
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const initialStatus = requiresGeneratedAssessment ? JobStatus.DRAFT : body.status as JobStatus;
+    const initialStatus = requiresGeneratedAssessment ? JobStatus.DRAFT : requestedStatus as JobStatus;
 
     const result = await prisma.$transaction(async (tx) => {
       let remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
@@ -345,7 +346,7 @@ export async function POST(request: Request) {
       companyId,
       action: "JOB_CREATE",
       resource: `JobListing:${result.jobId}`,
-      details: `Created ${body.status.toLowerCase()} job listing via ROS Gateway. Credits left: ${result.remainingCredits}`,
+      details: `Created ${requestedStatus.toLowerCase()} job listing via ROS Gateway. Credits left: ${result.remainingCredits}`,
     });
 
     return NextResponse.json(result.responsePayload, { status: 201 });
