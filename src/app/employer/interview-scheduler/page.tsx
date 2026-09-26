@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
@@ -18,6 +18,9 @@ function EmployerInterviewSchedulerContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ interviewId: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [copilotAvailable, setCopilotAvailable] = useState(false);
+  const [useCopilot, setUseCopilot] = useState(false);
+  const scheduleRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     const appVal = searchParams.get("applicationId") || searchParams.get("id") || "";
@@ -25,6 +28,25 @@ function EmployerInterviewSchedulerContent() {
     if (appVal) setApplicationId(appVal);
     if (roundVal) setRoundId(roundVal);
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/employer/copilot/capacity", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        const active = Boolean(response.ok && body.success && body.capacity?.active);
+        setCopilotAvailable(active);
+        setUseCopilot(active);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCopilotAvailable(false);
+          setUseCopilot(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,10 +57,14 @@ function EmployerInterviewSchedulerContent() {
       return;
     }
     setSaving(true);
+    if (useCopilot) scheduleRequestKey.current ||= crypto.randomUUID();
     try {
       const response = await fetch("/api/employer/interviews/schedule", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(useCopilot && scheduleRequestKey.current ? { "Idempotency-Key": scheduleRequestKey.current } : {}),
+        },
         body: JSON.stringify({
           applicationId,
           scheduledAt: new Date(`${date}T${time}`).toISOString(),
@@ -47,11 +73,13 @@ function EmployerInterviewSchedulerContent() {
           contactNumber: contactNumber || undefined,
           notifyEmail: email,
           notifyWhatsapp: whatsapp,
+          copilotManaged: useCopilot,
         }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || "Unable to schedule interview");
       setSuccess(data);
+      scheduleRequestKey.current = null;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to schedule interview");
     } finally {
@@ -105,6 +133,25 @@ function EmployerInterviewSchedulerContent() {
                 <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
               </label>
             </div>
+          )}
+          {copilotAvailable && (
+            <label className="flex items-start gap-3 rounded-xl border border-secondary/30 bg-secondary/10 p-4 text-sm text-text-primary">
+              <input
+                type="checkbox"
+                checked={useCopilot}
+                onChange={(e) => {
+                  setUseCopilot(e.target.checked);
+                  scheduleRequestKey.current = null;
+                }}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="block font-bold">Use HireGo Copilot for scheduling</span>
+                <span className="mt-1 block text-xs text-text-secondary">
+                  Copilot manages this scheduling action and its requested email/WhatsApp workflow notifications against your included plan capacity.
+                </span>
+              </span>
+            </label>
           )}
           <div className="space-y-3 text-sm text-text-secondary">
             <label className="flex gap-2 items-center">
