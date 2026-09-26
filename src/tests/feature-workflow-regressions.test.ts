@@ -227,7 +227,13 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
   const scheduler = fs.readFileSync(new URL("../../scripts/run-recorded-assessment-scheduler.mjs", import.meta.url), "utf8");
   const dockerfile = fs.readFileSync(new URL("../../Dockerfile.recorded-assessment-scheduler", import.meta.url), "utf8");
 
-  assert.deepEqual(vercel.crons, [{ path: "/api/cron/referrals-reconciliation", schedule: "0 2 * * *" }]);
+  assert.deepEqual(
+    vercel.crons,
+    [
+      { path: "/api/cron/referrals-reconciliation", schedule: "0 2 * * *" },
+      { path: "/api/cron/events-outbox", schedule: "*/5 * * * *" },
+    ],
+  );
   assert(!JSON.stringify(vercel).includes("/api/cron/recorded-assessment-analysis"));
   assert(scheduler.includes("'/api/cron/recorded-assessment-analysis'"));
   assert(scheduler.includes("process.env.CRON_SECRET"));
