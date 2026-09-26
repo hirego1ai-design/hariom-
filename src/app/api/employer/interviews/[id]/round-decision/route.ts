@@ -32,15 +32,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const nextRound = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: interview.roundProgress.round.processId, sequence: interview.roundProgress.round.sequence + 1 } }, include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } } });
       return NextResponse.json({ success: true, action: nextRound ? "PROCEED" : "FINAL_ROUND_COMPLETE", nextRound: nextRound ? { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } : null, applicationId: interview.applicationId, idempotent: true });
     }
-    if (interview.roundProgress.status !== "ROUND_COMPLETE") throw new ApiError("All required interviewer feedback must be finalized before a round decision.", 409);
+    if (!["ROUND_COMPLETE", "ON_HOLD"].includes(interview.roundProgress.status)) {
+      throw new ApiError("All required interviewer feedback must be finalized before a round decision.", 409);
+    }
     const requiredFeedbackMissing = await prisma.interviewRoundInterviewer.count({
       where: { roundId: interview.roundProgress.roundId, required: true, user: { interviewFeedbacks: { none: { interviewId: id, finalizedAt: { not: null } } } } },
     });
     if (requiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
 
     if (body.action === "HOLD") {
+      if (interview.roundProgress.status !== "ON_HOLD") {
+        const held = await prisma.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress.id, status: "ROUND_COMPLETE" },
+          data: { status: "ON_HOLD" },
+        });
+        if (held.count !== 1) throw new ApiError("Round state changed before HOLD could be persisted.", 409);
+      }
       await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD" });
-      return NextResponse.json({ success: true, action: "HOLD", message: "Candidate remains on hold after this round." });
+      return NextResponse.json({ success: true, action: "HOLD", persistedStatus: "ON_HOLD", message: "Candidate is on hold after this round." });
     }
 
     if (body.action === "REJECT") {
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         where: { id: interview.roundProgress!.id },
         select: { status: true, roundId: true },
       });
-      if (lockedProgress?.status !== "ROUND_COMPLETE") {
+      if (!lockedProgress || !["ROUND_COMPLETE", "ON_HOLD"].includes(lockedProgress.status)) {
         throw new ApiError("This interview round decision was already processed.", 409);
       }
       const lockedRequiredFeedbackMissing = await tx.interviewRoundInterviewer.count({
@@ -131,7 +140,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (body.action === "REJECT") {
         const claimed = await tx.interviewRoundProgress.updateMany({
-          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "ON_HOLD"] } },
           data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
         });
         if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
@@ -148,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       if (!nextRound) {
         const claimed = await tx.interviewRoundProgress.updateMany({
-          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "ON_HOLD"] } },
           data: { status: "FINAL_ROUND_COMPLETE", completedAt: interview.roundProgress!.completedAt || now },
         });
         if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
@@ -160,7 +169,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
       }
       const claimed = await tx.interviewRoundProgress.updateMany({
-        where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+        where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "ON_HOLD"] } },
         data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
       });
       if (claimed.count !== 1) throw new ApiError("This interview round decision was already processed.", 409);
