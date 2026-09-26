@@ -1,6 +1,7 @@
 import Link from "next/link";
 import MarketingShell from "./MarketingShell";
 import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
+import EmployerPricingPreview from "./EmployerPricingPreview";
 
 type PageKind = "features" | "pricing" | "enterprise" | "about" | "company" | "careers" | "blog" | "contact" | "terms" | "privacy" | "ai-features" | "find-jobs" | "certifications" | "career-resources" | "post-job-public";
 
@@ -75,15 +76,10 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
 }
 
 function PricingContent() {
-  const plans: Array<{ name: string; description: string; price: string; features: string[] }> = [
-    { name: "Starter", description: "For exploring your next step", price: "₹0", features: ["Profile builder", "Browse verified roles", "Basic readiness insights"] },
-    { name: "Pro", description: "For candidates who want momentum", price: "₹499/mo", features: ["Everything in Starter", "Practice assessments", "Detailed readiness report"] },
-    { name: "Teams", description: "For employers building talent pipelines", price: "Let’s talk", features: ["Structured hiring workflows", "Verified candidate signals", "Dedicated support"] },
-  ];
   return <div>
-    <div className="grid gap-5 lg:grid-cols-3">{plans.map(({ name, description, price, features }) => <article key={name} className="glass-card flex flex-col p-7"><h2 className="text-2xl font-bold">{name}</h2><p className="mt-2 min-h-12 text-sm text-slate-400">{description}</p><p className="mt-6 text-4xl font-extrabold">{price}</p><ul className="mt-6 flex-1 space-y-3 text-sm text-slate-300">{features.map((feature) => <li key={feature} className="flex gap-2"><span className="text-[#4caf50]">✓</span>{feature}</li>)}</ul><Link href={name === "Teams" ? "/contact" : "/register"} className="btn-primary-red mt-8 w-full">{name === "Teams" ? "Contact sales" : "Get started"}</Link></article>)}</div>
+    <EmployerPricingPreview />
     <div className="mt-7 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-xs leading-6 text-slate-400">
-      Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>. Any recurring billing will be shown clearly before purchase.
+      Employer pricing is loaded from the same Admin-managed subscription catalog used at checkout. Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>.
     </div>
   </div>;
 }

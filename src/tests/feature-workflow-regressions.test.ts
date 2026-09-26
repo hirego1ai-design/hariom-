@@ -45,17 +45,17 @@ test("persisted hiring stages survive page reload without label loss", () => {
   assert.throws(() => pipelineStageStatus("Documentation"), /Unsupported/);
 });
 
-test("paid plan provisions every quota including agent, application, download and verification credits", () => {
+test("paid plan provisions customer quotas without per-AI-action customer credits", () => {
   assert.deepEqual(subscriptionCredits({ jobPostsQuota: 1, resumeUnlocksQuota: 2, aiInterviewsQuota: 3,
     applicationsQuota: 4, resumeDownloadsQuota: 5, backgroundVerificationsQuota: 6 }), {
-    jobPostsLeft: 1, resumeUnlocksLeft: 2, aiInterviewsLeft: 3, aiAgentCreditsLeft: 3,
-    applicationsLeft: 4, resumeDownloadsLeft: 5, backgroundVerificationsLeft: 6,
+    jobPostsLeft: 1, resumeUnlocksLeft: 2, aiInterviewsLeft: 3, aiAgentCreditsLeft: 0,
+    applicationsLeft: 4, resumeDownloadsLeft: 5, backgroundVerificationsLeft: 6, copilotJobsLeft: 0,
   });
 });
 
 test("corrupt negative plan quotas cannot reduce credits on purchase", () => {
   assert.throws(() => subscriptionCredits({ jobPostsQuota: 1, resumeUnlocksQuota: 2, aiInterviewsQuota: -1,
-    applicationsQuota: 4, resumeDownloadsQuota: 5, backgroundVerificationsQuota: 6 }), /invalid credit quotas/);
+    applicationsQuota: 4, resumeDownloadsQuota: 5, backgroundVerificationsQuota: 6 }), /Subscription plan has invalid quotas/);
 });
 
 test("Payment gateway contract strictly enforces STRIPE and PAYU while rejecting RAZORPAY and PHONEPE", () => {
@@ -334,7 +334,7 @@ test("retired legacy routes redirect only to canonical production surfaces", () 
 test("candidate withdrawal uses the authoritative owned application transition", () => {
   const ui = fs.readFileSync(new URL("../app/applications/withdraw/page.tsx", import.meta.url), "utf8");
   const route = fs.readFileSync(new URL("../app/api/applications/route.ts", import.meta.url), "utf8");
-  const proxy = fs.readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+  const middleware = fs.readFileSync(new URL("../middleware.ts", import.meta.url), "utf8");
 
   assert(ui.includes('fetch("/api/applications"'));
   assert(ui.includes('method: "PATCH"'));
@@ -356,7 +356,7 @@ test("candidate withdrawal uses the authoritative owned application transition",
   assert(route.includes('data: { status: "WITHDRAWN" }'));
   assert(route.includes('action: "APPLICATION_WITHDRAWN"'));
   assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
-  assert(proxy.includes('"/applications"'));
+  assert(middleware.includes('"/applications"'));
 });
 
 test("production wiring report is generated from current inventory without stale manual verdicts", () => {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Outfit } from "next/font/google";
 import type { Metadata } from "next";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import HeroEarth from "@/components/marketing/HeroEarth";
@@ -8,20 +9,21 @@ import heroStyles from "@/components/marketing/HomeHero.module.css";
 import { JsonLd, styles } from "@/components/marketing/Editorial";
 import { marketingMetadata } from "@/lib/marketingMetadata";
 
+const heroFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-home-hero" });
+
 export const metadata: Metadata = marketingMetadata({path:"/",title:"HireGo AI | Connected Hiring Workflows",description:"HireGo AI helps coordinate sourcing, screening, assessments and interviews within one hiring workflow. People remain in control of hiring decisions.",image:"/marketing/og/home.webp"});
 
 const stages = ["Job requirement","Candidate sourcing","Screening","Assessments","Interview coordination","Feedback","Human hiring decision","Joining follow-up"];
 
 export default function HomePage() {
   return <MarketingShell home>
-    <section className={heroStyles.hero}>
+    <section className={`${heroStyles.hero} ${heroFont.variable}`}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
-        <h1 className={`${heroStyles.headline} text-[clamp(2.35rem,4.45vw,4.15rem)] leading-[1.01] text-white`}><span className="block">Welcome to <span className={heroStyles.futureWord}>Future</span></span><span className="mt-1 block">of Hiring</span></h1>
-        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[.35em] text-slate-200 sm:text-xs">The world’s fastest hiring platform</p>
+        <h1 className={heroStyles.headline}><span className="block">Welcome to <span className={heroStyles.futureWord}>Future</span></span><span className="mt-1 block">of Hiring</span></h1>
+        <p className={heroStyles.tagline}>The world’s fastest hiring platform</p>
         <div className="mx-auto mt-5 max-w-3xl text-slate-200">
-          <p className="text-base font-semibold leading-7 sm:text-xl sm:leading-8">Hiring doesn’t need more applications. It needs more job-ready people.</p>
-          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 tracking-[.015em] text-slate-300 sm:text-base sm:leading-7">HireGo AI finds, evaluates and prepares job-ready candidates while autonomous AI agents keep hiring moving.</p>
+          <p className={heroStyles.description}>HireGo AI finds, evaluates and prepares job-ready candidates while autonomous AI agents keep hiring moving.</p>
         </div>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/contact" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Find Job-Ready Talent <span aria-hidden className="ml-2">→</span></Link><Link href="/services" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>See How HireGo Works</Link></div>
       </div>

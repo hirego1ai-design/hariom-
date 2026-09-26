@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkoutSchema, createPlanSchema, updatePlanSchema } from "../lib/payments/planContracts";
 import { subscriptionCredits } from "../lib/payments/subscriptionCredits";
@@ -10,7 +11,16 @@ const plan = {
   name: "Contract test", description: "Not a live plan", price: 100, currency: "INR",
   jobPostsQuota: 0, resumeUnlocksQuota: 0, aiInterviewsQuota: 0,
   applicationsQuota: 0, resumeDownloadsQuota: 0, backgroundVerificationsQuota: 0,
-  featuresAllowed: ["JOB_POSTING"], validityMonths: 1,
+  featuresAllowed: ["JOB_POSTING"],
+  marketingBenefits: ["Job posting"],
+  validityMonths: 1,
+  jobValidityDays: 7,
+  firstTimeOnly: false,
+  copilotIncluded: false,
+  copilotJobLimit: 0,
+  isFeatured: false,
+  badgeText: null,
+  displayOrder: 10,
 };
 
 test("checkout accepts existing legacy and new UUID plan identifiers", () => {
@@ -35,7 +45,7 @@ test("plan validation rejects invalid prices, quotas, validity and unknown mutab
   for (const change of [
     { price: -1 }, { price: Infinity }, { jobPostsQuota: -1 }, { aiInterviewsQuota: 1.5 },
     { validityMonths: 0 }, { resumeDownloadsQuota: 2147483648 }, { currency: "inr" },
-    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["bad feature"] },
+    { price: "100" }, { createdAt: "2026-01-01" }, { featuresAllowed: ["<script>"] },
   ]) assert.equal(createPlanSchema.safeParse({ ...plan, ...change }).success, false);
 });
 
@@ -65,4 +75,21 @@ test("admin-created plans persist zero quotas and produce checkout-compatible un
       assert.equal(row[field], 0);
     }
   }
+});
+
+
+test("production catalog reconciliation creates all launch plans and keeps Co-Pilot config fail-closed", () => {
+  const migration = readFileSync(
+    new URL("../../prisma/migrations/20260927002500_subscription_catalog_security_reconcile/migration.sql", import.meta.url),
+    "utf8",
+  );
+  for (const planId of ["plan-bootstrapped", "plan-hypergrowth", "plan-unicorn", "plan-hiring-sprint"]) {
+    assert.match(migration, new RegExp(planId));
+  }
+  assert.match(migration, /ALTER TABLE "HiringCopilotConfig" ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /rolname = 'anon'/);
+  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon/);
+  assert.match(migration, /rolname = 'authenticated'/);
+  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM authenticated/);
+  assert.match(migration, /ON CONFLICT \("id"\) DO UPDATE SET/);
 });

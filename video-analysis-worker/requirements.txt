@@ -1,7 +1,7 @@
-fastapi==0.111.0
-uvicorn==0.30.1
+fastapi>=0.112.2
+uvicorn>=0.30.6
 faster-whisper==1.0.3
-numpy==1.26.4
-requests==2.32.3
-python-multipart==0.0.9
-pydantic==2.7.4
+numpy>=1.26.4
+requests>=2.32.3
+python-multipart>=0.0.18
+pydantic>=2.7.4

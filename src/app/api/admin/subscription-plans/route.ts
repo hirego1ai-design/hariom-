@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     await enforceRateLimit(request, "admin_subscription_plans_write", 20, 60_000);
     const body = await readValidatedJson(request, createPlanSchema);
-    const plan = await subscriptionsDb.createSubscriptionPlan(body);
+    const plan = await subscriptionsDb.createSubscriptionPlan({ ...body, badgeText: body.badgeText ?? null });
 
     return NextResponse.json({ success: true, plan }, { status: 201 });
   } catch (error) {

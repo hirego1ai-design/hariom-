@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
+import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
     const company = await getSessionCompany(session);
     const companyId = company.id;
     const now = new Date();
+    await reconcileExpiredJobs(prisma, companyId);
     const [activeJobsCount, totalApplicantsCount, credits, upcomingInterviewsCount] = await Promise.all([
       prisma.jobListing.count({ where: { companyId, status: "ACTIVE" } }),
       prisma.application.count({ where: { job: { companyId } } }),

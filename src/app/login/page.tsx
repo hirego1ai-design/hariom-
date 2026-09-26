@@ -3,6 +3,7 @@
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import AdminLoginPage from "@/app/admin/login/page";
 
@@ -70,22 +71,13 @@ function CandidateLoginContent() {
 
   return (
     <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
+      <div className="auth-login-card w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Feature Highlights */}
         <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
-          <div className="relative z-10">
-            <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
-              HireGo AI
-            </span>
-          </div>
-
           <div className="relative flex-grow flex items-center justify-center my-4">
             <div className="relative w-full max-w-[180px] aspect-square">
-              <div className="absolute inset-0 bg-primary/20 blur-[70px] rounded-full scale-75 animate-pulse"></div>
-              <div className="relative z-10 w-full h-full rounded-2xl bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-primary/20 flex flex-col items-center justify-center p-4">
-                <span className="material-symbols-outlined text-[56px] text-primary mb-2">lock</span>
-                <span className="text-xs font-bold text-primary">Secure Auth Portal</span>
-              </div>
+              <div className="absolute inset-3 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-[34px] opacity-75 logo-color-flow" />
+              <Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative z-10 w-full h-full object-contain" />
             </div>
           </div>
 
@@ -136,7 +128,10 @@ function CandidateLoginContent() {
 
         {/* Right Side: Compact Login Form */}
         <section className="col-span-1 md:col-span-7 flex items-center justify-center p-5 sm:p-6">
-          <div className="w-full max-w-[330px] mx-auto">
+          <div className="w-full max-w-[340px] mx-auto">
+            <div className="mb-5 flex justify-center md:hidden">
+              <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
+            </div>
             {/* Clean Segmented Control Pill Toggle (Candidate | Employer) */}
             <div className="flex justify-center mb-4">
               <div className="p-1 rounded-full flex items-center border border-outline bg-surface-container backdrop-blur-md">

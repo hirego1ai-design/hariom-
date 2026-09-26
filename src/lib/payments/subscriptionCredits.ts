@@ -1,9 +1,14 @@
 type PlanQuotas = {
-  jobPostsQuota: number; resumeUnlocksQuota: number; aiInterviewsQuota: number;
-  applicationsQuota: number; resumeDownloadsQuota: number; backgroundVerificationsQuota: number;
+  jobPostsQuota: number;
+  resumeUnlocksQuota: number;
+  aiInterviewsQuota: number;
+  applicationsQuota: number;
+  resumeDownloadsQuota: number;
+  backgroundVerificationsQuota: number;
+  copilotJobLimit?: number;
 };
 
-/** Calendar-month renewal, clamped to the target month's last day in UTC. */
+/** Calendar-month plan access, clamped to the target month's last day in UTC. */
 export function subscriptionExpiry(start: Date, months: number): Date {
   if (!Number.isFinite(start.getTime()) || !Number.isInteger(months) || months < 1 || months > 120) {
     throw new Error("Invalid subscription validity");
@@ -17,20 +22,30 @@ export function subscriptionExpiry(start: Date, months: number): Date {
   return expiry;
 }
 
-/** Agent calls currently share the plan's configured AI interview allowance. */
+export function jobExpiry(start: Date, validityDays: number): Date {
+  if (!Number.isFinite(start.getTime()) || !Number.isInteger(validityDays) || validityDays < 1 || validityDays > 365) {
+    throw new Error("Invalid job validity");
+  }
+  return new Date(start.getTime() + validityDays * 86_400_000);
+}
+
+/**
+ * Customer plan quotas. aiAgentCreditsLeft is retained as a legacy column only;
+ * normal subscription AI assistance is included and is not customer-metered.
+ */
 export function subscriptionCredits(plan: PlanQuotas) {
   const credits = {
     jobPostsLeft: plan.jobPostsQuota,
     resumeUnlocksLeft: plan.resumeUnlocksQuota,
     aiInterviewsLeft: plan.aiInterviewsQuota,
-    aiAgentCreditsLeft: plan.aiInterviewsQuota,
+    aiAgentCreditsLeft: 0,
     applicationsLeft: plan.applicationsQuota,
     resumeDownloadsLeft: plan.resumeDownloadsQuota,
     backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
+    copilotJobsLeft: plan.copilotJobLimit ?? 0,
   };
   if (Object.values(credits).some(value => !Number.isSafeInteger(value) || value < 0)) {
-    throw new Error("Subscription plan has invalid credit quotas");
+    throw new Error("Subscription plan has invalid quotas");
   }
   return credits;
 }
-

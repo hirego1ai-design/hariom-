@@ -80,9 +80,9 @@ export async function assertCompanyFeatureEntitlement(
 }
 
 /**
- * Verifies a current paid plan and consumes exactly one agent credit in the
- * same database transaction. There is intentionally no production fallback:
- * an unavailable billing database means a billable model call is denied.
+ * Verifies that the current plan includes the AI capability.
+ * Normal subscription AI assistance is included and is not customer-metered.
+ * Provider spend is still controlled separately by BudgetManager.
  */
 export async function assertAndConsumeAiEntitlement(companyId: string, agentId: string, transaction?: Prisma.TransactionClient): Promise<void> {
   const requiredFeatures = BILLABLE_AGENT_FEATURES[agentId];
@@ -116,15 +116,8 @@ export async function assertAndConsumeAiEntitlement(companyId: string, agentId: 
       throw new AiEntitlementError("Your subscription does not include this AI agent.");
     }
 
-    // updateMany makes the decrement conditional and atomic. Concurrent
-    // dispatches cannot turn a zero balance negative.
-    const debit = await tx.companyCredits.updateMany({
-      where: { companyId, aiAgentCreditsLeft: { gte: 1 } },
-      data: { aiAgentCreditsLeft: { decrement: 1 } },
-    });
-    if (debit.count !== 1) {
-      throw new AiEntitlementError("Your AI agent credits are exhausted.");
-    }
+    // No customer AI-credit debit here. Subscription AI assistance is included.
+    // Internal provider spend remains bounded and reconciled by BudgetManager.
   };
   if (transaction) await consume(transaction);
   else await prisma.$transaction(consume);

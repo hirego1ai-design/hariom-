@@ -17,18 +17,18 @@ export async function POST(request: Request) {
     await enforceRateLimit(request, "auth_reset_password");
     const body = await readValidatedJson(request, resetPasswordSchema);
 
-    const otpValidation = await verifyOtpCode(body.email, body.otp, "RESET_PASSWORD");
-    if (!otpValidation.valid) {
-      return NextResponse.json(
-        { success: false, error: otpValidation.error || "Invalid or expired verification code." },
-        { status: 400 }
-      );
-    }
-
     const strengthCheck = validatePasswordStrength(body.newPassword);
     if (!strengthCheck.valid) {
       return NextResponse.json(
         { success: false, error: strengthCheck.message || "Password does not meet complexity requirements." },
+        { status: 400 }
+      );
+    }
+
+    const otpValidation = await verifyOtpCode(body.email, body.otp, "RESET_PASSWORD");
+    if (!otpValidation.valid) {
+      return NextResponse.json(
+        { success: false, error: otpValidation.error || "Invalid or expired verification code." },
         { status: 400 }
       );
     }

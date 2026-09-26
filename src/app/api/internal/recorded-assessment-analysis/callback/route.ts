@@ -6,7 +6,7 @@ import { handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
-  jobId: z.string().uuid(), videoResumeId: z.string().uuid(),
+  jobId: z.string().uuid(), videoResumeId: z.string().uuid(), claimToken: z.string().min(1),
   status: z.enum(["COMPLETED","FAILED","BLOCKED_INFRA"]), error: z.string().nullable().optional(),
   modelName: z.string().trim().min(1).max(160).optional(),
   modelVersion: z.string().trim().min(1).max(160).optional(),
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     const job = await prisma.recordedAssessmentAnalysisJob.findUnique({ where: { id: body.jobId } });
     if (!job) return jsonError("Job not found", 404);
     if (job.responseId !== body.videoResumeId) return jsonError("Response does not match analysis job", 403);
+    if (job.claimToken && job.claimToken !== body.claimToken) return jsonError("Stale or invalid claim token", 409);
     if (["COMPLETED","FAILED","BLOCKED_INFRA"].includes(job.status)) return NextResponse.json({ success: true, status: job.status });
     const now = new Date();
     const retainedResult = body.result
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
       : undefined;
     await prisma.$transaction(async (tx) => {
       const claim = await tx.recordedAssessmentAnalysisJob.updateMany({
-        where: { id: job.id, status: { in: ["PENDING","PROCESSING"] } },
+        where: { id: job.id, claimToken: body.claimToken, status: { in: ["PENDING","PROCESSING"] } },
         data: { status: body.status, error: body.error || null, result: retainedResult ? retainedResult as Prisma.InputJsonValue : undefined, completedAt: now },
       });
       if (claim.count !== 1) return;

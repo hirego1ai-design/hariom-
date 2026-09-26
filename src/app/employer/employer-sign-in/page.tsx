@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 
 function EmployerSignInContent() {
@@ -70,28 +71,14 @@ function EmployerSignInContent() {
 
   return (
     <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
+      <div className="auth-login-card w-full max-w-[780px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Employer Features */}
         <section className="hidden md:flex md:col-span-5 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
-          {/* Brand Logo */}
-          <div className="relative z-10">
-            <span className="font-display-lg text-headline-sm text-amber-400 tracking-tight font-bold">
-              HireGo AI
-            </span>
-            <span className="block text-[10px] font-bold text-amber-500/80 uppercase tracking-widest mt-0.5">
-              Employer Workspace
-            </span>
-          </div>
-
-          {/* Futuristic Isometric 3D Illustration */}
+          {/* Centered brand mark */}
           <div className="relative flex-grow flex items-center justify-center my-4">
             <div className="relative w-full max-w-[180px] aspect-square">
-              <div className="absolute inset-0 bg-amber-500/20 blur-[70px] rounded-full scale-75 animate-pulse"></div>
-              <img
-                className="relative z-10 w-full h-full object-contain"
-                alt="Futuristic isometric 3D building illustration"
-                src="/marketing/hirego-logo.png"
-              />
+              <div className="absolute inset-3 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-[34px] opacity-75 logo-color-flow" />
+              <Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative z-10 w-full h-full object-contain" />
             </div>
           </div>
 
@@ -144,6 +131,9 @@ function EmployerSignInContent() {
         {/* Right Side: Compact Sign In Form */}
         <section className="col-span-1 md:col-span-7 flex items-center justify-center p-5 sm:p-6">
           <div className="w-full max-w-[340px] mx-auto">
+            <div className="mb-5 flex justify-center md:hidden">
+              <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
+            </div>
             
             {/* Segmented Control Pill Toggle */}
             <div className="flex justify-center mb-4">

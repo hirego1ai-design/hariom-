@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "upstash": {
-      "serverUrl": "https://mcp.upstash.com/mcp"
+    "vercel": {
+      "serverUrl": "https://mcp.vercel.com"
     }
   }
 }
