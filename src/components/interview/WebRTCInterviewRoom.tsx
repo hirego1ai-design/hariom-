@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import ProctoringEngine from "@/components/proctoring/ProctoringEngine";
 
 interface WebRTCInterviewRoomProps {
   roundTitle?: string;
@@ -45,6 +46,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const [error, setError] = useState("");
   const [interviewId, setInterviewId] = useState("");
   const [isHost, setIsHost] = useState(false);
+  const [proctoringConsent, setProctoringConsent] = useState(false);
 
   const signal = async (action: string, targetId?: string, payload: Record<string, unknown> = {}) => {
     const res = await fetch("/api/interviews/room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, action, ...(targetId ? { targetId } : {}), ...payload }) });
@@ -242,10 +244,30 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   return <div className="w-full h-full flex flex-col bg-[#0A0A0C] text-white rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
     <div className="h-14 bg-[#141418] border-b border-white/10 px-6 flex items-center justify-between"><div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-xs uppercase tracking-wider text-red-400">LIVE · {roundTitle}</span></div><span className="text-xs text-text-muted">{status} · {remotes.length + 1} connected</span></div>
     {error && <div role="alert" className="px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300">{error}</div>}
+    {!isHost && interviewId && (
+      <div className="mx-4 mt-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-amber-100">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={proctoringConsent}
+            onChange={(event) => setProctoringConsent(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            I understand that HireGo may record browser integrity events such as tab switching, copy/paste, and context-menu activity for human review during this interview. These client-reported events are not an automatic hiring decision.
+          </span>
+        </label>
+      </div>
+    )}
     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4 min-h-0 overflow-auto">
       {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={interviewerName} />)}
       <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{candidateName} (You)</span></div>
     </div>
+    {!isHost && interviewId && proctoringConsent && (
+      <div className="px-4 pb-4">
+        <ProctoringEngine interviewId={interviewId} />
+      </div>
+    )}
     <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{isHost && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
   </div>;
 }
