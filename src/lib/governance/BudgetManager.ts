@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { AiCompanyBudget, BudgetReservation } from '@prisma/client';
+import { assertAndConsumeAiEntitlement } from './AiEntitlements';
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
@@ -29,6 +30,7 @@ export class BudgetManager {
     correlationId: string;
     estimatedMinor: bigint;
     ttlSeconds?: number;
+    billableAgentId?: string;
   }): Promise<BudgetReservation> {
     const { companyId, executionId, correlationId, estimatedMinor, ttlSeconds = 3600 } = params;
     if (estimatedMinor < BigInt(0) || !Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
@@ -57,9 +59,14 @@ export class BudgetManager {
           }
         }
 
+        // Preserve purchased-plan feature authorization inside the same
+        // transaction. The entitlement check does not debit customer AI credits.
+        if (params.billableAgentId) {
+          await assertAndConsumeAiEntitlement(companyId, params.billableAgentId, tx);
+        }
+
         // This budget is HireGo's internal provider-spend control. Customer
         // subscription quotas are handled separately and are never debited here.
-
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
         const reservation = await tx.budgetReservation.create({
