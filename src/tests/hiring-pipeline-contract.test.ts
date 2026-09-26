@@ -80,7 +80,7 @@ test('six-stage advisory contracts and readiness API (offline only)', async (t) 
       await t.test('all six stages receive actual required input and persist completion once', async () => {
         reset(); const result = await HiringPipeline.runPipeline(input);
         assert.equal(result.status, 'COMPLETED'); assert.equal(calls.length, 6); assert.equal(published, 1);
-        assert.equal(calls[0].taskInput.title, input.jobTitle); assert.equal(calls[2].taskInput.jobId, input.jobId);
+        assert.equal(calls[0].taskInput.title, input.jobTitle); assert.equal(calls[1].taskInput.jobId, input.jobId); assert.equal(calls[2].taskInput.jobId, input.jobId);
         assert.equal(calls[4].taskInput.transcript, input.transcript); assert.equal(calls[4].taskInput.durationSeconds, 8);
         assert.equal(calls[5].taskInput.faceCount, 1);
         for (const call of calls) assert.equal(call.context.executionId, `${result.workflowId}:${call.agentId}:1`);
