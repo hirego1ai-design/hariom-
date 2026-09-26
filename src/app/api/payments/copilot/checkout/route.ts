@@ -57,6 +57,10 @@ export async function POST(req: NextRequest) {
     if (session.role === "ADMIN") throw new ApiError("Administrators cannot purchase a tenant Copilot plan from this endpoint.", 400);
     if (session.role !== "EMPLOYER") throw new ApiError("Only the company employer can purchase HireGo Copilot.", 403);
     const company = await getSessionCompany(session);
+    const billingUser = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { phoneNumber: true },
+    });
 
     const idempotencyKey = req.headers.get("idempotency-key")?.trim() || "";
     if (!IDEMPOTENCY_KEY.test(idempotencyKey)) {
@@ -138,6 +142,9 @@ export async function POST(req: NextRequest) {
           planName: `HireGo Copilot — ${snapshot.planName}`,
           planId: snapshot.planId,
           companyId: company.id,
+          customerName: session.name,
+          customerEmail: session.email,
+          customerPhone: billingUser?.phoneNumber || undefined,
         },
         price.paymentRoute as GatewayName,
       );
