@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkoutSchema, createPlanSchema, updatePlanSchema } from "../lib/payments/planContracts";
 import { subscriptionCredits } from "../lib/payments/subscriptionCredits";
@@ -74,4 +75,18 @@ test("admin-created plans persist zero quotas and produce checkout-compatible un
       assert.equal(row[field], 0);
     }
   }
+});
+
+
+test("production catalog reconciliation creates all launch plans and keeps Co-Pilot config fail-closed", () => {
+  const migration = readFileSync(
+    new URL("../../prisma/migrations/20260927002500_subscription_catalog_security_reconcile/migration.sql", import.meta.url),
+    "utf8",
+  );
+  for (const planId of ["plan-bootstrapped", "plan-hypergrowth", "plan-unicorn", "plan-hiring-sprint"]) {
+    assert.match(migration, new RegExp(planId));
+  }
+  assert.match(migration, /ALTER TABLE "HiringCopilotConfig" ENABLE ROW LEVEL SECURITY/);
+  assert.match(migration, /REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon, authenticated/);
+  assert.match(migration, /ON CONFLICT \("id"\) DO UPDATE SET/);
 });
