@@ -178,12 +178,58 @@ export async function POST(req: NextRequest) {
     }
 
     if (!validationState.completedAndCurrent) {
-      const pending = await RosGateway.handleApplicationValidationIntent({
-        userId: session.id,
-        jobId,
-        candidateProfileId: candidate.id,
-        companyId: job.companyId,
-      });
+      let pending;
+      try {
+        pending = await RosGateway.handleApplicationValidationIntent({
+          userId: session.id,
+          jobId,
+          candidateProfileId: candidate.id,
+          companyId: job.companyId,
+        });
+      } catch (raceError: any) {
+        if (raceError?.name !== "DuplicateApplicationError" && raceError?.code !== "P2002") {
+          throw raceError;
+        }
+
+        const racedApplication = await prisma.application.findUnique({
+          where: {
+            candidateProfileId_jobId: {
+              candidateProfileId: candidate.id,
+              jobId,
+            },
+          },
+          include: {
+            gates: {
+              where: { type: ApplicationGateType.UNIVERSAL_SKILL_VALIDATION },
+              take: 1,
+            },
+          },
+        });
+        const racedGate = racedApplication?.gates[0];
+        if (
+          !racedApplication ||
+          !racedGate ||
+          (racedGate.status !== ApplicationGateStatus.REQUIRED &&
+            racedGate.status !== ApplicationGateStatus.IN_PROGRESS)
+        ) {
+          return jsonError("You have already applied to this job.", 409);
+        }
+        pending = {
+          application: {
+            id: racedApplication.id,
+            jobId: racedApplication.jobId,
+            candidateProfileId: racedApplication.candidateProfileId,
+            status: racedApplication.status,
+            matchScore: racedApplication.matchScore,
+            aiSummary: racedApplication.aiSummary,
+          },
+          gate: {
+            id: racedGate.id,
+            status: racedGate.status,
+            assessmentId: racedGate.assessmentId,
+          },
+        };
+      }
 
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
