@@ -20,6 +20,16 @@ export async function POST(request: Request) {
     const actor = await actorFor(request);
     await enforceRateLimit(request, "employer_managed_hiring_join", 10, 60000);
     const input = await readValidatedJson(request, joiningSchema);
+    const acceptedOffer = await prisma.offer.findFirst({
+      where: { applicationId: input.applicationId, status: "ACCEPTED" },
+      orderBy: { acceptedAt: "desc" },
+      select: { id: true, companyId: true, compensationAmount: true, currency: true, acceptedAt: true },
+    });
+    if (!acceptedOffer) throw new ApiError("Candidate acceptance of a persisted offer is required before joining can be confirmed.", 409);
+    if (actor.role !== "ADMIN" && acceptedOffer.companyId !== actor.companyId) throw new ApiError("Accepted offer belongs to a different company.", 403);
+    if (acceptedOffer.compensationAmount && Math.abs(Number(acceptedOffer.compensationAmount) - input.annualCtc) > 0.009) {
+      throw new ApiError("Joining CTC must match the candidate-accepted offer. Amend and re-accept the offer before joining.", 409);
+    }
     const result = await confirmPphJoining(input, actor);
     if (!result.duplicate) {
       await logAuditEvent({
@@ -27,7 +37,7 @@ export async function POST(request: Request) {
         companyId: result.placement.companyId,
         action: "PPH_JOINING_RECORDED",
         resource: `PphPlacement:${result.placement.id}`,
-        details: `Application ${input.applicationId} marked HIRED; CTC: ${input.annualCtc}; Joined: ${input.joinedAt}`,
+        details: `Application ${input.applicationId} marked HIRED after accepted offer ${acceptedOffer.id}; CTC: ${input.annualCtc}; Joined: ${input.joinedAt}`,
       });
       const application = await prisma.application.findUnique({ where: { id: input.applicationId }, include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
       const candidate = application?.candidateProfile.user;

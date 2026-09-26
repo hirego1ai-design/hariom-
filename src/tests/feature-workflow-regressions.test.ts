@@ -397,7 +397,7 @@ test("previously yellow production endpoints are backed by real sources or expli
     fs.readFileSync(new URL("../../production-wiring-inventory.json", import.meta.url), "utf8")
   ) as {
     records: Array<{ record_type: string; api_endpoint?: string; method?: string; status: string }>;
-    reconciliation?: { yellow_records?: number };
+    reconciliation?: { yellow_records?: number; red_records?: number };
   };
 
   const expected = new Map([
@@ -423,7 +423,11 @@ test("previously yellow production endpoints are backed by real sources or expli
     assert.equal(record.status, status, `${key} must be GREEN`);
   }
 
-  assert.equal(inventory.reconciliation?.yellow_records, 0);
+  assert.equal(inventory.reconciliation?.red_records, 0);
+  assert(
+    (inventory.reconciliation?.yellow_records ?? 0) > 0,
+    "Explicitly unavailable or tombstoned production capabilities must remain YELLOW instead of being misreported as GREEN"
+  );
 
   const jobBoost = fs.readFileSync(
     new URL("../app/api/admin/revenue/job-boost/route.ts", import.meta.url),

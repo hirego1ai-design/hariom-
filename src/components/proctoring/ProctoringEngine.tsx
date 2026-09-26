@@ -2,116 +2,105 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 
-export interface ProctoringViolation {
-  id: string;
-  type: "Tab Switch" | "Copy-Paste Attempt" | "Right Click Blocked" | "Face Missing" | "Background Noise";
-  timestamp: string;
-  severity: "low" | "medium" | "high";
-}
-
-const telemetryTypeByViolation: Record<ProctoringViolation["type"], string> = {
-  "Tab Switch": "TAB_SWITCH",
-  "Copy-Paste Attempt": "COPY_PASTE_DETECTED",
-  "Right Click Blocked": "BROWSER_UNFOCUSED",
-  "Face Missing": "FACE_NOT_DETECTED",
-  "Background Noise": "AUDIO_ANOMALY",
+export type LiveProctoringClientPolicy = {
+  enabled: boolean;
+  trackTabSwitch: boolean;
+  trackClipboard: boolean;
+  trackContextMenu: boolean;
+  policyVersion: string;
 };
 
-export default function ProctoringEngine({ interviewId, onViolationCountChange }: { interviewId?: string; onViolationCountChange?: (count: number) => void }) {
-  const [violations, setViolations] = useState<ProctoringViolation[]>([]);
-  const [cheatingScore, setCheatingScore] = useState<number>(0);
+type BrowserObservation = {
+  id: string;
+  label: string;
+  timestamp: string;
+};
 
-  const addViolation = useCallback((type: ProctoringViolation["type"], severity: ProctoringViolation["severity"]) => {
-    const newV: ProctoringViolation = {
-      id: String(Date.now()),
-      type,
-      timestamp: new Date().toLocaleTimeString(),
-      severity,
-    };
-    setViolations((prev) => {
-      const updated = [newV, ...prev];
-      if (onViolationCountChange) onViolationCountChange(updated.length);
-      return updated;
+export default function ProctoringEngine({
+  interviewId,
+  policy,
+  onViolationCountChange,
+}: {
+  interviewId: string;
+  policy: LiveProctoringClientPolicy;
+  onViolationCountChange?: (count: number) => void;
+}) {
+  const [observations, setObservations] = useState<BrowserObservation[]>([]);
+  const [deliveryError, setDeliveryError] = useState("");
+
+  const report = useCallback(async (violationType: "TAB_SWITCH" | "COPY_PASTE_DETECTED" | "BROWSER_UNFOCUSED", label: string) => {
+    const observation = { id: crypto.randomUUID(), label, timestamp: new Date().toLocaleTimeString() };
+    setObservations((previous) => {
+      const next = [observation, ...previous].slice(0, 20);
+      onViolationCountChange?.(next.length);
+      return next;
     });
-
-    const weight = severity === "high" ? 25 : severity === "medium" ? 15 : 5;
-    setCheatingScore((prev) => Math.min(100, prev + weight));
-
-    // Push the raw browser observation only. The server owns severity and
-    // scoring; this UI must not be treated as an authoritative decision.
-    if (interviewId) {
-      fetch("/api/proctoring/telemetry", {
+    try {
+      const response = await fetch("/api/proctoring/telemetry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interviewId, violationType: telemetryTypeByViolation[type] }),
-      }).catch(() => {});
+        body: JSON.stringify({ interviewId, violationType }),
+      });
+      if (!response.ok && response.status !== 429) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Telemetry could not be recorded.");
+      }
+      setDeliveryError("");
+    } catch (error) {
+      setDeliveryError(error instanceof Error ? error.message : "Telemetry could not be recorded.");
     }
   }, [interviewId, onViolationCountChange]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        addViolation("Tab Switch", "high");
-      }
+    if (!policy.enabled) return;
+
+    const onVisibility = () => {
+      if (policy.trackTabSwitch && document.hidden) void report("TAB_SWITCH", "Interview tab hidden");
+    };
+    const onClipboard = (event: ClipboardEvent) => {
+      if (!policy.trackClipboard) return;
+      event.preventDefault();
+      void report("COPY_PASTE_DETECTED", "Copy or paste blocked");
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (!policy.trackContextMenu) return;
+      event.preventDefault();
+      void report("BROWSER_UNFOCUSED", "Context menu blocked");
     };
 
-    const handleCopyPaste = (e: ClipboardEvent) => {
-      e.preventDefault();
-      addViolation("Copy-Paste Attempt", "medium");
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      addViolation("Right Click Blocked", "low");
-    };
-
-    window.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("copy", handleCopyPaste);
-    window.addEventListener("paste", handleCopyPaste);
-    window.addEventListener("contextmenu", handleContextMenu);
-
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("copy", onClipboard);
+    window.addEventListener("paste", onClipboard);
+    window.addEventListener("contextmenu", onContextMenu);
     return () => {
-      window.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("copy", handleCopyPaste);
-      window.removeEventListener("paste", handleCopyPaste);
-      window.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("copy", onClipboard);
+      window.removeEventListener("paste", onClipboard);
+      window.removeEventListener("contextmenu", onContextMenu);
     };
-  }, [addViolation]);
+  }, [policy, report]);
+
+  if (!policy.enabled) return null;
 
   return (
-    <div className="w-full bg-[#141418] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-          <h4 className="font-bold text-xs text-white uppercase tracking-wider font-mono">Live AI Proctoring Monitor</h4>
+    <aside className="rounded-2xl border border-white/10 bg-[#141418] p-4 text-white" aria-label="Interview browser monitoring">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider">Browser monitoring active</p>
+          <p className="mt-1 text-[11px] text-text-muted">Policy {policy.policyVersion}. Browser events are advisory evidence and require human review.</p>
         </div>
-
-        <div className="flex items-center gap-3 font-mono text-xs">
-          <span className="text-text-muted">Advisory review score:</span>
-          <span className={`px-2.5 py-0.5 rounded-full font-bold ${
-            cheatingScore > 40 ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-green/20 text-green border border-green/30"
-          }`}>
-            {cheatingScore}% {cheatingScore > 40 ? "(Flagged)" : "(Clean)"}
-          </span>
-        </div>
+        <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-bold text-amber-300">{observations.length} observed</span>
       </div>
-
-      {/* Violation Feed */}
-      <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
-        {violations.length === 0 ? (
-          <p className="text-text-muted text-center py-4 italic">No proctoring violations recorded in current session.</p>
-        ) : (
-          violations.map((v) => (
-            <div key={v.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${v.severity === "high" ? "bg-red-500" : "bg-yellow"}`} />
-                <span className="text-white font-bold">{v.type}</span>
-              </div>
-              <span className="text-text-muted text-[11px]">{v.timestamp}</span>
+      {deliveryError && <p role="status" className="mt-3 text-xs text-amber-300">{deliveryError}</p>}
+      {observations.length > 0 && (
+        <div className="mt-3 max-h-28 space-y-1 overflow-y-auto">
+          {observations.map((item) => (
+            <div key={item.id} className="flex justify-between gap-3 text-[11px] text-text-muted">
+              <span>{item.label}</span><span>{item.timestamp}</span>
             </div>
-          ))
-        )}
-      </div>
-    </div>
+          ))}
+        </div>
+      )}
+    </aside>
   );
 }

@@ -1,10 +1,26 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 
 export default function OnboardingCompletePage() {
+  const [assessmentState, setAssessmentState] = useState<{ loading: boolean; assessmentId?: string; noticeUrl?: string; alreadyCurrent?: boolean; error?: string }>({ loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/candidate/readiness/assign", { method: "POST" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || "Skill Validation is temporarily unavailable.");
+        if (!cancelled) setAssessmentState({ loading: false, assessmentId: body.assessmentId, noticeUrl: body.noticeUrl, alreadyCurrent: body.alreadyCurrent });
+      })
+      .catch((error) => {
+        if (!cancelled) setAssessmentState({ loading: false, error: error instanceof Error ? error.message : "Skill Validation is temporarily unavailable." });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
@@ -35,17 +51,32 @@ export default function OnboardingCompletePage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold text-text-primary">Your onboarding details are saved</h1>
               <p className="text-xs text-text-muted max-w-[400px] mx-auto leading-relaxed">
-                Continue to Job-Ready assessments if an administrator has configured one for your role and seniority. Completion does not automatically verify your profile or guarantee a job.
+                HireGo now prepares an optional role-based Skill Validation for your target role. You can take it now or continue browsing jobs. If a job requires validation, the same durable requirement is reused during application.
               </p>
             </div>
 
+            {assessmentState.error && <p role="status" className="text-xs text-text-muted">{assessmentState.error} This does not block onboarding or job browsing.</p>}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link
-                href="/assessment/readiness"
-                className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-base">verified</span> Check Job-Ready assessments
-              </Link>
+              {assessmentState.loading ? (
+                <span className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/10 border border-sky-400/30 text-sky-300 font-bold text-xs">
+                  Preparing Skill Validation…
+                </span>
+              ) : assessmentState.assessmentId ? (
+                <Link
+                  href={assessmentState.noticeUrl || `/assessment/mcq/active?id=${encodeURIComponent(assessmentState.assessmentId)}`}
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-sky-500/20 border border-sky-400 text-sky-300 font-bold text-xs hover:bg-sky-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base">verified</span>
+                  {assessmentState.alreadyCurrent ? "View current Skill Validation" : "Start optional Skill Validation"}
+                </Link>
+              ) : (
+                <Link
+                  href="/assessment/readiness"
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-surface-container border border-outline text-text-primary font-bold text-xs hover:bg-white/10 transition-all"
+                >
+                  Skill Validation unavailable — review later
+                </Link>
+              )}
               <Link
                 href="/dashboard"
                 className="w-full sm:w-auto px-8 py-3 rounded-full bg-yellow text-bg-page font-bold text-xs shadow-[0_0_20px_rgba(255,200,0,0.35)] hover:scale-105 transition-all"

@@ -7,9 +7,21 @@ import { prisma } from "@/lib/prisma";
 
 const WARNING_LIMIT = 3;
 const DUPLICATE_EVENT_WINDOW_MS = 5_000;
+const eventTypeSchema = z.enum(["TAB_HIDDEN","FULLSCREEN_EXIT","CAMERA_INTERRUPTED","MIC_INTERRUPTED","MULTIPLE_FACE_SIGNAL","FACE_MISSING_SIGNAL"]);
+type ProctoringEventType = z.infer<typeof eventTypeSchema>;
+type ProctoringSeverity = "INFO" | "WARNING" | "HIGH";
+
+const SERVER_SEVERITY: Record<ProctoringEventType, ProctoringSeverity> = {
+  TAB_HIDDEN: "WARNING",
+  FULLSCREEN_EXIT: "WARNING",
+  CAMERA_INTERRUPTED: "HIGH",
+  MIC_INTERRUPTED: "HIGH",
+  MULTIPLE_FACE_SIGNAL: "HIGH",
+  FACE_MISSING_SIGNAL: "HIGH",
+};
+
 const schema = z.object({
-  eventType: z.enum(["TAB_HIDDEN","FULLSCREEN_EXIT","CAMERA_INTERRUPTED","MIC_INTERRUPTED","MULTIPLE_FACE_SIGNAL","FACE_MISSING_SIGNAL"]),
-  severity: z.enum(["INFO","WARNING","HIGH"]),
+  eventType: eventTypeSchema,
   evidence: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 
@@ -25,7 +37,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== "CANDIDATE") throw new ApiError("Candidate access required.", 403);
     const { id } = await params;
-    const body = await readValidatedJson(request, schema);
+    const body = await readValidatedJson(request, schema, 16 * 1024);
+    const severity = SERVER_SEVERITY[body.eventType];
 
     const result = await prisma.$transaction(async (tx) => {
       const attempt = await tx.recordedAssessmentAttempt.findFirst({
@@ -50,7 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const priorWarnings = await tx.recordedAssessmentProctoringEvent.count({
         where: { attemptId: id, warningNumber: { not: null } },
       });
-      const warningWorthy = body.severity !== "INFO";
+      const warningWorthy = severity !== "INFO";
       const terminated = warningWorthy && priorWarnings >= WARNING_LIMIT;
       const warningNumber = warningWorthy && !terminated ? priorWarnings + 1 : null;
 
@@ -58,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: {
           attemptId: id,
           eventType: body.eventType,
-          severity: body.severity,
+          severity,
           evidence: body.evidence as Prisma.InputJsonValue | undefined,
           warningNumber,
         },

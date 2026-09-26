@@ -305,3 +305,48 @@ test("seed script cannot silently target localhost or add sample companies", () 
   assert.doesNotMatch(seed, /company-hirego/);
   assert.match(seed, /DATABASE_URL is required for seeding/);
 });
+
+
+test("public candidate sharing and unavailable AI surfaces cannot be falsely certified", () => {
+  const publicProfile = read("src/app/profile/public/page.tsx");
+  for (const pattern of [/Alex Chen/i, /Top 5% Candidate/i, /HireGo Score.*88/i, /localhost:3000\/profile\/public/i]) {
+    assert.doesNotMatch(publicProfile, pattern);
+  }
+
+  const inventory = JSON.parse(read("production-wiring-inventory.json"));
+  const unavailableRoutes = new Set([
+    "/employer/ai-hiring-copilot-hub",
+    "/employer/ai-evaluation-scores",
+    "/employer/ai-candidate-ranking-explanation",
+  ]);
+  const records = Array.isArray(inventory.records) ? inventory.records : [];
+  for (const route of unavailableRoutes) {
+    const screen = records.find((record: any) => record.record_type === "screen" && record.route === route);
+    assert.ok(screen, `wiring inventory is missing unavailable screen ${route}`);
+    assert.notEqual(screen.status, "GREEN", `unavailable screen was falsely certified GREEN: ${route}`);
+  }
+});
+
+test("offer, proctoring and approval remediation surfaces are connected to authoritative APIs", () => {
+  const offerCreate = read("src/app/employer/offer-letter-create-and-send/page.tsx");
+  const offerManage = read("src/app/employer/offer-management-dashboard/page.tsx");
+  const candidateOffers = read("src/app/offers/page.tsx");
+  const proctorAdmin = read("src/app/admin/proctoring-control-panel/page.tsx");
+  const room = read("src/app/interviews/room/[roomId]/page.tsx");
+  const workflow = read("src/lib/workflows/WorkflowEngine.ts");
+
+  assert.match(offerCreate, /\/api\/employer\/offers/);
+  assert.match(offerManage, /\/api\/employer\/offers/);
+  assert.match(candidateOffers, /\/api\/candidate\/offers/);
+  assert.doesNotMatch(offerCreate, /currently in development/i);
+  assert.doesNotMatch(offerManage, /currently in development/i);
+
+  assert.match(proctorAdmin, /\/api\/admin\/proctoring-policy/);
+  assert.match(room, /\/api\/proctoring\/consent/);
+  assert.match(room, /ProctoringEngine/);
+  assert.doesNotMatch(proctorAdmin, /PROCTORING CONFIGURATION NOT CONNECTED/);
+
+  for (const token of ["expiresAt", "revokedAt", "revokeApproval", "consumeApprovedActionInTransaction"]) {
+    assert.ok(workflow.includes(token), `approval lifecycle guard missing: ${token}`);
+  }
+});

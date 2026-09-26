@@ -5,6 +5,20 @@ import { getPrivateDownloadUrl, getPrivateObject } from "@/lib/storage";
 
 async function canAccessFile(userId: string, role: string, file: { id: string; ownerId: string; companyId: string | null; category: string }) {
   if (role === "ADMIN" || file.ownerId === userId) return true;
+
+  if (role === "CANDIDATE") {
+    const offerDocument = await prisma.offer.findFirst({
+      where: {
+        documentFileId: file.id,
+        status: { in: ["SENT", "ACCEPTED"] },
+        expiresAt: { gt: new Date() },
+        application: { candidateProfile: { userId } },
+      },
+      select: { id: true },
+    });
+    return Boolean(offerDocument);
+  }
+
   if (role !== "EMPLOYER" && role !== "RECRUITER") return false;
 
   const profile = await prisma.employerProfile.findUnique({

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import crypto from "crypto";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
@@ -57,6 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       success: true,
       tiers: JOB_BOOST_TIERS,
+      purchaseStatus: "PAYMENT_INTEGRATION_REQUIRED",
       boostStatus: {
         isBoosted: isBoosted && !isExpired,
         boostTier: config.boostTier || null,
@@ -74,67 +74,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     await enforceRateLimit(request, "employer_job_boost_post", 10, 60_000);
     const { id } = await params;
-    const { session, job } = await resolveEmployerJob(request, id);
-    const body = await readValidatedJson(request, boostSchema);
-
-    const tier = JOB_BOOST_TIERS.find((t) => t.id === body.tierId);
-    if (!tier) {
-      throw new ApiError("Invalid job boost tier selected", 400);
-    }
-
-    const boostExpiresAt = new Date(Date.now() + tier.days * 24 * 60 * 60 * 1000);
-    const currentConfig = (job.matchingConfig && typeof job.matchingConfig === "object" && !Array.isArray(job.matchingConfig))
-      ? (job.matchingConfig as Record<string, unknown>)
-      : {};
-
-    const updatedConfig = {
-      ...currentConfig,
-      isBoosted: true,
-      boostTier: tier.id,
-      boostName: tier.name,
-      boostedAt: new Date().toISOString(),
-      boostExpiresAt: boostExpiresAt.toISOString(),
-    };
-
-    const txId = `boost_tx_${crypto.randomUUID()}`;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.jobListing.update({
-        where: { id: job.id },
-        data: { matchingConfig: updatedConfig },
-      });
-
-      await tx.paymentTransaction.create({
-        data: {
-          gatewayTxId: txId,
-          companyId: job.companyId,
-          planId: tier.id,
-          amount: tier.price,
-          currency: tier.currency,
-          status: "SUCCESS",
-          provider: "STRIPE",
-          rawPayload: {
-            revenueSource: "Job Boost",
-            planName: tier.name,
-            customerName: job.company?.name || session.email || "Employer",
-            customerType: "Employer",
-            jobId: job.id,
-            jobTitle: job.title,
-            durationDays: tier.days,
-          },
-        },
-      });
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `"${job.title}" has been successfully boosted with ${tier.name}!`,
-      boost: {
-        jobId: job.id,
-        tier: tier.name,
-        expiresAt: boostExpiresAt.toISOString(),
-      },
-    });
+    await resolveEmployerJob(request, id);
+    await readValidatedJson(request, boostSchema);
+    throw new ApiError(
+      "Job Boost purchase is unavailable until a provider-backed payment order and verified webhook fulfillment are connected.",
+      503,
+    );
   } catch (error) {
     return handleApiError(error);
   }

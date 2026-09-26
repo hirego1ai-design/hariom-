@@ -15,8 +15,10 @@ import { writeAgentApprovalAudit } from "@/lib/security/AgentApprovalAudit";
 type ConsequentialAuthorization = { approvedByUserId: string; approvalId: string; workflowId: string };
 
 async function assertPersistedCommunicationAuthorization(proof: ConsequentialAuthorization, eventKey: CommunicationEventKey) {
-  const approval = await prisma.workflowApproval.findUnique({ where: { id: proof.approvalId }, select: { workflowInstanceId: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true, actionType: true } });
+  const approval = await prisma.workflowApproval.findUnique({ where: { id: proof.approvalId }, select: { workflowInstanceId: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true, actionType: true, expiresAt: true, revokedAt: true } });
   if (!approval || approval.workflowInstanceId !== proof.workflowId || approval.decision !== "APPROVED" || !approval.decidedAt || !approval.decidedBy || approval.decidedBy !== proof.approvedByUserId) throw new Error("Persisted human approval is required for consequential communication.");
+  if (approval.revokedAt) throw new Error("Consequential communication approval was revoked.");
+  if (approval.expiresAt <= new Date()) throw new Error("Consequential communication approval expired before dispatch.");
   if (!approval.decidedByRole || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(approval.decidedByRole)) throw new Error("Consequential communication approval was not granted by an authorized human role.");
   const requiredAction = eventKey === "APPLICATION_REJECTED" ? "CANDIDATE_REJECTION" : eventKey === "CANDIDATE_SELECTED" ? "CANDIDATE_SELECTION" : "EXTERNAL_COMMUNICATION";
   if (approval.actionType !== requiredAction) throw new Error(`Approval action ${approval.actionType} cannot authorize communication ${eventKey}; ${requiredAction} is required.`);
@@ -111,9 +113,10 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
   if (consequentialApprovalId && input.authorizationProof) {
     const proof = input.authorizationProof;
     await prisma.$transaction(async (tx) => {
-      const approval = await tx.workflowApproval.findUnique({ where: { id: consequentialApprovalId }, select: { workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true } });
-      if (!approval || approval.workflowInstanceId !== proof.workflowId || approval.decision !== "APPROVED" || !approval.decidedAt || approval.decidedBy !== proof.approvedByUserId || approval.consumedAt) throw new Error("Consequential communication approval is no longer valid.");
-      const consumed = await tx.workflowApproval.updateMany({ where: { id: consequentialApprovalId, workflowInstanceId: proof.workflowId, decision: "APPROVED", consumedAt: null }, data: { consumedAt: new Date() } });
+      const approval = await tx.workflowApproval.findUnique({ where: { id: consequentialApprovalId }, select: { workflowInstanceId: true, companyId: true, stepName: true, actionType: true, actionDigest: true, decision: true, decidedBy: true, decidedByRole: true, decidedAt: true, consumedAt: true, expiresAt: true, revokedAt: true } });
+      const now = new Date();
+      if (!approval || approval.workflowInstanceId !== proof.workflowId || approval.decision !== "APPROVED" || !approval.decidedAt || approval.decidedBy !== proof.approvedByUserId || approval.consumedAt || approval.revokedAt || approval.expiresAt <= now) throw new Error("Consequential communication approval is no longer valid.");
+      const consumed = await tx.workflowApproval.updateMany({ where: { id: consequentialApprovalId, workflowInstanceId: proof.workflowId, decision: "APPROVED", consumedAt: null, revokedAt: null, expiresAt: { gt: now } }, data: { consumedAt: now } });
       if (consumed.count !== 1) throw new Error("Consequential communication approval was already consumed.");
       if (!approval.decidedByRole) throw new Error("Consequential communication approval is missing approver role evidence.");
       await writeAgentApprovalAudit(tx, { userId: proof.approvedByUserId, companyId: approval.companyId, action: "AGENT_APPROVAL_CONSUMED", workflowId: proof.workflowId, approvalId: consequentialApprovalId, stepName: approval.stepName, actionType: approval.actionType, actionDigest: approval.actionDigest, role: approval.decidedByRole });
