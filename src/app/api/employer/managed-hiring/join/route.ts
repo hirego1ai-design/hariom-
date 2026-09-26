@@ -20,6 +20,17 @@ export async function POST(request: Request) {
     const actor = await actorFor(request);
     await enforceRateLimit(request, "employer_managed_hiring_join", 10, 60000);
     const input = await readValidatedJson(request, joiningSchema);
+    const acceptedOffer = await prisma.offer.findFirst({
+      where: {
+        applicationId: input.applicationId,
+        status: "ACCEPTED",
+        ...(actor.role === "ADMIN" ? {} : { companyId: actor.companyId }),
+      },
+      select: { id: true, acceptedAt: true },
+    });
+    if (!acceptedOffer?.acceptedAt) {
+      throw new ApiError("Joining can only be recorded after the candidate has accepted the offer.", 409);
+    }
     const result = await confirmPphJoining(input, actor);
     if (!result.duplicate) {
       await logAuditEvent({
