@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { RequirementStatus, HiringRequirementRecord } from "@/types";
@@ -63,9 +64,12 @@ export default function AdminManagedHiringPipeline() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button className="px-4 py-2 rounded-xl bg-[#29B6F6] text-white text-xs font-bold hover:bg-[#29B6F6]/90">
+                  <Link
+                    href={`/admin/managed-hiring/agreements/builder?reqId=${encodeURIComponent(req.id)}`}
+                    className="px-4 py-2 rounded-xl bg-[#29B6F6] text-white text-xs font-bold hover:bg-[#29B6F6]/90"
+                  >
                     Draft Agreement
-                  </button>
+                  </Link>
                 </div>
               </div>
             ))}
