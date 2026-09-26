@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
     const effectivePlan: CheckoutPlan = {
       ...plan,
       featuresAllowed: addCopilot ? [...new Set([...plan.featuresAllowed, "COPILOT", "COPILOT_ADDON"])] : plan.featuresAllowed,
-      copilotIncluded: plan.copilotIncluded || addCopilot,
+      copilotIncluded: Boolean(plan.copilotIncluded || addCopilot),
       copilotJobLimit: plan.copilotJobLimit + (addCopilot ? (copilotConfig?.addonJobLimit ?? 0) : 0),
     };
     const originalAmount = plan.price + (addCopilot ? (copilotConfig?.addonPrice ?? 0) : 0);
