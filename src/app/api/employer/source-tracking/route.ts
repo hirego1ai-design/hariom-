@@ -52,10 +52,7 @@ export async function GET(request: Request) {
         ? prisma.candidateSourcingRelationship.findMany({
             where: {
               companyId: company.id,
-              OR: applications.map((application) => ({
-                jobId: application.jobId,
-                candidateProfileId: application.candidateProfileId,
-              })),
+              status: "ACCEPTED",
             },
             select: {
               jobId: true,
