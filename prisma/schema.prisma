@@ -715,6 +715,16 @@ model ProctoringTelemetry {
   @@index([candidateId, createdAt])
 }
 
+model ProctoringConfig {
+  id                 String   @id @default("global-proctoring-config")
+  enabled            Boolean  @default(true)
+  tabSwitchEnabled   Boolean  @default(true)
+  clipboardEnabled   Boolean  @default(true)
+  contextMenuEnabled Boolean  @default(true)
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String
