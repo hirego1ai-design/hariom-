@@ -72,6 +72,7 @@ export async function listPublicCapacityOffers(countryInput: string) {
         amount: price.amountMinor / 100,
         taxInclusive: price.taxMode === "TAX_INCLUSIVE" || price.taxMode === "MERCHANT_OF_RECORD",
         taxesMayApplyAtCheckout: price.taxMode === "TAX_EXCLUSIVE",
+        checkoutAvailable: price.paymentRoute !== "MERCHANT_OF_RECORD",
       },
     }];
   });
