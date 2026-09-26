@@ -69,7 +69,6 @@ export function parsePurchasedPlanSnapshot(value: unknown): PurchasedPlanSnapsho
 
   const legacy = legacySchema.parse(value);
   return purchasedPlanSnapshotSchema.parse({
-    version: 2,
     ...legacy,
     version: 2,
     marketingBenefits: legacy.featuresAllowed,
