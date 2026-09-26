@@ -276,15 +276,15 @@ export default function EmployerSubscriptionsStorePage() {
 
               <div className="bg-white/3 p-4 rounded-xl border border-white/5">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">AI Interviews</span>
+                  <span className="text-[#94A3B8] text-[10px] font-semibold uppercase">AI Agent Credits</span>
                   <span className="text-xs font-mono font-extrabold text-white">
-                    {credits?.aiInterviewsLeft ?? 0} / {quotas?.aiInterviews?.total ?? 0}
+                    {credits?.aiAgentCreditsLeft ?? 0} / {quotas?.aiAgentCredits?.total ?? 0}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-purple rounded-full"
-                    style={{ width: `${Math.min(100, ((credits?.aiInterviewsLeft ?? 0) / Math.max(1, quotas?.aiInterviews?.total ?? 0)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((credits?.aiAgentCreditsLeft ?? 0) / Math.max(1, quotas?.aiAgentCredits?.total ?? 0)) * 100)}%` }}
                   />
                 </div>
               </div>
@@ -362,7 +362,7 @@ export default function EmployerSubscriptionsStorePage() {
                         </li>
                         <li className="flex items-center gap-2">
                           <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
-                          {p.aiInterviewsQuota === 9999 ? "Unlimited" : `${p.aiInterviewsQuota}`} AI Video Screening Credits
+                          {p.aiInterviewsQuota === 9999 ? "Unlimited" : `${p.aiInterviewsQuota}`} Shared AI Agent Credits
                         </li>
                         <li className="flex items-center gap-2">
                           <span className="material-symbols-outlined text-[16px] text-green-500">check_circle</span>
