@@ -95,3 +95,43 @@ test("assessment authoring stores provider/model provenance", () => {
   assert.ok(schema.includes("authoringModel"), "assessment schema must store model provenance");
   assert.ok(authoring.includes("authoringVersion"), "generated assessments must store authoring version");
 });
+
+
+test("self-hosted LLM is a first-class admin-routable provider without browser secrets", () => {
+  const config = read("src/lib/ai/AiRoutingConfig.ts");
+  const registry = read("src/app/admin/models/registry/page.tsx");
+  const env = read(".env.example");
+  assert.ok(config.includes('"self_hosted"'), "router provider schema must include self_hosted");
+  assert.ok(config.includes("SELF_HOSTED_LLM_BASE_URL"), "self-hosted endpoint must stay server-side");
+  assert.ok(config.includes("SELF_HOSTED_LLM_API_KEY"), "self-hosted auth must stay server-side");
+  assert.ok(registry.includes('"self_hosted"'), "admin registry must expose self-hosted models");
+  assert.ok(env.includes("SELF_HOSTED_LLM_BASE_URL="));
+  assert.ok(env.includes("SELF_HOSTED_LLM_API_KEY="));
+});
+
+test("media analysis callbacks never fabricate Whisper/model provenance", () => {
+  const video = read("src/app/api/internal/video-analysis/callback/route.ts");
+  const recorded = read("src/app/api/internal/recorded-assessment-analysis/callback/route.ts");
+  assert.ok(video.includes("modelName is required for a completed analysis callback") || video.includes("modelName") && video.includes('status !== "COMPLETED"'));
+  assert.ok(!video.includes('body.modelName || "whisper-small"'), "video analysis must not invent Whisper model");
+  assert.ok(!video.includes('body.modelVersion || "1.0.0"'), "video analysis must not invent model version");
+  assert.ok(recorded.includes("provenance"), "recorded assessment result must retain worker/model provenance");
+});
+
+test("AI telemetry uses the same canonical task keys as admin routing", () => {
+  const dispatcher = read("src/utils/aiRouter.ts");
+  assert.ok(dispatcher.includes('ASSESSMENT_AUTHORING: "assessment-authoring"'));
+  assert.ok(dispatcher.includes('ASSESSMENT_FEEDBACK: "assessment-feedback"'));
+  assert.ok(dispatcher.includes('JD_GENERATION: "jd-generator"'));
+  assert.ok(dispatcher.includes("effectiveTaskType"));
+  assert.ok(dispatcher.includes("markAiExecutionValidationFailure"));
+});
+
+test("universal results can continue directly to required job-specific assessment", () => {
+  const submit = read("src/app/api/assessment/mcq/submit/route.ts");
+  const active = read("src/app/assessment/mcq/active/page.tsx");
+  assert.ok(submit.includes("pendingJobSpecificAssessments"));
+  assert.ok(submit.includes('"JOB_SPECIFIC_ASSESSMENT_REQUIRED"'));
+  assert.ok(active.includes("Continue Job-Specific Assessment"));
+  assert.ok(active.includes("isUniversalSkillValidation"), "private coaching must be scoped to Universal Skill Validation");
+});
