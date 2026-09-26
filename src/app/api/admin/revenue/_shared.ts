@@ -35,7 +35,10 @@ function textValue(value: unknown, fallback = "") {
 export async function loadRevenueTransactions() {
   const [payments, invoices] = await Promise.all([
     prisma.paymentTransaction.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.invoice.findMany({
+      include: { placement: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
   const companyIds = [...new Set(payments.map((payment) => payment.companyId))];
   const companies = companyIds.length
@@ -131,6 +134,7 @@ export async function loadRevenueTransactions() {
 export async function loadManagedHiringRevenue() {
   const invoices = await prisma.invoice.findMany({
     where: { candidateName: { not: null } },
+    include: { placement: true },
     orderBy: { createdAt: "desc" },
   });
   const agreementIds = [...new Set(invoices.map((invoice) => invoice.agreementId))];
@@ -140,6 +144,10 @@ export async function loadManagedHiringRevenue() {
   const agreementById = new Map(agreements.map((agreement) => [agreement.id, agreement]));
   const placements = invoices.map((invoice) => {
     const agreement = agreementById.get(invoice.agreementId);
+    const joinedAt = invoice.placement?.joinedAt
+      ? invoice.placement.joinedAt.toISOString()
+      : invoice.createdAt.toISOString();
+    const annualSalary = invoice.placement?.annualCtc ? Number(invoice.placement.annualCtc) : 0;
     return {
       id: invoice.id,
       candidateName: invoice.candidateName || "",
@@ -149,14 +157,14 @@ export async function loadManagedHiringRevenue() {
       recruiterPartner: "",
       jobTitle: invoice.jobTitle || "",
       jobRoleLevel: "",
-      annualSalary: 0,
-      salaryFormatted: "",
+      annualSalary,
+      salaryFormatted: annualSalary ? formatMoney(annualSalary, invoice.currency) : "Unavailable",
       commissionPct: agreement?.feeType === "PERCENTAGE" ? agreement.feeValue : 0,
       commissionAmount: invoice.amount,
       commissionFormatted: formatMoney(invoice.amount, invoice.currency),
       hiringFee: invoice.totalAmount,
       replacementWarrantyDays: agreement?.replacementDays || 0,
-      joiningDate: invoice.createdAt.toISOString(),
+      joiningDate: joinedAt,
       paymentStatus: invoice.status === "PAID" ? "Success" : invoice.status,
       invoiceId: invoice.invoiceNumber,
       offerLetterRef: "",
@@ -166,6 +174,11 @@ export async function loadManagedHiringRevenue() {
   const paid = invoices.filter((invoice) => invoice.status === "PAID");
   const totalCommissionEarned = paid.reduce((sum, invoice) => sum + invoice.amount, 0);
   const hiringFeesCollected = paid.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+  const hiresWithSalary = paid.filter((invoice) => invoice.placement?.annualCtc);
+  const averageSalaryNumber = hiresWithSalary.length
+    ? hiresWithSalary.reduce((sum, invoice) => sum + Number(invoice.placement!.annualCtc), 0) / hiresWithSalary.length
+    : 0;
+
   return {
     summary: {
       totalHires: invoices.length,
@@ -178,7 +191,7 @@ export async function loadManagedHiringRevenue() {
       replacementWarrantyCost: 0,
       netProfit: totalCommissionEarned,
       netProfitFormatted: formatMoney(totalCommissionEarned),
-      averageHireSalary: "Unavailable",
+      averageHireSalary: averageSalaryNumber ? formatMoney(averageSalaryNumber, paid[0]?.currency || "INR") : "Unavailable",
       averageCommissionPerHire: formatMoney(paid.length ? totalCommissionEarned / paid.length : 0),
     },
     placements,

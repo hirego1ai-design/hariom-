@@ -42,14 +42,39 @@ export async function GET(req: NextRequest) {
       ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100
       : null;
 
+    const currentMonthSubscriptionRevenue = successful
+      .filter((transaction) => transaction.revenueSource === "Subscription" && new Date(transaction.paidDate || transaction.createdDate) >= monthStart)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+    const mrr = currentMonthSubscriptionRevenue;
+    const arr = mrr * 12;
+
+    const currencies = [...new Set(successful.map((t) => t.currency || "INR"))];
+    const byCurrency = currencies.reduce<Record<string, { totalRevenue: number; currentMonthRevenue: number; mrr: number; formattedTotal: string }>>((acc, curr) => {
+      const currTx = successful.filter((t) => (t.currency || "INR") === curr);
+      const total = currTx.reduce((sum, t) => sum + t.amount, 0);
+      const monthTotal = currTx
+        .filter((t) => new Date(t.paidDate || t.createdDate) >= monthStart)
+        .reduce((sum, t) => sum + t.amount, 0);
+      const subMonthTotal = currTx
+        .filter((t) => t.revenueSource === "Subscription" && new Date(t.paidDate || t.createdDate) >= monthStart)
+        .reduce((sum, t) => sum + t.amount, 0);
+      acc[curr] = {
+        totalRevenue: total,
+        currentMonthRevenue: monthTotal,
+        mrr: subMonthTotal,
+        formattedTotal: formatMoney(total, curr),
+      };
+      return acc;
+    }, {});
+
     return NextResponse.json({
       success: true,
       source: "database",
       data: {
-        mrr: currentMonthRevenue,
-        mrrFormatted: formatMoney(currentMonthRevenue),
-        arr: currentMonthRevenue * 12,
-        arrFormatted: formatMoney(currentMonthRevenue * 12),
+        mrr,
+        mrrFormatted: formatMoney(mrr),
+        arr,
+        arrFormatted: formatMoney(arr),
         totalRevenue,
         totalRevenueFormatted: formatMoney(totalRevenue),
         currentMonthRevenue,
@@ -63,6 +88,7 @@ export async function GET(req: NextRequest) {
         taxesCollected,
         platformFees: null,
         netProfit: null,
+        byCurrency,
         streams: {
           subscriptions: stream("Subscription"),
           managedHiring: { ...stream("Managed Hiring"), label: "HireGo Managed Hiring™" },

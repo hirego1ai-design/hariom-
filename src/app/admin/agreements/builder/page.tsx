@@ -21,7 +21,7 @@ export default function SalesAgreementBuilderPage() {
   const [feeType, setFeeType] = useState("PERCENTAGE");
   const [feeValue, setFeeValue] = useState(8.33);
   const [replacementDays, setReplacementDays] = useState(90);
-  const [invoiceRule, setInvoiceRule] = useState("ON_JOINING");
+  const [invoiceRule, setInvoiceRule] = useState("DAY_25");
   const [creditDays, setCreditDays] = useState(15);
   const [hiringQuantity, setHiringQuantity] = useState(1);
   const [notes, setNotes] = useState("");
@@ -221,6 +221,7 @@ export default function SalesAgreementBuilderPage() {
                   onChange={(e) => setInvoiceRule(e.target.value)}
                   className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
                 >
+                  <option value="DAY_25">25 Days Post Joining (Automatic PPH)</option>
                   <option value="ON_OFFER">On Offer Acceptance</option>
                   <option value="ON_JOINING">On Joining Date</option>
                   <option value="DAY_30">30 Days Post Joining</option>
