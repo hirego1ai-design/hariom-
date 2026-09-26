@@ -2,7 +2,17 @@
 -- Keep the new Co-Pilot configuration table fail-closed to Supabase Data API roles.
 
 ALTER TABLE "HiringCopilotConfig" ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon, authenticated;
+
+DO $
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE "HiringCopilotConfig" FROM authenticated;
+  END IF;
+END
+$;
 
 INSERT INTO "SubscriptionPlan" (
   "id","name","description","price","currency","jobPostsQuota","resumeUnlocksQuota","aiInterviewsQuota",
