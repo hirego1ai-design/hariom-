@@ -135,3 +135,12 @@ test("universal results can continue directly to required job-specific assessmen
   assert.ok(active.includes("Continue Job-Specific Assessment"));
   assert.ok(active.includes("isUniversalSkillValidation"), "private coaching must be scoped to Universal Skill Validation");
 });
+
+
+test("OpenAI reasoning-family Chat Completions uses current completion-token parameter", () => {
+  const dispatcher = read("src/utils/aiRouter.ts");
+  assert.ok(dispatcher.includes('request.provider === "openai"'));
+  assert.ok(dispatcher.includes("max_completion_tokens: maxTokens"));
+  assert.ok(dispatcher.includes("openAiReasoningFamily"));
+  assert.ok(dispatcher.includes("max_tokens: maxTokens"), "OpenAI-compatible non-OpenAI providers retain max_tokens");
+});
