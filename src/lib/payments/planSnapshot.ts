@@ -15,7 +15,7 @@ export const purchasedPlanSnapshotSchema = z.object({
   applicationsQuota: quota,
   resumeDownloadsQuota: quota,
   backgroundVerificationsQuota: quota,
-  featuresAllowed: z.array(z.string().min(1).max(100).regex(/^[A-Z0-9_]+$/)).max(100),
+  featuresAllowed: z.array(z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/)).max(100),
 }).strict();
 
 export type PurchasedPlanSnapshot = z.infer<typeof purchasedPlanSnapshotSchema>;
