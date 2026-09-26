@@ -421,6 +421,7 @@ export async function getAiUsageStats() {
       deepseek: providerCounts.deepseek || 0,
       kimi: providerCounts.kimi || 0,
       qwen: providerCounts.qwen || 0,
+      self_hosted: providerCounts.self_hosted || 0,
     },
     modelStats: Array.from(modelStats.values()).map((stat) => {
       const successRate = stat.requests > 0 ? stat.successes / stat.requests : 0;
