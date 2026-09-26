@@ -1,9 +1,6 @@
 export type RequirementStatus =
-  | "NEW"
   | "SUBMITTED"
   | "IN_DISCUSSION"
-  | "UNDER_REVIEW"
-  | "COMMERCIAL_DISCUSSION"
   | "AGREEMENT_DRAFTED"
   | "AGREEMENT_SENT"
   | "ACTIVE"
