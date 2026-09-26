@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
       const gate = existingApplication.gates[0];
       if (
         !gate ||
-        ![ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(gate.status)
+        (gate.status !== ApplicationGateStatus.REQUIRED &&
+          gate.status !== ApplicationGateStatus.IN_PROGRESS)
       ) {
         return jsonError("You have already applied to this job.", 409);
       }
