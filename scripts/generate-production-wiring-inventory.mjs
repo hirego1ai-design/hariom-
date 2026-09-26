@@ -107,7 +107,11 @@ function detectServices(text) {
 }
 
 function hasMock(text) {
-  return /\b(mockData|mockUser|dummyData|fakeData|demoData|sampleData|simulatedData|hardcodedData|staticData|rawHtml)\b|\b(simulated|fabricated)\s+(response|result|record|profile|job|notification)/i.test(text);
+  return /\b(mockData|mockUser|mockProfile|mockCandidate|mockJob|dummyData|fakeData|demoData|sampleData|simulatedData|hardcodedData|staticData|rawHtml)\b|\b(simulated|fabricated|hardcoded|fake)\s+(response|result|record|profile|candidate|job|notification|score|metric)|localhost:\d+\/profile\/public|Top\s+\d+%\s+Candidate|0\s+Vulnerabilities\s+Found/i.test(text);
+}
+
+function hasUnavailableCapability(text) {
+  return /\bUNAVAILABLE\b|\bNOT_IMPLEMENTED\b|\bNOT CONNECTED\b|currently\s+in\s+development|waiting\s+for\s+real\s+API\s+integration|\bComing Soon\b/i.test(text);
 }
 
 function hasErrorHandling(text) {
@@ -131,17 +135,18 @@ function hasIdempotency(text) {
 }
 
 function classify(text, kind, hasAction = false) {
-  if (hasMock(text)) return { status: "RED", severity: "HIGH" };
-  if (kind === "screen" && !hasAction) return { status: "GREEN", severity: "LOW" };
+  if (hasMock(text)) return { status: "RED", severity: "HIGH", reason: "Mock/fabricated production marker detected." };
+  if (hasUnavailableCapability(text)) return { status: "YELLOW", severity: "MEDIUM", reason: "Capability is explicitly unavailable or not connected." };
+  if (kind === "screen" && !hasAction) return { status: "GREEN", severity: "LOW", reason: "Static render-only screen; runtime readiness is not inferred." };
   if (kind === "endpoint") {
     const wired = detectDbModels(text).length > 0 || detectServices(text).length > 0 || detectProvider(text).length > 0;
     return wired && hasErrorHandling(text)
-      ? { status: "GREEN", severity: "LOW" }
-      : { status: "YELLOW", severity: "MEDIUM" };
+      ? { status: "GREEN", severity: "LOW", reason: "Endpoint has implementation references and error handling." }
+      : { status: "YELLOW", severity: "MEDIUM", reason: "Endpoint lacks clear implementation wiring or error handling." };
   }
   return hasAction
-    ? { status: "GREEN", severity: "LOW" }
-    : { status: "YELLOW", severity: "MEDIUM" };
+    ? { status: "GREEN", severity: "LOW", reason: "Interactive implementation detected; runtime behavior still requires separate verification." }
+    : { status: "YELLOW", severity: "MEDIUM", reason: "No implementation evidence detected." };
 }
 
 function baseRecord(overrides) {
@@ -217,7 +222,7 @@ for (const file of pages) {
     evidence: fileLineEvidence(file, 1, `screen route ${route}`),
     file: relativeFile,
     line: 1,
-    notes: hasAction ? "Interactive handlers detected; action-level rows follow." : "No interactive handler detected by static scan.",
+    notes: classification.reason || (hasAction ? "Interactive handlers detected; action-level rows follow." : "No interactive handler detected by static scan."),
   }));
 
   const events = allMatches(text, /\b(onClick|onSubmit|onChange|onKeyDown|onBlur)\s*=|\b(router\.(push|replace))\s*\(/g);
@@ -254,7 +259,7 @@ for (const file of pages) {
       evidence: fileLineEvidence(file, line, `${eventName} handler`),
       file: relativeFile,
       line,
-      notes: apiMatches.length ? "Static nearby fetch association; verify exact handler path." : "No nearby API call detected; verify whether UI-only is intentional.",
+      notes: classificationAction.reason || (apiMatches.length ? "Static nearby fetch association; verify exact handler path." : "No nearby API call detected; verify whether UI-only is intentional."),
     }));
   }
 
