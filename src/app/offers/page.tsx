@@ -86,7 +86,7 @@ export default function CandidateOffersPage() {
               </div>
               {offer.terms.benefits?.length ? <div><strong className="text-sm">Benefits</strong><ul className="mt-2 list-disc pl-5 text-sm text-text-secondary">{offer.terms.benefits.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
               {offer.terms.additionalTerms && <div><strong className="text-sm">Additional terms</strong><p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{offer.terms.additionalTerms}</p></div>}
-              {offer.documentFile && <p className="text-xs text-text-secondary">Attached private document: {offer.documentFile.originalName} · {offer.documentFile.scanStatus}</p>}
+              {offer.documentFile && <p className="text-xs text-text-secondary">Attached private document: <a className="underline" href={`/api/files/${offer.documentFile.id}`}>{offer.documentFile.originalName}</a> · {offer.documentFile.scanStatus}</p>}
               {offer.status === "SENT" && <div className="flex flex-wrap gap-3 pt-2">
                 <button disabled={busy === offer.id} onClick={() => void respond(offer, "ACCEPT")} className="rounded-full bg-emerald-500 px-5 py-2.5 text-xs font-bold text-black disabled:opacity-50">Accept offer</button>
                 <button disabled={busy === offer.id} onClick={() => void respond(offer, "DECLINE")} className="rounded-full border border-red-400/30 px-5 py-2.5 text-xs font-bold text-red-300 disabled:opacity-50">Decline</button>
