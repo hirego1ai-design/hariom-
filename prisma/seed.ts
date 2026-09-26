@@ -69,7 +69,7 @@ const launchPlans = [
     applicationsQuota: 0,
     resumeDownloadsQuota: 0,
     backgroundVerificationsQuota: 0,
-    featuresAllowed: ["JOB_POSTING", "AI_JD_GENERATION", "MATCHING_SCORE", "ASSESSMENTS", "VIRTUAL_INTERVIEW", "PROCTORING", "INTERVIEW_WORKFLOW", "COPILOT"],
+    featuresAllowed: ["JOB_POSTING", "AI_JD_GENERATION", "MATCHING_SCORE", "ASSESSMENTS", "VIRTUAL_INTERVIEW", "PROCTORING", "CANDIDATE_COMPARISON", "INTERVIEW_WORKFLOW", "ANALYTICS", "PROACTIVE_SOURCING", "OFFER_WORKFLOW", "COPILOT"],
     displayBenefits: ["HireGo Co-Pilot included", "Candidate prioritisation", "Assessment coordination", "Interview scheduling & reminders", "Feedback tracking", "Next-step recommendations", "Human-approved final decisions"],
     validityMonths: 1,
     jobValidityDays: 7,
