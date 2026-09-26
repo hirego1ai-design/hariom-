@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 
 const schema = z.object({
   applicationId: z.string().min(1),
@@ -58,6 +59,11 @@ export async function POST(request: NextRequest) {
         ? "PHONE"
         : "ONLINE";
     const durationMins = round.durationMins;
+    if (session.role !== "ADMIN" && mode === "ONLINE") {
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, application.job.companyId, ["VIRTUAL_INTERVIEW"], "Your current plan does not include HireGo virtual interviews.")
+      );
+    }
     if (mode === "OFFLINE" && !body.address) return NextResponse.json({ success: false, error: "Address is required for this configured offline round." }, { status: 400 });
     if ((mode === "OFFLINE" || mode === "PHONE") && !body.contactNumber) return NextResponse.json({ success: false, error: `Contact number is required for this configured ${mode.toLowerCase()} round.` }, { status: 400 });
     if (!round.interviewers.some((interviewer) => interviewer.required)) return NextResponse.json({ success: false, error: "Assign at least one required interviewer before scheduling this round." }, { status: 400 });
