@@ -1,8 +1,7 @@
 .hero {
   position: relative;
   isolation: isolate;
-  height: 100svh;
-  min-height: 680px;
+  min-height: max(680px, 100svh);
   overflow: hidden;
   padding: 112px 20px 110px;
   background: radial-gradient(ellipse at 50% 74%, #06182b 0%, #020a15 48%, #01050b 90%);
@@ -56,35 +55,50 @@
   max-width: 1024px;
   margin: 0 auto;
   text-align: center;
+  font-family: var(--font-home-hero), Arial, sans-serif;
 }
 
 .copy h1 { text-shadow: 0 3px 26px #00000035; }
 
 .headline {
-  font-family: var(--font-display);
+  font-family: var(--font-home-hero), Arial, sans-serif;
+  font-size: clamp(2.5rem, 5.4vw, 5rem);
+  line-height: 1.08;
   font-weight: 800;
-  letter-spacing: -.055em;
+  letter-spacing: -.035em;
+  color: #f8fbff;
   text-wrap: balance;
+}
+
+.tagline {
+  margin-top: 20px;
+  color: #ffd76a;
+  font-size: clamp(.75rem, 1.1vw, .875rem);
+  line-height: 1.8;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.description {
+  max-width: 660px;
+  margin: 12px auto 0;
+  color: #c5d4e8;
+  font-size: clamp(.875rem, 1.2vw, 1rem);
+  line-height: 1.8;
+  font-weight: 400;
+  text-wrap: pretty;
 }
 
 .futureWord {
   display: inline-block;
   color: transparent;
-  background: linear-gradient(90deg, #42b9ff 0%, #7b8cff 24%, #c079ff 48%, #ff77d8 72%, #ff7767 100%);
-  background-size: 220% 100%;
+  background: linear-gradient(90deg, #4285ff 0%, #4285ff 18%, #ff5757 36%, #ff5757 45%, #ffcf45 62%, #49cf78 82%, #49cf78 100%);
   -webkit-background-clip: text;
   background-clip: text;
-  animation: future-gradient 6s ease-in-out infinite alternate;
-  filter: drop-shadow(0 0 18px rgba(119, 151, 255, .16));
-}
-
-@keyframes future-gradient {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .futureWord { animation: none; background-position: 50% 50%; }
+  text-shadow: none;
+  filter: drop-shadow(0 2px 12px rgba(66, 133, 255, .14));
 }
 
 .primaryCta {
@@ -140,7 +154,7 @@
 }
 
 @media (max-width: 639px) {
-  .hero { min-height: 740px; padding-bottom: 88px; }
+  .hero { min-height: max(740px, 100svh); padding-bottom: 88px; }
   .moon { display: none; }
   .transition { height: 78px; }
 }

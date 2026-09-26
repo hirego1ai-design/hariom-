@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, Home } from "lucide-react";
 import { syncCandidateRegistrationData } from "@/services/candidateProfileService";
 
 export default function RegisterPage() {
@@ -91,27 +92,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-6">
-      <div className="w-full max-w-[840px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
+    <div className="auth-registration-page min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-2">
+      <div className="auth-registration-card w-full max-w-[1060px] mx-auto grid grid-cols-1 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-outline flex-col p-5 sm:p-6 justify-between relative">
-          <div className="relative z-10">
-            <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
-              HireGo AI
-            </span>
-          </div>
-
+        <section className="auth-registration-sidebar hidden md:flex bg-surface-container-low/40 border-r border-outline flex-col p-6 lg:p-8 justify-between relative">
           <div className="relative flex-grow flex items-center justify-center my-4">
-            <div className="relative w-full max-w-[200px] aspect-square">
-              <div className="absolute inset-0 bg-primary/20 blur-[80px] rounded-full scale-75 animate-pulse"></div>
-              <div className="relative z-10 w-full h-full rounded-2xl bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-primary/20 flex flex-col items-center justify-center p-4">
-                <span className="material-symbols-outlined text-[64px] text-primary mb-2">person_add</span>
-                <span className="text-xs font-bold text-primary">HireGo AI Pass</span>
-              </div>
+            <div className="auth-brand-block relative w-full max-w-[230px]">
+              <div className="absolute inset-3 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-[34px] opacity-75 logo-color-flow" />
+              <Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative z-10 w-full h-auto object-contain" />
+              <p className="auth-brand-tagline">The world’s fastest<br />hiring platform.</p>
             </div>
           </div>
 
-          <div className="relative z-10 space-y-3 pl-1">
+          <div className="auth-progress-list relative z-10 space-y-3 pl-1">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-white font-bold">
                 ✓
@@ -123,6 +116,7 @@ export default function RegisterPage() {
                 <p className="font-body-md text-xs text-text-primary font-bold">
                   Account Details
                 </p>
+                <p className="auth-step-description">Create your secure account</p>
               </div>
             </div>
 
@@ -137,6 +131,7 @@ export default function RegisterPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   Email Passcode Check
                 </p>
+                <p className="auth-step-description">Verify your email</p>
               </div>
             </div>
 
@@ -151,6 +146,7 @@ export default function RegisterPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   AI Practice & Mock
                 </p>
+                <p className="auth-step-description">Try AI mock interview</p>
               </div>
             </div>
 
@@ -165,17 +161,25 @@ export default function RegisterPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   Job Match Vectoring
                 </p>
+                <p className="auth-step-description">Get personalised matches</p>
               </div>
             </div>
           </div>
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6">
-          <div className="w-full max-w-[480px]">
-            <div className="mb-4">
-              <h1 className="font-headline-md font-bold text-primary mb-1">
-                Create Account
+        <section className="flex items-start justify-center p-5 sm:p-7 lg:p-9">
+          <div className="w-full max-w-[560px]">
+            <div className="mb-5 flex justify-center md:hidden">
+              <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
+            </div>
+            <nav className="registration-nav mb-4" aria-label="Registration navigation">
+              <Link href="/login" className="registration-nav-link"><ArrowLeft size={15} aria-hidden="true" /> Back to sign in</Link>
+              <Link href="/" className="registration-nav-link"><Home size={15} aria-hidden="true" /> Home</Link>
+            </nav>
+            <div className="mb-4 text-center">
+              <h1 className="auth-registration-title font-headline-md font-bold text-white mb-1">
+                Create <span className="auth-gradient-word">Account</span>
               </h1>
               <p className="font-body-md text-sm text-text-secondary">
                 Start building your AI verified vector profile.

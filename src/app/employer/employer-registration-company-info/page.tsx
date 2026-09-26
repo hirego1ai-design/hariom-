@@ -1,7 +1,9 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Search, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Search, CheckCircle2, XCircle, Loader2, Home } from "lucide-react";
+import Image from "next/image";
 import { INDUSTRY_MASTER } from "@/lib/industry-master";
 
 export default function EmployerCompanyInfoPage() {
@@ -52,31 +54,21 @@ export default function EmployerCompanyInfoPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex items-center justify-center p-3 sm:p-5 text-text-primary">
-      <div className="w-full max-w-[800px] mx-auto grid grid-cols-1 md:grid-cols-12 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
+    <div className="auth-registration-page min-h-screen bg-[#0E0E0E] flex items-center justify-center px-3 py-2 sm:px-4 text-text-primary">
+      <div className="auth-registration-card auth-employer-registration w-full max-w-[1060px] mx-auto grid grid-cols-1 glass-card rounded-2xl overflow-hidden shadow-2xl border border-white/10 my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="hidden md:flex md:col-span-5 lg:col-span-4 bg-surface-container-low/40 border-r border-white/10 flex-col p-5 justify-between relative">
-          {/* Brand Logo */}
-          <div className="relative z-10">
-            <span className="font-display-lg text-headline-sm text-primary tracking-tight font-bold">
-              HireGo AI
-            </span>
-          </div>
-
+        <section className="auth-registration-sidebar hidden md:flex bg-surface-container-low/40 border-r border-white/10 flex-col p-6 lg:p-8 justify-between relative">
           {/* Illustration Area */}
           <div className="relative flex-grow flex items-center justify-center my-2">
-            <div className="relative w-full max-w-[150px] aspect-square">
-              <div className="absolute inset-0 bg-primary/20 blur-[80px] rounded-full scale-75 animate-pulse" />
-              <img
-                className="relative z-10 w-full h-full object-contain"
-                alt="3D Corporate Headquarters Graphic"
-                src="/marketing/hirego-logo.png"
-              />
+            <div className="auth-brand-block relative w-full max-w-[230px]">
+              <div className="absolute inset-3 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-[34px] opacity-75 logo-color-flow" />
+              <Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative z-10 w-full h-auto object-contain" />
+              <p className="auth-brand-tagline">The world’s fastest<br />hiring platform.</p>
             </div>
           </div>
 
           {/* Registration progress */}
-          <div className="relative z-10 space-y-2 pl-1">
+          <div className="auth-progress-list relative z-10 space-y-2 pl-1">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-white font-bold">
                 1
@@ -88,6 +80,7 @@ export default function EmployerCompanyInfoPage() {
                 <p className="font-body-md text-xs text-text-primary font-bold">
                   Company Profile
                 </p>
+                <p className="auth-step-description">Create your hiring workspace</p>
               </div>
             </div>
 
@@ -102,6 +95,7 @@ export default function EmployerCompanyInfoPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   Identity OTP Check
                 </p>
+                <p className="auth-step-description">Verify your work email</p>
               </div>
             </div>
 
@@ -116,6 +110,7 @@ export default function EmployerCompanyInfoPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   Hiring Model
                 </p>
+                <p className="auth-step-description">Choose how you hire</p>
               </div>
             </div>
 
@@ -130,6 +125,7 @@ export default function EmployerCompanyInfoPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   Plan Setup (Subscription)
                 </p>
+                <p className="auth-step-description">Select your workspace plan</p>
               </div>
             </div>
 
@@ -144,18 +140,26 @@ export default function EmployerCompanyInfoPage() {
                 <p className="font-body-md text-xs text-text-secondary">
                   One-Document KYC
                 </p>
+                <p className="auth-step-description">Complete secure verification</p>
               </div>
             </div>
           </div>
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="col-span-1 md:col-span-7 lg:col-span-8 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          <div className="w-full max-w-[460px]">
+        <section className="flex items-start justify-center p-5 sm:p-7 lg:p-9">
+          <div className="w-full max-w-[560px]">
+            <div className="mb-5 flex justify-center md:hidden">
+              <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
+            </div>
+            <nav className="registration-nav mb-4" aria-label="Registration navigation">
+              <Link href="/employer/employer-sign-in" className="registration-nav-link"><ArrowLeft size={15} aria-hidden="true" /> Back to sign in</Link>
+              <Link href="/" className="registration-nav-link"><Home size={15} aria-hidden="true" /> Home</Link>
+            </nav>
             {/* Header */}
-            <div className="mb-3">
-              <h1 className="font-display-xl text-[26px] leading-tight text-primary mb-1 font-bold">
-                Create Employer Account
+            <div className="mb-3 text-center">
+              <h1 className="auth-registration-title font-headline-md whitespace-nowrap text-white mb-1 font-bold">
+                Create Employer <span className="auth-gradient-word">Account</span>
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
                 Start hiring elite talent with AI-driven precision.

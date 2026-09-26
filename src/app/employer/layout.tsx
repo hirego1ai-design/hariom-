@@ -8,6 +8,9 @@ export default function EmployerLayout({ children }: { children: React.ReactNode
   const pathname = usePathname() || "";
   const isAuthOrOnboarding = pathname.includes("sign-in") || pathname.includes("registration") || pathname.includes("onboarding") || pathname.includes("forgot-password");
 
+  // Public account screens own their spacing and do not consume employer data.
+  if (isAuthOrOnboarding) return <main>{children}</main>;
+
   return (
     <EmployerProvider>
       <div className="bg-bg-page text-on-surface font-body-md selection:bg-primary/30 min-h-screen relative overflow-x-hidden">

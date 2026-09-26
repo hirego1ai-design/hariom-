@@ -21,7 +21,7 @@ export default function MarketingNav() {
     <header className="absolute inset-x-0 top-0 z-40 bg-white text-slate-900 lg:bg-[#01050b] lg:text-white">
       <div className="mx-auto flex h-24 max-w-[1450px] items-center justify-between gap-6 px-5 sm:px-8">
         <Link href="/" aria-label="HireGo AI home" className="flex shrink-0 items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300" onClick={() => setOpen(false)}>
-          <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={660} height={220} className="h-auto w-[180px] object-contain sm:w-[205px]" unoptimized preload />
+          <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={660} height={220} className="h-auto w-[132px] object-contain sm:w-[148px] lg:w-[160px]" unoptimized preload />
         </Link>
 
         <nav className="hidden items-center gap-4 xl:gap-6 lg:flex" aria-label="Main navigation">
