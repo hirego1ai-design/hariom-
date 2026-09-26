@@ -93,6 +93,9 @@ test("PayU hosted checkout generation calculates official SHA-512 request hash w
     planName: "Pro Tier",
     planId: "plan_pro",
     companyId: "comp_audit_payu",
+    customerName: "Employer",
+    customerEmail: "billing@hirego.ai",
+    customerPhone: "9999999999",
   });
 
   assert.equal(res.success, true);
