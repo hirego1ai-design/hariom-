@@ -150,9 +150,12 @@ Supported provider adapters:
 - DeepSeek
 - Kimi / Moonshot
 - Qwen
+- self-hosted OpenAI-compatible endpoints
 - future reviewed adapters
 
-Local/self-hosted models can be added behind the same routing boundary. Existing local/self-hosted transcription such as Whisper remains a separate media-processing concern and must be audited independently for worker/runtime configuration.
+Self-hosted models are first-class registry entries and use the same task allowlist, routing, budget, fallback, telemetry, and audit boundaries as hosted providers. The application requires a server-side self-hosted endpoint and authentication key before that provider can be enabled.
+
+Whisper/media transcription is a separate private worker concern rather than an LLM routing shortcut. HireGo dispatches only eligible private media to the configured analysis worker. A completed worker callback must report the real model name, model version, worker version, and analysis version; the application must not invent a default Whisper model or version. The deployed worker/model remains external configuration until runtime evidence confirms it.
 
 No business module should hardcode a current commercial model name or price.
 
@@ -242,6 +245,8 @@ Each provider requires:
 4. current cost metadata,
 5. an approved task route,
 6. successful controlled test execution.
+
+The self-hosted provider additionally requires SELF_HOSTED_LLM_BASE_URL and SELF_HOSTED_LLM_API_KEY. The media-analysis worker requires its own worker URL/token plus real callback provenance; WHISPER_MODEL_SIZE/device/compute configuration does not by itself prove which model is deployed or healthy.
 
 Universal assessment generation additionally requires configured Universal Skill Validation policy, canonical role-to-skill mappings, and an enabled assessment-authoring route.
 
