@@ -232,8 +232,7 @@ export default function AdminCopilotCommercePage() {
                           <td className="py-3 pr-3">
                             <select id={`tax-${price.id}`} defaultValue={price.taxMode} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
                               <option value="NO_TAX_COLLECTION">No tax collection</option>
-                              <option value="NO_TAX_COLLECTION">No tax collection</option>
-                <option value="TAX_EXCLUSIVE">Tax exclusive</option>
+                              <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
                               <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
@@ -242,7 +241,7 @@ export default function AdminCopilotCommercePage() {
                             <input id={`tax-rate-${price.id}`} type="number" min={0} max={100} step={0.01} defaultValue={price.taxRateBps / 100} className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
                           </td>
                           <td className="py-3 pr-3">
-                            <select id={`route-${price.id}` defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                            <select id={`route-${price.id}`} defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
                               <option value="PAYU">PayU</option>
                               <option value="STRIPE">Stripe</option>
                               <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
