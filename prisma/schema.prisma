@@ -264,6 +264,10 @@ model Company {
 
   sourcingRelationships CandidateSourcingRelationship[]
   offers                Offer[]
+  copilotSubscriptions  CopilotSubscription[]
+  copilotUsageLedger    CopilotUsageLedger[]
+  copilotReservations   CopilotUsageReservation[]
+  copilotAddons         CopilotCapacityAddon[]
 }
 
 enum InvitationStatus {
@@ -1108,6 +1112,7 @@ model PaymentTransaction {
   id           String   @id @default(uuid())
   gatewayTxId  String   @unique
   companyId    String
+  productType  String   @default("LEGACY_SUBSCRIPTION")
   planId       String?
   amount       Float    @default(0.0)
   currency     String   @default("INR")
@@ -1277,6 +1282,223 @@ model CompanySubscription {
   updatedAt           DateTime         @updatedAt
   @@index([companyId])
   @@index([planId])
+}
+
+
+enum CopilotSubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAYMENT_PENDING
+}
+
+enum CopilotBillingCycleStatus {
+  SCHEDULED
+  ACTIVE
+  CLOSED
+}
+
+enum CopilotUsageReservationStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+  EXPIRED
+}
+
+enum CopilotUsageLedgerStatus {
+  CONSUMED
+  RELEASED
+  FAILED
+}
+
+enum CopilotTaxMode {
+  TAX_EXCLUSIVE
+  TAX_INCLUSIVE
+  MERCHANT_OF_RECORD
+}
+
+enum CopilotPaymentRoute {
+  PAYU
+  STRIPE
+  MERCHANT_OF_RECORD
+}
+
+model CopilotPlan {
+  id                    String   @id @default(uuid())
+  code                  String   @unique
+  name                  String
+  description           String
+  monthlyCapacityUnits  Int
+  softWarningPct        Int      @default(80)
+  hardWarningPct        Int      @default(90)
+  featuresAllowed       String[] @default([])
+  validityMonths        Int      @default(1)
+  isArchived            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  regionalPrices CopilotRegionalPrice[]
+  subscriptions  CopilotSubscription[]
+
+  @@index([isArchived])
+}
+
+model CopilotRegionalPrice {
+  id            String              @id @default(uuid())
+  planId        String
+  plan          CopilotPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  regionCode    String
+  countries     String[]            @default([])
+  currency      String
+  amountMinor   Int
+  taxMode       CopilotTaxMode      @default(TAX_EXCLUSIVE)
+  paymentRoute  CopilotPaymentRoute
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([planId, regionCode])
+  @@index([regionCode, isActive])
+}
+
+model CopilotSubscription {
+  id                  String                    @id @default(uuid())
+  companyId           String
+  company             Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                CopilotPlan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status              CopilotSubscriptionStatus @default(ACTIVE)
+  billingCountry      String
+  priceSnapshot       Json
+  startDate           DateTime                  @default(now())
+  endDate             DateTime
+  paymentId           String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  billingCycles CopilotBillingCycle[]
+  reservations  CopilotUsageReservation[]
+  usageLedger   CopilotUsageLedger[]
+  addons        CopilotCapacityAddon[]
+
+  @@index([companyId, status, endDate])
+  @@index([planId])
+}
+
+model CopilotBillingCycle {
+  id                    String                    @id @default(uuid())
+  subscriptionId        String
+  subscription          CopilotSubscription       @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  startsAt              DateTime
+  endsAt                DateTime
+  baseCapacityUnits     Int
+  addonCapacityUnits    Int                       @default(0)
+  consumedCapacityUnits Int                       @default(0)
+  reservedCapacityUnits Int                       @default(0)
+  status                CopilotBillingCycleStatus @default(ACTIVE)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  reservations CopilotUsageReservation[]
+  usageLedger  CopilotUsageLedger[]
+  addons       CopilotCapacityAddon[]
+
+  @@unique([subscriptionId, startsAt])
+  @@index([subscriptionId, status, endsAt])
+}
+
+model CopilotUsageRule {
+  id                     String   @id @default(uuid())
+  actionKey              String   @unique
+  displayName            String
+  unitType               String
+  unitsPerQuantity       Int
+  estimatedCostMinor     Int      @default(0)
+  estimatedCostCurrency  String   @default("INR")
+  expensive              Boolean  @default(false)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([active, actionKey])
+}
+
+model CopilotUsageReservation {
+  id              String                        @id @default(uuid())
+  subscriptionId  String
+  subscription    CopilotSubscription           @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  billingCycleId  String
+  billingCycle    CopilotBillingCycle           @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+  companyId       String
+  company         Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actionKey       String
+  quantity        Int
+  reservedUnits   Int
+  consumedUnits   Int                           @default(0)
+  releasedUnits   Int                           @default(0)
+  idempotencyKey  String                        @unique
+  jobId           String?
+  applicationId   String?
+  candidateId     String?
+  interviewId     String?
+  metadata        Json?
+  status          CopilotUsageReservationStatus @default(RESERVED)
+  expiresAt       DateTime
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  @@index([companyId, status, expiresAt])
+  @@index([billingCycleId, status])
+  @@index([interviewId])
+}
+
+model CopilotUsageLedger {
+  id                 String                   @id @default(uuid())
+  subscriptionId     String
+  subscription       CopilotSubscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  billingCycleId     String
+  billingCycle       CopilotBillingCycle      @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+  companyId          String
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actionKey          String
+  quantity           Int
+  capacityUnits      Int
+  estimatedCostMinor Int                      @default(0)
+  costCurrency       String                   @default("INR")
+  idempotencyKey     String                   @unique
+  jobId              String?
+  applicationId      String?
+  candidateId        String?
+  interviewId        String?
+  provider           String?
+  model              String?
+  metadata           Json?
+  status             CopilotUsageLedgerStatus @default(CONSUMED)
+  createdAt          DateTime                 @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([billingCycleId, createdAt])
+  @@index([actionKey, createdAt])
+  @@index([interviewId])
+}
+
+model CopilotCapacityAddon {
+  id             String              @id @default(uuid())
+  subscriptionId String
+  subscription   CopilotSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  billingCycleId String
+  billingCycle   CopilotBillingCycle @relation(fields: [billingCycleId], references: [id], onDelete: Cascade)
+  companyId      String
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  capacityUnits  Int
+  amountMinor    Int
+  currency       String
+  paymentId      String              @unique
+  expiresAt      DateTime
+  createdAt      DateTime            @default(now())
+
+  @@index([companyId, expiresAt])
+  @@index([billingCycleId])
 }
 
 model CompanyCredits {
@@ -2192,6 +2414,8 @@ model PaymentOrder {
   id                    String   @id @default(uuid())
   orderId               String   @unique
   companyId             String
+  productType           String   @default("LEGACY_SUBSCRIPTION")
+  billingCountry        String?
   planId                String
   planSnapshot          Json?
   originalAmount        Float
