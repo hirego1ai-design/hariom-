@@ -9,6 +9,7 @@ import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
 import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
+import { getJobPublicationTerms } from "@/lib/jobPlanEntitlements";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
@@ -234,10 +235,17 @@ export async function POST(request: Request) {
         tx,
       );
 
-      const jobObj = newJob as any;
+      let jobObj = newJob as any;
+      if (isPublishing && !requiresGeneratedAssessment) {
+        const terms = await getJobPublicationTerms(tx, companyId);
+        jobObj = await tx.jobListing.update({
+          where: { id: jobObj.id },
+          data: { publishedAt: terms.publishedAt, expiresAt: terms.expiresAt },
+        });
+      }
       const responsePayload = {
         success: true,
-        job: newJob,
+        job: jobObj,
         jobPostsLeft: remainingCredits,
         jobSpecificAssessment: requiresGeneratedAssessment ? "GENERATING" : "NOT_REQUIRED",
         message: requiresGeneratedAssessment
@@ -283,9 +291,10 @@ export async function POST(request: Request) {
             throw new ApiError("Insufficient job posting credits. Job remains a draft.", 402);
           }
           const remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+          const terms = await getJobPublicationTerms(tx, companyId);
           const activeJob = await tx.jobListing.update({
             where: { id: result.jobId },
-            data: { status: JobStatus.ACTIVE },
+            data: { status: JobStatus.ACTIVE, publishedAt: terms.publishedAt, expiresAt: terms.expiresAt },
           });
           await OutboxPublisher.publish({
             eventType: "JOB_LISTING_CREATED",
