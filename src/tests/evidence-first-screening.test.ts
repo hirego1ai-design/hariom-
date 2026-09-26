@@ -175,3 +175,60 @@ test("managed sourcing keeps both HireGo database and inbound application channe
   );
   assert.doesNotMatch(matchingEngine, /status:\s*["']REJECTED["']/);
 });
+
+
+test("generic managed pipeline cannot directly reject and the controlled endpoint requires human approval", () => {
+  const stageRoute = fs.readFileSync(
+    new URL(
+      "../app/api/employer/candidates/[id]/stage/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const decisionRoute = fs.readFileSync(
+    new URL(
+      "../app/api/employer/candidates/[id]/decision/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const tracker = fs.readFileSync(
+    new URL(
+      "../app/employer/managed-hiring/candidate-tracking/page.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    stageRoute,
+    /z\.enum\(\[[^\]]*["']REJECTED["']/,
+  );
+  assert.match(stageRoute, /controlled candidate-decision workflow for rejection/i);
+
+  for (const token of [
+    "CANDIDATE_REJECTION",
+    "requestConsequentialAction",
+    "confirmApproval",
+    "decideApproval",
+    "consumeApprovedActionInTransaction",
+    'data: { status: "REJECTED" }',
+  ]) {
+    assert.ok(
+      decisionRoute.includes(token),
+      `controlled rejection guard missing: ${token}`,
+    );
+  }
+
+  assert.match(
+    decisionRoute,
+    /Required candidate evidence is still pending/,
+  );
+  assert.match(tracker, /Start controlled rejection/);
+  assert.match(tracker, /Request human approval/);
+  assert.match(tracker, /Confirm rejection/);
+  assert.doesNotMatch(
+    tracker,
+    /movableStages[\s\S]{0,300}["']REJECTED["']/,
+  );
+});
