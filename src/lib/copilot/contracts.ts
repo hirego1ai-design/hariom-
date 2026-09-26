@@ -8,7 +8,7 @@ export const copilotCheckoutSchema = z.object({
   paymentMethod: z.enum(["STRIPE", "PAYU"]).optional(),
 }).strict();
 
-export const copilotAdminPatchSchema = z.discriminatedUnion("type", [
+export const copilotAdminPatchSchema = z.union([
   z.object({
     type: z.literal("PLAN"),
     planId: z.string().min(1).max(128),
