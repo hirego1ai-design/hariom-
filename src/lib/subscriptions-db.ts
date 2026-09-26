@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { createPurchasedPlanSnapshot, type PurchasedPlanSnapshot } from "./payments/planSnapshot";
 import type { CompanySubscription } from "@prisma/client";
 import { findActiveCompanySubscription, reconcileExpiredCompanySubscriptions } from "./subscriptionAccess";
+import { createPlanSchema } from "./payments/planContracts";
+import { subscriptionCredits, subscriptionExpiry } from "./payments/subscriptionCredits";
 
 export interface SubscriptionPlanRecord {
   id: string;
@@ -17,7 +19,16 @@ export interface SubscriptionPlanRecord {
   resumeDownloadsQuota: number;
   backgroundVerificationsQuota: number;
   featuresAllowed: string[];
+  displayBenefits: string[];
   validityMonths: number;
+  jobValidityDays: number;
+  planType: "FREE_TRIAL" | "STANDARD" | "COPILOT";
+  firstTimeOnly: boolean;
+  copilotJobsQuota: number;
+  copilotAutoActivate: boolean;
+  badge?: string | null;
+  isFeatured: boolean;
+  displayOrder: number;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -43,6 +54,7 @@ export interface CompanyCreditsRecord {
   resumeUnlocksLeft: number;
   aiInterviewsLeft: number;
   aiAgentCreditsLeft: number;
+  copilotJobsLeft: number;
   applicationsLeft: number;
   resumeDownloadsLeft: number;
   backgroundVerificationsLeft: number;
@@ -94,7 +106,7 @@ class SubscriptionsDb {
   public async getSubscriptionPlans(includeArchived = false): Promise<SubscriptionPlanRecord[]> {
     const records = await prisma.subscriptionPlan.findMany({
       where: includeArchived ? {} : { isArchived: false },
-      orderBy: { price: "asc" },
+      orderBy: [{ displayOrder: "asc" }, { price: "asc" }],
     });
     return records.map((r) => ({
       id: r.id,
@@ -109,7 +121,16 @@ class SubscriptionsDb {
       resumeDownloadsQuota: r.resumeDownloadsQuota,
       backgroundVerificationsQuota: r.backgroundVerificationsQuota,
       featuresAllowed: r.featuresAllowed,
+      displayBenefits: r.displayBenefits,
       validityMonths: r.validityMonths,
+      jobValidityDays: r.jobValidityDays,
+      planType: r.planType as SubscriptionPlanRecord["planType"],
+      firstTimeOnly: r.firstTimeOnly,
+      copilotJobsQuota: r.copilotJobsQuota,
+      copilotAutoActivate: r.copilotAutoActivate,
+      badge: r.badge,
+      isFeatured: r.isFeatured,
+      displayOrder: r.displayOrder,
       isArchived: r.isArchived,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -132,7 +153,16 @@ class SubscriptionsDb {
       resumeDownloadsQuota: r.resumeDownloadsQuota,
       backgroundVerificationsQuota: r.backgroundVerificationsQuota,
       featuresAllowed: r.featuresAllowed,
+      displayBenefits: r.displayBenefits,
       validityMonths: r.validityMonths,
+      jobValidityDays: r.jobValidityDays,
+      planType: r.planType as SubscriptionPlanRecord["planType"],
+      firstTimeOnly: r.firstTimeOnly,
+      copilotJobsQuota: r.copilotJobsQuota,
+      copilotAutoActivate: r.copilotAutoActivate,
+      badge: r.badge,
+      isFeatured: r.isFeatured,
+      displayOrder: r.displayOrder,
       isArchived: r.isArchived,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -166,7 +196,16 @@ class SubscriptionsDb {
         resumeDownloadsQuota: payload.resumeDownloadsQuota,
         backgroundVerificationsQuota: payload.backgroundVerificationsQuota,
         featuresAllowed: payload.featuresAllowed || [],
+        displayBenefits: payload.displayBenefits || [],
         validityMonths: payload.validityMonths || 1,
+        jobValidityDays: payload.jobValidityDays,
+        planType: payload.planType,
+        firstTimeOnly: payload.firstTimeOnly,
+        copilotJobsQuota: payload.copilotJobsQuota,
+        copilotAutoActivate: payload.copilotAutoActivate,
+        badge: payload.badge ?? null,
+        isFeatured: payload.isFeatured,
+        displayOrder: payload.displayOrder,
         isArchived: false,
       },
     });
@@ -181,12 +220,61 @@ class SubscriptionsDb {
     const existing = await this.getSubscriptionPlanById(id);
     if (!existing) return null;
 
-    const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
-    await prisma.subscriptionPlan.update({
+    const mergedInput = {
+      name: updates.name ?? existing.name,
+      description: updates.description ?? existing.description,
+      price: updates.price ?? existing.price,
+      currency: updates.currency ?? existing.currency,
+      jobPostsQuota: updates.jobPostsQuota ?? existing.jobPostsQuota,
+      resumeUnlocksQuota: updates.resumeUnlocksQuota ?? existing.resumeUnlocksQuota,
+      aiInterviewsQuota: updates.aiInterviewsQuota ?? existing.aiInterviewsQuota,
+      applicationsQuota: updates.applicationsQuota ?? existing.applicationsQuota,
+      resumeDownloadsQuota: updates.resumeDownloadsQuota ?? existing.resumeDownloadsQuota,
+      backgroundVerificationsQuota: updates.backgroundVerificationsQuota ?? existing.backgroundVerificationsQuota,
+      featuresAllowed: updates.featuresAllowed ?? existing.featuresAllowed,
+      displayBenefits: updates.displayBenefits ?? existing.displayBenefits,
+      validityMonths: updates.validityMonths ?? existing.validityMonths,
+      jobValidityDays: updates.jobValidityDays ?? existing.jobValidityDays,
+      planType: updates.planType ?? existing.planType,
+      firstTimeOnly: updates.firstTimeOnly ?? existing.firstTimeOnly,
+      copilotJobsQuota: updates.copilotJobsQuota ?? existing.copilotJobsQuota,
+      copilotAutoActivate: updates.copilotAutoActivate ?? existing.copilotAutoActivate,
+      badge: updates.badge === undefined ? existing.badge ?? null : updates.badge,
+      isFeatured: updates.isFeatured ?? existing.isFeatured,
+      displayOrder: updates.displayOrder ?? existing.displayOrder,
+    };
+    createPlanSchema.parse(mergedInput);
+    const row = await prisma.subscriptionPlan.update({
       where: { id },
-      data: updates as any,
+      data: mergedInput,
     });
-    return updated;
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      price: row.price,
+      currency: row.currency,
+      jobPostsQuota: row.jobPostsQuota,
+      resumeUnlocksQuota: row.resumeUnlocksQuota,
+      aiInterviewsQuota: row.aiInterviewsQuota,
+      applicationsQuota: row.applicationsQuota,
+      resumeDownloadsQuota: row.resumeDownloadsQuota,
+      backgroundVerificationsQuota: row.backgroundVerificationsQuota,
+      featuresAllowed: row.featuresAllowed,
+      displayBenefits: row.displayBenefits,
+      validityMonths: row.validityMonths,
+      jobValidityDays: row.jobValidityDays,
+      planType: row.planType as SubscriptionPlanRecord["planType"],
+      firstTimeOnly: row.firstTimeOnly,
+      copilotJobsQuota: row.copilotJobsQuota,
+      copilotAutoActivate: row.copilotAutoActivate,
+      badge: row.badge,
+      isFeatured: row.isFeatured,
+      displayOrder: row.displayOrder,
+      isArchived: row.isArchived,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
   }
 
   public async archiveSubscriptionPlan(id: string): Promise<SubscriptionPlanRecord | null> {
@@ -203,6 +291,7 @@ class SubscriptionsDb {
       resumeUnlocksLeft: r.resumeUnlocksLeft,
       aiInterviewsLeft: r.aiInterviewsLeft,
       aiAgentCreditsLeft: r.aiAgentCreditsLeft,
+      copilotJobsLeft: r.copilotJobsLeft,
       applicationsLeft: r.applicationsLeft,
       resumeDownloadsLeft: r.resumeDownloadsLeft,
       backgroundVerificationsLeft: r.backgroundVerificationsLeft,
@@ -235,6 +324,7 @@ class SubscriptionsDb {
       resumeUnlocksLeft: r.resumeUnlocksLeft,
       aiInterviewsLeft: r.aiInterviewsLeft,
       aiAgentCreditsLeft: r.aiAgentCreditsLeft,
+      copilotJobsLeft: r.copilotJobsLeft,
       applicationsLeft: r.applicationsLeft,
       resumeDownloadsLeft: r.resumeDownloadsLeft,
       backgroundVerificationsLeft: r.backgroundVerificationsLeft,
@@ -255,7 +345,7 @@ class SubscriptionsDb {
     if (!plan) throw new Error("Subscription plan not found");
 
     const startDate = new Date();
-    const endDate = new Date(startDate.getTime() + plan.validityMonths * 30 * 86400 * 1000);
+    const endDate = subscriptionExpiry(startDate, plan.validityMonths);
     const entitlementSnapshot = createPurchasedPlanSnapshot(plan);
 
     const record = await prisma.$transaction(async (tx) => {
@@ -271,27 +361,11 @@ class SubscriptionsDb {
         },
       });
 
+      const quotaCredits = subscriptionCredits(plan);
       await tx.companyCredits.upsert({
         where: { companyId },
-        create: {
-          companyId,
-          jobPostsLeft: plan.jobPostsQuota,
-          resumeUnlocksLeft: plan.resumeUnlocksQuota,
-          aiInterviewsLeft: plan.aiInterviewsQuota,
-          aiAgentCreditsLeft: plan.aiInterviewsQuota,
-          applicationsLeft: plan.applicationsQuota,
-          resumeDownloadsLeft: plan.resumeDownloadsQuota,
-          backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
-        },
-        update: {
-          jobPostsLeft: plan.jobPostsQuota,
-          resumeUnlocksLeft: plan.resumeUnlocksQuota,
-          aiInterviewsLeft: plan.aiInterviewsQuota,
-          aiAgentCreditsLeft: plan.aiInterviewsQuota,
-          applicationsLeft: plan.applicationsQuota,
-          resumeDownloadsLeft: plan.resumeDownloadsQuota,
-          backgroundVerificationsLeft: plan.backgroundVerificationsQuota,
-        },
+        create: { companyId, ...quotaCredits },
+        update: quotaCredits,
       });
 
       return subscription;
