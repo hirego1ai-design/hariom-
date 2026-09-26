@@ -137,9 +137,10 @@ export async function POST(request: Request) {
                   throw new ApiError("Insufficient job posting credits. Quotas exhausted.", 402);
                 }
                 remainingCredits = (await tx.companyCredits.findUnique({ where: { companyId } }))?.jobPostsLeft ?? 0;
+                const terms = await getJobPublicationTerms(tx, companyId);
                 await tx.jobListing.update({
                   where: { id: job.id },
-                  data: { status: JobStatus.ACTIVE },
+                  data: { status: JobStatus.ACTIVE, publishedAt: terms.publishedAt, expiresAt: terms.expiresAt },
                 });
                 await OutboxPublisher.publish({
                   eventType: "JOB_LISTING_CREATED",
