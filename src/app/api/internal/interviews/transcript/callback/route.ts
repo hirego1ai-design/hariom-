@@ -7,6 +7,7 @@ import {
   readValidatedJson,
 } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { recordCopilotUsageAfterExecutionIfActive } from "@/lib/copilot/capacity";
 
 const schema = z.object({
   interviewId: z.string().uuid(),
@@ -18,6 +19,38 @@ const schema = z.object({
 }).strict();
 
 export const dynamic = "force-dynamic";
+
+async function meterTranscript(interview: {
+  id: string;
+  applicationId: string;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  durationMins: number;
+  application: { job: { companyId: string } };
+}, body: z.infer<typeof schema>) {
+  const minutes = interview.startedAt && interview.completedAt
+    ? Math.max(1, Math.ceil((interview.completedAt.getTime() - interview.startedAt.getTime()) / 60_000))
+    : Math.max(1, interview.durationMins);
+
+  await recordCopilotUsageAfterExecutionIfActive({
+    companyId: interview.application.job.companyId,
+    actionKey: "TRANSCRIPTION_MINUTE",
+    quantity: minutes,
+    idempotencyKey: `live-interview:${interview.id}:transcription`,
+    provider: body.provider,
+    model: body.model,
+    reference: {
+      interviewId: interview.id,
+      applicationId: interview.applicationId,
+    },
+    metadata: {
+      version: body.version,
+      confidence: body.confidence,
+      actualMinutes: minutes,
+      characterCount: body.transcript.length,
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,6 +84,7 @@ export async function POST(request: NextRequest) {
           409,
         );
       }
+      await meterTranscript(interview, body);
       return NextResponse.json({
         success: true,
         interviewId: interview.id,
@@ -89,6 +123,8 @@ export async function POST(request: NextRequest) {
         }),
       },
     });
+
+    await meterTranscript(interview, body);
 
     return NextResponse.json({
       success: true,
