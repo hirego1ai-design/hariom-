@@ -167,7 +167,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
 
-      const nextStatus = body.action === "CANCEL" ? "CANCELLED" : "SCHEDULED";
+      const nextStatus = body.action === "CANCEL" ? "CANCELLED" : "RESCHEDULED";
       const changed = await tx.interview.update({
         where: { id: interview.id },
         data: {
