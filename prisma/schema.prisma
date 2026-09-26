@@ -334,8 +334,12 @@ model JobListing {
   managedAgreement               CommercialAgreement?  @relation("ManagedAgreementJobs", fields: [managedAgreementId], references: [id], onDelete: SetNull)
   managedRoleKey                 String?
   status                         JobStatus @default(ACTIVE)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  publishedAt                    DateTime?
+  expiresAt                      DateTime?
+  copilotEnabled                 Boolean   @default(false)
+  copilotActivatedAt             DateTime?
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
 
   applications Application[]
 
@@ -348,6 +352,8 @@ model JobListing {
   @@unique([managedRequirementId, managedRoleKey])
   @@index([managedAgreementId])
   @@index([companyId])
+  @@index([status, expiresAt])
+  @@index([status, publishedAt])
 }
 
 // Shared role-to-skill catalog used by candidate profiles, job creation,
@@ -1254,7 +1260,16 @@ model SubscriptionPlan {
   resumeDownloadsQuota         Int      @default(50)
   backgroundVerificationsQuota Int      @default(5)
   featuresAllowed              String[] @default([])
+  displayBenefits              String[] @default([])
   validityMonths               Int      @default(1)
+  jobValidityDays              Int      @default(7)
+  planType                     String   @default("STANDARD") // FREE_TRIAL | STANDARD | COPILOT
+  firstTimeOnly                Boolean  @default(false)
+  copilotJobsQuota             Int      @default(0)
+  copilotAutoActivate          Boolean  @default(false)
+  badge                        String?
+  isFeatured                   Boolean  @default(false)
+  displayOrder                 Int      @default(0)
   isArchived                   Boolean  @default(false)
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
@@ -1286,7 +1301,8 @@ model CompanyCredits {
   jobPostsLeft                Int      @default(0)
   resumeUnlocksLeft           Int      @default(0)
   aiInterviewsLeft            Int      @default(0)
-  aiAgentCreditsLeft          Int      @default(0)
+  aiAgentCreditsLeft          Int      @default(0) // legacy; customer AI actions are not billed per call
+  copilotJobsLeft             Int      @default(0)
   applicationsLeft            Int      @default(0)
   resumeDownloadsLeft         Int      @default(0)
   backgroundVerificationsLeft Int      @default(0)
