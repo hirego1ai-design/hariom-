@@ -7,11 +7,21 @@ import { prisma } from "@/lib/prisma";
 
 const WARNING_LIMIT = 3;
 const DUPLICATE_EVENT_WINDOW_MS = 5_000;
+const eventTypeSchema = z.enum(["TAB_HIDDEN","FULLSCREEN_EXIT","CAMERA_INTERRUPTED","MIC_INTERRUPTED","MULTIPLE_FACE_SIGNAL","FACE_MISSING_SIGNAL"]);
 const schema = z.object({
-  eventType: z.enum(["TAB_HIDDEN","FULLSCREEN_EXIT","CAMERA_INTERRUPTED","MIC_INTERRUPTED","MULTIPLE_FACE_SIGNAL","FACE_MISSING_SIGNAL"]),
-  severity: z.enum(["INFO","WARNING","HIGH"]),
+  eventType: eventTypeSchema,
   evidence: z.record(z.string(), z.unknown()).optional(),
 }).strict();
+
+type RecordedProctorEventType = z.infer<typeof eventTypeSchema>;
+const SERVER_SEVERITY: Record<RecordedProctorEventType, "INFO" | "WARNING" | "HIGH"> = {
+  TAB_HIDDEN: "WARNING",
+  FULLSCREEN_EXIT: "WARNING",
+  CAMERA_INTERRUPTED: "HIGH",
+  MIC_INTERRUPTED: "WARNING",
+  MULTIPLE_FACE_SIGNAL: "HIGH",
+  FACE_MISSING_SIGNAL: "WARNING",
+};
 
 /**
  * Proctoring records observable browser/media events; it does not decide that a
@@ -50,7 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const priorWarnings = await tx.recordedAssessmentProctoringEvent.count({
         where: { attemptId: id, warningNumber: { not: null } },
       });
-      const warningWorthy = body.severity !== "INFO";
+      const severity = SERVER_SEVERITY[body.eventType];
+      const warningWorthy = severity !== "INFO";
       const terminated = warningWorthy && priorWarnings >= WARNING_LIMIT;
       const warningNumber = warningWorthy && !terminated ? priorWarnings + 1 : null;
 
@@ -58,7 +69,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         data: {
           attemptId: id,
           eventType: body.eventType,
-          severity: body.severity,
+          severity,
           evidence: body.evidence as Prisma.InputJsonValue | undefined,
           warningNumber,
         },
