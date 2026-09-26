@@ -171,6 +171,7 @@ export async function POST(req: NextRequest) {
 
     const profile = await prisma.employerProfile.findUnique({
       where: { userId: session.id },
+      include: { user: { select: { phoneNumber: true } } },
     });
     if (!profile || !profile.companyId) {
       return jsonError("No employer profile found for this account", 403);
@@ -242,6 +243,9 @@ export async function POST(req: NextRequest) {
           planName: plan.name,
           planId: plan.id,
           companyId,
+          customerName: session.name,
+          customerEmail: session.email,
+          customerPhone: profile.user?.phoneNumber || undefined,
         },
         paymentMethod,
       );
