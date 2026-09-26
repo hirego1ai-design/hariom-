@@ -324,11 +324,16 @@ model JobListing {
   screeningQuestions String[]  @default([])
   aiFocusAreas       String?
   skillRequirements  Json?
-  requiresJobReady             Boolean   @default(false)
-  requiresJobSpecificAssessment Boolean   @default(false)
-  jobReadyRoleTitle            String?
-  jobReadySeniority  String?
-  status             JobStatus @default(ACTIVE)
+  requiresJobReady               Boolean   @default(false)
+  requiresJobSpecificAssessment  Boolean   @default(false)
+  jobReadyRoleTitle              String?
+  jobReadySeniority              String?
+  managedRequirementId           String?
+  managedRequirement             HiringRequirement?    @relation("ManagedRequirementJobs", fields: [managedRequirementId], references: [id], onDelete: SetNull)
+  managedAgreementId             String?
+  managedAgreement               CommercialAgreement?  @relation("ManagedAgreementJobs", fields: [managedAgreementId], references: [id], onDelete: SetNull)
+  managedRoleKey                 String?
+  status                         JobStatus @default(ACTIVE)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -340,6 +345,8 @@ model JobListing {
   recordedAssessmentAttempts RecordedAssessmentAttempt[]
   interviewProcess           JobInterviewProcess?
   sourcingRelationships      CandidateSourcingRelationship[]
+  @@unique([managedRequirementId, managedRoleKey])
+  @@index([managedAgreementId])
   @@index([companyId])
 }
 
@@ -714,14 +721,42 @@ model Interview {
   durationMins     Int                     @default(30)
   status           String                  @default("SCHEDULED")
   roomUrl          String?
-  transcript       String?
-  aiFeedback       String?
-  proctoringEvents ProctoringTelemetry[]
+  transcript           String?
+  transcriptProvider   String?
+  transcriptModel      String?
+  transcriptVersion    String?
+  transcriptConfidence Float?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  aiFeedback           String?
+  aiEvaluation         InterviewEvaluation?
+  proctoringEvents     ProctoringTelemetry[]
   signals          InterviewSignal[]
   roundProgress    InterviewRoundProgress?
   feedbacks        InterviewFeedback[]
   createdAt        DateTime                @default(now())
   @@index([applicationId])
+}
+
+model InterviewEvaluation {
+  id                  String    @id @default(uuid())
+  interviewId         String    @unique
+  interview           Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  overallScore        Int
+  technicalScore      Int?
+  communicationScore  Int?
+  problemSolvingScore Int?
+  evidenceConfidence  Int
+  recommendation      String
+  strengths           Json
+  concerns             Json
+  summary              String
+  supportingEvidence   Json      @default("{}")
+  provider             String?
+  model                String?
+  schemaVersion        String    @default("1.0")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 // Short-lived, database-backed WebRTC signaling. This deliberately replaces
@@ -922,6 +957,7 @@ model HiringRequirement {
   updatedAt              DateTime          @updatedAt
 
   agreements CommercialAgreement[]
+  jobs       JobListing[]         @relation("ManagedRequirementJobs")
 
   @@index([companyId])
 }
@@ -992,6 +1028,7 @@ model CommercialAgreement {
 
   events     AgreementEvent[]
   placements PphPlacement[]
+  jobs       JobListing[]          @relation("ManagedAgreementJobs")
 
   @@index([companyId])
   @@index([requirementId])

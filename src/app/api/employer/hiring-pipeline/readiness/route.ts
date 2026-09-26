@@ -31,8 +31,18 @@ export async function GET(request: Request) {
       applicationId: parsedId.data ?? null,
       automaticHiringPipeline: {
         available: false,
-        status: 'NOT_IMPLEMENTED',
-        note: 'No unattended end-to-end executor is enabled. Consequential hiring actions remain human-controlled.',
+        status: 'HUMAN_GATED_BY_DESIGN',
+        note: 'HireGo intentionally does not run selection, rejection, offer, financial, or joining confirmation without an authorized human boundary.',
+      },
+      managedHiringAutomation: {
+        available: true,
+        status: 'HUMAN_GATED_AUTOMATION_AVAILABLE',
+        requirementActivation: 'CREATES_TRACEABLE_ACTIVE_JOBS',
+        internalTalentPoolSourcing: 'AUTOMATIC_DISCOVERY_ONLY',
+        candidateScreening: 'EVIDENCE_FIRST',
+        interviewEvaluation: 'ANSWER_BASED_ADVISORY_AVAILABLE',
+        consequentialActions: 'HUMAN_APPROVAL_REQUIRED',
+        automaticRejection: false,
       },
       safeStateOrchestration: {
         available: true,
@@ -52,16 +62,16 @@ export async function GET(request: Request) {
         { agentId: 'jd-generator', capability: 'Generate a job description draft' },
         { agentId: 'candidate-matchmaker', capability: 'Rank tenant-authorized applicants with deterministic evidence-first compatibility and screening recommendations; no automatic rejection' },
         { agentId: 'resume-evaluator', capability: 'Evaluate a tenant-linked application against a job' },
-        { agentId: 'mock-interview-copilot', capability: 'Draft a generic interview question; answer-based assessment is not implemented' },
+        { agentId: 'mock-interview-copilot', capability: 'Run text-only candidate practice interview turns; practice scores are not hiring decisions' },
+        { agentId: 'live-interview-evaluator', capability: 'Evaluate a provenance-tagged completed live-interview transcript against the tenant-owned job; advisory only' },
         { agentId: 'communication-coach', capability: 'Compute transcript pacing and filler-word metrics from supplied measurements' },
         { agentId: 'security-judge', capability: 'Produce advisory flags from supplied telemetry; not a verified integrity assessment' },
       ],
       blockers: [
-        'No unattended end-to-end executor currently advances every hiring stage without a human-triggered boundary.',
-        'Answer-based live interview assessment is not implemented; deterministic candidate compatibility ranking is available but remains advisory and evidence-first.',
-        'External job-board/ATS sourcing requires approved provider integrations and credentials; HireGo talent-pool and inbound application sourcing are available.',
-        'Proctoring evidence must remain linked to the actual interview and independently verified before it can support a decision.',
-        'A production-like end-to-end runtime proof is still required before claiming fully autonomous production readiness.',
+        'External job-board/ATS sourcing requires approved provider APIs and credentials; HireGo talent-pool and inbound application sourcing are available without those providers.',
+        'Live email, WhatsApp, transcription, TURN and external AI-provider delivery still require configured production credentials and provider-side runtime proof.',
+        'Browser proctoring telemetry remains client-reported advisory evidence and requires human interpretation; it never auto-rejects a candidate.',
+        'A production-like end-to-end runtime proof is still required after deployment before claiming live-provider production readiness.',
       ],
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

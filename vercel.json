@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/referrals-reconciliation",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/events-outbox",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

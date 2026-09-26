@@ -26,6 +26,7 @@ export const AGENT_PERMISSIONS: Record<string, AgentPermissions> = {
   'communication-coach': { agentId: 'communication-coach', allowedTools: ['analyzeAudio', 'computeWPM', 'countFillers', 'generateFeedback'], deniedTools: ['deductCredits', 'updateApplicationStatus'], maxCostPerTask: 3000, maxToolCalls: 5 },
   'jd-generator': { agentId: 'jd-generator', allowedTools: ['generateJobDescription', 'readCompanyProfile', 'readJobTemplate'], deniedTools: ['publishJob', 'deductCredits', 'deleteRecord'], maxCostPerTask: 2000, maxToolCalls: 4 },
   'candidate-matchmaker': { agentId: 'candidate-matchmaker', allowedTools: ['searchCandidates', 'computeCompatibility', 'readJobRequirements'], deniedTools: ['sendOffer', 'deductCredits', 'deleteRecord'], maxCostPerTask: 8000, maxToolCalls: 6 },
+  'live-interview-evaluator': { agentId: 'live-interview-evaluator', allowedTools: ['readInterviewTranscript', 'evaluateInterviewEvidence'], deniedTools: ['sendOffer', 'updateApplicationStatus', 'scheduleInterviewSession', 'deductCredits', 'deleteRecord', 'publishJob'], maxCostPerTask: 10000, maxToolCalls: 4 },
 };
 
 export class ToolRegistry {

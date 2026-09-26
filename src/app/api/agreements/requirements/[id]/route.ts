@@ -13,6 +13,7 @@ import {
   readValidatedJson,
 } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { activateManagedHiringRequirement } from "@/lib/managedHiring/RequirementActivation";
 
 const requirementUpdateSchema = z.object({
   status: z.enum([
@@ -117,6 +118,27 @@ export async function PATCH(
           409,
         );
       }
+    }
+
+    if (body.status === "ACTIVE") {
+      const activation = await activateManagedHiringRequirement({
+        requirementId: current.id,
+        activeAgreementId: body.activeAgreementId,
+        assignedSalesLead: body.assignedSalesLead,
+        activatedById: session.id,
+      });
+      return NextResponse.json({
+        success: true,
+        message: "Requirement activated and production job listings created or reconciled.",
+        requirement: activation.requirement,
+        agreementId: activation.agreementId,
+        jobs: activation.jobs.map((job) => ({
+          id: job.id,
+          title: job.title,
+          status: job.status,
+          managedRoleKey: job.managedRoleKey,
+        })),
+      });
     }
 
     const updated = await agreementsDb.updateRequirementStatus(

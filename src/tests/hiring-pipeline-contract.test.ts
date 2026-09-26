@@ -106,9 +106,12 @@ test('six-stage advisory contracts and readiness API (offline only)', async (t) 
         reset(); assert.equal((await GET(request('EMPLOYER', '?applicationId=invalid'))).status, 422);
         owned = false; assert.equal((await GET(request('EMPLOYER', '?applicationId=12345678-1234-4234-8234-123456789abc'))).status, 404); assert.equal(calls.length, 0);
       });
-      await t.test('readiness honestly reports missing automatic hiring integration without executing agents', async () => {
+      await t.test('readiness reports human-gated automation without executing agents', async () => {
         reset(); const response = await GET(request('EMPLOYER')); assert.equal(response.status, 200);
-        const body = await response.json(); assert.equal(body.automaticHiringPipeline.status, 'NOT_IMPLEMENTED');
+        const body = await response.json();
+        assert.equal(body.automaticHiringPipeline.status, 'HUMAN_GATED_BY_DESIGN');
+        assert.equal(body.managedHiringAutomation.status, 'HUMAN_GATED_AUTOMATION_AVAILABLE');
+        assert.equal(body.managedHiringAutomation.automaticRejection, false);
         assert.deepEqual(body.supportedAgentDispatch.agentIds, ['jd-generator', 'resume-evaluator']); assert.equal(calls.length, 0);
         assert.equal(response.headers.get('cache-control'), 'no-store');
       });
