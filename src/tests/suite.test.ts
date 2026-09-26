@@ -100,8 +100,10 @@ async function runIsolatedTests() {
     const pass =
       aiRouterSource.includes("AI_SECURITY_SYSTEM_POLICY") &&
       aiRouterSource.includes('{ role: "system", content: AI_SECURITY_SYSTEM_POLICY }') &&
+      aiRouterSource.includes("getProviderRuntime") &&
+      aiRouterSource.includes("assertSafeConfiguredKey") &&
       aiRouterSource.includes("maxRetries: 0") &&
-      aiRouterSource.includes("AI service is not configured. Set a valid OPENAI_API_KEY.") &&
+      aiRouterSource.includes("is not configured with a production-eligible API key") &&
       !aiRouterSource.includes("mock-ai-response");
     results.push({
       name: "AI Router - provider boundary fails closed without synthetic success",
