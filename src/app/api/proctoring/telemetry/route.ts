@@ -151,6 +151,15 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(request, "proctoring_telemetry_write", 120, 60_000);
     const body = await readValidatedJson(request, telemetrySchema);
     await assertInterviewAccess(session, body.interviewId, "write");
+    const consent = await prisma.auditLog.findFirst({
+      where: {
+        userId: session.id,
+        action: "INTERVIEW_PROCTORING_CONSENT",
+        resource: `Interview:${body.interviewId}`,
+      },
+      select: { id: true },
+    });
+    if (!consent) throw new ApiError("Interview monitoring consent is required before telemetry can be recorded.", 428);
     const severity = severityForProctoringEvent(body.violationType);
 
     // Do not let a client inflate the advisory score by replaying the same
