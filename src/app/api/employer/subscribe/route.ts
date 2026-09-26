@@ -20,12 +20,11 @@ export async function GET(request: NextRequest) {
     await enforceRateLimit(request, "employer_subscription_get", 60, 60_000);
     const companyId = (await getSessionCompany(session)).id;
 
-    const [credits, activeSubscription, rawPlans, gatewayConfig, copilotConfig, purchaseCount] = await Promise.all([
+    const [credits, activeSubscription, rawPlans, gatewayConfig, purchaseCount] = await Promise.all([
       subscriptionsDb.getCompanyCredits(companyId),
       subscriptionsDb.getCompanySubscription(companyId),
       subscriptionsDb.getSubscriptionPlans(false),
       PaymentGatewayController.getConfig(),
-      subscriptionsDb.getHiringCopilotConfig(),
       prisma.companySubscription.count({ where: { companyId } }),
     ]);
     const plans = rawPlans.map(plan => ({
@@ -72,7 +71,7 @@ export async function GET(request: NextRequest) {
       activeSubscription,
       activePlan,
       plans,
-      copilotConfig,
+      copilotConfig: null,
       gatewayConfig: {
         mode: gatewayConfig.mode,
         primaryGateway: gatewayConfig.primaryGateway,
@@ -89,13 +88,12 @@ export async function GET(request: NextRequest) {
         billingMode: "PREPAID_FIXED_TERM",
         autoRenew: false,
         creditAccess: activeSubscription ? "ENABLED" : "LOCKED",
-        copilotIncluded: Boolean(activePlan?.copilotIncluded),
+        copilotIncluded: false,
       },
       quotas: {
         jobPosts: { left: credits.jobPostsLeft, total: activePlan?.jobPostsQuota ?? 0 },
         resumeUnlocks: { left: credits.resumeUnlocksLeft, total: activePlan?.resumeUnlocksQuota ?? 0 },
         aiInterviews: { left: credits.aiInterviewsLeft, total: activePlan?.aiInterviewsQuota ?? 0 },
-        copilotJobs: { left: credits.copilotJobsLeft, total: activePlan?.copilotJobLimit ?? 0 },
       },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
