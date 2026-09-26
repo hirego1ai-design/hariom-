@@ -4,7 +4,7 @@ import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonErro
 import { prisma } from "@/lib/prisma";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
 import { assignUniversalAssessment, getCandidateTargetRole, getUniversalValidationState } from "@/lib/universalSkillValidation";
-import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
+import { ApplicationGateStatus, ApplicationGateType, Prisma } from "@prisma/client";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const applicationSchema = z.object({
@@ -58,7 +58,15 @@ export async function POST(req: NextRequest) {
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
-    const { jobId } = await readValidatedJson(req, applicationSchema);
+    const { jobId, answers } = await readValidatedJson(req, applicationSchema);
+    const screeningAnswers = answers ? (answers as Prisma.InputJsonValue) : undefined;
+    const persistScreeningAnswers = async (applicationId: string) => {
+      if (!screeningAnswers) return;
+      await prisma.application.updateMany({
+        where: { id: applicationId },
+        data: { screeningAnswers },
+      });
+    };
     const [job, candidate] = await Promise.all([
       prisma.jobListing.findUnique({ where: { id: jobId } }),
       prisma.candidateProfile.findUnique({ where: { userId: session.id } }),
@@ -99,6 +107,8 @@ export async function POST(req: NextRequest) {
       ) {
         return jsonError("You have already applied to this job.", 409);
       }
+
+      await persistScreeningAnswers(existingApplication.id);
 
       if (
         validationState.completedAndCurrent &&
@@ -231,6 +241,8 @@ export async function POST(req: NextRequest) {
         };
       }
 
+      await persistScreeningAnswers(pending.application.id);
+
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
         await RosGateway.attachUniversalAssessment({
@@ -265,6 +277,8 @@ export async function POST(req: NextRequest) {
         candidateProfileId: candidate.id,
         companyId: job.companyId,
       });
+
+      await persistScreeningAnswers(submission.application.id);
 
       await dispatchApplicationReceivedConfirmation({
         applicationId: submission.application.id,
