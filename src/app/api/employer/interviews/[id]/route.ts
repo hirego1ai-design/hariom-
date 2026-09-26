@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const candidate = interview.application.candidateProfile.user;
     const eventKey = body.action === "CANCEL" ? "INTERVIEW_CANCELLED" : "INTERVIEW_RESCHEDULED";
-    const variables = body.action === "CANCEL"
+    const variables: Record<string, string | number | boolean | null> = body.action === "CANCEL"
       ? {
           candidate_name: candidate?.name || "Candidate",
           company_name: interview.application.job.company.name,
