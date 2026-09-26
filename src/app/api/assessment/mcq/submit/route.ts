@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
       assessment.seniority === UNIVERSAL_VALIDATION_SENIORITY;
 
     let releasedApplicationIds: string[] = [];
-    let pendingJobSpecificAssessments: Array<{
+    const pendingJobSpecificAssessments: Array<{
       applicationId: string;
       assessmentId: string;
       assessmentUrl: string;
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let completedJobSpecificApplicationIds: string[] = [];
+    const completedJobSpecificApplicationIds: string[] = [];
     if (qualifiesForSkillValidation && assessment.scope === "EMPLOYER_JOB") {
       const gates = await prisma.applicationGate.findMany({
         where: {
