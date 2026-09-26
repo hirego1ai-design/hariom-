@@ -17,11 +17,13 @@ const planFields = {
   price: z.number().finite().min(0).max(1_000_000_000),
   currency: z.string().regex(/^[A-Z]{3}$/),
   jobPostsQuota: quota,
-  resumeUnlocksQuota: quota,
-  aiInterviewsQuota: quota,
-  applicationsQuota: quota,
-  resumeDownloadsQuota: quota,
-  backgroundVerificationsQuota: quota,
+  // Legacy quota columns remain for backward compatibility but are not part of
+  // the new customer-facing per-AI-action billing model.
+  resumeUnlocksQuota: quota.default(0),
+  aiInterviewsQuota: quota.default(0),
+  applicationsQuota: quota.default(0),
+  resumeDownloadsQuota: quota.default(0),
+  backgroundVerificationsQuota: quota.default(0),
   featuresAllowed: z.array(featureKey).max(100),
   displayBenefits: z.array(benefit).max(30),
   validityMonths: z.number().int().min(1).max(120),
