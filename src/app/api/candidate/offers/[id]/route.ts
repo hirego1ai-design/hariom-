@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await tx.$queryRaw`SELECT id FROM "Offer" WHERE id = ${id} FOR UPDATE`;
       const current = await tx.offer.findUnique({
         where: { id },
-        include: { application: { select: { candidateProfileId: true, status: true } } },
+        include: { application: { select: { candidateProfileId: true, status: true, jobId: true } } },
       });
       if (!current || current.application.candidateProfileId !== profile.id) throw new ApiError("Offer not found.", 404);
       if (current.status === "ACCEPTED" && body.action === "ACCEPT") return current;
@@ -37,13 +37,88 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (["HIRED", "REJECTED", "WITHDRAWN"].includes(current.application.status)) {
         throw new ApiError("This application is no longer eligible for an offer response.", 409);
       }
-      return tx.offer.update({
+      const updatedOffer = await tx.offer.update({
         where: { id },
         data: body.action === "ACCEPT"
           ? { status: "ACCEPTED", acceptedAt: now, candidateResponseNote: body.note || null }
           : { status: "DECLINED", declinedAt: now, candidateResponseNote: body.note || null },
         include: { application: { select: { job: { select: { title: true, company: { select: { name: true } } } } } } },
       });
+
+      const correlationId = `offer-send:${current.id}`;
+      const workflow = await tx.workflowInstance.findUnique({ where: { correlationId } });
+      if (body.action === "ACCEPT") {
+        if (workflow) {
+          if (
+            workflow.workflowType !== "JOINING_ONBOARDING" ||
+            workflow.applicationId !== current.applicationId ||
+            workflow.companyId !== current.companyId
+          ) {
+            throw new ApiError("Offer joining workflow does not match this application.", 409);
+          }
+          if (!["RUNNING", "PAUSED_FOR_APPROVAL"].includes(workflow.status)) {
+            throw new ApiError("Offer joining workflow requires operator reconciliation before acceptance can continue.", 409);
+          }
+          const checkpoint = workflow.checkpointState && typeof workflow.checkpointState === "object" && !Array.isArray(workflow.checkpointState)
+            ? workflow.checkpointState as Record<string, unknown>
+            : {};
+          await tx.workflowInstance.update({
+            where: { id: workflow.id },
+            data: {
+              status: "RUNNING",
+              currentStep: "OFFER_ACCEPTED",
+              checkpointState: {
+                ...checkpoint,
+                offerId: current.id,
+                candidateAccepted: true,
+                acceptedAt: now.toISOString(),
+                acceptedByCandidateUserId: session.id,
+              },
+            },
+          });
+        } else {
+          await tx.workflowInstance.create({
+            data: {
+              companyId: current.companyId,
+              jobId: current.application.jobId,
+              candidateId: current.application.candidateProfileId,
+              applicationId: current.applicationId,
+              workflowType: "JOINING_ONBOARDING",
+              status: "RUNNING",
+              currentStep: "OFFER_ACCEPTED",
+              correlationId,
+              initiatedBy: current.createdById,
+              checkpointState: {
+                offerId: current.id,
+                source: "candidate-offer-acceptance-recovery",
+                candidateAccepted: true,
+                acceptedAt: now.toISOString(),
+                acceptedByCandidateUserId: session.id,
+              },
+            },
+          });
+        }
+      } else if (workflow && ["RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"].includes(workflow.status)) {
+        const checkpoint = workflow.checkpointState && typeof workflow.checkpointState === "object" && !Array.isArray(workflow.checkpointState)
+          ? workflow.checkpointState as Record<string, unknown>
+          : {};
+        await tx.workflowInstance.update({
+          where: { id: workflow.id },
+          data: {
+            status: "CANCELLED",
+            currentStep: "OFFER_DECLINED",
+            checkpointState: {
+              ...checkpoint,
+              offerId: current.id,
+              candidateAccepted: false,
+              declinedAt: now.toISOString(),
+              declinedByCandidateUserId: session.id,
+            },
+          },
+        });
+      }
+
+      return updatedOffer;
     });
 
     await prisma.auditLog.create({
@@ -55,7 +130,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         details: body.note || null,
       },
     });
-    return NextResponse.json({ success: true, offer });
+    const joiningWorkflow = body.action === "ACCEPT"
+      ? await prisma.workflowInstance.findUnique({
+          where: { correlationId: `offer-send:${offer.id}` },
+          select: { id: true, status: true, currentStep: true },
+        })
+      : null;
+
+    return NextResponse.json({
+      success: true,
+      offer,
+      joiningWorkflowStarted: body.action === "ACCEPT" && joiningWorkflow?.currentStep === "OFFER_ACCEPTED",
+      joiningWorkflow,
+    });
   } catch (error) {
     return handleApiError(error);
   }

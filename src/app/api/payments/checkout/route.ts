@@ -30,7 +30,7 @@ function checkoutOrderId(companyId: string, idempotencyKey: string) {
 }
 
 function assertSameCheckout(order: PaymentOrder, input: {
-  companyId: string; planId: string; promoCode?: string; paymentMethod?: string; addCopilot?: boolean;
+  companyId: string; planId: string; promoCode?: string; paymentMethod?: string;
 }) {
   const expectedPromo = input.promoCode?.toUpperCase() || null;
   if (order.companyId !== input.companyId || order.planId !== input.planId || order.promoCode !== expectedPromo) {
@@ -38,10 +38,6 @@ function assertSameCheckout(order: PaymentOrder, input: {
   }
   if (input.paymentMethod && input.paymentMethod !== "AUTO" && order.gateway && order.gateway !== input.paymentMethod) {
     throw new ApiError("Idempotency key was already used with a different payment provider.", 409);
-  }
-  const snap = parsePurchasedPlanSnapshot(order.planSnapshot);
-  if (Boolean(input.addCopilot) !== snap.featuresAllowed.includes("COPILOT_ADDON")) {
-    throw new ApiError("Idempotency key was already used with different Co-Pilot add-on terms.", 409);
   }
 }
 
@@ -78,16 +74,15 @@ async function createPaymentOrderWithPromoReservation(params: {
   companyId: string;
   plan: CheckoutPlan;
   promoCode?: string;
-  originalAmount: number;
 }): Promise<ReservationResult> {
-  const { orderId, companyId, plan, promoCode, originalAmount } = params;
+  const { orderId, companyId, plan, promoCode } = params;
   return prisma.$transaction(async (tx) => {
     const existing = await tx.paymentOrder.findUnique({ where: { orderId } });
     if (existing) return { kind: "existing", order: existing } as const;
     let reservation: PromoReservation = {
       code: "",
       discountApplied: 0,
-      finalPrice: originalAmount,
+      finalPrice: plan.price,
     };
 
     if (promoCode) {
@@ -121,13 +116,13 @@ async function createPaymentOrderWithPromoReservation(params: {
       }
 
       const discountApplied = promo.discountType === "PERCENTAGE"
-        ? (originalAmount * Math.min(100, Math.max(0, promo.discountValue))) / 100
-        : Math.min(originalAmount, Math.max(0, promo.discountValue));
+        ? (plan.price * Math.min(100, Math.max(0, promo.discountValue))) / 100
+        : Math.min(plan.price, Math.max(0, promo.discountValue));
       reservation = {
         code: promo.code,
         promoId: promo.id,
         discountApplied,
-        finalPrice: Math.max(0, originalAmount - discountApplied),
+        finalPrice: Math.max(0, plan.price - discountApplied),
       };
     }
 
@@ -151,7 +146,7 @@ async function createPaymentOrderWithPromoReservation(params: {
         companyId,
         planId: plan.id,
         planSnapshot: createPurchasedPlanSnapshot(plan),
-        originalAmount,
+        originalAmount: plan.price,
         discountAmount: reservation.discountApplied,
         expectedAmount: reservation.finalPrice,
         promoCode: reservation.code || null,
@@ -176,6 +171,7 @@ export async function POST(req: NextRequest) {
 
     const profile = await prisma.employerProfile.findUnique({
       where: { userId: session.id },
+      include: { user: { select: { phoneNumber: true } } },
     });
     if (!profile || !profile.companyId) {
       return jsonError("No employer profile found for this account", 403);
@@ -187,7 +183,7 @@ export async function POST(req: NextRequest) {
       throw new ApiError("A valid Idempotency-Key header (16-128 safe characters) is required for checkout.", 400);
     }
 
-    const { planId, paymentMethod, promoCode, addCopilot } = await readValidatedJson(req, checkoutSchema);
+    const { planId, paymentMethod, promoCode } = await readValidatedJson(req, checkoutSchema);
 
     const isProduction = process.env.NODE_ENV === "production";
     
@@ -197,7 +193,7 @@ export async function POST(req: NextRequest) {
     }
 
     const orderId = checkoutOrderId(companyId, idempotencyKey);
-    const checkoutInput = { companyId, planId, promoCode, paymentMethod, addCopilot };
+    const checkoutInput = { companyId, planId, promoCode, paymentMethod };
     const existing = await prisma.paymentOrder.findUnique({ where: { orderId } });
     if (existing) {
       assertSameCheckout(existing, checkoutInput);
@@ -217,24 +213,10 @@ export async function POST(req: NextRequest) {
       return jsonError("This subscription plan has been archived and is no longer available", 400);
     }
 
-    const copilotConfig = addCopilot
-      ? await prisma.hiringCopilotConfig.findUnique({ where: { id: "default" } })
-      : null;
-    if (addCopilot && plan.copilotIncluded) throw new ApiError("This plan already includes Co-Pilot.", 400);
-    if (addCopilot && (!copilotConfig?.enabled || copilotConfig.currency !== plan.currency)) {
-      throw new ApiError("Co-Pilot add-on is not currently available for this plan.", 409);
-    }
-    const effectivePlan: CheckoutPlan = {
-      ...plan,
-      featuresAllowed: addCopilot ? [...new Set([...plan.featuresAllowed, "COPILOT", "COPILOT_ADDON"])] : plan.featuresAllowed,
-      copilotIncluded: Boolean(plan.copilotIncluded || addCopilot),
-      copilotJobLimit: plan.copilotJobLimit + (addCopilot ? (copilotConfig?.addonJobLimit ?? 0) : 0),
-    };
-    const originalAmount = plan.price + (addCopilot ? (copilotConfig?.addonPrice ?? 0) : 0);
-    subscriptionCredits(effectivePlan);
+    subscriptionCredits(plan);
     let reservationResult: ReservationResult;
     try {
-      reservationResult = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan: effectivePlan, promoCode, originalAmount });
+      reservationResult = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan, promoCode });
     } catch (error) {
       // Two serverless instances can race after the initial read. The unique
       // deterministic order ID chooses one winner; the loser reuses it.
@@ -257,10 +239,13 @@ export async function POST(req: NextRequest) {
         {
           orderId,
           amount: reservation.finalPrice,
-          currency: effectivePlan.currency,
-          planName: effectivePlan.name,
-          planId: effectivePlan.id,
+          currency: plan.currency,
+          planName: plan.name,
+          planId: plan.id,
           companyId,
+          customerName: session.name,
+          customerEmail: session.email,
+          customerPhone: profile.user?.phoneNumber || undefined,
         },
         paymentMethod,
       );
@@ -283,17 +268,16 @@ export async function POST(req: NextRequest) {
         orderId,
         gatewayOrderId: gatewayResult.gatewayOrderId,
         gateway: gatewayResult.gateway,
-        planId: effectivePlan.id,
-        planName: effectivePlan.name,
-        originalPrice: originalAmount,
+        planId: plan.id,
+                planName: plan.name,
+        originalPrice: plan.price,
         discountAmount: reservation.discountApplied,
         finalAmount: reservation.finalPrice,
-        currency: effectivePlan.currency,
+        currency: plan.currency,
         paymentMethod: gatewayResult.gateway,
         status: "CREATED",
         checkoutUrl: gatewayResult.checkoutUrl || `/payment/status?orderId=${orderId}&amount=${reservation.finalPrice}`,
         checkoutParams: gatewayResult.checkoutParams,
-        copilotAdded: addCopilot,
       },
     });
   } catch (error) {

@@ -1,8 +1,14 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import {
+  reconcileCopilotReservation,
+  releaseCopilotReservation,
+  reserveCopilotCapacity,
+} from "@/lib/copilot/capacity";
 
 const schema = z.object({
   applicationId: z.string().min(1),
@@ -15,13 +21,31 @@ const schema = z.object({
   instructions: z.string().max(2000).optional(),
   notifyEmail: z.boolean().default(true),
   notifyWhatsapp: z.boolean().default(false),
+  copilotManaged: z.boolean().default(false),
 });
 
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  let copilotSchedulingReservationId: string | null = null;
   try {
     const body = schema.parse(await request.json());
+    const requestIdempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (body.copilotManaged && !/^[A-Za-z0-9._:-]{16,128}$/.test(requestIdempotencyKey)) {
+      return NextResponse.json({ success: false, error: "Copilot scheduling requires a valid Idempotency-Key header." }, { status: 400 });
+    }
+    const copilotRequestDigest = body.copilotManaged
+      ? crypto.createHash("sha256").update(JSON.stringify({
+          applicationId: body.applicationId,
+          roundId: body.roundId,
+          scheduledAt: body.scheduledAt,
+          address: body.address || null,
+          contactNumber: body.contactNumber || null,
+          instructions: body.instructions || null,
+          notifyEmail: body.notifyEmail,
+          notifyWhatsapp: body.notifyWhatsapp,
+        })).digest("hex")
+      : null;
     if (session.role !== "CANDIDATE") {
       const blocking = await prisma.interviewRoundProgress.count({
         where: { status: "ENDED_PENDING_FEEDBACK", round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
@@ -62,7 +86,23 @@ export async function POST(request: NextRequest) {
     if ((mode === "OFFLINE" || mode === "PHONE") && !body.contactNumber) return NextResponse.json({ success: false, error: `Contact number is required for this configured ${mode.toLowerCase()} round.` }, { status: 400 });
     if (!round.interviewers.some((interviewer) => interviewer.required)) return NextResponse.json({ success: false, error: "Assign at least one required interviewer before scheduling this round." }, { status: 400 });
     const existingProgress = await prisma.interviewRoundProgress.findUnique({ where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } } });
-    if (existingProgress?.interviewId) return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
+    let idempotentExistingInterview: Awaited<ReturnType<typeof prisma.interview.findUnique>> | null = null;
+    if (existingProgress?.interviewId) {
+      if (!body.copilotManaged || !copilotRequestDigest) {
+        return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
+      }
+      const existingInterview = await prisma.interview.findUnique({ where: { id: existingProgress.interviewId } });
+      let existingMetadata: Record<string, unknown> = {};
+      try {
+        existingMetadata = existingInterview?.aiFeedback ? JSON.parse(existingInterview.aiFeedback) : {};
+      } catch {
+        existingMetadata = {};
+      }
+      if (!existingInterview || existingMetadata.copilotScheduleRequestDigest !== copilotRequestDigest) {
+        return NextResponse.json({ success: false, error: "This round is already scheduled with a different request." }, { status: 409 });
+      }
+      idempotentExistingInterview = existingInterview;
+    }
     if (round.sequence > 1) {
       const previous = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: round.processId, sequence: round.sequence - 1 } } });
       if (previous) {
@@ -74,14 +114,56 @@ export async function POST(request: NextRequest) {
     }
     const scheduledAt = new Date(body.scheduledAt);
     const scheduledEnd = new Date(scheduledAt.getTime() + durationMins * 60_000);
-    const roomId = mode === "ONLINE" ? `room-${crypto.randomUUID()}` : null;
+
+    if (body.copilotManaged) {
+      const reservation = await reserveCopilotCapacity({
+        companyId: application.job.companyId,
+        actionKey: "INTERVIEW_SCHEDULING",
+        quantity: 1,
+        idempotencyKey: `copilot-schedule:${crypto.createHash("sha256").update(requestIdempotencyKey).digest("hex")}`,
+        reference: {
+          jobId: application.jobId,
+          applicationId: application.id,
+          candidateId: application.candidateProfileId,
+          metadata: { requestDigest: copilotRequestDigest, requestedBy: session.id },
+        },
+      });
+      const reservationMetadata = reservation.metadata && typeof reservation.metadata === "object"
+        ? reservation.metadata as Record<string, unknown>
+        : {};
+      if (reservationMetadata.requestDigest && reservationMetadata.requestDigest !== copilotRequestDigest) {
+        throw new Error("COPILOT_IDEMPOTENCY_MISMATCH");
+      }
+      copilotSchedulingReservationId = reservation.id;
+    }
+
+    let roomId = mode === "ONLINE" ? `room-${crypto.randomUUID()}` : null;
+    if (idempotentExistingInterview?.aiFeedback) {
+      try {
+        const existingMetadata = JSON.parse(idempotentExistingInterview.aiFeedback) as Record<string, unknown>;
+        roomId = typeof existingMetadata.roomId === "string" ? existingMetadata.roomId : roomId;
+      } catch {
+        // The digest check above already rejected malformed Copilot metadata.
+      }
+    }
     const roomUrl = mode === "ONLINE"
       ? `/employer/active-video-interview-interviewer-view?roomId=${roomId}`
       : mode === "PHONE"
         ? `PHONE:${JSON.stringify({ contactNumber: body.contactNumber || null })}`
         : `OFFLINE:${JSON.stringify({ address: body.address, contactNumber: body.contactNumber })}`;
-    const metadata = JSON.stringify({ mode: mode, roundId: round.id, round: round.name, address: body.address || null, contactNumber: body.contactNumber || null, instructions: body.instructions || null, notifyWhatsapp: body.notifyWhatsapp, roomId });
-    const interview = await prisma.$transaction(async (tx) => {
+    const metadata = JSON.stringify({
+      mode,
+      roundId: round.id,
+      round: round.name,
+      address: body.address || null,
+      contactNumber: body.contactNumber || null,
+      instructions: body.instructions || null,
+      notifyWhatsapp: body.notifyWhatsapp,
+      roomId,
+      copilotManaged: body.copilotManaged,
+      copilotScheduleRequestDigest: copilotRequestDigest,
+    });
+    const interview = idempotentExistingInterview ?? await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${application.id} FOR UPDATE`;
       const lockedApplication = await tx.application.findUnique({
         where: { id: application.id },
@@ -167,6 +249,21 @@ export async function POST(request: NextRequest) {
       }
       return created;
     });
+
+    if (copilotSchedulingReservationId) {
+      await reconcileCopilotReservation({
+        reservationId: copilotSchedulingReservationId,
+        actualQuantity: 1,
+        metadata: {
+          scheduledAt: interview.scheduledAt.toISOString(),
+          roundId: round.id,
+          mode,
+          interviewId: interview.id,
+        },
+      });
+      copilotSchedulingReservationId = null;
+    }
+
     const appNotification = await prisma.notification.create({
       data: {
         userId: application.candidateProfile.userId,
@@ -201,6 +298,16 @@ export async function POST(request: NextRequest) {
             idempotencyKey: `interview:${interview.id}:scheduled:candidate:email`,
             correlationId: interview.id,
             recipientRef: application.candidateProfile.userId,
+            copilotMetering: body.copilotManaged ? {
+              companyId: application.job.companyId,
+              idempotencyKey: `copilot-communication:${interview.id}:scheduled:email`,
+              reference: {
+                jobId: application.jobId,
+                applicationId: application.id,
+                candidateId: application.candidateProfileId,
+                interviewId: interview.id,
+              },
+            } : undefined,
           }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "Email dispatch failed." }));
 
     const whatsapp = !body.notifyWhatsapp
@@ -216,6 +323,16 @@ export async function POST(request: NextRequest) {
             idempotencyKey: `interview:${interview.id}:scheduled:candidate:whatsapp`,
             correlationId: interview.id,
             recipientRef: application.candidateProfile.userId,
+            copilotMetering: body.copilotManaged ? {
+              companyId: application.job.companyId,
+              idempotencyKey: `copilot-communication:${interview.id}:scheduled:whatsapp`,
+              reference: {
+                jobId: application.jobId,
+                applicationId: application.id,
+                candidateId: application.candidateProfileId,
+                interviewId: interview.id,
+              },
+            } : undefined,
           }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "WhatsApp dispatch failed." }));
 
     return NextResponse.json({
@@ -225,9 +342,15 @@ export async function POST(request: NextRequest) {
       mode,
       scheduledAt: interview.scheduledAt,
       notifications: { app: appNotification, email, whatsapp },
+      copilotManaged: body.copilotManaged,
+      idempotent: Boolean(idempotentExistingInterview),
       message: "Interview scheduled. Notification results are reported separately.",
-    }, { status: 201 });
+    }, { status: idempotentExistingInterview ? 200 : 201 });
   } catch (error) {
+    if (copilotSchedulingReservationId) {
+      await releaseCopilotReservation(copilotSchedulingReservationId).catch(() => undefined);
+    }
+    if (error instanceof Error && error.message === "COPILOT_IDEMPOTENCY_MISMATCH") return NextResponse.json({ success: false, error: "Idempotency key was already used for a different Copilot scheduling request." }, { status: 409 });
     if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });

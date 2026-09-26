@@ -59,7 +59,7 @@ export default function EmployerSubscriptionsStorePage() {
       setActivePlan(body.activePlan || null);
       setSubscriptionState(body.subscriptionState || null);
       setGatewayConfig(body.gatewayConfig || null);
-      setCopilotConfig(body.copilotConfig || null);
+      setCopilotConfig(null);
       setSelectedGateway(body.gatewayConfig?.primaryGateway || "STRIPE");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to load hiring plans.");
@@ -124,7 +124,6 @@ export default function EmployerSubscriptionsStorePage() {
           planId: checkoutPlan.id,
           paymentMethod: gatewayConfig?.allowEmployerSelection ? selectedGateway : undefined,
           promoCode: promoCode.trim() || undefined,
-          addCopilot,
         }),
       });
       const body = await response.json();

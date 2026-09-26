@@ -39,11 +39,11 @@ function validatePlanCommercialRules(value: {
   if (value.firstTimeOnly && value.price !== undefined && value.price !== 0) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["price"], message: "First-time-only plans must be zero-priced." });
   }
-  if (value.copilotIncluded === false && value.copilotJobLimit !== undefined && value.copilotJobLimit !== 0) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["copilotJobLimit"], message: "Plans without Co-Pilot must have a zero Co-Pilot job limit." });
+  if (value.copilotIncluded === true) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["copilotIncluded"], message: "Job-posting plans cannot bundle HireGo Copilot. Configure Copilot in the standalone Copilot commerce console." });
   }
-  if (value.copilotIncluded === true && value.copilotJobLimit !== undefined && value.copilotJobLimit < 1) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["copilotJobLimit"], message: "Co-Pilot plans must include at least one Co-Pilot job." });
+  if (value.copilotJobLimit !== undefined && value.copilotJobLimit !== 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["copilotJobLimit"], message: "Legacy per-job Copilot entitlements are disabled; this value must remain zero." });
   }
 }
 
@@ -57,7 +57,6 @@ export const checkoutSchema = z.object({
   planId: planIdSchema,
   paymentMethod: z.enum(["STRIPE", "PAYU", "AUTO"]).optional(),
   promoCode: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/).optional(),
-  addCopilot: z.boolean().optional().default(false),
 }).strict();
 
 export const copilotConfigSchema = z.object({

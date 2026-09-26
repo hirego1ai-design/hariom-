@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { copilotConfigSchema } from "@/lib/payments/planContracts";
 
 const promoSchema = z.object({
   code: z.string().trim().min(3).max(64).regex(/^[A-Za-z0-9_-]+$/),
@@ -29,12 +28,17 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
     await enforceRateLimit(request, "admin_subscription_settings_read", 60, 60_000);
-    const [promos, services, copilotConfig] = await Promise.all([
+    const [promos, services] = await Promise.all([
       subscriptionsDb.getPromoCodes(),
       subscriptionsDb.getAiServices(),
-      subscriptionsDb.getHiringCopilotConfig(),
     ]);
-    return NextResponse.json({ success: true, promos, services, copilotConfig });
+    return NextResponse.json({
+      success: true,
+      promos,
+      services,
+      copilotConfig: null,
+      copilotCommercePath: "/admin/copilot-commerce",
+    });
   } catch (error) { return handleApiError(error); }
 }
 
@@ -60,9 +64,7 @@ export async function PUT(request: NextRequest) {
     await enforceRateLimit(request, "admin_subscription_settings_write", 20, 60_000);
     const raw = await request.json();
     if (raw?.kind === "COPILOT_CONFIG") {
-      const body = copilotConfigSchema.parse(raw.config);
-      const copilotConfig = await subscriptionsDb.updateHiringCopilotConfig(body);
-      return NextResponse.json({ success: true, copilotConfig });
+      throw new ApiError("Legacy per-job Co-Pilot configuration is disabled. Use the standalone Copilot Commerce console.", 409);
     }
     const body = serviceCostSchema.parse(raw);
     const updated = await subscriptionsDb.updateAiServiceCost(body.serviceKey, body.creditCost, body.billingType);

@@ -12,13 +12,15 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") || "";
     try {
       if (contentType.includes("application/x-www-form-urlencoded")) {
-        const params = new URLSearchParams(rawBody);
-        body = Object.fromEntries(params.entries());
+        body = Object.fromEntries(new URLSearchParams(rawBody).entries());
       } else {
         body = JSON.parse(rawBody);
       }
+      if (!body || typeof body !== "object" || Object.keys(body).length === 0) {
+        throw new Error("empty payload");
+      }
     } catch {
-      throw new ApiError("Invalid webhook payload format", 400);
+      throw new ApiError("Invalid payment webhook payload format", 400);
     }
 
     // 1. Multi-Gateway Webhook Signature & Authenticity Verification
@@ -143,10 +145,15 @@ export async function POST(req: NextRequest) {
           if (gatewayTxId) {
             await tx.paymentTransaction.upsert({
               where: { gatewayTxId },
-              update: { status: "FAILED", errorMessage: "Payment gateway failed event received" },
+              update: {
+                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
+                status: "FAILED",
+                errorMessage: "Payment gateway failed event received",
+              },
               create: {
                 gatewayTxId,
                 companyId: failCompanyId,
+                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
                 planId: currentOrder?.planId || paymentOrder?.planId || null,
                 amount: verification.amount || 0,
                 status: "FAILED",
@@ -203,6 +210,63 @@ export async function POST(req: NextRequest) {
       const planId = paymentOrder.planId;
       const expectedAmount = paymentOrder.expectedAmount;
 
+      if (paymentOrder.productType === "COPILOT_ADDON") {
+        const { fulfillCopilotCapacityAddon } = await import("@/lib/copilot/capacityAddonFulfillment");
+        const fulfillment = await fulfillCopilotCapacityAddon({
+          paymentOrder,
+          verification,
+          provider: providerHeader,
+          gatewayTxId,
+          rawPayload: body,
+        });
+
+        if (fulfillment.duplicate) {
+          return NextResponse.json({
+            success: true,
+            duplicate: true,
+            product: "COPILOT_ADDON",
+            message: "Copilot add-capacity payment was already fulfilled.",
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          received: true,
+          product: "COPILOT_ADDON",
+          status: "ACTIVE",
+          addonId: fulfillment.addonId,
+        });
+      }
+
+      if (paymentOrder.productType === "COPILOT") {
+        const { fulfillCopilotPayment } = await import("@/lib/copilot/paymentFulfillment");
+        const fulfillment = await fulfillCopilotPayment({
+          paymentOrder,
+          verification,
+          provider: providerHeader,
+          gatewayTxId,
+          rawPayload: body,
+        });
+
+        if (fulfillment.duplicate) {
+          return NextResponse.json({
+            success: true,
+            duplicate: true,
+            product: "COPILOT",
+            message: "Copilot payment was already fulfilled.",
+          });
+        }
+
+        return NextResponse.json({
+          success: true,
+          received: true,
+          product: "COPILOT",
+          status: "ACTIVE",
+          subscriptionId: fulfillment.subscriptionId,
+          billingCycleId: fulfillment.billingCycleId,
+        });
+      }
+
       let planSnapshot;
       try {
         planSnapshot = parsePurchasedPlanSnapshot(paymentOrder.planSnapshot);
@@ -237,7 +301,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (Math.abs(verification.amount - expectedAmount) > 0.01) {
-        throw new ApiError(`Payment amount mismatch. Gateway: ₹${verification.amount}, Plan: ₹${expectedAmount}`, 400);
+        throw new ApiError(`Payment amount mismatch. Gateway: ${verification.amount} ${planSnapshot.currency}, Plan: ${expectedAmount} ${planSnapshot.currency}`, 400);
       }
 
       // =========================================================================
@@ -355,10 +419,10 @@ export async function POST(req: NextRequest) {
             jobPostsLeft: { increment: planSnapshot.jobPostsQuota },
             resumeUnlocksLeft: { increment: planSnapshot.resumeUnlocksQuota },
             aiInterviewsLeft: { increment: planSnapshot.aiInterviewsQuota },
+            aiAgentCreditsLeft: { increment: planSnapshot.aiInterviewsQuota },
             applicationsLeft: { increment: quotaCredits.applicationsLeft },
             resumeDownloadsLeft: { increment: quotaCredits.resumeDownloadsLeft },
             backgroundVerificationsLeft: { increment: quotaCredits.backgroundVerificationsLeft },
-            copilotJobsLeft: { increment: quotaCredits.copilotJobsLeft },
           },
           create: {
             companyId,
@@ -414,7 +478,7 @@ export async function POST(req: NextRequest) {
             companyId,
             action: "PAYMENT_AND_REFERRAL_COMMITTED",
             resource: "/api/payments/webhook",
-            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ₹${expectedAmount}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
+            details: `Payment SUCCESS for plan ${planSnapshot.name} (Amount: ${expectedAmount} ${planSnapshot.currency}, GatewayTx: ${gatewayTxId}). Referral reward: ${referralResult.reward?.id || "None"}`,
           },
         });
 

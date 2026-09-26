@@ -203,6 +203,29 @@ export class PaymentGatewayController {
   }
 
   /**
+   * Create an order on a commerce-selected provider without employer/provider
+   * failover. Regional Copilot pricing binds a currency and payment route, so
+   * silently switching providers could violate commercial or tax routing.
+   */
+  static async createOrderForRoute(
+    params: CreateOrderParams,
+    gateway: GatewayName
+  ): Promise<CreateOrderResult> {
+    const config = await this.getConfig();
+    if (!Object.prototype.hasOwnProperty.call(this.providers, gateway)) {
+      throw new Error("Unsupported payment gateway.");
+    }
+    if (config.gatewaysStatus[gateway] === "DISABLED") {
+      throw new Error(`Required payment gateway ${gateway} is disabled.`);
+    }
+    if (process.env.NODE_ENV === "production" && PRODUCTION_BLOCKED_GATEWAYS.has(gateway)) {
+      throw new Error(`Required payment gateway ${gateway} is not released for production.`);
+    }
+
+    return this.providers[gateway].createOrder(params);
+  }
+
+  /**
    * Authoritative order creation with safe automatic failover
    */
   static async createOrder(

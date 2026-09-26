@@ -311,6 +311,11 @@ test("seed script cannot silently target localhost or add sample companies", () 
 
 test("public candidate sharing and unavailable AI surfaces cannot be falsely certified", () => {
   const publicProfile = read("src/app/profile/public/page.tsx");
+  const copilot = read("src/app/employer/ai-hiring-copilot-hub/page.tsx");
+  for (const marker of ["/api/copilot/plans", "/api/employer/copilot/capacity", "/api/payments/copilot/checkout"]) {
+    assert.ok(copilot.includes(marker), `Copilot hub must be wired to authoritative API: ${marker}`);
+  }
+  assert.doesNotMatch(copilot, /UNAVAILABLE|mock page has been removed|Waiting for real API integration/i);
   for (const pattern of [/Alex Chen/i, /Top 5% Candidate/i, /HireGo Score.*88/i, /localhost:3000\/profile\/public/i]) {
     assert.doesNotMatch(publicProfile, pattern);
   }

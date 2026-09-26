@@ -14,6 +14,11 @@ import { prisma } from "@/lib/prisma";
 import { createTenantContext } from "@/lib/security/TenantContext";
 import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
 import { ExecutionLoop } from "@/lib/agents/ExecutionLoop";
+import {
+  reconcileCopilotReservation,
+  releaseCopilotReservation,
+  reserveCopilotCapacityIfActive,
+} from "@/lib/copilot/capacity";
 
 export const dynamic = "force-dynamic";
 
@@ -193,29 +198,62 @@ export async function POST(
 
     const attemptNumber = Math.min(3, workflow.failureCount + 1);
     const executionId = `${workflow.id}:live-interview-evaluator:${attemptNumber}:${crypto.randomUUID()}`;
-    const result = await WorkflowEngine.executeStep(
-      workflow.id,
-      "TRANSCRIPT_EVALUATION",
-      attemptNumber,
-      { interviewId: interview.id },
-      () =>
-        ExecutionLoop.runTask({
-          agentId: "live-interview-evaluator",
-          taskInput: { interviewId: interview.id },
-          context: {
-            tenantContext,
-            correlationId,
-            executionId,
+    const copilotReservation = await reserveCopilotCapacityIfActive({
+      companyId,
+      actionKey: "INTERVIEW_REPORT",
+      quantity: 1,
+      idempotencyKey: `live-interview:${interview.id}:ai-report`,
+      reference: {
+        interviewId: interview.id,
+        applicationId: interview.applicationId,
+        candidateId: interview.application.candidateProfile.id,
+        jobId: interview.application.job.id,
+      },
+    });
+
+    let result: unknown;
+    try {
+      result = await WorkflowEngine.executeStep(
+        workflow.id,
+        "TRANSCRIPT_EVALUATION",
+        attemptNumber,
+        { interviewId: interview.id },
+        () =>
+          ExecutionLoop.runTask({
             agentId: "live-interview-evaluator",
-            workflowId: workflow!.id,
-            workflowStep: "TRANSCRIPT_EVALUATION",
-          },
-          companyId,
-          estimatedSpendMinor: BigInt(10_000),
-        }),
-    );
+            taskInput: { interviewId: interview.id },
+            context: {
+              tenantContext,
+              correlationId,
+              executionId,
+              agentId: "live-interview-evaluator",
+              workflowId: workflow!.id,
+              workflowStep: "TRANSCRIPT_EVALUATION",
+            },
+            companyId,
+            estimatedSpendMinor: BigInt(10_000),
+          }),
+      );
+    } catch (executionError) {
+      if (copilotReservation) {
+        await releaseCopilotReservation(copilotReservation.id).catch(() => undefined);
+      }
+      throw executionError;
+    }
 
     const output = result as Record<string, unknown>;
+    if (copilotReservation) {
+      // The paid model call already happened. Consume plan capacity before
+      // downstream presentation/schema work so a later UI/data error cannot
+      // make a real AI cost disappear from the usage ledger.
+      await reconcileCopilotReservation({
+        reservationId: copilotReservation.id,
+        actualQuantity: 1,
+        provider: typeof output.provider === "string" ? output.provider : undefined,
+        model: typeof output.model === "string" ? output.model : undefined,
+        metadata: { workflowId: workflow.id, executionId },
+      });
+    }
     const score = (key: string) => {
       const value = output[key];
       if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
