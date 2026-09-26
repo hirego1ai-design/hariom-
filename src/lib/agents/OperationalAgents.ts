@@ -5,7 +5,7 @@ import { FairnessAuditor } from '../governance/FairnessAuditor';
 import { MemoryManager } from '../memory/MemoryManager';
 import { MemoryScopeLevel } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { dispatchAiTask } from '@/utils/aiRouter';
+import { dispatchAiTask, markAiExecutionValidationFailure } from '@/utils/aiRouter';
 import { validateTenantAccess, TenantAccessError } from '../security/TenantContext';
 import { z } from 'zod';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
@@ -110,6 +110,7 @@ export class ResumeEvaluatorAgent extends BaseAgent {
     }, "resume-evaluation-data");
 
     let actualCostMinorUnits: number | null = null;
+    let currentExecutionLogId: string | null = null;
     // Execute LLM via ModelRouter with multi-provider fallback
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'resume-screening',
@@ -128,17 +129,23 @@ export class ResumeEvaluatorAgent extends BaseAgent {
           maxCostUsdPerRequest: policy.maxCostUsdPerRequest,
           isFallback,
         });
-        actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
+        if (aiTask.log.actualCostMinorUnits !== null) {
+          actualCostMinorUnits = (actualCostMinorUnits ?? 0) + aiTask.log.actualCostMinorUnits;
+        }
+        currentExecutionLogId = aiTask.log.id;
         return aiTask.resultText;
+      },
+      validateResult: async (raw) => {
+        try {
+          resumeEvaluationSchema.parse(JSON.parse(raw));
+        } catch (error) {
+          if (currentExecutionLogId) await markAiExecutionValidationFailure(currentExecutionLogId);
+          throw new Error(`Resume evaluator returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
+        }
       },
     });
 
-    let evaluation: z.infer<typeof resumeEvaluationSchema>;
-    try {
-      evaluation = resumeEvaluationSchema.parse(JSON.parse(result));
-    } catch (error) {
-      throw new Error(`Resume evaluator returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
-    }
+    const evaluation = resumeEvaluationSchema.parse(JSON.parse(result));
 
     // Write DOMAIN memory layer (computed score)
     await MemoryManager.setMemory({
@@ -182,6 +189,7 @@ export class MockInterviewCopilotAgent extends BaseAgent {
     if (typeof candidateProfileId !== 'string') throw new Error('candidateProfileId is required.');
 
     let actualCostMinorUnits: number | null = null;
+    let currentExecutionLogId: string | null = null;
     const { result } = await ModelRouter.executeWithFallback({
       taskType: 'mock-interview',
       fn: async (endpoint, policy, isFallback) => {
@@ -197,17 +205,23 @@ export class MockInterviewCopilotAgent extends BaseAgent {
           maxCostUsdPerRequest: policy.maxCostUsdPerRequest,
           isFallback,
         });
-        actualCostMinorUnits = aiTask.log.actualCostMinorUnits;
+        if (aiTask.log.actualCostMinorUnits !== null) {
+          actualCostMinorUnits = (actualCostMinorUnits ?? 0) + aiTask.log.actualCostMinorUnits;
+        }
+        currentExecutionLogId = aiTask.log.id;
         return aiTask.resultText;
+      },
+      validateResult: async (raw) => {
+        try {
+          mockInterviewSchema.parse(JSON.parse(raw));
+        } catch (error) {
+          if (currentExecutionLogId) await markAiExecutionValidationFailure(currentExecutionLogId);
+          throw new Error(`Mock interview returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
+        }
       },
     });
 
-    let interview: z.infer<typeof mockInterviewSchema>;
-    try {
-      interview = mockInterviewSchema.parse(JSON.parse(result));
-    } catch (error) {
-      throw new Error(`Mock interview returned invalid structured output: ${error instanceof Error ? error.message : 'unknown parse error'}`);
-    }
+    const interview = mockInterviewSchema.parse(JSON.parse(result));
 
     return {
       agentId: this.agentId,
