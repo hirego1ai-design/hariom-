@@ -3,16 +3,16 @@
 
 ALTER TABLE "HiringCopilotConfig" ENABLE ROW LEVEL SECURITY;
 
-DO $
+DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon;
+    EXECUTE 'REVOKE ALL ON TABLE "HiringCopilotConfig" FROM anon';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    REVOKE ALL ON TABLE "HiringCopilotConfig" FROM authenticated;
+    EXECUTE 'REVOKE ALL ON TABLE "HiringCopilotConfig" FROM authenticated';
   END IF;
 END
-$;
+$$;
 
 INSERT INTO "SubscriptionPlan" (
   "id","name","description","price","currency","jobPostsQuota","resumeUnlocksQuota","aiInterviewsQuota",
