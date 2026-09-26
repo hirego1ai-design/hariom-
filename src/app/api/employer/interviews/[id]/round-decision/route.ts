@@ -60,6 +60,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ success: true, action: "HOLD", applicationId: interview.applicationId, message: "Candidate is on hold. A later proceed or reject decision can resume this round." });
     }
 
+    let rejectionExecution: {
+      workflowId: string;
+      stepName: string;
+      action: { interviewId: string; applicationId: string; action: "REJECT" };
+      context: ReturnType<typeof createTenantContext>;
+    } | null = null;
+
     if (body.action === "REJECT") {
       const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
       const expectedAction = { interviewId: id, applicationId: interview.applicationId, action: "REJECT" };
@@ -88,7 +95,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           throw new ApiError("Existing rejection workflow requires reconciliation before another decision.", 409);
         }
         let approval = await prisma.workflowApproval.findFirst({
-          where: { workflowInstanceId: workflow.id, actionType: "CANDIDATE_REJECTION", decision: { in: ["PENDING", "APPROVED"] }, consumedAt: null },
+          where: {
+            workflowInstanceId: workflow.id,
+            actionType: "CANDIDATE_REJECTION",
+            decision: { in: ["PENDING", "APPROVED"] },
+            consumedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
           orderBy: { requestedAt: "desc" },
         });
         if (!approval) {
@@ -124,7 +138,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
       }
       if (approval.decision !== "APPROVED") throw new ApiError("Candidate rejection approval is not approved.", 409);
-      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: expectedAction, context: tenantContext });
+      const currentApproval = await WorkflowEngine.verifyApprovedAction({
+        workflowId: body.workflowId,
+        stepName: approval.stepName,
+        action: expectedAction,
+        context: tenantContext,
+      });
+      if (currentApproval.id !== body.approvalId) throw new ApiError("Approval does not match this rejection action.", 409);
+      rejectionExecution = {
+        workflowId: body.workflowId,
+        stepName: approval.stepName,
+        action: expectedAction,
+        context: tenantContext,
+      };
     }
 
     const now = new Date();
@@ -147,6 +173,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (lockedRequiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
 
       if (body.action === "REJECT") {
+        if (!rejectionExecution) throw new ApiError("Current rejection approval is required.", 409);
+        await WorkflowEngine.consumeApprovedActionInTransaction(tx, rejectionExecution);
         const claimed = await tx.interviewRoundProgress.updateMany({
           where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "HOLD"] } },
           data: { status: "TRANSFERRED", completedAt: interview.roundProgress!.completedAt || now },
@@ -194,6 +222,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       return { action: "PROCEED" as const, nextRound: { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } };
     });
+    if (result.action === "REJECT" && rejectionExecution) {
+      await WorkflowEngine.resumeApprovedWorkflow({
+        workflowId: rejectionExecution.workflowId,
+        context: rejectionExecution.context,
+      });
+      await WorkflowEngine.completeWorkflow({
+        workflowId: rejectionExecution.workflowId,
+        context: rejectionExecution.context,
+      });
+    }
     await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
