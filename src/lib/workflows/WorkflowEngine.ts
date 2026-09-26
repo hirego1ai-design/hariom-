@@ -148,18 +148,60 @@ export class WorkflowEngine {
     if (!workflow) throw new Error('Workflow not found');
     validateTenantAccess(params.context, workflow.companyId);
     RbacGuard.assertRole(params.context, APPROVER_ROLES);
-    if (workflow.status !== 'PAUSED_FOR_APPROVAL') throw new Error(`Workflow is not pending approval: ${workflow.status}`);
+    if (workflow.status !== 'PAUSED_FOR_APPROVAL') {
+      throw new Error(`Workflow is not pending approval: ${workflow.status}`);
+    }
+
+    const now = new Date();
+    const expired = await prisma.workflowApproval.findFirst({
+      where: {
+        workflowInstanceId: workflow.id,
+        revokedAt: null,
+        consumedAt: null,
+        decision: { in: ['PENDING', 'APPROVED'] },
+        OR: [{ expiresAt: null }, { expiresAt: { lte: now } }],
+      },
+      select: { id: true },
+    });
+    if (expired) throw new Error('Workflow contains an expired consequential approval; request a fresh approval');
+
     const [pending, rejected] = await Promise.all([
-      prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'PENDING' } }),
-      prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'REJECTED' } }),
+      prisma.workflowApproval.count({
+        where: { workflowInstanceId: workflow.id, decision: 'PENDING', revokedAt: null, expiresAt: { gt: now } },
+      }),
+      prisma.workflowApproval.count({
+        where: { workflowInstanceId: workflow.id, decision: 'REJECTED', revokedAt: null },
+      }),
     ]);
     if (rejected > 0) throw new Error('Workflow has a rejected consequential action');
-    const invalidApproval = await prisma.workflowApproval.findFirst({ where: { workflowInstanceId: workflow.id, decision: 'APPROVED', OR: [{ decidedBy: null }, { decidedAt: null }, { decidedByRole: null }] }, select: { id: true } });
-    if (invalidApproval) throw new Error('Workflow contains incomplete approval evidence');
     if (pending > 0) throw new Error('Workflow still has pending consequential approvals');
-    const unconsumed = await prisma.workflowApproval.count({ where: { workflowInstanceId: workflow.id, decision: 'APPROVED', consumedAt: null } });
+
+    const invalidApproval = await prisma.workflowApproval.findFirst({
+      where: {
+        workflowInstanceId: workflow.id,
+        decision: 'APPROVED',
+        revokedAt: null,
+        OR: [{ decidedBy: null }, { decidedAt: null }, { decidedByRole: null }],
+      },
+      select: { id: true },
+    });
+    if (invalidApproval) throw new Error('Workflow contains incomplete approval evidence');
+
+    const unconsumed = await prisma.workflowApproval.count({
+      where: {
+        workflowInstanceId: workflow.id,
+        decision: 'APPROVED',
+        consumedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+    });
     if (unconsumed > 0) throw new Error('Approved consequential actions must be consumed before workflow resume');
-    return prisma.workflowInstance.update({ where: { id: workflow.id, status: 'PAUSED_FOR_APPROVAL' }, data: { status: 'RUNNING', updatedAt: new Date() } });
+
+    return prisma.workflowInstance.update({
+      where: { id: workflow.id, status: 'PAUSED_FOR_APPROVAL' },
+      data: { status: 'RUNNING', updatedAt: now },
+    });
   }
 
   static async failWorkflow(params: { workflowId: string; context: TenantContext; errorType: string; errorMessage: string }): Promise<WorkflowInstance> {
