@@ -2,6 +2,13 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 
+type ProctoringRuntimeConfig = {
+  enabled: boolean;
+  tabSwitchEnabled: boolean;
+  clipboardEnabled: boolean;
+  contextMenuEnabled: boolean;
+};
+
 export interface ProctoringViolation {
   id: string;
   type: "Tab Switch" | "Copy-Paste Attempt" | "Right Click Blocked" | "Face Missing" | "Background Noise";
@@ -20,6 +27,7 @@ const telemetryTypeByViolation: Record<ProctoringViolation["type"], string> = {
 export default function ProctoringEngine({ interviewId, onViolationCountChange }: { interviewId?: string; onViolationCountChange?: (count: number) => void }) {
   const [violations, setViolations] = useState<ProctoringViolation[]>([]);
   const [cheatingScore, setCheatingScore] = useState<number>(0);
+  const [config, setConfig] = useState<ProctoringRuntimeConfig | null>(null);
 
   const addViolation = useCallback((type: ProctoringViolation["type"], severity: ProctoringViolation["severity"]) => {
     const newV: ProctoringViolation = {
@@ -49,18 +57,34 @@ export default function ProctoringEngine({ interviewId, onViolationCountChange }
   }, [interviewId, onViolationCountChange]);
 
   useEffect(() => {
+    let active = true;
+    fetch("/api/proctoring/config", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) throw new Error("Proctoring policy unavailable.");
+        if (active) setConfig(data.config);
+      })
+      .catch(() => { if (active) setConfig({ enabled: false, tabSwitchEnabled: false, clipboardEnabled: false, contextMenuEnabled: false }); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!config?.enabled) return;
+
     const handleVisibilityChange = () => {
-      if (document.hidden) {
+      if (document.hidden && config.tabSwitchEnabled) {
         addViolation("Tab Switch", "high");
       }
     };
 
     const handleCopyPaste = (e: ClipboardEvent) => {
+      if (!config.clipboardEnabled) return;
       e.preventDefault();
       addViolation("Copy-Paste Attempt", "medium");
     };
 
     const handleContextMenu = (e: MouseEvent) => {
+      if (!config.contextMenuEnabled) return;
       e.preventDefault();
       addViolation("Right Click Blocked", "low");
     };
@@ -76,7 +100,14 @@ export default function ProctoringEngine({ interviewId, onViolationCountChange }
       window.removeEventListener("paste", handleCopyPaste);
       window.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, [addViolation]);
+  }, [addViolation, config]);
+
+  if (!config) {
+    return <div className="w-full rounded-2xl border border-white/10 bg-[#141418] p-4 text-xs text-text-muted">Loading interview integrity policy…</div>;
+  }
+  if (!config.enabled) {
+    return <div className="w-full rounded-2xl border border-white/10 bg-[#141418] p-4 text-xs text-text-muted">Browser integrity telemetry is disabled by the administrator.</div>;
+  }
 
   return (
     <div className="w-full bg-[#141418] border border-white/10 rounded-2xl p-5 space-y-4">
