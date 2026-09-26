@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getKnowledgeScreeningPolicy } from "@/lib/knowledgeScreeningPolicy";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
-import { dispatchAiTask } from "@/utils/aiRouter";
+import { dispatchAiTask, markAiExecutionValidationFailure } from "@/utils/aiRouter";
 import { getUniversalSkillValidationPolicy } from "@/lib/universalSkillValidationPolicy";
 import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
@@ -195,6 +195,7 @@ export async function generateAssessmentQuestions(params: {
   });
 
   let actualCostMinorUnits: number | null = null;
+  let currentExecutionLogId: string | null = null;
   const { result, usedEndpoint } = await ModelRouter.executeWithFallback({
     taskType: "assessment-authoring",
     fn: async (endpoint, route, isFallback) => {
@@ -222,20 +223,28 @@ export async function generateAssessmentQuestions(params: {
         isFallback,
       });
       actualCostMinorUnits = execution.log.actualCostMinorUnits;
+      currentExecutionLogId = execution.log.id;
       return execution.resultText;
     },
-    validateResult: (raw) => {
-      let parsed: unknown;
+    validateResult: async (raw) => {
       try {
-        parsed = parseModelJson(raw);
-      } catch {
-        throw new Error("Assessment authoring returned invalid JSON.");
+        let parsed: unknown;
+        try {
+          parsed = parseModelJson(raw);
+        } catch {
+          throw new Error("Assessment authoring returned invalid JSON.");
+        }
+        const validated = authoringOutputSchema.safeParse(parsed);
+        if (!validated.success) {
+          throw new Error("Assessment authoring output failed the required schema.");
+        }
+        validateGeneratedQuestions(validated.data.questions, roleTitle, allocation, params.department);
+      } catch (error) {
+        if (currentExecutionLogId) {
+          await markAiExecutionValidationFailure(currentExecutionLogId);
+        }
+        throw error;
       }
-      const validated = authoringOutputSchema.safeParse(parsed);
-      if (!validated.success) {
-        throw new Error("Assessment authoring output failed the required schema.");
-      }
-      validateGeneratedQuestions(validated.data.questions, roleTitle, allocation, params.department);
     },
   });
 
