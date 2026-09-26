@@ -57,7 +57,7 @@ INSERT INTO "SubscriptionPlan" (
 ),
 (
   'plan-hiring-sprint','Hiring Sprint','One role with HireGo Co-Pilot actively assisting the hiring workflow.',799,'INR',1,0,0,0,0,0,
-  ARRAY['JOB_POSTING','AI_JD_GENERATION','MATCHING_SCORE','ASSESSMENTS','VIRTUAL_INTERVIEW','PROCTORING','INTERVIEW_WORKFLOW','COPILOT'],
+  ARRAY['JOB_POSTING','AI_JD_GENERATION','MATCHING_SCORE','ASSESSMENTS','VIRTUAL_INTERVIEW','PROCTORING','CANDIDATE_COMPARISON','INTERVIEW_WORKFLOW','ANALYTICS','PROACTIVE_SOURCING','OFFER_WORKFLOW','COPILOT'],
   ARRAY['HireGo Co-Pilot included','Candidate prioritisation','Assessment coordination','Interview scheduling & reminders','Feedback tracking','Next-step recommendations','Human-approved final decisions'],
   1,7,'COPILOT',false,1,true,'Co-Pilot included',true,30,false,NOW(),NOW()
 ),
