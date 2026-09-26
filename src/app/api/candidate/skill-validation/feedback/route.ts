@@ -7,7 +7,7 @@ import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@
 import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
 import { getUniversalSkillValidationPolicy } from "@/lib/universalSkillValidationPolicy";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
-import { dispatchAiTask } from "@/utils/aiRouter";
+import { dispatchAiTask, markAiExecutionValidationFailure } from "@/utils/aiRouter";
 
 const requestSchema = z.object({
   attemptId: z.string().uuid(),
@@ -238,6 +238,7 @@ export async function POST(request: NextRequest) {
       deterministicFacts.skills.map((skill) => skill.name.toLowerCase()),
     );
 
+    let currentExecutionLogId: string | null = null;
     const { result: raw, usedEndpoint } = await ModelRouter.executeWithFallback({
       taskType: "assessment-feedback",
       fn: async (endpoint, route, isFallback) => {
@@ -261,24 +262,32 @@ export async function POST(request: NextRequest) {
           maxTokens: route.maxTokens,
           isFallback,
         });
+        currentExecutionLogId = execution.log.id;
         return execution.resultText;
       },
-      validateResult: (rawResult) => {
-        let candidateFeedback: z.infer<typeof feedbackSchema>;
+      validateResult: async (rawResult) => {
         try {
-          candidateFeedback = feedbackSchema.parse(parseJson(rawResult));
-        } catch {
-          throw new Error("Assessment feedback returned invalid structured output.");
-        }
-        for (const item of candidateFeedback.improvementAreas) {
-          if (!allowedSkills.has(item.skill.toLowerCase())) {
-            throw new Error("Assessment feedback referenced a skill outside the deterministic evidence.");
+          let candidateFeedback: z.infer<typeof feedbackSchema>;
+          try {
+            candidateFeedback = feedbackSchema.parse(parseJson(rawResult));
+          } catch {
+            throw new Error("Assessment feedback returned invalid structured output.");
           }
-        }
-        for (const skill of candidateFeedback.mockInterviewFocusSkills) {
-          if (!allowedSkills.has(skill.toLowerCase())) {
-            throw new Error("Assessment feedback proposed a mock-interview focus outside the deterministic evidence.");
+          for (const item of candidateFeedback.improvementAreas) {
+            if (!allowedSkills.has(item.skill.toLowerCase())) {
+              throw new Error("Assessment feedback referenced a skill outside the deterministic evidence.");
+            }
           }
+          for (const skill of candidateFeedback.mockInterviewFocusSkills) {
+            if (!allowedSkills.has(skill.toLowerCase())) {
+              throw new Error("Assessment feedback proposed a mock-interview focus outside the deterministic evidence.");
+            }
+          }
+        } catch (error) {
+          if (currentExecutionLogId) {
+            await markAiExecutionValidationFailure(currentExecutionLogId);
+          }
+          throw error;
         }
       },
     });
