@@ -22,7 +22,6 @@ function Monitor() {
   useEffect(() => {
     if (!interviewId) return;
     let stopped = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
     const load = async () => {
       try {
         const response = await fetch(`/api/proctoring/telemetry?interviewId=${encodeURIComponent(interviewId)}`, { cache: "no-store" });
@@ -34,8 +33,8 @@ function Monitor() {
       }
     };
     void load();
-    timer = setInterval(() => void load(), 5000);
-    return () => { stopped = true; if (timer) clearInterval(timer); };
+    const timer = setInterval(() => void load(), 5000);
+    return () => { stopped = true; clearInterval(timer); };
   }, [interviewId]);
 
   if (!interviewId) return <PageContainer><div className="mx-auto max-w-xl py-16 text-center"><h1 className="text-2xl font-bold">Proctoring telemetry monitor</h1><p className="mt-3 text-sm text-text-secondary">Open this monitor with an authorized interviewId. No demo telemetry is shown.</p></div></PageContainer>;
