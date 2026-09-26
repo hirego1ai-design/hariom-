@@ -238,11 +238,11 @@ async function runIsolatedTests() {
       });
       const expiredActiveSubscription = await subscriptionsDb.getCompanySubscription(companyId);
       const latestSubscription = await subscriptionsDb.getLatestCompanySubscription(companyId);
-      const pass12 = expiredActiveSubscription === null && latestSubscription?.status === "EXPIRED";
+      const pass13 = expiredActiveSubscription === null && latestSubscription?.status === "EXPIRED";
       results.push({
         name: "Subscriptions Engine - Expired periods fail closed and reconcile lifecycle state",
         category: "Subscriptions",
-        passed: pass12,
+        passed: pass13,
       });
     } catch (e: any) {
       results.push({ name: "Subscriptions Engine - Tests", category: "Subscriptions", passed: false, message: e.message });
