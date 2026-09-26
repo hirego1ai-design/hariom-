@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 export default function EmployerSubscriptionsStorePage() {
   const router = useRouter();
+  const formatMoney = (amount: number, currency = "INR") =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(amount);
   const [plans, setPlans] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [credits, setCredits] = useState<any | null>(null);
@@ -164,7 +166,7 @@ export default function EmployerSubscriptionsStorePage() {
             </h1>
           </div>
           <p className="text-[#CBD5E1] text-sm max-w-xl">
-            Choose a startup credit pack to self-service your hiring. Instantly unlock job slots, AI vetting filters, and video interview matches.
+            Choose a prepaid subscription plan for self-service hiring. Verified payment activates the plan period and its included usage credits.
           </p>
         </div>
 
@@ -202,7 +204,7 @@ export default function EmployerSubscriptionsStorePage() {
                 <p className="text-xs text-[#94A3B8] font-bold uppercase tracking-wider mb-1">Current Active Plan</p>
                 <div className="flex items-center gap-3">
                   <h2 className="text-2xl font-[family-name:var(--font-display)] font-extrabold text-white">
-                    {activePlan ? activePlan.name : "Free / Pay-As-You-Go"}
+                    {activePlan ? activePlan.name : "No active subscription"}
                   </h2>
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-extrabold tracking-wider border ${
                     subscriptionState?.status === "ACTIVE"
@@ -218,7 +220,7 @@ export default function EmployerSubscriptionsStorePage() {
                 </div>
                 {activePlan && (
                   <p className="text-xs text-[#CBD5E1] mt-1 font-mono">
-                    ₹{activePlan.price.toLocaleString("en-IN")} / {activePlan.validityMonths || 1} Month(s)
+                    {formatMoney(activePlan.price, activePlan.currency)} / {activePlan.validityMonths || 1} Month(s)
                   </p>
                 )}
               </div>
@@ -233,6 +235,12 @@ export default function EmployerSubscriptionsStorePage() {
                 </div>
               )}
             </div>
+
+            {subscriptionState?.creditAccess === "LOCKED" && (
+              <div className="relative z-10 mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+                Remaining credits are locked because there is no active subscription period. Purchase or renew a plan to use subscription features.
+              </div>
+            )}
 
             {/* Configured Credit Balances */}
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-white/5">
@@ -332,8 +340,8 @@ export default function EmployerSubscriptionsStorePage() {
                         {p.name}
                       </p>
                       <h4 className="text-3xl font-[family-name:var(--font-display)] font-extrabold text-white tracking-tight mb-4">
-                        ₹{p.price}
-                        <span className="text-xs text-[#94A3B8] font-normal font-sans"> / month</span>
+                        {formatMoney(p.price, p.currency)}
+                        <span className="text-xs text-[#94A3B8] font-normal font-sans"> / {p.validityMonths || 1} month{(p.validityMonths || 1) === 1 ? "" : "s"}</span>
                       </h4>
                       
                       <p className="text-xs text-[#CBD5E1] mb-6 leading-relaxed">
@@ -371,14 +379,13 @@ export default function EmployerSubscriptionsStorePage() {
                         setCouponCode("");
                         setPromoError(null);
                       }}
-                      disabled={isCurrent}
                       className={`w-full py-3 rounded-full text-xs font-extrabold tracking-wider transition-all relative z-10 ${
                         isCurrent
-                          ? "bg-white/5 border border-[#4CAF50]/40 text-[#4CAF50] cursor-not-allowed"
+                          ? "bg-[#4CAF50]/10 border border-[#4CAF50]/40 text-[#4CAF50] hover:bg-[#4CAF50]/15"
                           : `bg-gradient-to-tr ${accentColor} text-white font-bold hover:shadow-lg hover:scale-102`
                       }`}
                     >
-                      {isCurrent ? "Plan Active" : "Buy Credits Package"}
+                      {isCurrent ? "Renew Current Plan" : "Purchase Plan"}
                     </button>
                   </div>
                 );
@@ -451,19 +458,19 @@ export default function EmployerSubscriptionsStorePage() {
               <div className="mt-2 space-y-2 text-xs">
                 <div className="flex justify-between items-center text-[#CBD5E1]">
                   <span>Original Price ({checkoutPlan.name})</span>
-                  <span>₹{checkoutPlan.price}</span>
+                  <span>{formatMoney(checkoutPlan.price, checkoutPlan.currency)}</span>
                 </div>
                 
                 {promoDetails && (
                   <div className="flex justify-between items-center text-green-400 font-medium">
                     <span>Discount Applied ({promoDetails.code})</span>
-                    <span>- ₹{promoDetails.savings}</span>
+                    <span>- {formatMoney(promoDetails.savings, checkoutPlan.currency)}</span>
                   </div>
                 )}
 
                 <div className="border-t border-white/5 my-2 pt-2 flex justify-between items-center font-bold text-sm text-white">
                   <span>Final Price</span>
-                  <span className="text-lg text-[#FF5252]">₹{promoDetails ? promoDetails.finalPrice : checkoutPlan.price}</span>
+                  <span className="text-lg text-[#FF5252]">{formatMoney(promoDetails ? promoDetails.finalPrice : checkoutPlan.price, checkoutPlan.currency)}</span>
                 </div>
               </div>
             </div>
@@ -499,7 +506,7 @@ export default function EmployerSubscriptionsStorePage() {
               {promoDetails && (
                 <p className="text-[10px] text-[#4CAF50] mt-1.5 flex items-center gap-1 font-bold">
                   <span className="material-symbols-outlined text-[12px]">check_circle</span>
-                  Promo Code Applied! You saved ₹{promoDetails.savings}!
+                  Promo Code Applied! You saved {formatMoney(promoDetails.savings, checkoutPlan.currency)}!
                 </p>
               )}
             </div>
@@ -571,9 +578,12 @@ export default function EmployerSubscriptionsStorePage() {
               </button>
             </div>
             
-            <p className="text-[10px] text-center text-[#94A3B8] mt-4 flex items-center justify-center gap-1">
+            <p className="text-[10px] text-center text-[#94A3B8] mt-4">
+              One-time prepaid purchase for the configured plan period. HireGo does not automatically renew or debit this subscription.
+            </p>
+            <p className="text-[10px] text-center text-[#94A3B8] mt-2 flex items-center justify-center gap-1">
               <span className="material-symbols-outlined text-[12px] text-green-500">verified_user</span>
-              100% Secure 256-Bit Encrypted Payment Flow.
+              Payment confirmation is applied only after a verified provider webhook.
             </p>
           </div>
         </div>
