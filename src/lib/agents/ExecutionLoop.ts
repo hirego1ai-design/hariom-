@@ -74,6 +74,7 @@ export class ExecutionLoop {
       executionId: params.context.executionId,
       correlationId: params.context.correlationId,
       estimatedMinor,
+      billableAgentId: billable ? params.agentId : undefined,
     });
 
     let executionStarted = false;
