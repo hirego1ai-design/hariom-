@@ -127,24 +127,38 @@ export async function POST(
     });
 
     if (!workflow) {
-      workflow = await WorkflowEngine.startWorkflow({
-        workflowType: "VIRTUAL_INTERVIEW",
-        companyId,
-        jobId: interview.application.job.id,
-        candidateId: interview.application.candidateProfile.id,
-        applicationId: interview.applicationId,
-        correlationId,
-        initiatedBy: session.id,
-        initialStep: "TRANSCRIPT_EVALUATION",
-        checkpointState: {
-          mode: "ADVISORY_ONLY",
-          interviewId: interview.id,
-          transcriptProvider: interview.transcriptProvider,
-          transcriptModel: interview.transcriptModel,
-          transcriptVersion: interview.transcriptVersion,
-        },
-        context: tenantContext,
-      });
+      try {
+        workflow = await WorkflowEngine.startWorkflow({
+          workflowType: "VIRTUAL_INTERVIEW",
+          companyId,
+          jobId: interview.application.job.id,
+          candidateId: interview.application.candidateProfile.id,
+          applicationId: interview.applicationId,
+          correlationId,
+          initiatedBy: session.id,
+          initialStep: "TRANSCRIPT_EVALUATION",
+          checkpointState: {
+            mode: "ADVISORY_ONLY",
+            interviewId: interview.id,
+            transcriptProvider: interview.transcriptProvider,
+            transcriptModel: interview.transcriptModel,
+            transcriptVersion: interview.transcriptVersion,
+          },
+          context: tenantContext,
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          workflow = await prisma.workflowInstance.findUnique({
+            where: { correlationId },
+          });
+          if (!workflow) throw error;
+        } else {
+          throw error;
+        }
+      }
     } else if (workflow.status === "FAILED") {
       workflow = await WorkflowEngine.retryWorkflow({
         workflowId: workflow.id,
