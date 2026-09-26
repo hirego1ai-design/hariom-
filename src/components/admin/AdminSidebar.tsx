@@ -19,7 +19,6 @@ const mainNavItems: NavRailItem[] = [
   { id: "employers", label: "Employers & Companies", href: "/admin/employers", icon: "domain" },
   { id: "jobs", label: "Job Listings", href: "/admin/jobs", icon: "work" },
   { id: "skill-validation", label: "Universal Skill Validation", href: "/admin/assessment/skill-validation", icon: "fact_check" },
-  { id: "job-specific-assessment", label: "Job-Specific Assessment", href: "/admin/assessment/job-specific", icon: "assignment_turned_in" },
   { id: "signups", label: "New Signups", href: "/admin/signups", icon: "person_add" },
   { id: "document-verification", label: "KYC Document Review", href: "/admin/document-verification", icon: "verified_user" },
   { id: "revenue", label: "Revenue & Billing", href: "/admin/revenue", icon: "payments" },
