@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/apiSecurity";
-import { normalizeCountryCode } from "./commerce";
+import { calculateCopilotTax, normalizeCountryCode } from "./commerce";
 
 export type ResolvedCapacityOffer = {
   offerId: string;
@@ -13,7 +13,12 @@ export type ResolvedCapacityOffer = {
   currency: string;
   amountMinor: number;
   amount: number;
-  taxMode: "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
+  taxRateBps: number;
+  taxMinor: number;
+  taxAmount: number;
+  totalAmountMinor: number;
+  totalAmount: number;
+  taxMode: "NO_TAX_COLLECTION" | "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
   paymentRoute: "PAYU" | "STRIPE" | "MERCHANT_OF_RECORD";
 };
 
@@ -33,6 +38,7 @@ export async function resolveCapacityOffer(offerId: string, countryInput: string
   const price = selectPrice(offer.regionalPrices, countryCode);
   if (!price) throw new ApiError("This capacity offer is not available for the billing country.", 409);
 
+  const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
   return {
     offerId: offer.id,
     offerCode: offer.code,
@@ -44,6 +50,11 @@ export async function resolveCapacityOffer(offerId: string, countryInput: string
     currency: price.currency,
     amountMinor: price.amountMinor,
     amount: price.amountMinor / 100,
+    taxRateBps: price.taxRateBps,
+    taxMinor: tax.taxMinor,
+    taxAmount: tax.taxMinor / 100,
+    totalAmountMinor: tax.totalAmountMinor,
+    totalAmount: tax.totalAmountMinor / 100,
     taxMode: price.taxMode,
     paymentRoute: price.paymentRoute,
   };
@@ -60,6 +71,7 @@ export async function listPublicCapacityOffers(countryInput: string) {
   return offers.flatMap((offer) => {
     const price = selectPrice(offer.regionalPrices, countryCode);
     if (!price) return [];
+    const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
     return [{
       id: offer.id,
       code: offer.code,
@@ -70,8 +82,13 @@ export async function listPublicCapacityOffers(countryInput: string) {
         regionCode: price.regionCode,
         currency: price.currency,
         amount: price.amountMinor / 100,
-        taxInclusive: price.taxMode === "TAX_INCLUSIVE" || price.taxMode === "MERCHANT_OF_RECORD",
-        taxesMayApplyAtCheckout: price.taxMode === "TAX_EXCLUSIVE",
+        taxAmount: tax.taxMinor / 100,
+        totalAmount: tax.totalAmountMinor / 100,
+        taxRatePercent: price.taxRateBps / 100,
+        taxLabel: countryCode === "IN" && price.taxRateBps > 0 ? "GST" : null,
+        taxInclusive: price.taxMode === "TAX_INCLUSIVE",
+        taxesMayApplyAtCheckout: price.taxMode === "TAX_EXCLUSIVE" && price.taxRateBps > 0,
+        noTaxCollected: price.taxMode === "NO_TAX_COLLECTION",
         checkoutAvailable: price.paymentRoute !== "MERCHANT_OF_RECORD",
       },
     }];
