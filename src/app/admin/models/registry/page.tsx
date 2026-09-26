@@ -281,7 +281,7 @@ export default function AdminModelRegistryPage() {
                   <h2 className="text-xl font-bold text-white">Provider readiness</h2>
                   <p className="mt-1 text-xs text-text-muted">Configured means the server has the required credential/endpoint. It does not claim a model is enabled for any task.</p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {providers.map((provider) => {
                     const status = providerStatus.find((item) => item.provider === provider);
                     const configured = Boolean(status?.configured);
