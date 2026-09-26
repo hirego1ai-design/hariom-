@@ -9,6 +9,7 @@ import { dispatchCommunication } from "@/lib/communications/dispatcher";
 import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
 import { createTenantContext } from "@/lib/security/TenantContext";
 import { Role } from "@prisma/client";
+import { writeAgentApprovalAudit } from "@/lib/security/AgentApprovalAudit";
 
 const schema = z.object({ action: z.enum(["PROCEED", "REJECT", "HOLD"]), approvalId: z.string().uuid().optional(), workflowId: z.string().uuid().optional(), confirmApproval: z.boolean().optional() }).strict();
 
@@ -51,6 +52,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD" });
       return NextResponse.json({ success: true, action: "HOLD", persistedStatus: "ON_HOLD", message: "Candidate is on hold after this round." });
     }
+
+    let rejectionApprovalForConsumption: {
+      id: string;
+      workflowId: string;
+      stepName: string;
+      actionType: string;
+      actionDigest: string;
+    } | null = null;
 
     if (body.action === "REJECT") {
       const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
@@ -116,7 +125,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
       }
       if (approval.decision !== "APPROVED") throw new ApiError("Candidate rejection approval is not approved.", 409);
-      await WorkflowEngine.consumeApprovedAction({ workflowId: body.workflowId, stepName: approval.stepName, action: expectedAction, context: tenantContext });
+      rejectionApprovalForConsumption = {
+        id: approval.id,
+        workflowId: body.workflowId,
+        stepName: approval.stepName,
+        actionType: approval.actionType,
+        actionDigest: approval.actionDigest,
+      };
     }
 
     const now = new Date();
@@ -149,6 +164,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: "REJECTED" },
         });
         if (rejected.count !== 1) throw new ApiError("Application is already in a terminal state and cannot be rejected from this interview round.", 409);
+
+        if (!rejectionApprovalForConsumption) {
+          throw new ApiError("Approved rejection authorization is required.", 409);
+        }
+        const consumedAt = new Date();
+        const consumed = await tx.workflowApproval.updateMany({
+          where: {
+            id: rejectionApprovalForConsumption.id,
+            workflowInstanceId: rejectionApprovalForConsumption.workflowId,
+            decision: "APPROVED",
+            consumedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: consumedAt },
+          },
+          data: { consumedAt },
+        });
+        if (consumed.count !== 1) {
+          throw new ApiError("Rejection approval expired, was revoked, or was already consumed.", 409);
+        }
+        await writeAgentApprovalAudit(tx, {
+          userId: session.id,
+          companyId: interview.application.job.companyId,
+          action: "AGENT_APPROVAL_CONSUMED",
+          workflowId: rejectionApprovalForConsumption.workflowId,
+          approvalId: rejectionApprovalForConsumption.id,
+          stepName: rejectionApprovalForConsumption.stepName,
+          actionType: rejectionApprovalForConsumption.actionType,
+          actionDigest: rejectionApprovalForConsumption.actionDigest,
+          role: session.role,
+        });
+        await tx.workflowInstance.updateMany({
+          where: { id: rejectionApprovalForConsumption.workflowId, status: "PAUSED_FOR_APPROVAL" },
+          data: { status: "RUNNING", updatedAt: new Date() },
+        });
+
         return { action: "REJECT" as const, nextRound: null };
       }
       const nextRound = await tx.interviewRound.findUnique({
