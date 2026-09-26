@@ -6,6 +6,7 @@ import {
   CommunicationCoachAgent,
   JdGeneratorAgent,
   CandidateMatchmakerAgent,
+  LiveInterviewEvaluatorAgent,
 } from './OperationalAgents';
 
 export class AgentNotFoundError extends Error {
@@ -27,6 +28,7 @@ export class AgentRegistry {
     this.register(new CommunicationCoachAgent());
     this.register(new JdGeneratorAgent());
     this.register(new CandidateMatchmakerAgent());
+    this.register(new LiveInterviewEvaluatorAgent());
   }
 
   public static getInstance(): AgentRegistry {
