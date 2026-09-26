@@ -14,7 +14,8 @@ ALTER TABLE "HiringRequirement"
   ADD COLUMN "benefits" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN "shift" TEXT,
   ADD COLUMN "noticePeriod" TEXT,
-  ADD COLUMN "positions" JSONB;
+  ADD COLUMN "positions" JSONB,
+  ADD COLUMN "jdFileName" TEXT;
 
 -- Existing rows were created under legacy implicit defaults. Keep their current
 -- values, but remove database defaults so all new managed-hiring requirements
