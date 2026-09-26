@@ -179,7 +179,7 @@ test('duplicate decided approval request cannot re-pause workflow', async (t) =>
   let workflowWrites = 0;
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
   stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
-  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION' }));
+  stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION', consumedAt: null, revokedAt: null, expiresAt: new Date(Date.now() + 60_000) }));
   stubMethod(t, prisma.workflowApproval, 'upsert', async () => ({ id: 'approval-a', decision: 'APPROVED', actionType: 'CANDIDATE_SELECTION' }));
   stubMethod(t, prisma.workflowInstance, 'update', async () => { workflowWrites++; throw new Error('must not write'); });
   stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
@@ -199,7 +199,7 @@ test('repeated identical pending approval request does not duplicate audit evide
   const existing = {
     id: 'approval-a', workflowInstanceId: 'workflow-test', companyId: 'company-a',
     stepName: 'select', actionType: 'CANDIDATE_SELECTION', actionDigest: 'persisted',
-    decision: 'PENDING',
+    decision: 'PENDING', consumedAt: null, revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
   };
   let auditWrites = 0;
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a', status: 'RUNNING' }));
@@ -227,7 +227,7 @@ test('approving one action keeps workflow paused while another approval is pendi
   const approval = {
     id: 'approval-a', workflowInstanceId: workflow.id, companyId: workflow.companyId,
     stepName: 'select', actionType: 'CANDIDATE_SELECTION', actionDigest: 'digest-a',
-    decision: 'PENDING', workflowInstance: workflow,
+    decision: 'PENDING', workflowInstance: workflow, revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
   };
   let persistedStatus = '';
   stubMethod(t, prisma.workflowApproval, 'findUnique', async () => approval);
@@ -252,7 +252,7 @@ test('approved action consumption is single-use under replay', async (t) => {
   let consumes = 0;
   stubMethod(t, prisma.workflowInstance, 'findUnique', async () => ({ id: 'workflow-test', companyId: 'company-a' }));
   stubMethod(t, prisma.workflowApproval, 'findUnique', async () => ({
-    id: 'approval-a', decision: 'APPROVED', decidedBy: 'reviewer', decidedAt: new Date(), decidedByRole: Role.EMPLOYER, actionType: 'CANDIDATE_SELECTION', consumedAt: null,
+    id: 'approval-a', decision: 'APPROVED', decidedBy: 'reviewer', decidedAt: new Date(), decidedByRole: Role.EMPLOYER, actionType: 'CANDIDATE_SELECTION', consumedAt: null, revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
   }));
   stubMethod(t, prisma.workflowApproval, 'updateMany', async () => ({ count: ++consumes === 1 ? 1 : 0 }));
   stubMethod(t, prisma.workflowApproval, 'count', async () => 0);
