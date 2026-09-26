@@ -5,7 +5,7 @@ CREATE TYPE "CopilotSubscriptionStatus" AS ENUM ('ACTIVE', 'CANCELLED', 'EXPIRED
 CREATE TYPE "CopilotBillingCycleStatus" AS ENUM ('SCHEDULED', 'ACTIVE', 'CLOSED');
 CREATE TYPE "CopilotUsageReservationStatus" AS ENUM ('RESERVED', 'CONSUMED', 'RELEASED', 'EXPIRED');
 CREATE TYPE "CopilotUsageLedgerStatus" AS ENUM ('CONSUMED', 'RELEASED', 'FAILED');
-CREATE TYPE "CopilotTaxMode" AS ENUM ('TAX_EXCLUSIVE', 'TAX_INCLUSIVE', 'MERCHANT_OF_RECORD');
+CREATE TYPE "CopilotTaxMode" AS ENUM ('NO_TAX_COLLECTION', 'TAX_EXCLUSIVE', 'TAX_INCLUSIVE', 'MERCHANT_OF_RECORD');
 CREATE TYPE "CopilotPaymentRoute" AS ENUM ('PAYU', 'STRIPE', 'MERCHANT_OF_RECORD');
 
 ALTER TABLE "PaymentOrder"
@@ -41,7 +41,8 @@ CREATE TABLE "CopilotRegionalPrice" (
   "countries" TEXT[] DEFAULT ARRAY[]::TEXT[],
   "currency" TEXT NOT NULL,
   "amountMinor" INTEGER NOT NULL,
-  "taxMode" "CopilotTaxMode" NOT NULL DEFAULT 'TAX_EXCLUSIVE',
+  "taxMode" "CopilotTaxMode" NOT NULL DEFAULT 'NO_TAX_COLLECTION',
+  "taxRateBps" INTEGER NOT NULL DEFAULT 0,
   "paymentRoute" "CopilotPaymentRoute" NOT NULL,
   "isActive" BOOLEAN NOT NULL DEFAULT true,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -74,7 +75,8 @@ CREATE TABLE "CopilotCapacityOfferPrice" (
   "countries" TEXT[] DEFAULT ARRAY[]::TEXT[],
   "currency" TEXT NOT NULL,
   "amountMinor" INTEGER NOT NULL,
-  "taxMode" "CopilotTaxMode" NOT NULL DEFAULT 'TAX_EXCLUSIVE',
+  "taxMode" "CopilotTaxMode" NOT NULL DEFAULT 'NO_TAX_COLLECTION',
+  "taxRateBps" INTEGER NOT NULL DEFAULT 0,
   "paymentRoute" "CopilotPaymentRoute" NOT NULL,
   "isActive" BOOLEAN NOT NULL DEFAULT true,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -248,13 +250,15 @@ ALTER TABLE "CopilotPlan"
   ADD CONSTRAINT "CopilotPlan_warningPct_check" CHECK ("softWarningPct" >= 1 AND "softWarningPct" < "hardWarningPct" AND "hardWarningPct" <= 100);
 
 ALTER TABLE "CopilotRegionalPrice"
-  ADD CONSTRAINT "CopilotRegionalPrice_amountMinor_check" CHECK ("amountMinor" > 0);
+  ADD CONSTRAINT "CopilotRegionalPrice_amountMinor_check" CHECK ("amountMinor" > 0),
+  ADD CONSTRAINT "CopilotRegionalPrice_taxRateBps_check" CHECK ("taxRateBps" >= 0 AND "taxRateBps" <= 10000);
 
 ALTER TABLE "CopilotCapacityOffer"
   ADD CONSTRAINT "CopilotCapacityOffer_capacityUnits_check" CHECK ("capacityUnits" > 0);
 
 ALTER TABLE "CopilotCapacityOfferPrice"
-  ADD CONSTRAINT "CopilotCapacityOfferPrice_amountMinor_check" CHECK ("amountMinor" > 0);
+  ADD CONSTRAINT "CopilotCapacityOfferPrice_amountMinor_check" CHECK ("amountMinor" > 0),
+  ADD CONSTRAINT "CopilotCapacityOfferPrice_taxRateBps_check" CHECK ("taxRateBps" >= 0 AND "taxRateBps" <= 10000);
 
 ALTER TABLE "CopilotBillingCycle"
   ADD CONSTRAINT "CopilotBillingCycle_capacity_check"
@@ -280,7 +284,7 @@ VALUES
   ('copilot-pro','PRO','Pro','High-capacity Copilot workflow for larger hiring teams.',700,80,90,ARRAY['PROFILE_MATCHING','SHORTLIST_RECOMMENDATION','ASSESSMENT_SUPPORT','INTERVIEW_SCHEDULING','NOTIFICATIONS','VIDEO_INTERVIEW','PROCTORING','INTERVIEW_REPORTS','MULTI_ROUND'],1,false,CURRENT_TIMESTAMP);
 
 INSERT INTO "CopilotRegionalPrice"
-  ("id","planId","regionCode","countries","currency","amountMinor","taxMode","paymentRoute","isActive","updatedAt")
+  ("id","planId","regionCode","countries","currency","amountMinor","taxMode","taxRateBps","paymentRoute","isActive","updatedAt")
 VALUES
   ('copilot-starter-in','copilot-starter','IN',ARRAY['IN'],'INR',39900,'TAX_EXCLUSIVE','PAYU',true,CURRENT_TIMESTAMP),
   ('copilot-growth-in','copilot-growth','IN',ARRAY['IN'],'INR',79900,'TAX_EXCLUSIVE','PAYU',true,CURRENT_TIMESTAMP),
