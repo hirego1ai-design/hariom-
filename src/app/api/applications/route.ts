@@ -16,6 +16,16 @@ const applicationSchema = z.object({
   }).strict().optional(),
 }).strict();
 
+type ScreeningAnswers = z.infer<typeof applicationSchema>["answers"];
+
+async function persistScreeningAnswers(applicationId: string, answers: ScreeningAnswers) {
+  if (!answers) return;
+  await prisma.application.update({
+    where: { id: applicationId },
+    data: { screeningAnswers: answers },
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     await enforceRateLimit(req, "candidate_applications_get", 60, 60_000);
@@ -58,7 +68,7 @@ export async function POST(req: NextRequest) {
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
-    const { jobId } = await readValidatedJson(req, applicationSchema);
+    const { jobId, answers } = await readValidatedJson(req, applicationSchema);
     const [job, candidate] = await Promise.all([
       prisma.jobListing.findUnique({ where: { id: jobId } }),
       prisma.candidateProfile.findUnique({ where: { userId: session.id } }),
@@ -99,6 +109,7 @@ export async function POST(req: NextRequest) {
       ) {
         return jsonError("You have already applied to this job.", 409);
       }
+      await persistScreeningAnswers(existingApplication.id, answers);
 
       if (
         validationState.completedAndCurrent &&
@@ -150,6 +161,8 @@ export async function POST(req: NextRequest) {
           }, { status: 201 });
         }
       }
+
+      await persistScreeningAnswers(pending.application.id, answers);
 
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
@@ -265,6 +278,7 @@ export async function POST(req: NextRequest) {
         candidateProfileId: candidate.id,
         companyId: job.companyId,
       });
+      await persistScreeningAnswers(submission.application.id, answers);
 
       await dispatchApplicationReceivedConfirmation({
         applicationId: submission.application.id,
