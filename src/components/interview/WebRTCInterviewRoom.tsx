@@ -124,8 +124,8 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
             setStatus("Interview ended");
             peers.current.forEach(connection => connection.close());
             stream.current?.getTracks().forEach(track => track.stop());
-      displayStream.current?.getTracks().forEach(track => track.stop());
-      displayStream.current = null;
+            displayStream.current?.getTracks().forEach(track => track.stop());
+            displayStream.current = null;
             if (poll) clearInterval(poll);
             return;
           }
@@ -179,6 +179,8 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
       pendingIce.current.clear();
       reconnectAttempts.current.clear();
       stream.current?.getTracks().forEach(track => track.stop());
+      displayStream.current?.getTracks().forEach(track => track.stop());
+      displayStream.current = null;
     };
   }, [roomId]);
 
@@ -239,7 +241,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const remotes = Object.entries(remoteStreams);
   return <div className="w-full h-full flex flex-col bg-[#0A0A0C] text-white rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
     <div className="h-14 bg-[#141418] border-b border-white/10 px-6 flex items-center justify-between"><div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-xs uppercase tracking-wider text-red-400">LIVE · {roundTitle}</span></div><span className="text-xs text-text-muted">{status} · {remotes.length + 1} connected</span></div>
-    {error && <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300">{error}. Allow camera and microphone permissions, then reload the room.</div>}
+    {error && <div role="alert" className="px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300">{error}</div>}
     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4 min-h-0 overflow-auto">
       {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={interviewerName} />)}
       <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{candidateName} (You)</span></div>
