@@ -158,16 +158,17 @@ export class StripeGateway implements PaymentGateway {
     const dataObj = eventPayload?.data?.object || eventPayload;
     const gatewayTxId = dataObj?.id || eventPayload?.id || "";
     const eventType = eventPayload?.type || "";
+    const isCheckoutEvent = eventType.startsWith("checkout.session.");
+    const checkoutPaid = dataObj?.payment_status === "paid";
     const isSuccess =
-      eventType === "checkout.session.completed" ||
+      (isCheckoutEvent && ["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(eventType) && checkoutPaid) ||
       eventType === "payment_intent.succeeded" ||
       eventType === "charge.succeeded" ||
-      dataObj?.status === "succeeded" ||
-      dataObj?.status === "paid" ||
-      dataObj?.payment_status === "paid";
+      (!isCheckoutEvent && (dataObj?.status === "succeeded" || dataObj?.status === "paid"));
 
     const isFailure =
       eventType === "payment_intent.payment_failed" ||
+      eventType === "checkout.session.async_payment_failed" ||
       eventType === "checkout.session.expired" ||
       dataObj?.status === "failed";
 
