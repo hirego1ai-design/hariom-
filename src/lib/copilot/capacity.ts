@@ -17,7 +17,7 @@ function safeUnits(value: number, label: string) {
   return value;
 }
 
-function usageLevel(percentage: number, soft: number, hard: number): CopilotCapacityLevel {
+export function copilotCapacityLevel(percentage: number, soft: number, hard: number): CopilotCapacityLevel {
   if (percentage >= 100) return "REACHED";
   if (percentage >= hard) return "HIGH";
   if (percentage >= soft) return "MODERATE";
@@ -71,7 +71,7 @@ export async function getCopilotCapacityStatus(companyId: string) {
       subscriptionId: subscription.id,
       billingCycle: { startsAt: cycle.startsAt, endsAt: cycle.endsAt },
       percentageUsed,
-      level: usageLevel(percentageUsed, subscription.plan.softWarningPct, subscription.plan.hardWarningPct),
+      level: copilotCapacityLevel(percentageUsed, subscription.plan.softWarningPct, subscription.plan.hardWarningPct),
       canStartExpensiveOperation: used < total,
     };
   });
