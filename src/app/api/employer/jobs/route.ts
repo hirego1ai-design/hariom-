@@ -10,6 +10,7 @@ import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
 import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
 import { getJobPublicationTerms } from "@/lib/jobPlanEntitlements";
+import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
