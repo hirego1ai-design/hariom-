@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
-type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen";
+type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen" | "self_hosted";
 type QualityTier = "ECONOMY" | "BALANCED" | "PREMIUM";
 type RoutingMode = "MANUAL" | "COST_SAVER" | "BALANCED" | "QUALITY_FIRST" | "SMART_AUTO";
 
@@ -69,7 +69,7 @@ type Telemetry = {
   modelStats: ModelStat[];
 };
 
-const providers: ProviderName[] = ["openai", "gemini", "deepseek", "kimi", "qwen"];
+const providers: ProviderName[] = ["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"];
 const qualityTiers: QualityTier[] = ["ECONOMY", "BALANCED", "PREMIUM"];
 const routingModes: RoutingMode[] = ["MANUAL", "COST_SAVER", "BALANCED", "QUALITY_FIRST", "SMART_AUTO"];
 const capabilities = ["TEXT", "STRUCTURED_OUTPUT", "TOOL_USE", "VISION", "LONG_CONTEXT", "REASONING"];
