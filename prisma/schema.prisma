@@ -28,6 +28,15 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
 enum ApplicationGateType {
   UNIVERSAL_SKILL_VALIDATION
   JOB_SPECIFIC_ASSESSMENT
@@ -174,6 +183,7 @@ model User {
   candidateTagsCreated          EmployerCandidateTag[]
   candidateCollectionsCreated   EmployerCandidateCollection[]
   sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
+  offersCreated                  Offer[]                          @relation("OfferCreatedBy")
 
   @@index([phoneNumber])
 }
@@ -253,6 +263,7 @@ model Company {
   candidateNotes       EmployerCandidateNote[]
   candidateTags        EmployerCandidateTag[]
   candidateCollections EmployerCandidateCollection[]
+  offers               Offer[]
 
   sourcingRelationships CandidateSourcingRelationship[]
 }
@@ -505,6 +516,7 @@ model Application {
   annualCtc          Float?
   screeningAnswers   Json?
   pphPlacement       PphPlacement?
+  offer              Offer?
 
   interviews    Interview[]
   roundProgress InterviewRoundProgress[]
@@ -796,6 +808,7 @@ model StoredFile {
   scanDetail                 String?
   createdAt                  DateTime                     @default(now())
   RecordedAssessmentResponse RecordedAssessmentResponse[]
+  offerDocument              Offer?                       @relation("OfferDocument")
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
@@ -976,6 +989,32 @@ model Invoice {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   placement     PphPlacement?
+}
+
+model Offer {
+  id                 String      @id @default(uuid())
+  applicationId      String      @unique
+  application        Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  companyId          String
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdById        String
+  createdBy          User        @relation("OfferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  status             OfferStatus @default(DRAFT)
+  positionTitle      String
+  currency           String      @default("INR")
+  annualCompensation Decimal     @db.Decimal(18, 2)
+  joiningDate        DateTime?
+  terms              Json
+  documentFileId     String?     @unique
+  documentFile       StoredFile? @relation("OfferDocument", fields: [documentFileId], references: [id], onDelete: SetNull)
+  sentAt             DateTime?
+  respondedAt        DateTime?
+  responseNote       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([status, sentAt])
 }
 
 model PphPlacement {
