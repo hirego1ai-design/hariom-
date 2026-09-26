@@ -51,8 +51,15 @@ type SubmitResponse = {
     validationEligible?: boolean;
     validationNote?: string | null;
     releasedApplicationIds?: string[];
-    applicationContinuation?: "SUBMITTED" | "JOB_SPECIFIC_ASSESSMENT_COMPLETED" | "NO_PENDING_APPLICATION";
+    assessmentScope?: "EMPLOYER_JOB" | "PLATFORM_READINESS";
+    isUniversalSkillValidation?: boolean;
+    applicationContinuation?: "SUBMITTED" | "JOB_SPECIFIC_ASSESSMENT_REQUIRED" | "JOB_SPECIFIC_ASSESSMENT_COMPLETED" | "NO_PENDING_APPLICATION";
     completedJobSpecificApplicationIds?: string[];
+    pendingJobSpecificAssessments?: Array<{
+      applicationId: string;
+      assessmentId: string;
+      assessmentUrl: string;
+    }>;
     skillEvidence: Array<{
       name: string;
       score: number;
@@ -168,8 +175,13 @@ export default function ActiveMCQAssessment() {
       
       setResults(data.results);
       setStatus("results");
-      setFeedbackStatus("loading");
 
+      if (!data.results.isUniversalSkillValidation) {
+        setFeedbackStatus("idle");
+        return;
+      }
+
+      setFeedbackStatus("loading");
       void (async () => {
         try {
           const feedbackResponse = await fetch("/api/candidate/skill-validation/feedback", {
@@ -291,6 +303,11 @@ export default function ActiveMCQAssessment() {
                 Your pending job application has now been submitted.
               </div>
             )}
+            {results.applicationContinuation === "JOB_SPECIFIC_ASSESSMENT_REQUIRED" && (
+              <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                Universal Skill Validation is complete. This employer requires one additional job-specific assessment before the application moves to normal screening.
+              </div>
+            )}
             {results.applicationContinuation === "JOB_SPECIFIC_ASSESSMENT_COMPLETED" && (
               <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                 Your additional job-specific assessment is complete. Your application is now ready for employer screening.
@@ -342,7 +359,8 @@ export default function ActiveMCQAssessment() {
               </div>
             )}
 
-            <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+            {results.isUniversalSkillValidation && (
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
               <h2 className="font-semibold text-white">Private improvement feedback</h2>
               {feedbackStatus === "loading" && (
                 <p className="mt-2 text-xs text-gray-500">Preparing coaching from your assessment evidence…</p>
@@ -386,7 +404,19 @@ export default function ActiveMCQAssessment() {
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
+
+            {results.applicationContinuation === "JOB_SPECIFIC_ASSESSMENT_REQUIRED" &&
+              results.pendingJobSpecificAssessments?.[0]?.assessmentUrl && (
+                <button
+                  type="button"
+                  onClick={() => router.push(results.pendingJobSpecificAssessments![0].assessmentUrl)}
+                  className="w-full rounded-lg bg-amber-500 py-3 text-sm font-extrabold text-black hover:bg-amber-400 transition-colors"
+                >
+                  Continue Job-Specific Assessment
+                </button>
+              )}
           </div>
           
           <div className="grid gap-3 sm:grid-cols-2">
