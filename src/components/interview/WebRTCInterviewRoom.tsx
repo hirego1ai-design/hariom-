@@ -11,7 +11,7 @@ interface WebRTCInterviewRoomProps {
 }
 
 type Signal = { id: string; senderId: string; targetId?: string | null; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; isHost: boolean; status: "ACTIVE" | "COMPLETED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
+type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; isHost: boolean; status: "ACTIVE" | "COMPLETED" | "CLOSED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
 
 async function readRoom(roomId: string): Promise<RoomSnapshot> {
   const response = await fetch(`/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, { cache: "no-store" });
@@ -30,6 +30,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const localVideo = useRef<HTMLVideoElement>(null);
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const stream = useRef<MediaStream | null>(null);
+  const displayStream = useRef<MediaStream | null>(null);
   const seenSignals = useRef(new Set<string>());
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const reconnectAttempts = useRef(new Map<string, number>());
@@ -91,7 +92,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
     async function start() {
       try {
         const room = await readRoom(roomId);
-        if (room.status === "COMPLETED") throw new Error("This interview has already ended.");
+        if (room.status !== "ACTIVE") throw new Error("This interview room is closed.");
         selfId.current = room.participantId;
         hostRef.current = room.isHost;
         setIsHost(room.isHost);
@@ -119,10 +120,12 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         poll = setInterval(async () => {
           let latest: RoomSnapshot;
           try { latest = await readRoom(roomId); } catch { setStatus("Signaling connection interrupted — retrying…"); return; }
-          if (latest.status === "COMPLETED") {
+          if (latest.status !== "ACTIVE") {
             setStatus("Interview ended");
             peers.current.forEach(connection => connection.close());
             stream.current?.getTracks().forEach(track => track.stop());
+      displayStream.current?.getTracks().forEach(track => track.stop());
+      displayStream.current = null;
             if (poll) clearInterval(poll);
             return;
           }
@@ -144,7 +147,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
             if (answer.targetId !== selfId.current || answer.senderId === selfId.current || seenSignals.current.has(answer.id) || !answer.sdp) continue;
             seenSignals.current.add(answer.id);
             const connection = ensurePeer(answer.senderId);
-            if (!connection.currentRemoteDescription) {
+            if (connection.signalingState === "have-local-offer") {
               await connection.setRemoteDescription(answer.sdp);
               const queued = pendingIce.current.get(answer.senderId) || [];
               for (const ice of queued) await connection.addIceCandidate(ice).catch(() => undefined);
@@ -194,18 +197,23 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         const sender = connection.getSenders().find(item => item.track?.kind === "video");
         if (sender && camera) await sender.replaceTrack(camera);
       }));
+      displayStream.current?.getTracks().forEach(track => track.stop());
+      displayStream.current = null;
       setSharing(false);
       return;
     }
     const display = await navigator.mediaDevices.getDisplayMedia({ video: true }).catch(() => null);
     const screen = display?.getVideoTracks()[0];
-    if (!screen) return;
+    if (!screen || !display) return;
+    displayStream.current = display;
     await Promise.all([...peers.current.values()].map(async connection => {
       const sender = connection.getSenders().find(item => item.track?.kind === "video");
       if (sender) await sender.replaceTrack(screen);
     }));
     screen.onended = () => {
       if (camera) [...peers.current.values()].forEach(connection => connection.getSenders().find(item => item.track?.kind === "video")?.replaceTrack(camera).catch(() => undefined));
+      display.getTracks().forEach(track => track.stop());
+      displayStream.current = null;
       setSharing(false);
     };
     setSharing(true);
@@ -213,9 +221,18 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
 
   const finish = async () => {
     if (!hostRef.current) return;
-    await signal("COMPLETE").catch(() => undefined);
+    setError("");
+    try {
+      await signal("COMPLETE");
+    } catch {
+      setError("Interview completion could not be saved. The room remains open; please retry.");
+      setStatus("Unable to end interview");
+      return;
+    }
     peers.current.forEach(connection => connection.close());
     stream.current?.getTracks().forEach(track => track.stop());
+    displayStream.current?.getTracks().forEach(track => track.stop());
+    displayStream.current = null;
     onComplete?.(interviewId || undefined);
   };
 
