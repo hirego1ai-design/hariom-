@@ -29,7 +29,14 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       applicationId: parsedId.data ?? null,
-      automaticHiringPipeline: { available: false, status: 'NOT_IMPLEMENTED' },
+      automaticHiringPipeline: {
+        available: true,
+        status: 'STATE_ORCHESTRATION_AVAILABLE',
+        mode: 'SAFE_NEXT_ACTION',
+        endpoint: '/api/employer/candidates/:applicationId/orchestration',
+        automaticRejection: false,
+        note: 'The orchestrator resolves the next safe application step. Consequential selection, rejection, offer, and joining actions remain human-controlled.',
+      },
       supportedAgentDispatch: {
         endpoint: '/api/agents/dispatch',
         agentIds: ['jd-generator', 'resume-evaluator'],
@@ -45,10 +52,10 @@ export async function GET(request: Request) {
         { agentId: 'security-judge', capability: 'Produce advisory flags from supplied telemetry; not a verified integrity assessment' },
       ],
       blockers: [
-        'No application workflow connects all six stages to a verified interview/evidence lifecycle.',
-        'Candidate compatibility ranking and answer-based interview assessment are not implemented.',
-        'Proctoring evidence must be linked to the actual interview and independently verified.',
-        'Agent recommendations require human review before a hiring decision.',
+        'External job-board/ATS sourcing requires approved provider integrations and credentials; HireGo talent-pool and inbound application sourcing are available.',
+        'The safe next-action orchestrator does not bypass human approval for selection, rejection, offer, or joining confirmation.',
+        'Proctoring evidence must remain linked to the actual interview and independently verified before it can support a decision.',
+        'A production-like end-to-end runtime proof is still required before claiming fully autonomous production readiness.',
       ],
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
