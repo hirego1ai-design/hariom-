@@ -30,7 +30,7 @@ function checkoutOrderId(companyId: string, idempotencyKey: string) {
 }
 
 function assertSameCheckout(order: PaymentOrder, input: {
-  companyId: string; planId: string; promoCode?: string; paymentMethod?: string;
+  companyId: string; planId: string; promoCode?: string; paymentMethod?: string; addCopilot?: boolean;
 }) {
   const expectedPromo = input.promoCode?.toUpperCase() || null;
   if (order.companyId !== input.companyId || order.planId !== input.planId || order.promoCode !== expectedPromo) {
@@ -38,6 +38,12 @@ function assertSameCheckout(order: PaymentOrder, input: {
   }
   if (input.paymentMethod && input.paymentMethod !== "AUTO" && order.gateway && order.gateway !== input.paymentMethod) {
     throw new ApiError("Idempotency key was already used with a different payment provider.", 409);
+  }
+  const snap = parsePurchasedPlanSnapshot(order.planSnapshot);
+  if (Boolean(input.addCopilot) !== Boolean(snap.copilotIncluded && snap.copilotJobLimit > 0 && !snap.featuresAllowed.includes("COPILOT_PLAN_NATIVE"))) {
+    // Native Co-Pilot plans do not count as checkout add-ons.
+    const nativePlan = snap.featuresAllowed.includes("COPILOT_PLAN_NATIVE");
+    if (!nativePlan) throw new ApiError("Idempotency key was already used with different Co-Pilot add-on terms.", 409);
   }
 }
 
@@ -74,15 +80,16 @@ async function createPaymentOrderWithPromoReservation(params: {
   companyId: string;
   plan: CheckoutPlan;
   promoCode?: string;
+  originalAmount: number;
 }): Promise<ReservationResult> {
-  const { orderId, companyId, plan, promoCode } = params;
+  const { orderId, companyId, plan, promoCode, originalAmount } = params;
   return prisma.$transaction(async (tx) => {
     const existing = await tx.paymentOrder.findUnique({ where: { orderId } });
     if (existing) return { kind: "existing", order: existing } as const;
     let reservation: PromoReservation = {
       code: "",
       discountApplied: 0,
-      finalPrice: plan.price,
+      finalPrice: originalAmount,
     };
 
     if (promoCode) {
@@ -116,13 +123,13 @@ async function createPaymentOrderWithPromoReservation(params: {
       }
 
       const discountApplied = promo.discountType === "PERCENTAGE"
-        ? (plan.price * Math.min(100, Math.max(0, promo.discountValue))) / 100
-        : Math.min(plan.price, Math.max(0, promo.discountValue));
+        ? (originalAmount * Math.min(100, Math.max(0, promo.discountValue))) / 100
+        : Math.min(originalAmount, Math.max(0, promo.discountValue));
       reservation = {
         code: promo.code,
         promoId: promo.id,
         discountApplied,
-        finalPrice: Math.max(0, plan.price - discountApplied),
+        finalPrice: Math.max(0, originalAmount - discountApplied),
       };
     }
 
@@ -146,7 +153,7 @@ async function createPaymentOrderWithPromoReservation(params: {
         companyId,
         planId: plan.id,
         planSnapshot: createPurchasedPlanSnapshot(plan),
-        originalAmount: plan.price,
+        originalAmount,
         discountAmount: reservation.discountApplied,
         expectedAmount: reservation.finalPrice,
         promoCode: reservation.code || null,
@@ -182,7 +189,7 @@ export async function POST(req: NextRequest) {
       throw new ApiError("A valid Idempotency-Key header (16-128 safe characters) is required for checkout.", 400);
     }
 
-    const { planId, paymentMethod, promoCode } = await readValidatedJson(req, checkoutSchema);
+    const { planId, paymentMethod, promoCode, addCopilot } = await readValidatedJson(req, checkoutSchema);
 
     const isProduction = process.env.NODE_ENV === "production";
     
@@ -192,7 +199,7 @@ export async function POST(req: NextRequest) {
     }
 
     const orderId = checkoutOrderId(companyId, idempotencyKey);
-    const checkoutInput = { companyId, planId, promoCode, paymentMethod };
+    const checkoutInput = { companyId, planId, promoCode, paymentMethod, addCopilot };
     const existing = await prisma.paymentOrder.findUnique({ where: { orderId } });
     if (existing) {
       assertSameCheckout(existing, checkoutInput);
@@ -212,10 +219,22 @@ export async function POST(req: NextRequest) {
       return jsonError("This subscription plan has been archived and is no longer available", 400);
     }
 
-    subscriptionCredits(plan);
+    const copilotConfig = await prisma.hiringCopilotConfig.findUnique({ where: { id: "default" } });
+    if (addCopilot && plan.copilotIncluded) throw new ApiError("This plan already includes Co-Pilot.", 400);
+    if (addCopilot && (!copilotConfig?.enabled || copilotConfig.currency !== plan.currency)) {
+      throw new ApiError("Co-Pilot add-on is not currently available for this plan.", 409);
+    }
+    const effectivePlan: CheckoutPlan = {
+      ...plan,
+      featuresAllowed: addCopilot ? [...new Set([...plan.featuresAllowed, "COPILOT"])] : plan.featuresAllowed,
+      copilotIncluded: plan.copilotIncluded || addCopilot,
+      copilotJobLimit: plan.copilotJobLimit + (addCopilot ? (copilotConfig?.addonJobLimit ?? 0) : 0),
+    };
+    const originalAmount = plan.price + (addCopilot ? (copilotConfig?.addonPrice ?? 0) : 0);
+    subscriptionCredits(effectivePlan);
     let reservationResult: ReservationResult;
     try {
-      reservationResult = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan, promoCode });
+      reservationResult = await createPaymentOrderWithPromoReservation({ orderId, companyId, plan: effectivePlan, promoCode, originalAmount });
     } catch (error) {
       // Two serverless instances can race after the initial read. The unique
       // deterministic order ID chooses one winner; the loser reuses it.
@@ -238,9 +257,9 @@ export async function POST(req: NextRequest) {
         {
           orderId,
           amount: reservation.finalPrice,
-          currency: plan.currency,
-          planName: plan.name,
-          planId: plan.id,
+          currency: effectivePlan.currency,
+          planName: effectivePlan.name,
+          planId: effectivePlan.id,
           companyId,
         },
         paymentMethod,
@@ -264,16 +283,17 @@ export async function POST(req: NextRequest) {
         orderId,
         gatewayOrderId: gatewayResult.gatewayOrderId,
         gateway: gatewayResult.gateway,
-        planId: plan.id,
-                planName: plan.name,
-        originalPrice: plan.price,
+        planId: effectivePlan.id,
+        planName: effectivePlan.name,
+        originalPrice: originalAmount,
         discountAmount: reservation.discountApplied,
         finalAmount: reservation.finalPrice,
-        currency: plan.currency,
+        currency: effectivePlan.currency,
         paymentMethod: gatewayResult.gateway,
         status: "CREATED",
         checkoutUrl: gatewayResult.checkoutUrl || `/payment/status?orderId=${orderId}&amount=${reservation.finalPrice}`,
         checkoutParams: gatewayResult.checkoutParams,
+        copilotAdded: addCopilot,
       },
     });
   } catch (error) {
