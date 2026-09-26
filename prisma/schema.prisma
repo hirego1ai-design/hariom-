@@ -21,6 +21,7 @@ enum ApplicationStatus {
   SCREENING
   AI_INTERVIEW
   ASSESSMENT
+  ON_HOLD
   SHORTLISTED
   HIRED
   REJECTED
@@ -502,6 +503,7 @@ model Application {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   annualCtc          Float?
+  screeningAnswers   Json?
   pphPlacement       PphPlacement?
 
   interviews    Interview[]
@@ -1335,8 +1337,12 @@ model WorkflowApproval {
   decidedByRole      Role?
   decisionNotes      String?
   requestedAt        DateTime                 @default(now())
+  expiresAt          DateTime?
   decidedAt          DateTime?
   consumedAt         DateTime?
+  revokedAt          DateTime?
+  revokedBy          String?
+  revocationReason   String?
 
   @@unique([workflowInstanceId, stepName, actionDigest])
   @@index([companyId, decision, requestedAt])
@@ -1566,6 +1572,7 @@ enum InterviewRoundProgressStatus {
   LIVE
   ENDED_PENDING_FEEDBACK
   ROUND_COMPLETE
+  HOLD
   TRANSFERRED
   FINAL_ROUND_COMPLETE
   CANCELLED
