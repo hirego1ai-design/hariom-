@@ -9,6 +9,7 @@ import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { buildPublicAppUrl } from "@/lib/env";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { requireCompanyPlanFeature } from "@/lib/subscriptionAccess";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest) {
       const company = await getSessionCompany(session);
       companyId = company.id;
       companyName = company.name;
+      await prisma.$transaction(tx =>
+        requireCompanyPlanFeature(tx, companyId, ["TEAM_COLLABORATION"], "Your current plan does not include team collaboration.")
+      );
     }
 
     // 1. Check if user is already an active member of this company's team
