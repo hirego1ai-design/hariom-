@@ -415,7 +415,7 @@ export default function AdminSubscriptionsPage() {
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">AI Interviews</label>
+                            <label className="block text-[10px] text-[#CBD5E1] uppercase mb-1">AI Agent Credits</label>
                             <input
                               type="number"
                               required
@@ -537,7 +537,7 @@ export default function AdminSubscriptionsPage() {
                           </span>
                           <span className="flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-[14px]">psychology</span>
-                            Interviews: {p.aiInterviewsQuota === 9999 ? "Unlimited" : p.aiInterviewsQuota}
+                            AI Credits: {p.aiInterviewsQuota === 9999 ? "Unlimited" : p.aiInterviewsQuota}
                           </span>
                           <span className="flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-[14px]">manage_search</span>
