@@ -40,6 +40,11 @@ export interface DispatchApplicationParams {
   jobId: string;
   candidateProfileId: string;
   companyId: string;
+  screeningAnswers?: {
+    noticePeriod?: string;
+    experienceYears?: string;
+    whyJoin?: string;
+  };
 }
 
 export class DuplicateApplicationError extends Error {
@@ -192,6 +197,12 @@ export class RosGateway {
             (existingGate.status === ApplicationGateStatus.REQUIRED ||
               existingGate.status === ApplicationGateStatus.IN_PROGRESS)
           ) {
+            if (params.screeningAnswers) {
+              await tx.application.update({
+                where: { id: existing.id },
+                data: { screeningAnswers: params.screeningAnswers },
+              });
+            }
             return {
               application: {
                 id: existing.id,
@@ -218,6 +229,7 @@ export class RosGateway {
             status: "ASSESSMENT",
             matchScore: 0,
             aiSummary: null,
+            screeningAnswers: params.screeningAnswers ?? undefined,
           },
           select: {
             id: true,
@@ -368,6 +380,7 @@ export class RosGateway {
             status: jobSpecificAssessment ? "ASSESSMENT" : "APPLIED",
             matchScore: match.matchScore,
             aiSummary: match.summary,
+            screeningAnswers: params.screeningAnswers ?? undefined,
           },
         });
 
