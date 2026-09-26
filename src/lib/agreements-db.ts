@@ -560,7 +560,10 @@ class AgreementsStore {
     return this.agreements.find((a) => a.id === id || a.agreementNumber === id) || null;
   }
 
-  async createAgreement(payload: Omit<CommercialAgreementRecord, "id" | "agreementNumber" | "status" | "createdAt" | "updatedAt">): Promise<CommercialAgreementRecord> {
+  async createAgreement(
+    payload: Omit<CommercialAgreementRecord, "id" | "agreementNumber" | "status" | "createdAt" | "updatedAt">,
+    performedBy = "SYSTEM",
+  ): Promise<CommercialAgreementRecord> {
     const rand = Math.floor(1000 + Math.random() * 9000);
     const id = `agr-${Date.now()}`;
     const agreementNumber = `HGO-CMA-2026-${rand}`;
@@ -593,11 +596,11 @@ class AgreementsStore {
           replacementDays: payload.replacementDays,
           validityStartDate: payload.validityStartDate ? new Date(payload.validityStartDate) : new Date(),
           validityEndDate: payload.validityEndDate ? new Date(payload.validityEndDate) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-          advancePaymentAmount: payload.advancePaymentAmount || 0,
-          discountPercentage: payload.discountPercentage || 0,
-          creditDays: payload.creditDays || 15,
-          taxRatePct: payload.taxRatePct || 18.0,
-          customClauses: payload.customClauses || [],
+          advancePaymentAmount: payload.advancePaymentAmount ?? 0,
+          discountPercentage: payload.discountPercentage ?? 0,
+          creditDays: payload.creditDays ?? 0,
+          taxRatePct: payload.taxRatePct ?? 0,
+          customClauses: payload.customClauses ?? [],
           commercialNotes: payload.commercialNotes || null,
           salesExecutiveNotes: payload.salesExecutiveNotes || null,
         }
@@ -612,7 +615,7 @@ class AgreementsStore {
     this.agreements.unshift(newAgr);
 
     // Event log
-    await this.addEvent(newAgr.id, "CREATED", "Sales/Admin", "Agreement initialized from template.");
+    await this.addEvent(newAgr.id, "CREATED", performedBy, "Agreement initialized from approved commercial terms.");
 
     // Update parent requirement if linked
     if (payload.requirementId) {
