@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUBSCRIPTION_FEATURE_KEYS } from "@/lib/subscriptionFeatures";
 
 // Existing persisted plans use legacy IDs; accept those without rewriting FKs.
 // Checkout always resolves commercial terms from the database.
@@ -7,7 +8,7 @@ export const planIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/)
 export const planTypeSchema = z.enum(["FREE_TRIAL", "STANDARD", "COPILOT"]);
 const quota = z.number().int().min(0).max(2_147_483_647);
 const benefit = z.string().trim().min(1).max(180).regex(/^[^<>\u0000-\u001F\u007F]+$/);
-const featureKey = z.string().trim().min(1).max(100).regex(/^[A-Z0-9_]+$/);
+const featureKey = z.enum(SUBSCRIPTION_FEATURE_KEYS);
 const badge = z.string().trim().min(1).max(80).regex(/^[^<>\u0000-\u001F\u007F]+$/);
 
 const planFields = {
