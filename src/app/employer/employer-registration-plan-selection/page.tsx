@@ -10,8 +10,13 @@ type Plan = {
   price: number;
   validityMonths?: number;
   jobPostsQuota?: number;
-  resumeUnlocksQuota?: number;
-  aiInterviewsQuota?: number;
+  jobValidityDays?: number;
+  marketingBenefits?: string[];
+  copilotIncluded?: boolean;
+  copilotJobLimit?: number;
+  badgeText?: string | null;
+  eligible?: boolean;
+  eligibilityReason?: string | null;
   isArchived?: boolean;
 };
 
@@ -56,13 +61,19 @@ export default function EmployerPlanSelectionPage() {
               <article key={plan.id} className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                 <h2 className="text-lg font-bold text-white">{plan.name}</h2>
                 <p className="mt-2 text-2xl font-extrabold text-white">₹{plan.price.toLocaleString("en-IN")}</p>
-                <p className="mt-1 text-xs text-text-muted">{plan.validityMonths || 1} month(s)</p>
+                <p className="mt-1 text-xs text-text-muted">{plan.jobPostsQuota ?? 0} job post{(plan.jobPostsQuota ?? 0) === 1 ? "" : "s"} · {plan.jobValidityDays ?? 7} days per job</p>
                 {plan.description && <p className="mt-3 text-xs leading-relaxed text-text-secondary">{plan.description}</p>}
-                <dl className="mt-4 space-y-2 text-xs text-text-muted">
-                  <div className="flex justify-between gap-3"><dt>Job posts</dt><dd>{plan.jobPostsQuota ?? 0}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>Resume unlocks</dt><dd>{plan.resumeUnlocksQuota ?? 0}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>AI interviews</dt><dd>{plan.aiInterviewsQuota ?? 0}</dd></div>
-                </dl>
+                <ul className="mt-4 space-y-2 text-xs text-text-muted">
+                  {(plan.marketingBenefits || []).slice(0, 6).map((benefit) => (
+                    <li key={benefit} className="flex gap-2"><span className="text-green">✓</span><span>{benefit}</span></li>
+                  ))}
+                </ul>
+                {plan.copilotIncluded ? (
+                  <p className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200">
+                    HireGo Co-Pilot included for {plan.copilotJobLimit ?? 0} job{(plan.copilotJobLimit ?? 0) === 1 ? "" : "s"}.
+                  </p>
+                ) : null}
+                {plan.eligible === false ? <p className="mt-3 text-xs text-amber-300">{plan.eligibilityReason}</p> : null}
               </article>
             ))}
           </div>
