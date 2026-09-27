@@ -15,6 +15,8 @@ export default function EducationPage() {
       ? state.education
       : []
   );
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = () => {
     setEduList([...eduList, { degree: "", university: "", year: "", gpa: "" }]);
@@ -30,27 +32,30 @@ export default function EducationPage() {
     setEduList(updated);
   };
 
-  const handleNext = () => {
-    updateState({ education: eduList });
-    markStepComplete(4);
+  const persistEducationAndContinue = async (education: EducationEntry[]) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ education }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Could not save education.");
 
-    // Persist to backend
-    fetch("/api/candidate/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        education: eduList,
-      }),
-    }).catch(() => {});
-
-    router.push("/onboarding/experience");
+      updateState({ education });
+      markStepComplete(4);
+      router.push("/onboarding/experience");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save education.");
+      setIsSaving(false);
+    }
   };
 
-  const handleSkip = () => {
-    updateState({ education: [] });
-    markStepComplete(4);
-    router.push("/onboarding/experience");
-  };
+  const handleNext = () => persistEducationAndContinue(eduList);
+  const handleSkip = () => persistEducationAndContinue([]);
 
 
   return (
@@ -270,6 +275,12 @@ export default function EducationPage() {
             Add Another Education Entry
           </button>
 
+          {saveError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+              {saveError}
+            </div>
+          )}
+
           {/* Bottom Actions */}
           <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--outline)" }}>
             <Link
@@ -289,6 +300,7 @@ export default function EducationPage() {
             <button
               type="button"
               onClick={handleSkip}
+              disabled={isSaving}
               className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
               style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
             >
@@ -296,13 +308,14 @@ export default function EducationPage() {
             </button>
             <button
               onClick={handleNext}
+              disabled={isSaving}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                 boxShadow: "var(--shadow-btn-red)",
               }}
             >
-              <span>Next: Work Experience</span>
+              <span>{isSaving ? "Saving..." : "Next: Work Experience"}</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
             </div>
