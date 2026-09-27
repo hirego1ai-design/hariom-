@@ -188,7 +188,7 @@ export default function VideoResumePage() {
       const saveJson = await saveResponse.json();
       if (!saveResponse.ok || !saveJson.success) throw new Error(saveJson.error || "Video could not be saved");
 
-      updateState({ videoRecorded: true, videoAnalysis: null });
+      updateState({ videoRecorded: true });
       markStepComplete(8);
 
       if (saveJson.videoId && !["COMPLETED", "FAILED", "BLOCKED_INFRA"].includes(saveJson.analysisStatus)) {
@@ -211,7 +211,7 @@ export default function VideoResumePage() {
   };
 
   const handleSkip = () => {
-    updateState({ videoRecorded: false, videoAnalysis: null });
+    updateState({ videoRecorded: false });
     markStepComplete(8);
     router.push("/onboarding/preferences");
   };
