@@ -66,19 +66,6 @@ export interface AssessmentResult {
   timeTakenSec: number;
 }
 
-export interface HireGoScore {
-  overall: number;
-  resumeQuality: number;
-  skills: number;
-  experience: number;
-  education: number;
-  videoAnalysis: number;
-  assessmentScore: number;
-  communicationScore: number;
-  technicalScore: number;
-  behaviourScore: number;
-}
-
 export interface OnboardingState {
   currentStep: number;
   completedSteps: number[];
@@ -103,7 +90,6 @@ export interface OnboardingState {
   videoAnalysis: VideoAnalysis | null;
   baselineAssessmentCompleted: boolean;
   assessmentResults: AssessmentResult[];
-  hireGoScore: HireGoScore | null;
   interviewEligibility: "ready-ai" | "needs-assessment" | "needs-improvement" | "ready-employer" | null;
   userId: string | null;
   companyName: string | null;
@@ -113,7 +99,6 @@ interface OnboardingContextValue {
   state: OnboardingState;
   updateState: (partial: Partial<OnboardingState>) => void;
   markStepComplete: (step: number) => void;
-  calculateHireGoScore: () => HireGoScore;
   resetOnboarding: () => void;
 }
 
@@ -141,7 +126,6 @@ const defaultState: OnboardingState = {
   videoAnalysis: null,
   baselineAssessmentCompleted: false,
   assessmentResults: [],
-  hireGoScore: null,
   interviewEligibility: null,
   userId: null,
   companyName: null,
@@ -152,8 +136,8 @@ const STORAGE_KEY = "hirego_onboarding_v1";
 const OnboardingContext = createContext<OnboardingContextValue | undefined>(undefined);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  // Start with the same state on the server and browser. Restoring localStorage
-  // during the first browser render causes hydration mismatches with SSR.
+  // localStorage is only a convenience draft cache for partially completed forms.
+  // Authoritative profile, assessment, verification, and hiring state is server-side.
   const [state, setState] = useState<OnboardingState>(defaultState);
   const [hasRestoredSavedState, setHasRestoredSavedState] = useState(false);
 
@@ -191,54 +175,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const calculateHireGoScore = (): HireGoScore => {
-    const resumeQuality = state.resumeAnalysis?.qualityScore ?? 0;
-    const skillsScore = Math.min(100, state.skills.length * 15);
-    const experienceScore = Math.min(100, state.experience.length * 25);
-    const educationScore = Math.min(100, state.education.length * 35);
-    const videoScore = state.videoAnalysis?.overallScore ?? 0;
-    const assessmentScore =
-      state.assessmentResults.length > 0
-        ? Math.round(
-            state.assessmentResults.reduce((sum, r) => sum + (r.correctAnswers / r.totalQuestions) * 100, 0) /
-              state.assessmentResults.length
-          )
-        : 0;
-    const communicationScore = state.videoAnalysis
-      ? Math.round((state.videoAnalysis.communicationScore + state.videoAnalysis.clarityScore + state.videoAnalysis.fluencyScore) / 3)
-      : 0;
-    const technicalScore = assessmentScore;
-    const behaviourScore = state.videoAnalysis
-      ? Math.round((state.videoAnalysis.confidenceScore + state.videoAnalysis.professionalismScore + state.videoAnalysis.bodyLanguageScore) / 3)
-      : 0;
-
-    const overall = Math.round(
-      resumeQuality * 0.15 +
-        skillsScore * 0.1 +
-        experienceScore * 0.1 +
-        educationScore * 0.05 +
-        videoScore * 0.2 +
-        assessmentScore * 0.2 +
-        communicationScore * 0.1 +
-        behaviourScore * 0.1
-    );
-
-    const score: HireGoScore = {
-      overall,
-      resumeQuality,
-      skills: skillsScore,
-      experience: experienceScore,
-      education: educationScore,
-      videoAnalysis: videoScore,
-      assessmentScore,
-      communicationScore,
-      technicalScore,
-      behaviourScore,
-    };
-
-    setState((prev) => ({ ...prev, hireGoScore: score }));
-    return score;
-  };
 
   const resetOnboarding = () => {
     setState(defaultState);
@@ -249,7 +185,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   return (
     <OnboardingContext.Provider
-      value={{ state, updateState, markStepComplete, calculateHireGoScore, resetOnboarding }}
+      value={{ state, updateState, markStepComplete, resetOnboarding }}
     >
       {children}
     </OnboardingContext.Provider>
