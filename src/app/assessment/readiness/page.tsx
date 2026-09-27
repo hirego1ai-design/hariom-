@@ -66,7 +66,7 @@ export default function ReadinessPage() {
   return (
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
-      <main className="flex-1 ml-0 md:ml-0 md:ml-[116px] max-w-5xl p-6 lg:p-10">
+      <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl p-6 lg:p-10">
         <header className="mb-8 max-w-3xl">
           <p className="text-primary text-xs font-bold uppercase tracking-wider">Candidate readiness</p>
           <h1 className="mt-2 text-3xl font-extrabold">Job-Ready assessments</h1>
