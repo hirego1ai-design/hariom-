@@ -155,6 +155,7 @@ model User {
   phoneNumber    String?
   avatarUrl      String?
   emailVerified  Boolean  @default(false)
+  referralCode   String?  @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
