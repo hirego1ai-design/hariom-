@@ -8,11 +8,10 @@ import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function ResumeUploadPage() {
   const router = useRouter();
-  const { state, updateState, markStepComplete } = useOnboarding();
+  const { updateState, markStepComplete } = useOnboarding();
 
   const [fileName, setFileName] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(state.resumeAnalysis);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileDrop = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,10 +59,9 @@ export default function ResumeUploadPage() {
           throw new Error(profileJson.error || "Resume could not be saved to your profile.");
         }
 
-        // Do not invent an AI score from a filename. Resume analysis is enabled
-        // only when a private-file parsing provider is configured.
-        setAnalysis(null);
-        updateState({ resumeUploaded: true, resumeAnalysis: null });
+        // Upload success means only that the private resume file was stored and
+        // attached to the candidate profile. No resume score is synthesized.
+        updateState({ resumeUploaded: true });
       } catch (err) {
         setFileName(null);
         setUploadError(err instanceof Error ? err.message : "Resume upload failed. Please try again.");
@@ -80,7 +78,7 @@ export default function ResumeUploadPage() {
   };
 
   const handleSkip = () => {
-    updateState({ resumeUploaded: false, resumeAnalysis: null });
+    updateState({ resumeUploaded: false });
     markStepComplete(7);
     router.push("/onboarding/video-resume");
   };
