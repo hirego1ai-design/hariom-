@@ -67,8 +67,8 @@ export default function DocumentUploadPage() {
   return (
     <div className="min-h-screen flex">
       <CandidateSidebar />
-      <div className="flex-1 ml-[116px] flex flex-col min-h-screen">
-        <header className="sticky top-0 z-40 px-8 py-4 bg-page border-b border-white/10 backdrop-blur-xl">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-h-screen">
+        <header className="sticky top-0 z-40 px-4 sm:px-8 py-4 bg-page border-b border-white/10 backdrop-blur-xl">
           <div className="flex items-center justify-between">
             <div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary-container-bg text-primary">
