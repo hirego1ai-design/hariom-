@@ -78,7 +78,7 @@ export default function DocumentUploadPage() {
                 Supporting documents
               </h1>
               <p className="text-xs text-text-muted mt-1">
-                Upload optional documents that support your candidate profile
+                Upload optional private documents that support your candidate profile. Uploading does not verify them.
               </p>
             </div>
             <span className="text-xs font-mono text-text-muted">
@@ -151,7 +151,7 @@ export default function DocumentUploadPage() {
                       ) : (
                         <div className="mt-3 flex items-center gap-2 text-xs text-green font-bold">
                           <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                          Document submitted for admin verification
+                          Document uploaded privately
                         </div>
                       )}
                     </div>
