@@ -91,7 +91,7 @@ export default function SavedJobsPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
 
-      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+      <main className="flex-1 ml-0 md:ml-[116px] p-6 lg:p-10 max-w-6xl">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl lg:text-3xl font-extrabold text-primary mb-2">
