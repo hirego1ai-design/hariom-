@@ -65,7 +65,7 @@ export default function JobApplyPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
 
-      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-5xl">
+      <main className="flex-1 ml-0 md:ml-[116px] p-6 lg:p-10 max-w-5xl">
         {/* Stepper Progress */}
         <div className="max-w-2xl mx-auto mb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
