@@ -65,7 +65,13 @@ export async function GET(
     });
 
     if (!application) throw new ApiError("Application not found", 404);
-    return NextResponse.json({ success: true, application });
+    return NextResponse.json({
+      success: true,
+      application: {
+        ...application,
+        matchScore: application.aiSummary ? application.matchScore : null,
+      },
+    });
   } catch (error) {
     return handleApiError(error);
   }
