@@ -16,7 +16,7 @@ export interface CandidateState {
 export const useCandidateStore = create<CandidateState>((set) => ({
   headline: "",
   bio: "",
-  location: "Bangalore, India",
+  location: "",
   skills: [],
   experienceYears: 0,
   savedJobIds: [],
