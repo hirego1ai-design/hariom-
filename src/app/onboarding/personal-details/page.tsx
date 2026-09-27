@@ -78,11 +78,11 @@ export default function PersonalDetailsPage() {
       <CandidateSidebar />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
         {/* Premium Ambient Background Grid & Dual Glows */}
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30 ml-[116px]" />
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30 ml-0 md:ml-[116px]" />
         <div
-          className="fixed inset-0 pointer-events-none -z-10 ml-[116px]"
+          className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]"
           style={{
             background:
               "radial-gradient(ellipse at 80% 20%, rgba(255,82,82,0.09) 0%, transparent 55%), radial-gradient(ellipse at 20% 80%, rgba(68,138,255,0.09) 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(156,39,176,0.05) 0%, transparent 60%)",
@@ -91,7 +91,7 @@ export default function PersonalDetailsPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
