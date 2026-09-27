@@ -7,6 +7,19 @@ import { normalizeSkillName, syncCandidateClaimedSkills } from "@/lib/skillValid
 
 const optionalText = z.string().trim().max(5_000).nullable().optional();
 const claimedLevelSchema = z.enum(["beginner", "intermediate", "advanced", "expert"]);
+const educationEntrySchema = z.object({
+  degree: z.string().trim().max(240),
+  university: z.string().trim().max(240),
+  year: z.string().trim().max(40),
+  gpa: z.string().trim().max(40).optional(),
+}).strict();
+const experienceEntrySchema = z.object({
+  company: z.string().trim().max(240),
+  role: z.string().trim().max(240),
+  startDate: z.string().trim().max(80),
+  endDate: z.string().trim().max(80),
+  description: z.string().trim().max(5_000),
+}).strict();
 const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(160).optional(),
   name: z.string().trim().min(2).max(160).optional(),
@@ -22,8 +35,8 @@ const profileUpdateSchema = z.object({
   }).strict()).max(100).optional(),
   experienceYears: z.coerce.number().min(0).max(80).optional(),
   resumeUrl: z.string().trim().max(2_048).nullable().optional(),
-  education: z.unknown().optional(),
-  experience: z.unknown().optional(),
+  education: z.array(educationEntrySchema).max(50).optional(),
+  experience: z.array(experienceEntrySchema).max(100).optional(),
   preferences: z.record(z.string(), z.unknown()).optional(),
   linkedinUrl: z.string().trim().url().max(2_048).optional(),
 }).strict();
