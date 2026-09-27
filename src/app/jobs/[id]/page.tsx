@@ -119,7 +119,7 @@ export default function JobDetailPage() {
     return (
       <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
         <CandidateSidebar />
-        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+        <main className="flex-1 ml-0 md:ml-[116px] p-8 flex items-center justify-center">
           <div className="text-center space-y-3">
             <span className="material-symbols-outlined text-4xl text-primary animate-spin">
               progress_activity
@@ -135,7 +135,7 @@ export default function JobDetailPage() {
     return (
       <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
         <CandidateSidebar />
-        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+        <main className="flex-1 ml-0 md:ml-[116px] p-8 flex items-center justify-center">
           <div className="glass-card max-w-md p-8 rounded-3xl border border-white/10 text-center space-y-4">
             <span className="material-symbols-outlined text-4xl text-primary">work_off</span>
             <h1 className="text-lg font-bold">Job listing unavailable</h1>
@@ -151,7 +151,7 @@ export default function JobDetailPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
 
-      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+      <main className="flex-1 ml-0 md:ml-[116px] p-6 lg:p-10 max-w-6xl">
         {/* Top Back Link */}
         <Link
           href="/jobs"
