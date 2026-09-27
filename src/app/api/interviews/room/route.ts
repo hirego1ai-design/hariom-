@@ -41,7 +41,7 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
         { roomUrl: `/employer/active-video-interview-interviewer-view?roomId=${roomId}` },
       ],
     },
-    include: { application: { include: { candidateProfile: true, job: true } }, roundProgress: { include: { round: { include: { interviewers: true } } } } },
+    include: { application: { include: { candidateProfile: { include: { user: { select: { id: true, name: true } } } }, job: true } }, roundProgress: { include: { round: { include: { interviewers: { include: { user: { select: { id: true, name: true } } } } } } } } },
   });
   if (!interview) return null;
   const candidateUserId = interview.application.candidateProfile?.userId;
@@ -87,8 +87,15 @@ export async function GET(req: NextRequest) {
       take: 300,
     });
     const candidateUserId = interview.application.candidateProfile?.userId;
-    const assignedInterviewerIds = interview.roundProgress?.round.interviewers.map((item) => item.userId) || [];
+    const assignedInterviewers = interview.roundProgress?.round.interviewers || [];
+    const assignedInterviewerIds = assignedInterviewers.map((item) => item.userId);
     const authorizedParticipantIds = [candidateUserId, ...assignedInterviewerIds].filter((id): id is string => Boolean(id));
+    const participantLabels = Object.fromEntries([
+      ...(candidateUserId
+        ? [[candidateUserId, interview.application.candidateProfile?.user?.name || "Candidate"]]
+        : []),
+      ...assignedInterviewers.map((item) => [item.userId, item.user?.name || "Interviewer"]),
+    ]);
     const participantIds = new Set([session.id, ...signals.map((signal) => signal.senderId)]);
 
     return NextResponse.json({
@@ -104,6 +111,8 @@ export async function GET(req: NextRequest) {
         participantCount: participantIds.size,
         participantId: session.id,
         authorizedParticipantIds,
+        participantLabels,
+        roundTitle: interview.roundProgress?.round.name || "Interview",
         isHost: session.role !== "CANDIDATE",
         iceServers: iceServers(),
         signaling: {
