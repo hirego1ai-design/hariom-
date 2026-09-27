@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_sourcing_invitations_get", 60, 60_000);
     const session=await getCurrentSession(request.headers);
     if(!session||session.role!=="CANDIDATE")throw new ApiError("Candidate access required.",403);
     const candidate=await prisma.candidateProfile.findUnique({where:{userId:session.id},select:{id:true}});
