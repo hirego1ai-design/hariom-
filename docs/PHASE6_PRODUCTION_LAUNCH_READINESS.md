@@ -68,3 +68,11 @@ For the final production-readiness evidence run, merge the dedicated release-gat
 
 A skipped load-test job is not a pass. Final release sign-off requires an actual successful run plus the normal CI, Phase 5, security, migration, deployment, and provider checks.
 
+
+
+## Final release-gate evidence trigger
+
+- Source main commit before the release-gate merge: `b6eaa0dfd7ddf1e3b5df82afcde310f27dd3663b`.
+- Production CI, Phase 5 Verification, and Security checks are green on that source commit.
+- This dedicated release-gate change exists only to execute the repository's protected safe read-only production load-test workflow through the documented `[load-test]` merge trigger.
+- Final sign-off must use the resulting workflow artifact; a skipped run is not accepted as load-test evidence.
