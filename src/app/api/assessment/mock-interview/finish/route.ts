@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
-import { handleApiError, readValidatedJson, ApiError } from '@/lib/apiSecurity';
+import { handleApiError, readValidatedJson, ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from '@/lib/prisma';
 import { logAuditEvent } from '@/lib/auditLogger';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ const mockInterviewFinishSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    await enforceRateLimit(request, "mock_interview_finish", 20, 60000);
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== 'CANDIDATE') {
       throw new ApiError('Unauthorized', 401);
