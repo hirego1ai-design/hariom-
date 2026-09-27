@@ -50,7 +50,7 @@ export default function CandidateCreditsPage() {
 
   return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
     <CandidateSidebar />
-    <main className="flex-1 ml-[100px] lg:ml-[116px] max-w-5xl p-6 lg:p-10">
+    <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl p-6 lg:p-10">
       <header className="mb-8"><p className="text-primary text-xs font-bold uppercase tracking-wider">Candidate account</p><h1 className="mt-2 text-3xl font-extrabold">Career Credits</h1><p className="mt-3 max-w-3xl text-sm text-text-secondary">Credits are separate from employer credits. They can be used for AI Mock Interviews and career services; they cannot buy an artificial score, badge, or job outcome.</p></header>
       {error && <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
       {successNotice && <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">{successNotice}</div>}
