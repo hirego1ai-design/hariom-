@@ -111,10 +111,12 @@ function hasMock(text) {
 }
 
 function hasUnavailableCapability(text) {
-  // Generic runtime error copy such as "service unavailable" is not proof that
-  // an implementation is missing. Only explicit implementation/prototype
-  // markers should downgrade a production route.
-  return /\bNOT_IMPLEMENTED\b|\bNOT CONNECTED\b|currently\s+in\s+development|waiting\s+for\s+real\s+API\s+integration|\bComing Soon\b/i.test(text);
+  // Generic runtime error copy such as "service unavailable" or "not connected
+  // to a configured round" is not proof that an implementation is missing.
+  // Treat only deliberate prototype/tombstone markers as unavailable.
+  return /\bNOT_IMPLEMENTED\b/.test(text)
+    || /\bNOT CONNECTED\b/.test(text)
+    || /currently\s+in\s+development|waiting\s+for\s+real\s+API\s+integration|\bComing Soon\b/i.test(text);
 }
 
 function hasErrorHandling(text) {
