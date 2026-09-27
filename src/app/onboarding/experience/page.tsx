@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,8 +15,27 @@ export default function ExperiencePage() {
       ? state.experience
       : []
   );
+  const [experienceYears, setExperienceYears] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/candidate/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile) return;
+        if (cancelled) return;
+        if (expList.length === 0 && Array.isArray(body.profile.experience) && body.profile.experience.length > 0) {
+          setExpList(body.profile.experience);
+        }
+        if (typeof body.profile.experienceYears === "number" && body.profile.experienceYears >= 0) {
+          setExperienceYears(String(body.profile.experienceYears));
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const handleAdd = () => {
     setExpList([...expList, { company: "", role: "", startDate: "", endDate: "", description: "" }]);
@@ -32,7 +51,7 @@ export default function ExperiencePage() {
     setExpList(updated);
   };
 
-  const persistExperienceAndContinue = async (experience: ExperienceEntry[]) => {
+  const persistExperienceAndContinue = async (experience: ExperienceEntry[], years: number) => {
     if (isSaving) return;
     setIsSaving(true);
     setSaveError("");
@@ -40,7 +59,7 @@ export default function ExperiencePage() {
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ experience }),
+        body: JSON.stringify({ experience, experienceYears: years }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok || !body.success) throw new Error(body.error || "Could not save work experience.");
@@ -54,8 +73,15 @@ export default function ExperiencePage() {
     }
   };
 
-  const handleNext = () => persistExperienceAndContinue(expList);
-  const handleSkip = () => persistExperienceAndContinue([]);
+  const handleNext = () => {
+    const years = Number(experienceYears);
+    if (!Number.isFinite(years) || years < 0 || years > 80) {
+      setSaveError("Enter your total professional experience in years between 0 and 80.");
+      return;
+    }
+    void persistExperienceAndContinue(expList, years);
+  };
+  const handleSkip = () => void persistExperienceAndContinue([], 0);
 
 
   return (
@@ -126,6 +152,27 @@ export default function ExperiencePage() {
 
         {/* Main Workspace Body */}
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          <div className="rounded-3xl p-6 border" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--outline)" }}>
+            <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
+              TOTAL PROFESSIONAL EXPERIENCE (YEARS)
+            </label>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              Enter your own total experience. HireGo does not estimate years from the number of roles you add.
+            </p>
+            <input
+              type="number"
+              min="0"
+              max="80"
+              step="0.1"
+              inputMode="decimal"
+              value={experienceYears}
+              onChange={(event) => setExperienceYears(event.target.value)}
+              placeholder="e.g. 3.5"
+              className="mt-3 w-full sm:w-56 h-11 px-4 rounded-full outline-none text-xs font-semibold"
+              style={{ backgroundColor: "var(--bg-input)", border: "1.5px solid var(--outline)", color: "var(--text-primary)" }}
+            />
+          </div>
+
           <div className="space-y-4">
             {expList.map((exp, idx) => (
               <div
