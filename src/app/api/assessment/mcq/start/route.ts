@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { handleApiError, ApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { handleApiError, ApiError, readValidatedJson, enforceRateLimit } from "@/lib/apiSecurity";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { z } from "zod";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
@@ -13,6 +13,7 @@ const StartAssessmentSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "assessment_mcq_start", 12, 60000);
     const session = await getCurrentSession(req.headers);
     if (!session || session.role !== "CANDIDATE") {
       throw new ApiError("Forbidden. Candidate access only.", 403);
