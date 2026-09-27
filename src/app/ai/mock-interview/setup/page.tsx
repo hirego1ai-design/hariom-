@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, ShieldCheck, ArrowRight, Clock, History, AlertCircle } from "lucide-react";
@@ -14,13 +14,15 @@ export default function MockInterviewSetupPage() {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 6);
-  const [roleTarget, setRoleTarget] = useState(roleFromAssessment || "Full Stack Engineer");
+  const [roleTarget, setRoleTarget] = useState(roleFromAssessment);
   const [seniority, setSeniority] = useState("Senior");
   const [totalQuestions, setTotalQuestions] = useState(3);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState("");
+  const startRequestKey = useRef<string | null>(null);
 
   // Load candidate's past sessions for history overview
   useEffect(() => {
@@ -33,8 +35,8 @@ export default function MockInterviewSetupPage() {
             setPastSessions(data.sessions);
           }
         }
-      } catch {
-        // Non-fatal if history cannot be loaded initially
+      } catch (error) {
+        setHistoryError(error instanceof Error ? error.message : "Practice history could not be loaded.");
       } finally {
         setIsLoadingHistory(false);
       }
@@ -54,10 +56,13 @@ export default function MockInterviewSetupPage() {
 
     try {
       const fullRoleTarget = `${seniority} ${roleTarget.trim()}`;
+      const idempotencyKey = startRequestKey.current || crypto.randomUUID();
+      startRequestKey.current = idempotencyKey;
       const res = await fetch("/api/assessment/mock-interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          idempotencyKey,
           roleTarget: fullRoleTarget,
           totalQuestions: Number(totalQuestions),
           focusSkills,
@@ -287,7 +292,7 @@ export default function MockInterviewSetupPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-[#C5221F] font-bold">•</span>
-                  <span><strong>Private Practice:</strong> Scores are confidential to you and do not alter company hiring decisions without your submission.</span>
+                  <span><strong>Private Practice:</strong> Scores are private practice feedback and are not submitted to employers by this practice flow.</span>
                 </li>
               </ul>
             </div>
@@ -304,9 +309,11 @@ export default function MockInterviewSetupPage() {
 
               {isLoadingHistory ? (
                 <div className="text-xs text-white/40 py-4 text-center">Loading past sessions...</div>
+              ) : historyError ? (
+                <div role="alert" className="text-xs text-red-300 py-4 text-center">{historyError}</div>
               ) : pastSessions.length === 0 ? (
                 <div className="text-xs text-white/40 py-4 text-center leading-relaxed">
-                  No previous sessions found. Start your first session to track fluency growth!
+                  No previous practice sessions found.
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
