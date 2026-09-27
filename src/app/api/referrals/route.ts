@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { referralDb } from "@/lib/referral-db";
-import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { FraudStatus } from "@/types/referral";
+
+const inviteSchema = z.object({
+  action: z.literal("INVITE"),
+  email: z.string().trim().email().max(320),
+  name: z.string().trim().min(1).max(160).optional(),
+}).strict();
 
 export async function GET(request: Request) {
   try {
@@ -66,38 +73,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const body = await readValidatedJson(request, inviteSchema, 8 * 1024);
+    const stats = await referralDb.getUserReferralStats(session.id, session.name);
 
-    // IDOR Protection: Reject attempts to specify a different referrer
-    if (body.referrerId && body.referrerId !== session.id) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Cannot initiate referral on behalf of another user" },
-        { status: 403 }
-      );
-    }
+    const attr = await referralDb.createAttribution({
+      referrerId: session.id,
+      referralCode: stats.referralCode,
+      attributionSource: "DIRECT_EMAIL_INVITE",
+      referredEmail: body.email,
+      metadata: { inviteeEmail: body.email, inviteeName: body.name || "Friend" },
+    });
 
-    if (body.action === "INVITE") {
-      const email = body.email;
-      if (!email) {
-        return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
-      }
-
-      const attr = await referralDb.createAttribution({
-        referrerId: session.id,
-        referralCode: (session.name ? session.name.replace(/\s+/g, "").toUpperCase() : "HIREGO") + "2026",
-        attributionSource: "DIRECT_EMAIL_INVITE",
-        referredEmail: email,
-        metadata: { inviteeEmail: email, inviteeName: body.name || "Friend" },
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Referral invitation registered for ${email}`,
-        attributionId: attr.id,
-      });
-    }
-
-    return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+    return NextResponse.json({
+      success: true,
+      message: `Referral invitation registered for ${body.email}`,
+      attributionId: attr.id,
+    });
   } catch (error: any) {
     return handleApiError(error);
   }
