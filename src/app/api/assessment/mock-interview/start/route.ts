@@ -3,11 +3,11 @@ import { getCurrentSession } from '@/lib/auth';
 import { handleApiError, readValidatedJson, ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { runMockInterviewStructured } from '@/lib/mockInterviewAi';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
 
 const mockInterviewStartSchema = z.object({
+  idempotencyKey: z.string().uuid(),
   roleTarget: z.string().trim().min(1).max(120),
   totalQuestions: z.number().int().min(1).max(10).optional().default(5),
   focusSkills: z.array(z.string().trim().min(1).max(120)).max(6).optional().default([]),
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const body = await readValidatedJson(request, mockInterviewStartSchema);
-    const { roleTarget, totalQuestions, focusSkills } = body;
+    const { idempotencyKey, roleTarget, totalQuestions, focusSkills } = body;
 
     const candidateProfile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id }
@@ -30,6 +30,30 @@ export async function POST(request: Request) {
 
     if (!candidateProfile) {
       throw new ApiError('Candidate profile not found. Please complete your profile first.', 404);
+    }
+
+    const existingSession = await prisma.mockInterviewSession.findUnique({
+      where: { idempotencyKey },
+      include: { turns: { orderBy: { questionIndex: "asc" }, take: 1 } },
+    });
+    if (existingSession) {
+      if (existingSession.candidateProfileId !== candidateProfile.id) {
+        throw new ApiError("Mock interview request key is already in use.", 409);
+      }
+      const firstTurn = existingSession.turns[0];
+      if (!firstTurn) throw new ApiError("Existing mock interview session is incomplete.", 409);
+      return NextResponse.json({
+        success: true,
+        reused: true,
+        session: {
+          id: existingSession.id,
+          roleTarget: existingSession.roleTarget,
+          totalQuestions: existingSession.totalQuestions,
+          currentQuestionIndex: existingSession.currentQuestionIndex,
+          focusSkills: existingSession.focusSkills,
+        },
+        question: { text: firstTurn.questionText, questionIndex: firstTurn.questionIndex },
+      });
     }
 
     const mockService = await prisma.candidateServiceCatalog.findFirst({
@@ -77,7 +101,9 @@ export async function POST(request: Request) {
       throw new ApiError('Mock interview question service is unavailable. Please try again later.', 503);
     }
 
-    const interviewSession = await prisma.$transaction(async (tx) => {
+    let interviewSession;
+    try {
+      interviewSession = await prisma.$transaction(async (tx) => {
       if (mockService && mockService.creditCost > 0) {
         const debit = await tx.candidateCreditWallet.updateMany({
           where: {
@@ -102,7 +128,7 @@ export async function POST(request: Request) {
             amount: -mockService.creditCost,
             balanceAfter: wallet.balance,
             serviceKey: mockService.serviceKey,
-            idempotencyKey: crypto.randomUUID(),
+            idempotencyKey: `mock-interview:${candidateProfile.id}:${idempotencyKey}`,
             reference: `AI Mock Interview: ${roleTarget}`,
           },
         });
@@ -111,6 +137,7 @@ export async function POST(request: Request) {
       return tx.mockInterviewSession.create({
         data: {
           candidateProfileId: candidateProfile.id,
+          idempotencyKey,
           roleTarget,
           focusSkills,
           totalQuestions,
@@ -125,6 +152,32 @@ export async function POST(request: Request) {
         },
       });
     });
+    } catch (error: any) {
+      if (error?.code === "P2002") {
+        const racedSession = await prisma.mockInterviewSession.findUnique({
+          where: { idempotencyKey },
+          include: { turns: { orderBy: { questionIndex: "asc" }, take: 1 } },
+        });
+        if (racedSession && racedSession.candidateProfileId === candidateProfile.id && racedSession.turns[0]) {
+          return NextResponse.json({
+            success: true,
+            reused: true,
+            session: {
+              id: racedSession.id,
+              roleTarget: racedSession.roleTarget,
+              totalQuestions: racedSession.totalQuestions,
+              currentQuestionIndex: racedSession.currentQuestionIndex,
+              focusSkills: racedSession.focusSkills,
+            },
+            question: {
+              text: racedSession.turns[0].questionText,
+              questionIndex: racedSession.turns[0].questionIndex,
+            },
+          });
+        }
+      }
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
