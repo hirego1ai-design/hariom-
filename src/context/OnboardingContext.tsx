@@ -39,25 +39,6 @@ export interface ExperienceEntry {
   description: string;
 }
 
-export interface ResumeAnalysis {
-  qualityScore: number;
-  extractedSkills: string[];
-  experienceYears: number;
-  missingFields: string[];
-  summary: string;
-  improvements: string[];
-}
-
-export interface VideoAnalysis {
-  communicationScore: number;
-  clarityScore: number;
-  confidenceScore: number;
-  professionalismScore: number;
-  bodyLanguageScore: number;
-  fluencyScore: number;
-  overallScore: number;
-}
-
 export interface AssessmentResult {
   category: string;
   score: number;
@@ -85,9 +66,7 @@ export interface OnboardingState {
   experience: ExperienceEntry[];
   skills: SkillEntry[];
   resumeUploaded: boolean;
-  resumeAnalysis: ResumeAnalysis | null;
   videoRecorded: boolean;
-  videoAnalysis: VideoAnalysis | null;
   baselineAssessmentCompleted: boolean;
   assessmentResults: AssessmentResult[];
   interviewEligibility: "ready-ai" | "needs-assessment" | "needs-improvement" | "ready-employer" | null;
@@ -121,9 +100,7 @@ const defaultState: OnboardingState = {
   experience: [],
   skills: [],
   resumeUploaded: false,
-  resumeAnalysis: null,
   videoRecorded: false,
-  videoAnalysis: null,
   baselineAssessmentCompleted: false,
   assessmentResults: [],
   interviewEligibility: null,
