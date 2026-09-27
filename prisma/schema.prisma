@@ -657,6 +657,8 @@ model VideoResume {
   id                        String           @id @default(uuid())
   candidateProfileId        String
   candidateProfile          CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  storedFileId              String?          @unique
+  storedFile                StoredFile?      @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
   videoUrl                  String
   durationSeconds           Int
   transcript                String?
@@ -880,6 +882,7 @@ model StoredFile {
   createdAt                  DateTime                     @default(now())
   RecordedAssessmentResponse RecordedAssessmentResponse[]
   offerDocuments             Offer[]
+  videoResume                VideoResume?
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
