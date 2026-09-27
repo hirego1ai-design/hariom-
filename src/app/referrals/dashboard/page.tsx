@@ -15,20 +15,27 @@ export default function ReferralsDashboardPage() {
   const [payoutMethod, setPayoutMethod] = useState("UPI");
   const [withdrawMessage, setWithdrawMessage] = useState<string | null>(null);
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  const fetchStats = () => {
-    fetch("/api/referrals")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.stats) {
-          setStats(data.stats);
-          if (data.stats.availableBalance > 0) {
-            setWithdrawAmount(data.stats.availableBalance.toString());
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchStats = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/referrals", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !data.stats) {
+        throw new Error(data.error || "Referral data is unavailable.");
+      }
+      setStats(data.stats);
+      if (data.stats.availableBalance > 0) {
+        setWithdrawAmount(data.stats.availableBalance.toString());
+      }
+    } catch (error) {
+      setStats(null);
+      setLoadError(error instanceof Error ? error.message : "Referral data is unavailable.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -81,11 +88,39 @@ export default function ReferralsDashboardPage() {
     }
   };
 
-  const shareText = `Join me on HireGo AI, the autonomous neural talent & recruitment network! Use my referral code: ${
-    stats?.referralCode || "HIREGO2026"
-  }`;
+  const shareText = stats
+    ? `Join me on HireGo AI. Use my referral code: ${stats.referralCode}`
+    : "";
   const encodedShareText = encodeURIComponent(shareText);
-  const encodedShareUrl = encodeURIComponent(stats?.referralLink || "https://hirego.ai");
+  const encodedShareUrl = encodeURIComponent(stats?.referralLink || "");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+        <CandidateSidebar />
+        <main className="flex-1 ml-0 md:ml-[116px] grid place-items-center p-6">
+          <p className="text-sm text-text-muted">Loading referral account…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+        <CandidateSidebar />
+        <main className="flex-1 ml-0 md:ml-[116px] grid place-items-center p-6">
+          <section className="max-w-lg rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+            <h1 className="text-xl font-bold">Referral account unavailable</h1>
+            <p className="mt-2 text-sm text-text-secondary">{loadError || "Referral data could not be loaded."}</p>
+            <button type="button" onClick={() => void fetchStats()} className="mt-5 min-h-11 rounded-full bg-primary px-5 text-sm font-bold text-white">
+              Try again
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
@@ -193,11 +228,12 @@ export default function ReferralsDashboardPage() {
                 <input
                   type="text"
                   readOnly
-                  value={stats?.referralLink || "https://hirego.ai/register?ref=HIREGO2026"}
+                  value={stats.referralLink}
                   className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
                 />
                 <button
                   onClick={handleCopy}
+                  disabled={!stats.referralLink}
                   className="btn-3d-red px-6 py-2.5 rounded-full text-white text-xs font-bold shrink-0 transition-all shadow-md"
                 >
                   {copied ? "Copied! ✓" : "Copy Link"}
