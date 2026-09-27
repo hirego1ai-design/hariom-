@@ -2904,6 +2904,7 @@ model MockInterviewSession {
   id                   String              @id @default(uuid())
   candidateProfileId   String
   candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  idempotencyKey       String?             @unique
   roleTarget           String
   focusSkills          String[]            @default([])
   status               MockInterviewStatus @default(IN_PROGRESS)
