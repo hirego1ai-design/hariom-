@@ -10,9 +10,11 @@ async function canAccessFile(userId: string, role: string, file: { id: string; o
     const offerDocument = await prisma.offer.findFirst({
       where: {
         documentFileId: file.id,
-        status: { in: ["SENT", "ACCEPTED"] },
-        expiresAt: { gt: new Date() },
         application: { candidateProfile: { userId } },
+        OR: [
+          { status: "SENT", expiresAt: { gt: new Date() } },
+          { status: "ACCEPTED" },
+        ],
       },
       select: { id: true },
     });
