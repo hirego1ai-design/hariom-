@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
-import { handleApiError, readValidatedJson, ApiError } from '@/lib/apiSecurity';
+import { handleApiError, readValidatedJson, ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { wrapUntrustedContent } from '@/lib/security/untrustedContent';
@@ -57,6 +57,7 @@ async function evaluateTurn({
 
 export async function POST(request: Request) {
   try {
+    await enforceRateLimit(request, "mock_interview_turn", 30, 60000);
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== 'CANDIDATE') {
       throw new ApiError('Unauthorized', 401);
