@@ -106,7 +106,7 @@ export default function CandidateInterviewRoomPage() {
         </div>
         {policy.enabled && <ProctoringEngine interviewId={room.interviewId} policy={policy} />}
         <div className="min-h-0 flex-1">
-          <WebRTCInterviewRoom roomId={roomId} candidateName="Candidate" interviewerName="HireGo AI Interview Panel" onComplete={() => router.push("/interviews")} />
+          <WebRTCInterviewRoom roomId={roomId} onComplete={() => router.push("/interviews")} />
         </div>
       </div>
     </main>
