@@ -11,7 +11,7 @@ interface WebRTCInterviewRoomProps {
 }
 
 type Signal = { id: string; senderId: string; targetId?: string | null; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; isHost: boolean; status: "ACTIVE" | "COMPLETED" | "CLOSED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
+type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; participantLabels: Record<string, string>; roundTitle: string; isHost: boolean; status: "ACTIVE" | "COMPLETED" | "CLOSED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
 
 async function readRoom(roomId: string): Promise<RoomSnapshot> {
   const response = await fetch(`/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, { cache: "no-store" });
@@ -26,7 +26,7 @@ function RemoteVideo({ stream, label }: { stream: MediaStream; label: string }) 
   return <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={ref} autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{label}</span></div>;
 }
 
-export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview", candidateName = "Candidate", interviewerName = "Interview participant", roomId = "managed-hiring-room", onComplete }: WebRTCInterviewRoomProps) {
+export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidateName, interviewerName, roomId = "managed-hiring-room", onComplete }: WebRTCInterviewRoomProps) {
   const localVideo = useRef<HTMLVideoElement>(null);
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const stream = useRef<MediaStream | null>(null);
@@ -45,6 +45,8 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
   const [error, setError] = useState("");
   const [interviewId, setInterviewId] = useState("");
   const [isHost, setIsHost] = useState(false);
+  const [participantLabels, setParticipantLabels] = useState<Record<string, string>>({});
+  const [resolvedRoundTitle, setResolvedRoundTitle] = useState(roundTitle);
 
   const signal = async (action: string, targetId?: string, payload: Record<string, unknown> = {}) => {
     const res = await fetch("/api/interviews/room", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, action, ...(targetId ? { targetId } : {}), ...payload }) });
@@ -96,6 +98,8 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
         selfId.current = room.participantId;
         hostRef.current = room.isHost;
         setIsHost(room.isHost);
+        setParticipantLabels(room.participantLabels || {});
+        setResolvedRoundTitle(room.roundTitle || roundTitle);
         iceServersRef.current = room.iceServers;
         setInterviewId(room.interviewId);
 
@@ -240,11 +244,11 @@ export default function WebRTCInterviewRoom({ roundTitle = "Technical Interview"
 
   const remotes = Object.entries(remoteStreams);
   return <div className="w-full h-full flex flex-col bg-[#0A0A0C] text-white rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-    <div className="h-14 bg-[#141418] border-b border-white/10 px-6 flex items-center justify-between"><div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-xs uppercase tracking-wider text-red-400">LIVE · {roundTitle}</span></div><span className="text-xs text-text-muted">{status} · {remotes.length + 1} connected</span></div>
+    <div className="h-14 bg-[#141418] border-b border-white/10 px-6 flex items-center justify-between"><div className="flex items-center gap-3"><span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" /><span className="font-bold text-xs uppercase tracking-wider text-red-400">LIVE · {resolvedRoundTitle}</span></div><span className="text-xs text-text-muted">{status} · {remotes.length + 1} connected</span></div>
     {error && <div role="alert" className="px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300">{error}</div>}
     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4 min-h-0 overflow-auto">
-      {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={interviewerName} />)}
-      <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{candidateName} (You)</span></div>
+      {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={participantLabels[peerId] || interviewerName || "Interview participant"} />)}
+      <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{participantLabels[selfId.current] || candidateName || "You"} (You)</span></div>
     </div>
     <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{isHost && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
   </div>;
