@@ -56,9 +56,9 @@ export default function SkillsPage() {
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
       <CandidateSidebar />
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-[116px]" />
-        <header className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center" style={{ backgroundColor: "var(--bg-page)", borderBottom: "1px solid var(--outline)" }}>
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
+        <header className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center" style={{ backgroundColor: "var(--bg-page)", borderBottom: "1px solid var(--outline)" }}>
           <div>
             <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Build a profile recruiters can understand</p>
             <h1 className="text-headline-md font-bold tracking-tight" style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>Your skills</h1>
