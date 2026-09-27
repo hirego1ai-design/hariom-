@@ -126,7 +126,7 @@ export default function ReferralsDashboardPage() {
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
         <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
           <div>
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
