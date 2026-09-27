@@ -35,7 +35,6 @@ const candidateProtectedPrefixes = [
   "/referrals",
   "/leaderboard",
   "/credits",
-  "/jobs",
 ];
 
 interface SessionPayload {
