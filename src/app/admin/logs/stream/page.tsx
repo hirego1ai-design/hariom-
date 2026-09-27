@@ -1,5 +1,5 @@
-"use client";
-import React from "react";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminHeader from "@/components/admin/AdminHeader";
-export default function AdminLogStreamPage(){return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex"><AdminSidebar/><div className="flex-1 md:ml-[116px] flex flex-col min-w-0"><AdminHeader title="Operational Logs"/><main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1200px] w-full mx-auto"><div><h1 className="font-display-lg text-display-lg text-white">Operational Log Evidence</h1><p className="text-text-muted text-sm">Production logs must originate from authenticated application, worker, and infrastructure telemetry.</p></div><div className="glass-card p-6 rounded-2xl border border-amber-400/20 max-w-2xl space-y-3"><div className="text-xs font-bold text-amber-300">LIVE LOG STREAM NOT CONNECTED</div><p className="text-sm text-text-muted">No production stdout/stderr stream is connected to this screen. Synthetic server, database, traffic, candidate, or AI events are not displayed.</p><p className="text-xs text-text-muted">Use the deployment logging/SIEM source until a redacted, access-controlled log ingestion API is integrated.</p></div></main></div></div>}
+import { redirect } from "next/navigation";
+
+export default function RetiredRoute() {
+  redirect("/admin/settings/audit-log");
+}

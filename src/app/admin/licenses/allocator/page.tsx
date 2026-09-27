@@ -1,5 +1,5 @@
-"use client";
-import React from "react";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminHeader from "@/components/admin/AdminHeader";
-export default function AdminLicenseAllocatorPage(){return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex"><AdminSidebar/><div className="flex-1 md:ml-[116px] flex flex-col min-w-0"><AdminHeader title="Enterprise Licenses & Seats"/><main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1200px] w-full mx-auto"><div><h1 className="font-display-lg text-display-lg text-white">Enterprise Licenses & Seats</h1><p className="text-text-muted text-sm">Seat allocation must be backed by persisted subscription and company membership data.</p></div><div className="glass-card p-6 rounded-2xl border border-amber-400/20 max-w-2xl space-y-3"><div className="text-xs font-bold text-amber-300">LICENSE ALLOCATION API NOT CONNECTED</div><p className="text-sm text-text-muted">No authoritative seat-allocation service is connected to this screen. Synthetic companies, tiers, seat usage, and simulated grant actions have been removed.</p><p className="text-xs text-text-muted">Provision seats through the persisted subscription/team workflow until an audited allocator endpoint is implemented.</p></div></main></div></div>}
+import { redirect } from "next/navigation";
+
+export default function RetiredRoute() {
+  redirect("/admin/subscriptions");
+}

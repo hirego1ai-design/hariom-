@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reconcileExpiredCopilotReservations } from "@/lib/copilot/reservationReconciliation";
+import { handleApiError } from "@/lib/apiSecurity";
 
 function authorized(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -13,15 +14,19 @@ function authorized(request: NextRequest) {
 }
 
 async function handle(request: NextRequest) {
-  if (!authorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
-  }
+  try {
+    if (!authorized(request)) {
+      return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
+    }
 
-  const result = await reconcileExpiredCopilotReservations({ limit: 250 });
-  return NextResponse.json({
-    success: result.failed === 0,
-    ...result,
-  }, { status: result.failed === 0 ? 200 : 207 });
+    const result = await reconcileExpiredCopilotReservations({ limit: 250 });
+    return NextResponse.json({
+      success: result.failed === 0,
+      ...result,
+    }, { status: result.failed === 0 ? 200 : 207 });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function GET(request: NextRequest) {

@@ -143,3 +143,32 @@ future `prisma migrate deploy` against this database, use the staging
 `DATABASE_URL` to mark each existing migration as applied with
 `npx prisma migrate resolve --applied <migration_name>`. Do not rerun their SQL
 or manually insert migration-ledger rows.
+
+
+## 2026-09-27 standalone Copilot and recorded-assessment update
+
+The active Hariom project was rechecked after the latest main-branch commerce
+work. The application code expected standalone Copilot tables and
+`RecordedAssessmentAnalysisJob.claimToken`, but those structures were not yet
+present in the live database.
+
+The reviewed repository migrations were applied through Supabase's migration
+channel for:
+
+- standalone Copilot plans, regional pricing, subscriptions, billing cycles,
+  capacity offers, usage reservations and usage ledger;
+- recorded-assessment analysis claim-token fencing;
+- retirement of the legacy per-job Copilot commercial flags;
+- RLS and Data API privilege hardening for every new Copilot table.
+
+Post-application verification confirmed the standalone Copilot tables exist,
+three Copilot plans, fifteen regional prices and nine usage rules are present,
+and the recorded-assessment claim-token column exists. Every new Copilot table
+has RLS enabled and neither `anon` nor `authenticated` has direct DML table
+privileges.
+
+The repository now mirrors the exact Supabase migration versions listed in
+`MIGRATION_RECONCILIATION_RUNBOOK.md`. Prisma ledger reconciliation remains a
+separate controlled operational step for migrations applied through Supabase;
+do not use `prisma migrate deploy` against production until that ledger is
+resolved and rechecked.

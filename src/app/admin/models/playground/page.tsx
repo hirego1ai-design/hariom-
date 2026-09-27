@@ -1,5 +1,5 @@
-"use client";
-import React from "react";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminHeader from "@/components/admin/AdminHeader";
-export default function AdminModelPlaygroundPage(){return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex"><AdminSidebar/><div className="flex-1 md:ml-[116px] flex flex-col min-w-0"><AdminHeader title="AI Evaluation Playground"/><main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1200px] w-full mx-auto"><div><h1 className="font-display-lg text-display-lg text-white">AI Evaluation Playground</h1><p className="text-text-muted text-sm">Model experiments require a server-side gateway with authorization, tenant isolation, rate limits, spend controls, and traceable model/version metadata.</p></div><div className="glass-card p-6 rounded-2xl border border-amber-400/20 max-w-2xl space-y-3"><div className="text-xs font-bold text-amber-300">PLAYGROUND INFERENCE NOT CONNECTED</div><p className="text-sm text-text-muted">The previous Run Test Inference button returned a fixed 94/100 candidate score after a browser timer. That simulated evaluation has been removed and no candidate capability claim is generated without real model evidence.</p><p className="text-xs text-text-muted">Connect this page only through the hardened AI dispatch layer with bounded prompts, authorization, usage accounting and auditable inference metadata.</p></div></main></div></div>}
+import { redirect } from "next/navigation";
+
+export default function RetiredRoute() {
+  redirect("/admin/models/registry");
+}

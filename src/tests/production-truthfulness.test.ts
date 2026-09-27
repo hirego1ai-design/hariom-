@@ -309,7 +309,7 @@ test("seed script cannot silently target localhost or add sample companies", () 
 });
 
 
-test("public candidate sharing and unavailable AI surfaces cannot be falsely certified", () => {
+test("public candidate sharing stays truthful and retired prototype routes resolve to production surfaces", () => {
   const publicProfile = read("src/app/profile/public/page.tsx");
   const copilot = read("src/app/employer/ai-hiring-copilot-hub/page.tsx");
   for (const marker of ["/api/copilot/plans", "/api/employer/copilot/capacity", "/api/payments/copilot/checkout"]) {
@@ -320,20 +320,29 @@ test("public candidate sharing and unavailable AI surfaces cannot be falsely cer
     assert.doesNotMatch(publicProfile, pattern);
   }
 
-  const inventory = JSON.parse(read("production-wiring-inventory.json"));
-  const unavailableRoutes = new Set([
-    "/employer/ai-evaluation-scores",
-    "/employer/ai-candidate-ranking-explanation",
-  ]);
-  const records = Array.isArray(inventory.records) ? inventory.records : [];
-  const copilotScreen = records.find((record: any) => record.record_type === "screen" && record.route === "/employer/ai-hiring-copilot-hub");
-  assert.ok(copilotScreen, "wiring inventory is missing the production Co-Pilot hub");
-  assert.equal(copilotScreen.status, "GREEN", "production Co-Pilot hub must remain connected to authoritative APIs");
-  for (const route of unavailableRoutes) {
-    const screen = records.find((record: any) => record.record_type === "screen" && record.route === route);
-    assert.ok(screen, `wiring inventory is missing unavailable screen ${route}`);
-    assert.notEqual(screen.status, "GREEN", `unavailable screen was falsely certified GREEN: ${route}`);
+  const redirects: Array<[string, string]> = [
+    ["src/app/admin/licenses/allocator/page.tsx", "/admin/subscriptions"],
+    ["src/app/admin/logs/stream/page.tsx", "/admin/settings/audit-log"],
+    ["src/app/admin/models/playground/page.tsx", "/admin/models/registry"],
+    ["src/app/admin/sla/monitor/page.tsx", "/admin/system-health"],
+    ["src/app/admin/system/db-pool/page.tsx", "/admin/system-health"],
+    ["src/app/employer/ai-candidate-ranking-explanation/page.tsx", "/employer/hiring-pipeline"],
+    ["src/app/employer/ai-evaluation-scores/page.tsx", "/employer/hiring-pipeline"],
+    ["src/app/employer/job-boost-promote/page.tsx", "/employer/job-listings-management"],
+  ];
+  for (const [path, destination] of redirects) {
+    const source = read(path);
+    assert.match(source, /from ["']next\/navigation["']/);
+    assert.ok(source.includes(`redirect("${destination}")`), `${path} must redirect to ${destination}`);
+    assert.doesNotMatch(source, /NOT CONNECTED|Waiting for real API integration|mock page has been removed/i);
   }
+
+  const inventory = JSON.parse(read("production-wiring-inventory.json"));
+  const records = Array.isArray(inventory.records) ? inventory.records : [];
+  const red = records.filter((record: any) => record.status === "RED");
+  const yellow = records.filter((record: any) => record.status === "YELLOW");
+  assert.equal(red.length, 0, `production wiring inventory has ${red.length} RED record(s)`);
+  assert.equal(yellow.length, 0, `production wiring inventory has ${yellow.length} YELLOW record(s)`);
 });
 
 test("offer, proctoring and approval remediation surfaces are connected to authoritative APIs", () => {

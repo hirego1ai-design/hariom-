@@ -41,3 +41,32 @@ connects successfully and reports only the intentionally retired
 `20260823070000_assessment_engine` migration as pending. It must not be
 executed because the coding/IDE feature was removed. The live ledger contains
 all other repository migrations, including the company-invitation migration.
+
+
+## 2026-09-27 live schema reconciliation
+
+This section supersedes older statements above that described the migration
+ledger as fully reconciled.
+
+The latest standalone Copilot commerce schema and recorded-assessment claim
+fencing were applied to the active Hariom Supabase project using reviewed
+repository SQL. The legacy per-job Copilot commercial state was then retired,
+and all new standalone Copilot tables were hardened with RLS enabled and direct
+`anon` / `authenticated` table privileges revoked.
+
+Supabase migration-history mirror files now track the live versions:
+
+- `20260926200448_subscription_copilot_product_model`
+- `20260926201345_subscription_catalog_security_reconcile`
+- `20260927044325_copilot_global_commerce`
+- `20260927044334_recorded_assessment_claim_token`
+- `20260927044354_retire_legacy_job_copilot`
+- `20260927044421_copilot_rls_security_hardening`
+
+The database schema is present, but migrations applied through the Supabase
+migration channel are not automatically recorded in Prisma's
+`_prisma_migrations` ledger. Before any future production
+`prisma migrate deploy`, use a trusted direct production connection and run
+`prisma migrate resolve --applied <migration_name>` only after verifying the
+matching schema for each directly applied Prisma migration. Do not manually
+insert rows into `_prisma_migrations`, and do not rerun already-applied SQL.
