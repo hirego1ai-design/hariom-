@@ -45,7 +45,13 @@ export async function GET(req: NextRequest) {
           orderBy: { createdAt: "desc" },
         });
 
-    return NextResponse.json({ success: true, applications });
+    const presentedApplications = applications.map((application) => ({
+      ...application,
+      // Application intent rows use matchScore=0 before evidence-first matching
+      // runs. Do not expose that storage default as a measured compatibility.
+      matchScore: application.aiSummary ? application.matchScore : null,
+    }));
+    return NextResponse.json({ success: true, applications: presentedApplications });
   } catch (error) {
     return handleApiError(error);
   }
