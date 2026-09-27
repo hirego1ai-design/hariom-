@@ -430,9 +430,10 @@ test("previously yellow production endpoints are backed by real sources or expli
   }
 
   assert.equal(inventory.reconciliation?.red_records, 0);
-  assert(
-    (inventory.reconciliation?.yellow_records ?? 0) > 0,
-    "Explicitly unavailable or tombstoned production capabilities must remain YELLOW instead of being misreported as GREEN"
+  assert.equal(
+    inventory.reconciliation?.yellow_records ?? 0,
+    0,
+    "Current production inventory must not contain unresolved YELLOW records"
   );
 
   const jobBoost = fs.readFileSync(
