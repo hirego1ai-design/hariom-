@@ -114,7 +114,7 @@ export default function DocumentUploadPage() {
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-primary text-[24px]">
-                        {uploadedDocs[doc.id] ? "verified" : "description"}
+                        {uploadedDocs[doc.id] ? "check_circle" : "description"}
                       </span>
                     </div>
                     <div className="flex-1">
@@ -171,7 +171,6 @@ export default function DocumentUploadPage() {
 
               <button
                 onClick={handleNext}
-                disabled={Object.values(uploadedDocs).every(Boolean) === false}
                 className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
