@@ -945,6 +945,7 @@ class ReferralDatabaseStore {
     userName?: string
   ): Promise<ReferralDashboardStatsDTO> {
     const isProduction = process.env.NODE_ENV === "production";
+    const programConfig = await getReferralProgramConfig();
     const correlationId = generateCorrelationId("corr-user-stats");
     const code = await this.getOrCreateReferralCode(userId, userName);
 
@@ -1186,6 +1187,8 @@ class ReferralDatabaseStore {
       pendingPayoutBalance,
       paidBalance,
       currency: "INR",
+      programEnabled: programConfig.isEnabled,
+      minPayoutAmount: programConfig.minPayoutAmount,
       recentRewards,
       recentAttributions,
     };
