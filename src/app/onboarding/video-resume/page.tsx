@@ -223,10 +223,10 @@ export default function VideoResumePage() {
     >
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-[116px]" />
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
         <div
-          className="fixed inset-0 pointer-events-none -z-10 ml-[116px]"
+          className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]"
           style={{
             background:
               "radial-gradient(ellipse at 85% 15%, rgba(66,133,244,0.1) 0%, transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 10%, rgba(251,188,5,0.06) 0%, transparent 45%), radial-gradient(ellipse at 50% 90%, rgba(52,168,83,0.08) 0%, transparent 50%)",
@@ -234,7 +234,7 @@ export default function VideoResumePage() {
         />
 
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
