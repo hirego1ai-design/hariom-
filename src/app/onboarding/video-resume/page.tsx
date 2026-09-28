@@ -9,10 +9,12 @@ import { useOnboarding } from "@/context/OnboardingContext";
 export default function VideoResumePage() {
   const router = useRouter();
   const { updateState, markStepComplete } = useOnboarding();
-  const [mode, setMode] = useState<"idle" | "recording" | "recorded" | "uploading" | "analyzing" | "complete" | "failed">("idle");
+  const [mode, setMode] = useState<"idle" | "recording" | "recorded" | "uploading" | "analyzing" | "pending" | "complete" | "failed">("idle");
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null);
+  const [understandsProcessing, setUnderstandsProcessing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -95,71 +97,136 @@ export default function VideoResumePage() {
     setTimeElapsed(0);
     setAnalysisResult(null);
     setVideoFile(null);
+    setVideoDurationSeconds(null);
     setPreviewUrl((current) => {
       if (current) URL.revokeObjectURL(current);
       return null;
     });
   };
 
-  const handleVideoFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const readVideoDuration = (file: File): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const element = document.createElement("video");
+      const objectUrl = URL.createObjectURL(file);
+      element.preload = "metadata";
+      element.onloadedmetadata = () => {
+        URL.revokeObjectURL(objectUrl);
+        if (!Number.isFinite(element.duration) || element.duration <= 0) {
+          reject(new Error("Video duration could not be determined."));
+          return;
+        }
+        resolve(Math.ceil(element.duration));
+      };
+      element.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Video metadata could not be read."));
+      };
+      element.src = objectUrl;
+    });
+
+  const handleVideoFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setUploadError(null);
-    if (!file.type.startsWith("video/") || file.size > 10 * 1024 * 1024) {
+    if (!["video/mp4", "video/webm"].includes(file.type) || file.size > 10 * 1024 * 1024) {
       setUploadError("Please upload an MP4 or WebM video up to 10MB.");
       return;
     }
-    setVideoFile(file);
-    setPreviewUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return URL.createObjectURL(file);
-    });
-    setMode("recorded");
+
+    try {
+      const duration = await readVideoDuration(file);
+      if (duration > 120) {
+        setUploadError("Video exceeds the 120-second limit.");
+        return;
+      }
+      setVideoDurationSeconds(duration);
+      setVideoFile(file);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return URL.createObjectURL(file);
+      });
+      setMode("recorded");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Video metadata could not be read.");
+    }
   };
 
   const pollStatus = async (videoId: string) => {
     let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
+    let stopped = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const check = async () => {
+      if (stopped) return;
+      attempts += 1;
       try {
-        const res = await fetch(`/api/candidate/video-resume/status?videoId=${videoId}`);
-        const data = await res.json();
-        if (data.success) {
-          const status = data.analysisStatus;
-          if (status === "COMPLETED") {
-            clearInterval(interval);
-            setAnalysisResult({
-              transcript: data.transcript,
-              detectedLanguage: data.metrics?.detectedLanguage,
-              wordsPerMinute: data.metrics?.wordsPerMinute,
-              pauseRatio: data.metrics?.pauseRatio,
-              fillerWordCount: data.metrics?.fillerWordCount,
-              audioQuality: data.metrics?.audioQuality,
-              transcriptConfidence: data.metrics?.transcriptConfidence,
-              lowConfidence: data.metrics?.lowConfidence,
-            });
-            setMode("complete");
-          } else if (status === "FAILED" || status === "BLOCKED_INFRA") {
-            clearInterval(interval);
+        const res = await fetch(`/api/candidate/video-resume/status?videoId=${encodeURIComponent(videoId)}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          if (res.status === 403 || res.status === 404) {
+            stopped = true;
+            if (interval) clearInterval(interval);
             setMode("failed");
-            if (status === "BLOCKED_INFRA") {
-              setUploadError("Video saved. Local worker processing is BLOCKED_INFRA (Worker service unavailable).");
-            } else {
-              setUploadError(data.error || "Analysis processing failed.");
-            }
+            setUploadError(data.error || "This video resume is no longer available.");
           }
+          return;
         }
-      } catch (e) {
-        console.error("Polling error:", e);
+
+        const status = data.analysisStatus;
+        if (status === "COMPLETED") {
+          stopped = true;
+          if (interval) clearInterval(interval);
+          setAnalysisResult({
+            transcript: data.transcript,
+            detectedLanguage: data.metrics?.detectedLanguage,
+            wordsPerMinute: data.metrics?.wordsPerMinute,
+            pauseRatio: data.metrics?.pauseRatio,
+            fillerWordCount: data.metrics?.fillerWordCount,
+            audioQuality: data.metrics?.audioQuality,
+            transcriptConfidence: data.metrics?.transcriptConfidence,
+            lowConfidence: data.metrics?.lowConfidence,
+          });
+          setMode("complete");
+          return;
+        }
+
+        if (status === "FAILED" || status === "BLOCKED_INFRA") {
+          stopped = true;
+          if (interval) clearInterval(interval);
+          setMode("failed");
+          setUploadError(
+            status === "BLOCKED_INFRA"
+              ? "Video saved, but analysis infrastructure is currently unavailable."
+              : data.error || "Video analysis failed.",
+          );
+          return;
+        }
+
+        if (attempts >= 40) {
+          stopped = true;
+          if (interval) clearInterval(interval);
+          setMode("pending");
+          setStatusMessage("Video saved. Analysis is still processing; you can continue onboarding and check the Video Resume page later.");
+        }
+      } catch {
+        if (attempts >= 40) {
+          stopped = true;
+          if (interval) clearInterval(interval);
+          setMode("pending");
+          setStatusMessage("Video saved. Analysis status could not be refreshed; you can continue onboarding and check later.");
+        }
       }
-      if (attempts >= 40) {
-        clearInterval(interval);
-        setStatusMessage("Analysis is taking longer than expected. Status: PROCESSING.");
-      }
-    }, 3000);
+    };
+
+    await check();
+    if (!stopped) interval = setInterval(() => void check(), 3000);
   };
 
   const handleUpload = async () => {
+    if (!understandsProcessing) {
+      setUploadError("Please acknowledge the video processing notice before saving.");
+      return;
+    }
     if (!videoFile) {
       setUploadError("Record or choose a video before saving.");
       return;
@@ -176,7 +243,7 @@ export default function VideoResumePage() {
       if (!uploadResponse.ok || !uploadJson.file?.url) throw new Error(uploadJson.error || "Video upload failed");
 
       setMode("analyzing");
-      const durationToSubmit = Math.min(120, Math.max(1, timeElapsed || 60));
+      const durationToSubmit = Math.min(120, Math.max(1, videoDurationSeconds ?? timeElapsed));
       const saveResponse = await fetch("/api/candidate/video-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,13 +258,17 @@ export default function VideoResumePage() {
       updateState({ videoRecorded: true });
       markStepComplete(8);
 
-      if (saveJson.videoId && !["COMPLETED", "FAILED", "BLOCKED_INFRA"].includes(saveJson.analysisStatus)) {
-        pollStatus(saveJson.videoId);
-      } else if (saveJson.analysisStatus === "BLOCKED_INFRA") {
+      if (!saveJson.videoId) throw new Error("Video save response did not include a video ID.");
+      if (saveJson.analysisStatus === "FAILED" || saveJson.analysisStatus === "BLOCKED_INFRA") {
         setMode("failed");
-        setUploadError("Video saved. Local worker analysis is BLOCKED_INFRA.");
+        setUploadError(
+          saveJson.analysisStatus === "BLOCKED_INFRA"
+            ? "Video saved, but analysis infrastructure is currently unavailable."
+            : "Video saved, but analysis failed.",
+        );
       } else {
-        setMode("complete");
+        setMode("analyzing");
+        void pollStatus(saveJson.videoId);
       }
     } catch (error) {
       setMode("recorded");
@@ -253,7 +324,7 @@ export default function VideoResumePage() {
                 Video resume
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Local Speech & Presentation Processing (Max 120s)
+                Optional presentation analysis · Max 120s
               </span>
             </div>
             <h1
@@ -266,6 +337,21 @@ export default function VideoResumePage() {
         </header>
 
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm leading-6 text-text-secondary">
+            <p>
+              Your video may be transcribed and analyzed for observable presentation details. The report can be incomplete or wrong and does not make a hiring decision.
+            </p>
+            <label className="mt-3 flex cursor-pointer items-start gap-3 text-text-primary">
+              <input
+                type="checkbox"
+                checked={understandsProcessing}
+                onChange={(event) => setUnderstandsProcessing(event.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <span>I understand how my video may be processed.</span>
+            </label>
+          </div>
+
           <div
             className="rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl relative overflow-hidden"
             style={{
@@ -285,7 +371,7 @@ export default function VideoResumePage() {
                 2-Minute Elevator Pitch Studio
               </h2>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Privacy-First Local Processing
+                Private upload and server-side processing
               </span>
             </div>
 
@@ -299,7 +385,7 @@ export default function VideoResumePage() {
               {mode === "recording" && (
                 <video ref={videoPreviewRef} className="absolute inset-0 w-full h-full object-cover" autoPlay playsInline muted />
               )}
-              {(mode === "recorded" || mode === "uploading" || mode === "analyzing" || mode === "complete" || mode === "failed") && previewUrl && (
+              {(mode === "recorded" || mode === "uploading" || mode === "analyzing" || mode === "pending" || mode === "complete" || mode === "failed") && previewUrl && (
                 <video src={previewUrl} className="absolute inset-0 w-full h-full object-cover" controls playsInline />
               )}
               {mode === "idle" && (
@@ -359,14 +445,22 @@ export default function VideoResumePage() {
                 </div>
               )}
 
-              {(mode === "recorded" || mode === "uploading" || mode === "analyzing" || mode === "complete" || mode === "failed") && (
+              {(mode === "recorded" || mode === "uploading" || mode === "analyzing" || mode === "pending" || mode === "complete" || mode === "failed") && (
                 <div className="text-center space-y-3 p-6">
                   {mode === "analyzing" && (
                     <div className="space-y-2">
                       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
                       <p className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>
-                        Processing video with local Whisper & MediaPipe...
+                        Preparing transcript and presentation report…
                       </p>
+                    </div>
+                  )}
+                  {mode === "pending" && (
+                    <div className="space-y-2">
+                      <span className="material-symbols-outlined text-[40px]" style={{ color: "var(--color-yellow-dark, #F57F17)" }}>schedule</span>
+                      <h3 className="font-extrabold text-base" style={{ color: "var(--text-primary)" }}>
+                        Video saved · analysis pending
+                      </h3>
                     </div>
                   )}
                   {mode === "complete" && (
