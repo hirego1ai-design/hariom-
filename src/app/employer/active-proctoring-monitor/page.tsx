@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 
 type Metrics = {
   totalViolations: number;
-  cheatingRiskScore: number;
+  advisoryReviewScore: number;
   status: string;
   evidenceSource: string;
   requiresHumanReview: boolean;
@@ -45,7 +45,7 @@ function Monitor() {
     {metrics && <>
       <div className="grid sm:grid-cols-3 gap-3">
         <div className="glass-card rounded-xl p-4"><p className="text-xs text-text-secondary">Events</p><p className="text-2xl font-bold">{metrics.totalViolations}</p></div>
-        <div className="glass-card rounded-xl p-4"><p className="text-xs text-text-secondary">Advisory score</p><p className="text-2xl font-bold">{metrics.cheatingRiskScore}</p></div>
+        <div className="glass-card rounded-xl p-4"><p className="text-xs text-text-secondary">Advisory score</p><p className="text-2xl font-bold">{metrics.advisoryReviewScore}</p></div>
         <div className="glass-card rounded-xl p-4"><p className="text-xs text-text-secondary">Review status</p><p className="text-sm font-bold">{metrics.status}</p></div>
       </div>
       <div className="glass-card rounded-2xl p-5 space-y-2">
