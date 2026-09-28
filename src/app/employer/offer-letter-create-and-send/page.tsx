@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 
@@ -26,6 +26,7 @@ export default function OfferLetterCreatePage() {
   const [statusType, setStatusType] = useState<"success" | "error">("success");
   const [createdId, setCreatedId] = useState("");
   const [saving, setSaving] = useState(false);
+  const offerRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     const applicationId = params.get("applicationId");
@@ -38,9 +39,13 @@ export default function OfferLetterCreatePage() {
     setStatus("");
     setStatusType("success");
     try {
+      offerRequestKey.current ||= crypto.randomUUID();
       const response = await fetch("/api/employer/offers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": offerRequestKey.current,
+        },
         body: JSON.stringify({
           applicationId: form.applicationId,
           title: form.title,
@@ -63,6 +68,7 @@ export default function OfferLetterCreatePage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Unable to create offer.");
       setCreatedId(body.offer.id);
+      offerRequestKey.current = null;
       setStatusType("success");
       setStatus("Offer draft saved. Review it in Offer Management, then explicitly approve and send it.");
     } catch (error) {
