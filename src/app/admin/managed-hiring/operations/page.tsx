@@ -11,6 +11,8 @@ type Requirement = {
   companyName: string;
   jobTitles: string[];
   status: string;
+  latestAgreementId: string | null;
+  latestAgreementStatus: string | null;
   activeAgreementStatus: string | null;
   updatedAt: string;
 };
@@ -308,8 +310,8 @@ export default function ManagedHiringOperationsPage() {
                           </div>
                           <p className="mt-2 text-[10px] text-slate-500">
                             Agreement:{" "}
-                            {requirement.activeAgreementStatus?.replaceAll("_", " ") ||
-                              "None active"}
+                            {requirement.latestAgreementStatus?.replaceAll("_", " ") ||
+                              "None"}
                           </p>
                         </div>
                       ))}
