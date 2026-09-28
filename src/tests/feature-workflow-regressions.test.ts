@@ -682,3 +682,62 @@ test("admin KYC review requires deliberate rationale and durable audit evidence"
   assert(page.includes("md:pl-[116px]"));
   assert(!page.includes('pl-[116px] flex-1'));
 });
+
+
+test("admin revenue dashboard is wired and keeps money separated by currency", () => {
+  const page = fs.readFileSync(new URL("../app/admin/revenue/page.tsx", import.meta.url), "utf8");
+  const shared = fs.readFileSync(new URL("../app/api/admin/revenue/_shared.ts", import.meta.url), "utf8");
+  const summary = fs.readFileSync(new URL("../app/api/admin/revenue/summary/route.ts", import.meta.url), "utf8");
+  const transactions = fs.readFileSync(new URL("../app/api/admin/revenue/transactions/route.ts", import.meta.url), "utf8");
+  const subscriptions = fs.readFileSync(new URL("../app/api/admin/revenue/subscriptions/route.ts", import.meta.url), "utf8");
+  const mockInterviews = fs.readFileSync(new URL("../app/api/admin/revenue/mock-interviews/route.ts", import.meta.url), "utf8");
+  const jobBoost = fs.readFileSync(new URL("../app/api/admin/revenue/job-boost/route.ts", import.meta.url), "utf8");
+  const financeAudit = fs.readFileSync(new URL("../app/api/admin/revenue/audit-logs/route.ts", import.meta.url), "utf8");
+
+  assert(!page.includes('redirect("/admin/invoices")'));
+  assert(page.includes('fetch("/api/admin/revenue/summary"'));
+  assert(page.includes('/api/admin/revenue/transactions?'));
+  assert(page.includes("Multiple currencies are reported separately"));
+  assert(page.includes('href="/api/admin/revenue/export?format=csv"'));
+  assert(page.includes('<option value="Overdue">Overdue</option>'));
+
+  assert(shared.includes('case "COPILOT":'));
+  assert(shared.includes('case "COPILOT_ADDON":'));
+  assert(shared.includes('case "JOB_BOOST":'));
+  assert(shared.includes('case "MOCK_INTERVIEW":'));
+  assert(shared.includes('revenueSource: invoice.placement ? "Managed Hiring" : "Manual Invoice"'));
+  assert(shared.includes('where: { placement: { isNot: null } }'));
+  assert(shared.includes('invoice.status === "OVERDUE" ? "Overdue"'));
+  assert(shared.includes("cancelledOrReplaced: null"));
+  assert(shared.includes("replacementWarrantyCost: null"));
+  assert(shared.includes("netProfit: null"));
+  assert(!shared.includes('cancelledOrReplaced: 0'));
+  assert(!shared.includes('replacementWarrantyCost: 0'));
+
+  assert(summary.includes('currencyMode: currencies.length <= 1 ? "single" : "multiple"'));
+  assert(summary.includes("byCurrency"));
+  assert(!summary.includes("totalRevenueFormatted: formatMoney(totalRevenue),"));
+
+  assert(transactions.includes('currency: z.string().regex(/^[A-Z]{3}$/).optional()'));
+  assert(transactions.includes('"Overdue"'));
+  assert(transactions.includes("filtered.slice(offset, offset + query.limit)"));
+
+  assert(subscriptions.includes("take: 50"));
+  assert(subscriptions.includes("companySubscription.groupBy"));
+  assert(subscriptions.includes("revenueByCurrency"));
+
+  assert(mockInterviews.includes("mockInterviewSession.count()"));
+  assert(mockInterviews.includes("mockInterviewSession.aggregate"));
+  assert(mockInterviews.includes("recentSessionPreviewLimit: 200"));
+
+  assert(jobBoost.includes("byCurrency"));
+  assert(financeAudit.includes("getAuditLogsStrict"));
+  assert(financeAudit.includes('admin_revenue_audit_logs:${admin.id}'));
+});
+
+test("admin revenue error handling preserves API authorization status", () => {
+  const shared = fs.readFileSync(new URL("../app/api/admin/revenue/_shared.ts", import.meta.url), "utf8");
+  assert(shared.includes('"status" in error'));
+  assert(shared.includes("Number.isInteger"));
+  assert(shared.includes("return NextResponse.json({ success: false, error: message }, { status });"));
+});
