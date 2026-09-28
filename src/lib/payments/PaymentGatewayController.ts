@@ -197,7 +197,8 @@ export class PaymentGatewayController {
     auditContext?: GatewayConfigAuditContext,
     expectedUpdatedAt?: string | null,
   ): Promise<GatewayConfigState> {
-    const current = await this.getConfig();
+    const currentSnapshot = await this.getAdminConfigSnapshot();
+    const current = currentSnapshot.config;
     const updated: GatewayConfigState = {
       ...current,
       ...newConfig,
