@@ -44,7 +44,6 @@ export default function HiringPipelinePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJob, setSelectedJob] = useState<string>("All");
   const [selectedExperience, setSelectedExperience] = useState<string>("All");
-  const [selectedRecommendation, setSelectedRecommendation] = useState<string>("All");
   const [selectedMinScore, setSelectedMinScore] = useState<number>(0);
   const [selectedLocation, setSelectedLocation] = useState<string>("All");
 
@@ -85,17 +84,15 @@ export default function HiringPipelinePage() {
         (selectedExperience === "8y+" && parseInt(c.experience) >= 8) ||
         (selectedExperience === "5y-7y" && parseInt(c.experience) >= 5 && parseInt(c.experience) <= 7) ||
         (selectedExperience === "<5y" && parseInt(c.experience) < 5);
-      const matchesRecommendation =
-        selectedRecommendation === "All" || c.recommendation === selectedRecommendation;
       const matchesScore =
         selectedMinScore === 0 ||
         (typeof c.matchScore === "number" && Number.isFinite(c.matchScore) && c.matchScore >= selectedMinScore);
       const matchesLocation =
         selectedLocation === "All" || c.currentLocation.toLowerCase().includes(selectedLocation.toLowerCase());
 
-      return matchesSearch && matchesJob && matchesExp && matchesRecommendation && matchesScore && matchesLocation;
+      return matchesSearch && matchesJob && matchesExp && matchesScore && matchesLocation;
     });
-  }, [candidates, searchQuery, selectedJob, selectedExperience, selectedRecommendation, selectedMinScore, selectedLocation]);
+  }, [candidates, searchQuery, selectedJob, selectedExperience, selectedMinScore, selectedLocation]);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -319,23 +316,6 @@ export default function HiringPipelinePage() {
               <option value="<5y">Junior (&lt;5y Exp)</option>
             </select>
           </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-text-muted uppercase font-bold">Recommendation</label>
-            <select
-              value={selectedRecommendation}
-              onChange={(e) => setSelectedRecommendation(e.target.value)}
-              className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs outline-none"
-            >
-              <option value="All">All Recommendations</option>
-              <option value="Highly Recommended">⭐ Highly Recommended</option>
-              <option value="Recommended">✅ Recommended</option>
-              <option value="Consider">Consider</option>
-              <option value="Needs Review">Needs Review</option>
-              <option value="Not Recommended">Not Recommended</option>
-            </select>
-          </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-text-muted uppercase font-bold">Min AI Match</label>
             <select
@@ -373,7 +353,6 @@ export default function HiringPipelinePage() {
               setSearchQuery("");
               setSelectedJob("All");
               setSelectedExperience("All");
-              setSelectedRecommendation("All");
               setSelectedMinScore(0);
               setSelectedLocation("All");
             }}
@@ -461,7 +440,6 @@ export default function HiringPipelinePage() {
                       <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-text-muted border border-white/10">
                         {c.appliedJob}
                       </span>
-                      <RecommendationBadge rec={c.recommendation} />
                     </div>
                     <p className="text-xs text-text-muted font-bold mt-1">{c.currentRole} at {c.currentCompany}</p>
                     
@@ -507,8 +485,7 @@ export default function HiringPipelinePage() {
                     setSearchQuery("");
                     setSelectedJob("All");
                     setSelectedExperience("All");
-                    setSelectedRecommendation("All");
-                    setSelectedMinScore(0);
+                          setSelectedMinScore(0);
                     setSelectedLocation("All");
                   }}
                   className="mt-4 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white border border-white/10 transition-all"
@@ -613,12 +590,6 @@ function CandidateCard({
 
       {/* Recommendation and reason badge */}
       <div className="flex flex-col gap-1">
-        <RecommendationBadge rec={candidate.recommendation} />
-        {candidate.recommendationReason && (
-          <p className="text-[9px] text-text-muted italic leading-normal px-1">
-            "{candidate.recommendationReason}"
-          </p>
-        )}
       </div>
 
       {/* Expanded Notes section */}
@@ -659,27 +630,6 @@ function CandidateCard({
         </select>
 
         <div className="flex items-center gap-1">
-          <Link
-            href="/employer/ai-candidate-ranking-explanation"
-            className="w-7 h-7 rounded-lg bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 flex items-center justify-center text-secondary transition-all"
-            title="AI Ranking Explanation"
-          >
-            <span className="material-symbols-outlined text-[14px]">psychology</span>
-          </Link>
-          <Link
-            href="/employer/ai-evaluation-scores"
-            className="w-7 h-7 rounded-lg bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 flex items-center justify-center text-secondary transition-all"
-            title="AI Evaluation Scores"
-          >
-            <span className="material-symbols-outlined text-[14px]">fact_check</span>
-          </Link>
-          <Link
-            href="/employer/candidate-comparison"
-            className="w-7 h-7 rounded-lg bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 flex items-center justify-center text-secondary transition-all"
-            title="Compare Candidates"
-          >
-            <span className="material-symbols-outlined text-[14px]">compare_arrows</span>
-          </Link>
           {candidate.videoResumeId && (
             <Link
               href={`/employer/video-resume/${encodeURIComponent(candidate.videoResumeId)}`}
@@ -731,38 +681,3 @@ function ScoreBadge({ score, size = "md" }: { score: number | null; size?: "sm" 
   );
 }
 
-/* Recommendation state pills */
-function RecommendationBadge({ rec }: { rec: string }) {
-  let badgeColor = "bg-white/5 text-text-muted border-white/10";
-  let icon = "info";
-
-  switch (rec) {
-    case "Highly Recommended":
-      badgeColor = "bg-green/10 text-green border-green/20";
-      icon = "stars";
-      break;
-    case "Recommended":
-      badgeColor = "bg-[#26A69A]/10 text-[#26A69A] border-[#26A69A]/20";
-      icon = "check_circle";
-      break;
-    case "Consider":
-      badgeColor = "bg-yellow/10 text-yellow border-yellow/20";
-      icon = "help";
-      break;
-    case "Needs Review":
-      badgeColor = "bg-orange-500/10 text-orange-500 border-orange-500/20";
-      icon = "warning";
-      break;
-    case "Not Recommended":
-      badgeColor = "bg-red-light/10 text-red-light border-red-light/20";
-      icon = "cancel";
-      break;
-  }
-
-  return (
-    <div className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold flex items-center gap-1 w-fit ${badgeColor}`}>
-      <span className="material-symbols-outlined text-[12px]">{icon}</span>
-      <span>{rec}</span>
-    </div>
-  );
-}
