@@ -20,18 +20,23 @@ export default function EmployerAgreementReviewPage() {
   const [amendmentNotes, setAmendmentNotes] = useState("");
   const [showAmendmentBox, setShowAmendmentBox] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     async function load() {
+      setLoadError("");
       try {
-        const res = await fetch(`/api/agreements/contracts/${agreementId}`);
-        const data = await res.json();
-        if (data.success) {
-          setAgreement(data.agreement);
-          setEvents(data.events || []);
+        const res = await fetch(`/api/agreements/contracts/${agreementId}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.agreement) {
+          throw new Error(data.error || "Unable to load commercial agreement.");
         }
+        setAgreement(data.agreement);
+        setEvents(Array.isArray(data.events) ? data.events : []);
       } catch (err) {
-        console.error(err);
+        setAgreement(null);
+        setEvents([]);
+        setLoadError(err instanceof Error ? err.message : "Unable to load commercial agreement.");
       } finally {
         setLoading(false);
       }
@@ -52,12 +57,13 @@ export default function EmployerAgreementReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "accept",
+          expectedUpdatedAt: new Date(agreement.updatedAt).toISOString(),
           signedByName: signatureName,
           signedByDesignation: signatureDesignation,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
@@ -83,11 +89,12 @@ export default function EmployerAgreementReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "request_amendment",
+          expectedUpdatedAt: new Date(agreement.updatedAt).toISOString(),
           amendmentNotes,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
         setAmendmentNotes("");
@@ -115,7 +122,10 @@ export default function EmployerAgreementReviewPage() {
       <div className="bg-[#0A0A0C] text-white min-h-screen relative flex flex-col items-center justify-center p-6">
         <EmployerSidebar />
         <span className="material-symbols-outlined text-4xl text-[#FF5252] mb-2">error</span>
-        <h2 className="text-lg font-bold">Agreement Document Not Found</h2>
+        <h2 className="text-lg font-bold">Agreement unavailable</h2>
+        <p role="alert" className="mt-2 max-w-lg text-center text-sm text-slate-400">
+          {loadError || "The agreement could not be loaded."}
+        </p>
         <button onClick={() => router.push("/employer/dashboard")} className="mt-4 px-4 py-2 bg-[#29B6F6] text-white text-xs font-bold rounded-xl">
           Back to Dashboard
         </button>
