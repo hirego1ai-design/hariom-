@@ -13,11 +13,10 @@ export default function AdminInvoicesPage() {
   const [selectedReceiptInvoice, setSelectedReceiptInvoice] = useState<any>(null);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [companyName, setCompanyName] = useState("");
   const [agreementId, setAgreementId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
-  const [amount, setAmount] = useState(150000);
+  const [amount, setAmount] = useState("");
 
   const handleRejectReceipt = async (invoiceId: string) => {
     setActionMessage(null);
@@ -86,7 +85,7 @@ export default function AdminInvoicesPage() {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agreementId, companyName, candidateName, jobTitle, amount }),
+        body: JSON.stringify({ agreementId: agreementId.trim(), candidateName: candidateName.trim() || undefined, jobTitle: jobTitle.trim() || undefined, amount: Number(amount) }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -201,14 +200,9 @@ export default function AdminInvoicesPage() {
               <label className="text-xs text-slate-400 block">Commercial Agreement ID
                 <input value={agreementId} onChange={e => setAgreementId(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
               </label>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Company Name</label>
-                <input
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
-                />
-              </div>
+              <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-400">
+                Company identity, tax rate, currency and payment due date are derived from the selected signed commercial agreement and its linked hiring requirement.
+              </p>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Placed Candidate Name</label>
                 <input
@@ -230,7 +224,10 @@ export default function AdminInvoicesPage() {
                 <input
                   type="number"
                   value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Enter approved base placement fee"
+                  onChange={(e) => setAmount(e.target.value)}
                   className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
                 />
               </div>
