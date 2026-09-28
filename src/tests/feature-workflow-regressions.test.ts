@@ -1471,3 +1471,23 @@ test("admin Copilot commerce UI matches versioned audited backend contracts", ()
   assert(offers.includes("COPILOT_CAPACITY_OFFER_CREATED"));
   assert(offers.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
+
+
+test("admin login stays role-bound audited and evidence-based", () => {
+  const page = fs.readFileSync(new URL("../app/admin/login/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8");
+
+  assert(page.includes('portal: "admin"'));
+  assert(page.includes('autoComplete="username"'));
+  assert(page.includes('autoComplete="current-password"'));
+  assert(page.includes('aria-label={showPassword ? "Hide administrator password" : "Show administrator password"}'));
+  assert(page.includes("Administrator sign-in activity is security monitored."));
+  assert(!page.includes("All session logs recorded."));
+
+  assert(route.includes('(body.portal === "admin" && user.role === "ADMIN")'));
+  assert(route.includes("PORTAL_LOGIN_DENIED"));
+  assert(route.includes("USER_LOGIN_SUCCESS"));
+  assert(route.includes("USER_LOGIN_FAILED"));
+  assert(route.includes("httpOnly: true"));
+  assert(route.includes('sameSite: "lax"'));
+});
