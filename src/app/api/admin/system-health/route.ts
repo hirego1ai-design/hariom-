@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         name: "Node.js Compute Runtime",
         type: "COMPUTE",
         provider: "Next.js Engine",
-        status: "HEALTHY",
+        status: "OBSERVED_ACTIVE",
         uptimeSeconds: Math.round(process.uptime()),
         memoryHeapMb: Math.round(memoryUsage.heapUsed / 1024 / 1024),
         details: `Node.js runtime active (${Math.round(memoryUsage.rss / 1024 / 1024)}MB RSS)`,
@@ -76,11 +76,22 @@ export async function GET(req: NextRequest) {
       },
     ];
 
+    const configurationWarnings = [
+      ...(!storageConfigured ? ["S3-compatible object storage is not configured in this runtime."] : []),
+      ...(!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+        ? ["Redis REST credentials are not configured in this runtime."]
+        : []),
+      ...(configuredAiProviders.length === 0
+        ? ["No supported AI provider configuration is present in this runtime."]
+        : []),
+    ];
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      overallStatus: dbStatus === "HEALTHY" ? "APPLICATION_AVAILABLE" : "DEGRADED",
-      observedScope: "APPLICATION_RUNTIME_AND_CONFIGURATION",
+      overallStatus: dbStatus === "HEALTHY" ? "CORE_RUNTIME_AVAILABLE" : "CORE_RUNTIME_DEGRADED",
+      observedScope: "CURRENT_APP_INSTANCE_DATABASE_AND_CONFIGURATION",
+      configurationWarnings,
       services,
     });
   } catch (error) {
