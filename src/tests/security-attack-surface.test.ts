@@ -108,7 +108,17 @@ test("Supabase-facing public schema remains protected by RLS", () => {
 
 test("CI continuously scans dependencies, secrets and code", () => {
   const workflow = read(".github/workflows/security.yml");
-  assert.match(workflow, /dependency-review-action@v4/);
+
+  // Dependency security must remain blocking even when GitHub's hosted
+  // dependency-review service is unavailable for this repository.
+  assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
+
+  // Pull-request metadata is required by the Gitleaks action; missing this
+  // permission previously caused the secret scan itself to fail before
+  // inspecting repository history.
+  assert.match(workflow, /pull-requests:\s*read/);
   assert.match(workflow, /gitleaks\/gitleaks-action@v2/);
+
+  // Static code analysis remains a required independent gate.
   assert.match(workflow, /github\/codeql-action\/analyze@v3/);
 });
