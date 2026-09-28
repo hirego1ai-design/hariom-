@@ -132,6 +132,7 @@ async function runBatch3_CommercialPricingVerification() {
       feeValue: 75000,
       ctcAnnual: 1800000,
       taxRatePct: 18.0,
+      replacementDays: 90,
       discountPct: 10,
     });
     assert.equal(fixedRes.baseFee, 75000, "Base fee must equal fixed fee value");
@@ -153,6 +154,7 @@ async function runBatch3_CommercialPricingVerification() {
       ctcAnnual: ctc,
       discountPct: 0,
       taxRatePct: 18.0,
+      replacementDays: 90,
     });
     const expectedBase = Math.round(ctc * 0.0833);
     assert.equal(pctRes.baseFee, expectedBase, "Base fee must be exactly CTC * 8.33%");
@@ -171,6 +173,8 @@ async function runBatch3_CommercialPricingVerification() {
       feeValue: 5.0,
       ctcAnnual: 2000000,
       discountPct: 5,
+      taxRatePct: 18.0,
+      replacementDays: 90,
     });
     assert.equal(hybridRes.retainerFee, 30000, "Retainer fee must equal specified amount");
     assert.equal(hybridRes.successFee, 100000, "5% of 20L is 100000");
@@ -180,15 +184,39 @@ async function runBatch3_CommercialPricingVerification() {
     record("Batch 3", "Pricing Model: HYBRID (₹30k Retainer + 5% Success)", false, err.message);
   }
 
-  // 4. Test SLAB model (CTC tiered rates)
+  // 4. Test SLAB model with explicit admin-maintained slabs.
   try {
-    const slabUnder10 = calculateCommercialFee({ pricingModel: "SLAB", feeValue: 0, ctcAnnual: 800000 });
+    const slabs = [
+      { upToCtcAnnual: 1_000_000, feePct: 8.33 },
+      { upToCtcAnnual: 2_500_000, feePct: 10 },
+      { upToCtcAnnual: null, feePct: 12.5 },
+    ];
+
+    const slabUnder10 = calculateCommercialFee({
+      pricingModel: "SLAB",
+      ctcAnnual: 800000,
+      taxRatePct: 18.0,
+      replacementDays: 90,
+      slabs,
+    });
     assert.equal(slabUnder10.baseFee, Math.round(800000 * 0.0833));
 
-    const slabMid = calculateCommercialFee({ pricingModel: "SLAB", feeValue: 0, ctcAnnual: 1500000 });
+    const slabMid = calculateCommercialFee({
+      pricingModel: "SLAB",
+      ctcAnnual: 1500000,
+      taxRatePct: 18.0,
+      replacementDays: 90,
+      slabs,
+    });
     assert.equal(slabMid.baseFee, Math.round(1500000 * 0.10));
 
-    const slabHigh = calculateCommercialFee({ pricingModel: "SLAB", feeValue: 0, ctcAnnual: 3000000 });
+    const slabHigh = calculateCommercialFee({
+      pricingModel: "SLAB",
+      ctcAnnual: 3000000,
+      taxRatePct: 18.0,
+      replacementDays: 90,
+      slabs,
+    });
     assert.equal(slabHigh.baseFee, Math.round(3000000 * 0.125));
 
     record("Batch 3", "Pricing Model: SLAB Multi-Tier Progression (<10L, 10-25L, >25L)", true, `Tier 1: 8.33%, Tier 2: 10%, Tier 3: 12.5% verified`);
@@ -196,18 +224,35 @@ async function runBatch3_CommercialPricingVerification() {
     record("Batch 3", "Pricing Model: SLAB Multi-Tier Progression", false, err.message);
   }
 
-  // 5. Boundary condition: discount clamp [0, 100]
+  // 5. Boundary condition: invalid discounts fail closed instead of being silently clamped.
   try {
-    const clampedUnder = calculateCommercialFee({ pricingModel: "FIXED", feeValue: 50000, discountPct: -20 });
-    assert.equal(clampedUnder.discountPct, 0, "Negative discount must clamp to 0%");
+    assert.throws(
+      () => calculateCommercialFee({
+        pricingModel: "FIXED",
+        feeValue: 50000,
+        discountPct: -20,
+        taxRatePct: 18.0,
+        replacementDays: 90,
+        ctcAnnual: 1_000_000,
+      }),
+      /discountPct must be between 0 and 100/,
+    );
 
-    const clampedOver = calculateCommercialFee({ pricingModel: "FIXED", feeValue: 50000, discountPct: 150 });
-    assert.equal(clampedOver.discountPct, 100, "Over-100% discount must clamp to 100%");
-    assert.equal(clampedOver.subtotal, 0, "100% discount must yield subtotal of 0");
+    assert.throws(
+      () => calculateCommercialFee({
+        pricingModel: "FIXED",
+        feeValue: 50000,
+        discountPct: 150,
+        taxRatePct: 18.0,
+        replacementDays: 90,
+        ctcAnnual: 1_000_000,
+      }),
+      /discountPct must be between 0 and 100/,
+    );
 
-    record("Batch 3", "Discount Boundary Defense Clamping ([-20% -> 0%], [150% -> 100%])", true, "Bounds strictly constrained");
+    record("Batch 3", "Discount Boundary Defense Rejects Invalid Values", true, "Out-of-range discounts fail closed");
   } catch (err: any) {
-    record("Batch 3", "Discount Boundary Defense Clamping", false, err.message);
+    record("Batch 3", "Discount Boundary Defense Rejects Invalid Values", false, err.message);
   }
 }
 
