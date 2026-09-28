@@ -659,3 +659,26 @@ test("admin assessment policy governance distinguishes missing config and audits
   assert(page.includes("Why are you changing the job-specific policy?"));
   assert(!page.includes("const [reason, setReason]"));
 });
+
+
+test("admin KYC review requires deliberate rationale and durable audit evidence", () => {
+  const page = fs.readFileSync(new URL("../app/admin/document-verification/page.tsx", import.meta.url), "utf8");
+  const listRoute = fs.readFileSync(new URL("../app/api/admin/document-verification/route.ts", import.meta.url), "utf8");
+  const actionRoute = fs.readFileSync(new URL("../app/api/admin/document-verification/[id]/route.ts", import.meta.url), "utf8");
+
+  assert(listRoute.includes('admin_document_verification_read:${session.id}'));
+  assert(listRoute.includes('orderBy: [{ submittedAt: "desc" }, { id: "desc" }]'));
+
+  assert(actionRoute.includes('admin_document_verification_write:${session.id}'));
+  assert(actionRoute.includes("A rejection reason is required for KYC review."));
+  assert(actionRoute.includes("KYC_DOCUMENT_VERIFIED"));
+  assert(actionRoute.includes("KYC_DOCUMENT_REJECTED"));
+  assert(actionRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(actionRoute.includes("prisma.$transaction"));
+
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("Reviewer note"));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(!page.includes('pl-[116px] flex-1'));
+});
