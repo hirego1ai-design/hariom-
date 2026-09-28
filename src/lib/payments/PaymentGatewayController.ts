@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { ApiError } from "@/lib/apiSecurity";
 import {
   PaymentGateway,
   GatewayName,
@@ -154,6 +155,7 @@ export class PaymentGatewayController {
   static async updateConfig(
     newConfig: Partial<GatewayConfigState>,
     auditContext?: GatewayConfigAuditContext,
+    expectedUpdatedAt?: string | null,
   ): Promise<GatewayConfigState> {
     const current = await this.getConfig();
     const updated: GatewayConfigState = {
@@ -180,6 +182,18 @@ export class PaymentGatewayController {
 
     try {
       await prisma.$transaction(async (tx) => {
+        const existing = await tx.paymentGatewayConfig.findUnique({
+          where: { id: "global-gateway-config" },
+          select: { updatedAt: true },
+        });
+        if (existing) {
+          if (!expectedUpdatedAt || existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new ApiError("Payment gateway configuration changed; reload before saving.", 409);
+          }
+        } else if (expectedUpdatedAt) {
+          throw new ApiError("Payment gateway configuration changed; reload before saving.", 409);
+        }
+
         await tx.paymentGatewayConfig.upsert({
           where: { id: "global-gateway-config" },
           update: {
