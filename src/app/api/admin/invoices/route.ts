@@ -55,7 +55,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Bank transfer receipt rejected", invoice: updated });
     }
 
-
     if ("invoiceId" in body) throw new ApiError("Invalid action", 400);
     const amount = Number(body.amount);
     const taxAmount = body.taxAmount ?? Math.round(amount * 0.18 * 100) / 100;
@@ -72,6 +71,9 @@ export async function POST(req: NextRequest) {
       currency: body.currency || "INR",
       status: body.status || "UNPAID",
       dueDate: body.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    }, {
+      actorId: session.id,
+      ipAddress: getClientIp(req),
     });
 
     const agreement = await prisma.commercialAgreement.findUnique({ where: { id: created.agreementId }, select: { clientEmail: true, clientPhone: true, companyName: true } });
