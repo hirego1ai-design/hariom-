@@ -19,6 +19,7 @@ export default function EmployerAgreementReviewPage() {
   const [signatureDesignation, setSignatureDesignation] = useState("");
   const [amendmentNotes, setAmendmentNotes] = useState("");
   const [showAmendmentBox, setShowAmendmentBox] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -39,10 +40,11 @@ export default function EmployerAgreementReviewPage() {
   }, [agreementId]);
 
   const handleSign = async () => {
-    if (!signatureName || !signatureDesignation) {
-      alert("Please enter your full name and designation to complete digital execution.");
+    if (!signatureName.trim() || !signatureDesignation.trim()) {
+      setActionMessage({ type: "error", text: "Please enter your full name and designation to complete digital execution." });
       return;
     }
+    setActionMessage(null);
     setSigning(true);
     try {
       const res = await fetch(`/api/agreements/contracts/${agreementId}`, {
@@ -57,19 +59,24 @@ export default function EmployerAgreementReviewPage() {
       const data = await res.json();
       if (data.success) {
         setAgreement(data.agreement);
-        alert("Commercial Agreement officially signed and activated!");
+        setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
-        alert(data.error);
+        setActionMessage({ type: "error", text: data.error || "Unable to sign the agreement." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Unable to sign the agreement. Please try again." });
     } finally {
       setSigning(false);
     }
   };
 
   const handleAmendmentRequest = async () => {
-    if (!amendmentNotes.trim()) return;
+    if (!amendmentNotes.trim()) {
+      setActionMessage({ type: "error", text: "Please describe the requested amendment before submitting." });
+      return;
+    }
+    setActionMessage(null);
     try {
       const res = await fetch(`/api/agreements/contracts/${agreementId}`, {
         method: "POST",
@@ -83,10 +90,14 @@ export default function EmployerAgreementReviewPage() {
       if (data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
-        alert("Amendment request submitted to your dedicated Sales Account Manager.");
+        setAmendmentNotes("");
+        setActionMessage({ type: "success", text: "Amendment request submitted for review." });
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Unable to submit the amendment request." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Unable to submit the amendment request. Please try again." });
     }
   };
 
@@ -120,6 +131,16 @@ export default function EmployerAgreementReviewPage() {
       <EmployerHeader title="Commercial Agreement Workspace" subtitle="Review and execute your HireGo Managed Hiring™ contract" />
 
       <main className="md:ml-[116px] p-6 lg:p-10 max-w-5xl mx-auto pt-24 space-y-8">
+        {actionMessage && (
+          <div
+            role={actionMessage.type === "error" ? "alert" : "status"}
+            aria-live={actionMessage.type === "error" ? "assertive" : "polite"}
+            className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-[#26A69A]/30 bg-[#26A69A]/10 text-[#8FE3DA]"}`}
+          >
+            {actionMessage.text}
+          </div>
+        )}
+
         {/* Document Status Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
           <div>
@@ -186,7 +207,7 @@ export default function EmployerAgreementReviewPage() {
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">Payment Credit Terms</span>
-                <span className="text-sm font-bold text-slate-200">{agreement.creditDays || 15} Net Credit Days</span>
+                <span className="text-sm font-bold text-slate-200">{typeof agreement.creditDays === "number" ? `${agreement.creditDays} Net Credit Days` : "Not specified"}</span>
               </div>
             </div>
           </div>
@@ -201,7 +222,7 @@ export default function EmployerAgreementReviewPage() {
               </p>
               <p>
                 <strong>3.2 Invoicing & Payment:</strong> Invoices are generated upon the selected trigger rule (
-                <span className="text-white font-bold">{agreement.invoiceRule}</span>) with net <span className="text-white font-bold">{agreement.creditDays || 15} days</span> payment terms.
+                <span className="text-white font-bold">{agreement.invoiceRule}</span>) with net <span className="text-white font-bold">{typeof agreement.creditDays === "number" ? `${agreement.creditDays} days` : "terms not specified"}</span>.
               </p>
               <p>
                 <strong>3.3 Confidentiality & Non-Solicitation:</strong> Both parties agree to maintain strict confidentiality regarding candidate profiles, compensation details, and business intelligence.
@@ -217,7 +238,7 @@ export default function EmployerAgreementReviewPage() {
               <p className="text-xs text-slate-300">
                 Signed by <strong className="text-white">{agreement.signedByName}</strong> ({agreement.signedByDesignation}) on {formatDate(agreement.signedAt || agreement.updatedAt)}.
               </p>
-              <div className="text-[10px] font-mono text-slate-500">Audit IP Stamp: {agreement.signerIpAddress || "127.0.0.1"}</div>
+              <div className="text-[10px] font-mono text-slate-500">{agreement.signerIpAddress ? `Audit IP Stamp: ${agreement.signerIpAddress}` : "Audit IP stamp was not recorded for this execution."}</div>
             </div>
           ) : (
             <div className="p-6 rounded-2xl bg-[#16161B] border border-white/10 space-y-6">
