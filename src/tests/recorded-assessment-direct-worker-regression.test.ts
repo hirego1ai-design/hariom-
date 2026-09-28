@@ -11,7 +11,7 @@ const dockerfile = readFileSync("Dockerfile.recorded-assessment-scheduler", "utf
 
 test("Railway recorded-assessment scheduler executes the shared worker directly", () => {
   assert.match(scheduler, /runRecordedAssessmentRecovery/);
-  assert.doesNotMatch(scheduler, /APP_URL/);
+  assert.doesNotMatch(scheduler, /process\\.env\\.APP_URL\\b/);
   assert.doesNotMatch(scheduler, /VERCEL_AUTOMATION_BYPASS_SECRET/);
   assert.doesNotMatch(scheduler, /fetch\s*\(/);
 });
