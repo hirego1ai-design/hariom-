@@ -18,9 +18,11 @@ const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8")) as {
   crons?: Array<{ path: string; schedule: string }>;
 };
 
-test("Railway scheduler has an explicit direct-worker cutover and safe HTTP fallback", () => {
+test("Railway scheduler supports direct, direct-outbox hybrid, and safe HTTP fallback modes", () => {
   assert.match(scheduler, /RAILWAY_DIRECT_BACKGROUND_WORKER/);
   assert.match(scheduler, /runDirectWorker/);
+  assert.match(scheduler, /RAILWAY_DIRECT_OUTBOX/);
+  assert.match(scheduler, /runHybridOutboxWorker/);
   assert.match(scheduler, /runHttpSchedulerFallback/);
   assert.match(scheduler, /runRecordedAssessmentRecovery/);
   assert.match(scheduler, /OutboxPoller/);
@@ -76,4 +78,13 @@ test("Vercel no longer schedules sub-daily background recovery", () => {
     false,
   );
   assert.equal(crons.some((cron) => cron.schedule === "*/5 * * * *"), false);
+});
+
+
+test("hybrid mode processes durable outbox directly and only invokes Vercel assessment recovery when jobs exist", () => {
+  assert.match(scheduler, /runOutboxDirect/);
+  assert.match(scheduler, /recordedAssessmentAnalysisJob\.count/);
+  assert.match(scheduler, /pendingRecordedAssessmentJobs === 0/);
+  assert.match(scheduler, /invokedVercelFallback: false/);
+  assert.match(scheduler, /invokedVercelFallback: true/);
 });

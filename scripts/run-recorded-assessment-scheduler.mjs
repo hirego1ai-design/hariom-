@@ -1,5 +1,7 @@
 const directWorkerMode =
   process.env.RAILWAY_DIRECT_BACKGROUND_WORKER === "true";
+const directOutboxMode =
+  process.env.RAILWAY_DIRECT_OUTBOX === "true";
 
 const DIRECT_WORKER_REQUIRED_ENV = [
   "DATABASE_URL",
@@ -32,18 +34,20 @@ function assertDirectWorkerEnvironment() {
   }
 }
 
-async function runDirectWorker() {
-  assertDirectWorkerEnvironment();
+function assertDirectOutboxEnvironment() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    throw new Error(
+      "Railway direct outbox mode requires DATABASE_URL.",
+    );
+  }
+}
 
-  const [
-    { runRecordedAssessmentRecovery },
-    { OutboxPoller },
-    { registerProductionConsumers },
-  ] = await Promise.all([
-    import("../src/lib/recordedAssessmentRecovery.ts"),
-    import("../src/lib/events/Outbox.ts"),
-    import("../src/lib/events/ProductionConsumers.ts"),
-  ]);
+async function runOutboxDirect() {
+  const [{ OutboxPoller }, { registerProductionConsumers }] =
+    await Promise.all([
+      import("../src/lib/events/Outbox.ts"),
+      import("../src/lib/events/ProductionConsumers.ts"),
+    ]);
 
   registerProductionConsumers();
 
@@ -68,6 +72,23 @@ async function runDirectWorker() {
     );
   }
 
+  return {
+    dispatched: totalDispatched,
+    failed: totalFailed,
+    unhandled: totalUnhandled,
+    passes: reports.length,
+  };
+}
+
+async function runDirectWorker() {
+  assertDirectWorkerEnvironment();
+
+  const [{ runRecordedAssessmentRecovery }] = await Promise.all([
+    import("../src/lib/recordedAssessmentRecovery.ts"),
+  ]);
+
+  const outbox = await runOutboxDirect();
+
   const batchSize = Number(
     process.env.RECORDED_ASSESSMENT_RECOVERY_BATCH_SIZE || 20,
   );
@@ -75,12 +96,7 @@ async function runDirectWorker() {
 
   return {
     mode: "direct",
-    outbox: {
-      dispatched: totalDispatched,
-      failed: totalFailed,
-      unhandled: totalUnhandled,
-      passes: reports.length,
-    },
+    outbox,
     recordedAssessment: {
       scanned: recordedAssessment.scanned,
       staleProcessingMinutes: recordedAssessment.staleProcessingMinutes,
@@ -157,6 +173,60 @@ async function invokeCronEndpoint(origin, headers, path, timeoutMs) {
   }
 }
 
+async function runHybridOutboxWorker() {
+  assertDirectOutboxEnvironment();
+
+  const [{ prisma }] = await Promise.all([
+    import("../src/lib/prisma.ts"),
+  ]);
+
+  const outbox = await runOutboxDirect();
+
+  const pendingRecordedAssessmentJobs =
+    await prisma.recordedAssessmentAnalysisJob.count({
+      where: {
+        completedAt: null,
+        status: {
+          in: ["PENDING", "BLOCKED_INFRA", "FAILED", "PROCESSING"],
+        },
+      },
+    });
+
+  if (pendingRecordedAssessmentJobs === 0) {
+    return {
+      mode: "direct-outbox",
+      outbox,
+      recordedAssessment: {
+        pending: 0,
+        invokedVercelFallback: false,
+      },
+    };
+  }
+
+  const { origin, headers } = getHttpSchedulerConfig();
+  const recordedAssessment = await invokeCronEndpoint(
+    origin,
+    headers,
+    "/api/cron/recorded-assessment-analysis",
+    90_000,
+  );
+
+  return {
+    mode: "direct-outbox",
+    outbox,
+    recordedAssessment: {
+      pending: pendingRecordedAssessmentJobs,
+      invokedVercelFallback: true,
+      scanned: recordedAssessment.scanned ?? null,
+      staleProcessingMinutes:
+        recordedAssessment.staleProcessingMinutes ?? null,
+      dispatched: Array.isArray(recordedAssessment.results)
+        ? recordedAssessment.results.filter((entry) => entry?.dispatched).length
+        : null,
+    },
+  };
+}
+
 async function runHttpSchedulerFallback() {
   const { origin, headers } = getHttpSchedulerConfig();
 
@@ -195,7 +265,9 @@ async function runHttpSchedulerFallback() {
 try {
   const result = directWorkerMode
     ? await runDirectWorker()
-    : await runHttpSchedulerFallback();
+    : directOutboxMode
+      ? await runHybridOutboxWorker()
+      : await runHttpSchedulerFallback();
 
   console.log(
     JSON.stringify({
@@ -211,7 +283,11 @@ try {
       worker: "hirego-background-recovery",
       at: new Date().toISOString(),
       status: "failed",
-      mode: directWorkerMode ? "direct" : "http-fallback",
+      mode: directWorkerMode
+        ? "direct"
+        : directOutboxMode
+          ? "direct-outbox"
+          : "http-fallback",
       message:
         error instanceof Error ? error.message : "Background worker failed",
     }),
