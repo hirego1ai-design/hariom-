@@ -73,10 +73,44 @@ async function assertRecordedAssessmentAccess(userId: string) {
   }
 }
 
+const RECORDED_ASSESSMENT_ELIGIBLE_APPLICATION_STATUSES = new Set([
+  "APPLIED",
+  "SCREENING",
+  "AI_INTERVIEW",
+  "ASSESSMENT",
+  "SHORTLISTED",
+]);
+
+export async function assertCandidateRecordedAssessmentApplicationEligible(userId: string, jobId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!candidate) throw new ApiError("Candidate profile not found.", 403);
+
+  const application = await prisma.application.findUnique({
+    where: {
+      candidateProfileId_jobId: {
+        candidateProfileId: candidate.id,
+        jobId,
+      },
+    },
+    select: { id: true, status: true },
+  });
+  if (!application) throw new ApiError("Recorded assessment application not found.", 404);
+  if (!RECORDED_ASSESSMENT_ELIGIBLE_APPLICATION_STATUSES.has(application.status)) {
+    throw new ApiError(
+      `Application is in '${application.status}' status and is not eligible for recorded assessment activity.`,
+      409,
+    );
+  }
+  return { candidateProfileId: candidate.id, applicationId: application.id };
+}
+
 export async function createOrResumeRecordedAssessmentAttempt(userId: string, jobId: string) {
   await assertRecordedAssessmentAccess(userId);
-  const candidate = await prisma.candidateProfile.findUnique({ where: { userId }, select: { id: true } });
-  if (!candidate) throw new ApiError("Candidate profile not found.", 403);
+  const eligibility = await assertCandidateRecordedAssessmentApplicationEligible(userId, jobId);
+  const candidate = { id: eligibility.candidateProfileId };
 
   const application = await prisma.application.findUnique({
     where: { candidateProfileId_jobId: { candidateProfileId: candidate.id, jobId } },
