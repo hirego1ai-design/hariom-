@@ -79,7 +79,11 @@ export default function EmployerSubscriptionsStorePage() {
   }, [checkoutPlan, addCopilot, copilotConfig]);
 
   const activeGateways = useMemo(
-    () => ["STRIPE", "PAYU"].filter((gateway) => gatewayConfig?.gatewaysStatus?.[gateway] !== "DISABLED"),
+    () =>
+      ["STRIPE", "PAYU"].filter((gateway) => {
+        const status = gatewayConfig?.gatewaysStatus?.[gateway];
+        return status === "HEALTHY" || status === "DEGRADED";
+      }),
     [gatewayConfig],
   );
   const checkoutAvailable = activeGateways.length > 0;
