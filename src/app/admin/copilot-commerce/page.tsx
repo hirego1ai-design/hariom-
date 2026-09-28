@@ -125,11 +125,7 @@ export default function AdminCopilotCommercePage() {
       const res = await fetch("/api/admin/copilot/capacity-offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          expectedUpdatedAt,
-          reason: changeReason.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Unable to create capacity offer.");
@@ -158,7 +154,11 @@ export default function AdminCopilotCommercePage() {
       const res = await fetch("/api/admin/copilot/commerce", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt,
+          reason: changeReason.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Update failed.");
@@ -167,6 +167,46 @@ export default function AdminCopilotCommercePage() {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Update failed.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function patchCapacityOffer(
+    payload: Record<string, unknown>,
+    key: string,
+    expectedUpdatedAt: string,
+  ) {
+    if (!configLoaded) {
+      setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
+      return;
+    }
+    if (changeReason.trim().length < 3) {
+      setMessage("Enter a change reason before saving Copilot capacity configuration.");
+      return;
+    }
+
+    setSaving(key);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/copilot/capacity-offers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt,
+          reason: changeReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Capacity offer update failed.");
+      }
+      setMessage("Capacity configuration saved and audited.");
+      setChangeReason("");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Capacity offer update failed.");
     } finally {
       setSaving("");
     }
