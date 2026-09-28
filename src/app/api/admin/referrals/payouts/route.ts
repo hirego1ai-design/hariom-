@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
-import { referralDb } from "@/lib/referral-db";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { z } from "zod";
+import { referralDb } from "@/lib/referral-db";
+import {
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 const payoutActionSchema = z.object({
   payoutId: z.string().trim().min(1).max(191),
@@ -11,29 +16,42 @@ const payoutActionSchema = z.object({
   adminNotes: z.string().trim().max(1000).optional(),
   rejectionReason: z.string().trim().min(3).max(1000).optional(),
 }).strict().superRefine((value, ctx) => {
-  if (value.action === "MARK_PAID" && !value.transactionRef) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["transactionRef"], message: "Settlement transaction reference is required." });
-  if (value.action === "REJECT" && !value.rejectionReason) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rejectionReason"], message: "Rejection reason is required." });
+  if (value.action === "MARK_PAID" && !value.transactionRef) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["transactionRef"],
+      message: "Settlement transaction reference is required.",
+    });
+  }
+  if (value.action === "REJECT" && !value.rejectionReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["rejectionReason"],
+      message: "Rejection reason is required.",
+    });
+  }
+});
+
+const querySchema = z.object({
+  status: z.enum(["PENDING_ADMIN_APPROVAL", "APPROVED", "PROCESSING", "PAID", "REJECTED"]).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 export async function GET(request: Request) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
-    }
-    if (session.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Administrator access required" },
-        { status: 403 }
-      );
-    }
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_referral_payouts_read:${admin.id}`, 60, 60_000);
+    const query = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
+    const result = await referralDb.getAdminPayoutQueuePage(query);
 
-    await enforceRateLimit(request, "admin_referral_payouts_read", 60, 60_000);
-    const queue = await referralDb.getAdminPayoutQueue();
-    return NextResponse.json({ success: true, queue });
+    return NextResponse.json({
+      success: true,
+      queue: result.queue,
+      total: result.total,
+      page: query.page,
+      limit: query.limit,
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -41,28 +59,19 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
-    }
-    if (session.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Administrator access required" },
-        { status: 403 }
-      );
-    }
-
-    await enforceRateLimit(request, "admin_referral_payouts_update", 20, 60_000);
-    const { payoutId, action, transactionRef, adminNotes, rejectionReason } = await readValidatedJson(request, payoutActionSchema);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_referral_payouts_update:${admin.id}`, 20, 60_000);
+    const { payoutId, action, transactionRef, adminNotes, rejectionReason } =
+      await readValidatedJson(request, payoutActionSchema, 8 * 1024);
+    const ipAddress = getClientIp(request);
 
     if (action === "APPROVE") {
-      const payout = await referralDb.adminApprovePayout(payoutId, session.id, adminNotes);
-      if (!payout) {
-        return NextResponse.json({ success: false, error: "Payout request not found" }, { status: 404 });
-      }
+      const payout = await referralDb.adminApprovePayout(
+        payoutId,
+        admin.id,
+        adminNotes,
+        ipAddress,
+      );
       return NextResponse.json({
         success: true,
         message: "Payout status updated to APPROVED for processing.",
@@ -71,17 +80,12 @@ export async function POST(request: Request) {
     }
 
     if (action === "MARK_PAID") {
-      if (!transactionRef || !transactionRef.trim()) {
-        return NextResponse.json({ success: false, error: "A valid transactionRef / UTR is required to mark payout as PAID." }, { status: 400 });
-      }
       const payout = await referralDb.adminMarkPayoutPaid(
         payoutId,
-        session.id,
-        transactionRef
+        admin.id,
+        transactionRef!,
+        ipAddress,
       );
-      if (!payout) {
-        return NextResponse.json({ success: false, error: "Payout request not found" }, { status: 404 });
-      }
       return NextResponse.json({
         success: true,
         message: "Payout marked as PAID with settlement transaction reference.",
@@ -89,23 +93,17 @@ export async function POST(request: Request) {
       });
     }
 
-    if (action === "REJECT") {
-      const payout = await referralDb.adminRejectPayout(
-        payoutId,
-        session.id,
-        rejectionReason!
-      );
-      if (!payout) {
-        return NextResponse.json({ success: false, error: "Payout request not found" }, { status: 404 });
-      }
-      return NextResponse.json({
-        success: true,
-        message: "Payout request rejected and unreserved liability released.",
-        payout,
-      });
-    }
-
-    return NextResponse.json({ success: false, error: "Invalid action specified." }, { status: 400 });
+    const payout = await referralDb.adminRejectPayout(
+      payoutId,
+      admin.id,
+      rejectionReason!,
+      ipAddress,
+    );
+    return NextResponse.json({
+      success: true,
+      message: "Payout request rejected and unreserved liability released.",
+      payout,
+    });
   } catch (error) {
     return handleApiError(error);
   }
