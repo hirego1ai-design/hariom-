@@ -154,8 +154,8 @@ export default function AdminRolesPage() {
       <AdminSidebar />
       <div className="min-h-screen md:pl-[116px]">
         <AdminHeader
-          title="Roles & Permissions"
-          subtitle="Authoritative user roles with audited, session-invalidating changes"
+          title="Roles & Portal Access"
+          subtitle="Fixed application roles with audited, session-invalidating changes"
         />
 
         <main className="mx-auto w-full max-w-[1500px] space-y-6 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
@@ -164,6 +164,7 @@ export default function AdminRolesPage() {
             <p className="max-w-4xl text-sm text-text-muted">
               Role changes affect portal access. Self-role changes and last-admin demotion are blocked.
               Employer/recruiter roles require an employer profile; candidate role requires a candidate profile with no employer profile.
+              HireGo currently uses fixed application roles; this screen does not imply a custom permission matrix.
             </p>
           </header>
 
