@@ -230,6 +230,13 @@ export default function AdminCopilotCommercePage() {
         </p>
       </header>
 
+      {(plans.some((plan) => plan.regionalPrices.some((price) => price.paymentRoute === "MERCHANT_OF_RECORD" || price.taxMode === "MERCHANT_OF_RECORD")) ||
+        capacityOffers.some((offer) => offer.regionalPrices.some((price) => price.paymentRoute === "MERCHANT_OF_RECORD" || price.taxMode === "MERCHANT_OF_RECORD"))) && (
+        <div role="alert" className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
+          Legacy Merchant-of-Record pricing exists in persisted data. It is not an approved checkout route. Replace each affected price with Stripe or PayU and a supported tax mode before enabling it.
+        </div>
+      )}
+
       <section className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
         <label className="block text-xs font-bold uppercase tracking-wider text-amber-200">
           Change reason for existing commerce configuration
@@ -355,7 +362,6 @@ export default function AdminCopilotCommercePage() {
                               <option value="NO_TAX_COLLECTION">No tax collection</option>
                               <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </td>
                           <td className="py-3 pr-3">
@@ -365,7 +371,6 @@ export default function AdminCopilotCommercePage() {
                             <select id={`route-${price.id}`} defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
                               <option value="PAYU">PayU</option>
                               <option value="STRIPE">Stripe</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </td>
                           <td className="py-3">
@@ -510,7 +515,6 @@ export default function AdminCopilotCommercePage() {
                               <option value="NO_TAX_COLLECTION">No tax</option>
                               <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </label>
                           <label className="text-[#94A3B8]">
@@ -522,7 +526,6 @@ export default function AdminCopilotCommercePage() {
                             <select id={`offer-route-${price.id}`} defaultValue={price.paymentRoute} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
                               <option value="STRIPE">Stripe</option>
                               <option value="PAYU">PayU</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </label>
                           <button
