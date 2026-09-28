@@ -8,9 +8,10 @@ type Plan = {
   name: string;
   description?: string;
   price: number;
+  currency: string;
   validityMonths?: number;
   jobPostsQuota?: number;
-  jobValidityDays?: number;
+  jobValidityDays?: number | null;
   marketingBenefits?: string[];
   copilotIncluded?: boolean;
   copilotJobLimit?: number;
@@ -37,6 +38,9 @@ export default function EmployerPlanSelectionPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const money = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary">
       <main className="mx-auto max-w-5xl px-4 py-10">
@@ -60,8 +64,12 @@ export default function EmployerPlanSelectionPage() {
             ) : plans.map((plan) => (
               <article key={plan.id} className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                 <h2 className="text-lg font-bold text-white">{plan.name}</h2>
-                <p className="mt-2 text-2xl font-extrabold text-white">₹{plan.price.toLocaleString("en-IN")}</p>
-                <p className="mt-1 text-xs text-text-muted">{plan.jobPostsQuota ?? 0} job post{(plan.jobPostsQuota ?? 0) === 1 ? "" : "s"} · {plan.jobValidityDays ?? 7} days per job</p>
+                <p className="mt-2 text-2xl font-extrabold text-white">{money(plan.price, plan.currency || "INR")}</p>
+                <p className="mt-1 text-xs text-text-muted">
+                  {typeof plan.jobPostsQuota === "number" ? `${plan.jobPostsQuota} job post${plan.jobPostsQuota === 1 ? "" : "s"}` : "Job quota not configured"}
+                  {" · "}
+                  {typeof plan.jobValidityDays === "number" ? `${plan.jobValidityDays} days per job` : "Validity not configured"}
+                </p>
                 {plan.description && <p className="mt-3 text-xs leading-relaxed text-text-secondary">{plan.description}</p>}
                 <ul className="mt-4 space-y-2 text-xs text-text-muted">
                   {(plan.marketingBenefits || []).slice(0, 6).map((benefit) => (
