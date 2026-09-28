@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { SubscriptionPlanRecord } from "./subscriptions-db";
 import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
@@ -48,7 +49,7 @@ function presentPlan(record: any): SubscriptionPlanRecord {
 }
 
 async function writeAudit(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  tx: Prisma.TransactionClient,
   context: AdminMutationContext,
   action: string,
   resource: string,
