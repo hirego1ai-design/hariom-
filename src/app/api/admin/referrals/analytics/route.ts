@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       prisma.referralAttribution.count({ where: { userType: "CANDIDATE" } }),
       prisma.referralAttribution.count({ where: { userType: "EMPLOYER" } }),
       prisma.referralReward.findMany({ select: { rewardAmount: true, status: true } }),
-      prisma.referralPayout.findMany({ where: { status: "PENDING_ADMIN_APPROVAL" }, select: { amount: true } }),
+      prisma.referralPayout.findMany({ where: { status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] } }, select: { amount: true } }),
     ]);
     totalAttributions = totalAttributionsDb;
     candidateAttributions = candidateAttributionsDb;
