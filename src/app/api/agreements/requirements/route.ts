@@ -142,8 +142,8 @@ function normalizedSkills(
 // Guard: Tenant isolation enforced via authoritative EmployerProfile.companyId -> Company FK boundary.
 export async function GET(req: NextRequest) {
   try {
-    await enforceRateLimit(req, "agreements_requirements_get", 60, 60_000);
     const session = await requireEmployerOrAdminSession(req);
+    await enforceRateLimit(req, `agreements_requirements_get:${session.id}`, 60, 60_000);
     let requirements = await agreementsDb.getRequirements();
 
     if (session.role === "ADMIN") {
@@ -173,8 +173,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await enforceRateLimit(req, "agreements_requirements_post", 20, 60_000);
     const session = await requireEmployerOrAdminSession(req);
+    await enforceRateLimit(req, `agreements_requirements_post:${session.id}`, 20, 60_000);
     const body = await readValidatedJson(req, requirementInputSchema, 128 * 1024);
 
     const targetCompany =
