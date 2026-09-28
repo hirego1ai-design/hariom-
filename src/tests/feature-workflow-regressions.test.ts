@@ -1170,3 +1170,36 @@ test("admin referral governance uses durable versioned financial and fraud contr
   assert(page.includes('role="dialog"'));
   assert(page.includes("Approval authorizes processing but does not initiate any bank or UPI transfer."));
 });
+
+
+test("admin role governance is versioned audited profile-aware and session-invalidating", () => {
+  const page = fs.readFileSync(new URL("../app/admin/roles/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/roles/route.ts", import.meta.url), "utf8");
+
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(page.includes("useDeferredValue(search)"));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("expectedUpdatedAt: target.updatedAt"));
+  assert(page.includes("Change role & invalidate sessions"));
+  assert(page.includes("Employer/recruiter roles require an employer profile"));
+  assert(page.includes("The last administrator cannot be demoted."));
+
+  assert(route.includes("requireAdminSession(request)"));
+  assert(route.includes('admin_roles_write:${admin.id}'));
+  assert(route.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(route.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(route.includes("Administrators cannot change their own role from this screen."));
+  assert(route.includes("The last administrator cannot be demoted."));
+  assert(route.includes("Employer or recruiter role requires an existing employer profile"));
+  assert(route.includes("Candidate role requires a candidate profile and no employer profile."));
+  assert(route.includes("pg_advisory_xact_lock(hashtext('admin-role-governance'))"));
+  assert(route.includes("sessionVersion: { increment: 1 }"));
+  assert(route.includes("ADMIN_USER_ROLE_CHANGED"));
+  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+  assert(route.includes("revokeAllUserSessions(updated.id, updated.sessionVersion)"));
+  assert(route.includes("skip: (query.page - 1) * query.limit"));
+  assert(route.includes("take: query.limit"));
+});
