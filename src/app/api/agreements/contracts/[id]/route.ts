@@ -146,16 +146,25 @@ export async function PUT(
       }
 
       const { expectedUpdatedAt: _version, reason, ...updates } = body;
+      const {
+        validityStartDate,
+        validityEndDate,
+        ...scalarUpdates
+      } = updates;
       const data = {
-        ...updates,
-        ...(updates.validityStartDate ? { validityStartDate: new Date(updates.validityStartDate) } : {}),
-        ...(updates.validityEndDate ? { validityEndDate: new Date(updates.validityEndDate) } : {}),
+        ...scalarUpdates,
+        ...(validityStartDate
+          ? { validityStartDate: new Date(validityStartDate) }
+          : {}),
+        ...(validityEndDate
+          ? { validityEndDate: new Date(validityEndDate) }
+          : {}),
       };
 
       if (current.requirementId) {
-        const nextInvoiceRule = updates.invoiceRule ?? current.invoiceRule;
+        const nextInvoiceRule = scalarUpdates.invoiceRule ?? current.invoiceRule;
         const nextAdvancePayment =
-          updates.advancePaymentAmount ?? current.advancePaymentAmount;
+          scalarUpdates.advancePaymentAmount ?? current.advancePaymentAmount;
 
         if (nextInvoiceRule !== "DAY_25") {
           throw new ApiError(
