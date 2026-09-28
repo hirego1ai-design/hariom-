@@ -32,6 +32,7 @@ export default function ManagedHiringRequirementWizard() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState("");
 
   // Form state starts blank. Authenticated company/user facts are loaded
   // from server-side tenant-scoped APIs below; requirement details are never
@@ -194,6 +195,7 @@ export default function ManagedHiringRequirementWizard() {
   };
 
   const handleSubmit = async () => {
+    setSubmitError("");
     setLoading(true);
     try {
       const totalPositions = positions.reduce((acc, p) => acc + (parseInt(p.numberOfPositions) || 0), 0);
@@ -230,11 +232,11 @@ export default function ManagedHiringRequirementWizard() {
       if (data.success) {
         setSubmittedRef(data.referenceCode || data.id || "Submitted");
       } else {
-        alert(data.error || "Submission failed");
+        setSubmitError(data.error || "Submission failed. Please review the requirement and try again.");
       }
     } catch (err) {
       console.error(err);
-      alert("An unexpected error occurred.");
+      setSubmitError("An unexpected error occurred while submitting the requirement. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -292,6 +294,12 @@ export default function ManagedHiringRequirementWizard() {
             );
           })}
         </div>
+
+        {submitError && (
+          <div role="alert" aria-live="assertive" className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {submitError}
+          </div>
+        )}
 
         {/* Form Body Container */}
         <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
