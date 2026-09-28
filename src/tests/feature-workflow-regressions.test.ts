@@ -1218,3 +1218,49 @@ test("admin referral governance persists fraud evidence and keeps payouts and an
   assert(page.includes('role="dialog"'));
 });
 
+
+
+test("managed-hiring agreements keep commercial terms versioned immutable and audit-bound", () => {
+  const builder = fs.readFileSync(new URL("../app/admin/agreements/builder/page.tsx", import.meta.url), "utf8");
+  const templates = fs.readFileSync(new URL("../app/admin/agreements/templates/page.tsx", import.meta.url), "utf8");
+  const contractCreate = fs.readFileSync(new URL("../app/api/agreements/contracts/route.ts", import.meta.url), "utf8");
+  const contractDetail = fs.readFileSync(new URL("../app/api/agreements/contracts/[id]/route.ts", import.meta.url), "utf8");
+  const employerReview = fs.readFileSync(new URL("../app/employer/managed-hiring/agreements/[id]/page.tsx", import.meta.url), "utf8");
+
+  assert(!fs.existsSync(new URL("../app/api/admin/managed-hiring/config/route.ts", import.meta.url)));
+
+  assert(builder.includes("expectedRequirementUpdatedAt"));
+  assert(builder.includes("expectedTemplateUpdatedAt"));
+  assert(builder.includes("reason: draftReason.trim()"));
+  assert(builder.includes('fetch("/api/agreements/contracts"'));
+
+  assert(templates.includes("expectedUpdatedAt"));
+  assert(templates.includes("changeReason"));
+  assert(templates.includes("Save audited template"));
+  assert(templates.includes("Archive reviewed version"));
+
+  assert(contractCreate.includes('requireAdminSession(req)'));
+  assert(contractCreate.includes('FOR UPDATE'));
+  assert(contractCreate.includes("Agreement template changed; reload before drafting the contract."));
+  assert(contractCreate.includes("Hiring requirement changed; reload before drafting the contract."));
+  assert(contractCreate.includes("COMMERCIAL_AGREEMENT_DRAFTED"));
+  assert(contractCreate.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+
+  assert(contractDetail.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(contractDetail.includes("reason: z.string().trim().min(3).max(2_000)"));
+  assert(contractDetail.includes('["DRAFT", "INTERNAL_REVIEW", "AMENDMENT_REQUESTED"]'));
+  assert(contractDetail.includes("Only draft or amendment-requested agreements can be revised."));
+  assert(contractDetail.includes("current.updatedAt.toISOString() !== body.expectedUpdatedAt"));
+  assert(contractDetail.includes("COMMERCIAL_AGREEMENT_UPDATED"));
+  assert(contractDetail.includes("COMMERCIAL_AGREEMENT_ACCEPTED"));
+  assert(contractDetail.includes("COMMERCIAL_AGREEMENT_AMENDMENT_REQUESTED"));
+  assert(contractDetail.includes("COMMERCIAL_AGREEMENT_SENT"));
+  assert(contractDetail.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(contractDetail.includes('getClientIp(req) || "unknown"'));
+  assert(!contractDetail.includes('"127.0.0.1"'));
+  assert(contractDetail.includes("Notification outcomes are recorded separately."));
+
+  assert(employerReview.includes("expectedUpdatedAt: new Date(agreement.updatedAt).toISOString()"));
+  assert(employerReview.includes('action: "accept"'));
+  assert(employerReview.includes('action: "request_amendment"'));
+});
