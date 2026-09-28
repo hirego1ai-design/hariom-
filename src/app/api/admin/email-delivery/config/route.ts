@@ -88,6 +88,37 @@ export async function POST(request: Request) {
         throw new ApiError("Email delivery configuration changed; reload before saving.", 409);
       }
 
+      const effectiveSendgridKey = Boolean(
+        encryptedSendgridKey ||
+        existing?.sendgridApiKeyEncrypted ||
+        process.env.SENDGRID_API_KEY
+      );
+      const effectiveZeptoMailKey = Boolean(
+        encryptedZeptoMailKey ||
+        existing?.zeptoMailApiKeyEncrypted ||
+        process.env.ZOHO_CPAAS_SEND_MAIL_TOKEN ||
+        process.env.ZEPTOMAIL_API_KEY
+      );
+      const effectiveSendgridSender = body.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL || "";
+      const effectiveZeptoMailSender =
+        body.zeptoMailFromEmail ||
+        process.env.ZOHO_CPAAS_FROM_EMAIL ||
+        process.env.ZEPTOMAIL_FROM_EMAIL ||
+        "";
+
+      if (body.sendgridEnabled && (!effectiveSendgridKey || !effectiveSendgridSender)) {
+        throw new ApiError(
+          "SendGrid cannot be enabled until a sender address and API key are configured.",
+          422,
+        );
+      }
+      if (body.zeptoMailEnabled && (!effectiveZeptoMailKey || !effectiveZeptoMailSender)) {
+        throw new ApiError(
+          "ZeptoMail cannot be enabled until a sender address and API key are configured.",
+          422,
+        );
+      }
+
       const data = {
         primaryProvider: body.primaryProvider,
         fallbackProvider: body.fallbackProvider,
