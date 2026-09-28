@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import { RECORDED_ASSESSMENT_READING_SECONDS } from "@/lib/recordedAssessment";
 import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
 
@@ -60,16 +61,27 @@ export async function POST(request: NextRequest) {
       if (family.some((item) => item.isActive)) {
         throw new ApiError("Retire the active version before publishing a replacement.", 409);
       }
-        return tx.recordedAssessmentQuestionBank.create({
-        data: {
-          ...body,
-          skillTags,
-          roleTitle: normalizedRole,
-          questionText: normalizedText,
-          version: (family[0]?.version ?? 0) + 1,
-          readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
-        },
+        const created = await tx.recordedAssessmentQuestionBank.create({
+          data: {
+            ...body,
+            skillTags,
+            roleTitle: normalizedRole,
+            questionText: normalizedText,
+            version: (family[0]?.version ?? 0) + 1,
+            readingTimeSeconds: RECORDED_ASSESSMENT_READING_SECONDS,
+          },
         });
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            action: "RECORDED_ASSESSMENT_QUESTION_PUBLISHED",
+            resource: `RecordedAssessmentQuestionBank:${created.id}`,
+            ipAddress: getClientIp(request) || "unknown",
+            details: `Published ${created.questionKey} version ${created.version} for role ${created.roleTitle}`,
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+        return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       // Concurrent admins can calculate the same next version. The unique
