@@ -1769,3 +1769,34 @@ test("admin Copilot commerce exposes only supported checkout routing and complet
   assert(pricingPage.includes("A calculation is not a quote, invoice, or signed agreement."));
   assert(pricingPage.includes("Scenario only. Nothing on this page is persisted."));
 });
+
+
+test("admin role governance uses fixed portal roles with serialized audited session invalidation", () => {
+  const page = fs.readFileSync(new URL("../app/admin/roles/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/roles/route.ts", import.meta.url), "utf8");
+  const licenseRedirect = fs.readFileSync(new URL("../app/admin/licenses/allocator/page.tsx", import.meta.url), "utf8");
+
+  assert(licenseRedirect.includes('redirect("/admin/subscriptions")'));
+
+  assert(page.includes('title="Roles & Portal Access"'));
+  assert(page.includes("fixed application roles"));
+  assert(page.includes("this screen does not imply a custom permission matrix"));
+  assert(page.includes("expectedUpdatedAt: target.updatedAt"));
+  assert(page.includes("Change role & invalidate sessions"));
+  assert(page.includes("Last administrator protected"));
+  assert(page.includes('role="dialog"'));
+
+  assert(route.includes("requireAdminSession(request)"));
+  assert(route.includes('admin_roles_read:${admin.id}'));
+  assert(route.includes('admin_roles_write:${admin.id}'));
+  assert(route.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(route.includes("Administrators cannot change their own role from this screen."));
+  assert(route.includes("The last administrator cannot be demoted."));
+  assert(route.includes("Employer or recruiter role requires an existing employer profile and company assignment."));
+  assert(route.includes("Candidate role requires a candidate profile and no employer profile."));
+  assert(route.includes("pg_advisory_xact_lock"));
+  assert(route.includes("sessionVersion: { increment: 1 }"));
+  assert(route.includes("ADMIN_USER_ROLE_CHANGED"));
+  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+  assert(route.includes("revokeAllUserSessions(updated.id, updated.sessionVersion)"));
+});
