@@ -2047,7 +2047,7 @@ class ReferralDatabaseStore {
   public async getUserFraudProfile(userId: string): Promise<UserFraudProfile> {
     if (process.env.NODE_ENV === "production") {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-      if (!user) throw new Error("Referral fraud profile user does not exist.");
+      if (!user) throw new ApiError("Referral fraud profile user does not exist.", 404);
       const row = await prisma.referralFraudProfile.upsert({
         where: { userId },
         create: {
@@ -2088,7 +2088,6 @@ class ReferralDatabaseStore {
     actorId?: string;
     ipAddress?: string;
     expectedUpdatedAt?: string;
-    expectedLastEvaluatedAt?: string;
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
@@ -2098,7 +2097,7 @@ class ReferralDatabaseStore {
     if (process.env.NODE_ENV === "production") {
       return prisma.$transaction(async (tx) => {
         const user = await tx.user.findUnique({ where: { id: params.userId }, select: { id: true } });
-        if (!user) throw new Error("Referral fraud profile user does not exist.");
+        if (!user) throw new ApiError("Referral fraud profile user does not exist.", 404);
         await tx.referralFraudProfile.upsert({
           where: { userId: params.userId },
           create: {
@@ -2121,15 +2120,10 @@ class ReferralDatabaseStore {
           throw new ApiError("Referral fraud profile changed; reload before saving.", 409);
         }
         const previousStatus = current.status as FraudStatus;
-        if (
-          params.expectedLastEvaluatedAt &&
-          current.lastEvaluatedAt.toISOString() !== params.expectedLastEvaluatedAt
-        ) {
-          throw new Error("Referral fraud profile changed; refresh before reviewing.");
-        }
         if (!validTransitions[previousStatus].includes(params.newStatus)) {
-          throw new Error(
+          throw new ApiError(
             `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
+            409,
           );
         }
 
@@ -2192,8 +2186,9 @@ class ReferralDatabaseStore {
     const currentProfile = await this.getUserFraudProfile(params.userId);
     const previousStatus = currentProfile.status;
     if (
-      params.expectedLastEvaluatedAt &&
-      new Date(currentProfile.lastEvaluatedAt).toISOString() !== params.expectedLastEvaluatedAt
+      params.expectedUpdatedAt &&
+      currentProfile.updatedAt &&
+      new Date(currentProfile.updatedAt).toISOString() !== params.expectedUpdatedAt
     ) {
       throw new Error("Referral fraud profile changed; refresh before reviewing.");
     }
@@ -2218,7 +2213,9 @@ class ReferralDatabaseStore {
     currentProfile.status = params.newStatus;
     if (params.riskScore !== undefined) currentProfile.riskScore = params.riskScore;
     if (params.riskFactors) currentProfile.riskFactors = params.riskFactors;
-    currentProfile.lastEvaluatedAt = new Date().toISOString();
+    const reviewedAt = new Date().toISOString();
+    currentProfile.lastEvaluatedAt = reviewedAt;
+    currentProfile.updatedAt = reviewedAt;
     currentProfile.history.push(auditRecord);
     this.fraudProfiles.set(params.userId, currentProfile);
     return currentProfile;
@@ -2264,7 +2261,7 @@ class ReferralDatabaseStore {
         reason: `Automated Risk Engine Evaluation (Risk Score: ${riskScore})`,
         actorId: context?.actorId || "FRAUD_ENGINE",
         ipAddress: context?.ip,
-        expectedLastEvaluatedAt: profile.lastEvaluatedAt,
+        expectedUpdatedAt: profile.updatedAt,
         riskScore,
         riskFactors,
       });
@@ -2290,7 +2287,9 @@ class ReferralDatabaseStore {
 
     profile.riskScore = riskScore;
     profile.riskFactors = riskFactors;
-    profile.lastEvaluatedAt = new Date().toISOString();
+    const evaluatedAt = new Date().toISOString();
+    profile.lastEvaluatedAt = evaluatedAt;
+    profile.updatedAt = evaluatedAt;
     this.fraudProfiles.set(userId, profile);
     return profile;
   }
