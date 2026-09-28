@@ -39,7 +39,22 @@ export async function GET(request: NextRequest) {
   try {
     const { session, companyId } = await actor(request);
     await enforceRateLimit(request, "employer_offers_read", 60, 60_000);
-    const applicationId = new URL(request.url).searchParams.get("applicationId");
+    const { searchParams } = new URL(request.url);
+    const applicationId = searchParams.get("applicationId");
+    const requestedLimit = searchParams.get("limit");
+    const requestedCursor = searchParams.get("cursor");
+    const limit = requestedLimit === null ? 50 : Number(requestedLimit);
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new ApiError("limit must be an integer between 1 and 100.", 400);
+    }
+    if (applicationId && !uuidPattern.test(applicationId)) {
+      throw new ApiError("Invalid application identifier.", 400);
+    }
+    if (requestedCursor && !uuidPattern.test(requestedCursor)) {
+      throw new ApiError("Invalid offer cursor.", 400);
+    }
+
     const offers = await prisma.offer.findMany({
       where: {
         ...(session.role === "ADMIN" ? {} : { companyId: companyId! }),
@@ -55,10 +70,21 @@ export async function GET(request: NextRequest) {
         },
         documentFile: { select: { id: true, originalName: true, mimeType: true, scanStatus: true } },
       },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      cursor: requestedCursor ? { id: requestedCursor } : undefined,
+      skip: requestedCursor ? 1 : 0,
+      take: limit + 1,
     });
-    return NextResponse.json({ success: true, offers }, { headers: { "Cache-Control": "no-store" } });
+    const page = offers.slice(0, limit);
+    const nextCursor = offers.length > limit ? page[page.length - 1]?.id || null : null;
+    return NextResponse.json(
+      {
+        success: true,
+        offers: page,
+        pagination: { limit, nextCursor, hasMore: nextCursor !== null },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return handleApiError(error);
   }
