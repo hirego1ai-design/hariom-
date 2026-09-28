@@ -65,10 +65,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       throw new ApiError("Question not found in this assessment", 404);
     }
 
-    // Historical Integrity: Cannot mutate questions if candidate attempts exist
-    const attemptCount = await prisma.mcqAttempt.count({ where: { assessmentId } });
-    if (attemptCount > 0) {
-      throw new ApiError("Cannot modify questions for an assessment that already has candidate attempts.", 400);
+    // Historical Integrity: freeze questions once assigned or attempted.
+    const [attemptCount, assignmentCount] = await Promise.all([
+      prisma.mcqAttempt.count({ where: { assessmentId } }),
+      prisma.applicationGate.count({ where: { assessmentId } }),
+    ]);
+    if (attemptCount > 0 || assignmentCount > 0) {
+      throw new ApiError("Cannot modify questions after this assessment has been assigned to a candidate.", 409);
     }
 
     const requestedSkillTags = data.skillTags !== undefined
@@ -170,10 +173,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       throw new ApiError("Question not found in this assessment", 404);
     }
 
-    // Historical Integrity: Cannot delete questions if candidate attempts exist
-    const attemptCount = await prisma.mcqAttempt.count({ where: { assessmentId } });
-    if (attemptCount > 0) {
-      throw new ApiError("Cannot delete questions for an assessment that already has candidate attempts.", 400);
+    // Historical Integrity: freeze questions once assigned or attempted.
+    const [attemptCount, assignmentCount] = await Promise.all([
+      prisma.mcqAttempt.count({ where: { assessmentId } }),
+      prisma.applicationGate.count({ where: { assessmentId } }),
+    ]);
+    if (attemptCount > 0 || assignmentCount > 0) {
+      throw new ApiError("Cannot delete questions after this assessment has been assigned to a candidate.", 409);
     }
 
     await prisma.mcqQuestion.delete({
