@@ -1413,7 +1413,8 @@ class ReferralDatabaseStore {
   public async adminApprovePayout(
     payoutId: string,
     adminUserId: string,
-    adminNotes?: string
+    adminNotes?: string,
+    ipAddress?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-approve-payout");
@@ -1431,7 +1432,24 @@ class ReferralDatabaseStore {
             },
           });
           if (transitioned.count !== 1) return null;
-          return tx.referralPayout.findUnique({ where: { id: payoutId } });
+          const approved = await tx.referralPayout.findUnique({ where: { id: payoutId } });
+          if (!approved) return null;
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_APPROVED",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: approved.amount,
+                currency: approved.currency,
+                adminNoteRecorded: Boolean(adminNotes?.trim()),
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
+          return approved;
         });
         if (!updated) throw new Error(`Payout ${payoutId} is not awaiting approval.`);
         return {
@@ -1473,7 +1491,8 @@ class ReferralDatabaseStore {
   public async adminMarkPayoutPaid(
     payoutId: string,
     adminUserId: string,
-    transactionRef: string
+    transactionRef: string,
+    ipAddress?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-mark-paid");
@@ -1550,7 +1569,7 @@ class ReferralDatabaseStore {
               payoutId: existing.id,
               entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,
               amount: existing.amount,
-              balanceAfter: 0, // balance settled
+              balanceAfter: 0,
               currency: existing.currency,
               correlationId,
               metadata: {
@@ -1559,6 +1578,22 @@ class ReferralDatabaseStore {
               },
             },
           });
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_MARKED_PAID",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: existing.amount,
+                currency: existing.currency,
+                transactionReferenceRecorded: true,
+                ledgerEntryId: createdLedger.id,
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
 
           return [updated, createdLedger];
         });
@@ -1642,7 +1677,8 @@ class ReferralDatabaseStore {
   public async adminRejectPayout(
     payoutId: string,
     adminUserId: string,
-    reason: string
+    reason: string,
+    ipAddress?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-reject-payout");
@@ -1696,6 +1732,22 @@ class ReferralDatabaseStore {
               },
             },
           });
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_REJECTED",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: existing.amount,
+                currency: existing.currency,
+                reason,
+                ledgerEntryId: createdLedger.id,
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
 
           return [updatedRecord, createdLedger];
         });
