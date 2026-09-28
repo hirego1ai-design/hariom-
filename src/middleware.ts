@@ -186,7 +186,11 @@ export async function middleware(request: NextRequest) {
   // 4. Candidate Protected Routes. Candidate-facing legacy and canonical
   // routes are role-gated here so an authenticated employer/recruiter cannot
   // render Candidate UI and discover data/actions by route guessing.
-  if (candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix))) {
+  const isCandidateJobAction =
+    pathname === "/jobs/saved" ||
+    /^\/jobs\/[^/]+\/apply(?:\/|$)/.test(pathname);
+
+  if (candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix)) || isCandidateJobAction) {
     if (!session || (session.role !== "CANDIDATE" && session.role !== "ADMIN")) {
       const redirectUrl = new URL("/login", request.url);
       redirectUrl.searchParams.set("redirect", pathname);
