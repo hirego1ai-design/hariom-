@@ -229,51 +229,6 @@ export default function ResumeUploadPage() {
               </div>
             )}
 
-            {/* Analysis Results */}
-            {analysis && !analyzing && (
-              <div
-                className="p-6 rounded-2xl border space-y-4"
-                style={{
-                  backgroundColor: "var(--surface-container-low)",
-                  borderColor: "var(--outline)",
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[20px]" style={{ color: "var(--color-green-light, #2E7D32)" }}>verified</span>
-                    <h3 className="font-extrabold text-xs uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>AI Quality Score Breakdown</h3>
-                  </div>
-                  <span className="text-lg font-extrabold font-mono" style={{ color: "var(--color-green-light, #2E7D32)" }}>
-                    {analysis.qualityScore} / 100
-                  </span>
-                </div>
-
-                <p className="text-xs font-semibold leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                  {analysis.summary}
-                </p>
-
-                <div className="space-y-2 pt-1">
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest block" style={{ color: "var(--text-muted)" }}>
-                    Extracted Skills:
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {analysis.extractedSkills.map((sk) => (
-                      <span
-                        key={sk}
-                        className="px-3 py-1 rounded-full text-xs font-bold"
-                        style={{
-                          backgroundColor: "var(--surface-container-high)",
-                          border: "1px solid var(--outline)",
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {sk}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Bottom Actions */}
