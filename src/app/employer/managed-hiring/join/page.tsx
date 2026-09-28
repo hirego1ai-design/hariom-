@@ -55,8 +55,10 @@ export default function ManagedHiringJoinPage() {
     try {
       const response = await fetch("/api/employer/managed-hiring/join", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, annualCtc: Number(form.annualCtc), joinedAt: new Date(form.joinedAt).toISOString(), termsAccepted: accepted }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to confirm joining.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !data.placement?.status || !data.placement?.invoiceEligibleAt) {
+        throw new Error(data.error || "Unable to confirm joining.");
+      }
       setStatusType("success");
       setStatus(`Joining recorded. Status: ${data.placement.status}. Invoice eligible: ${new Date(data.placement.invoiceEligibleAt).toLocaleString()}. No immediate invoice was created.`);
       await refresh();
