@@ -69,6 +69,10 @@ export default function CommunicationsPage() {
   const [toggleReason, setToggleReason] = useState("");
   const [toggleSaving, setToggleSaving] = useState(false);
 
+  const [testRecipient, setTestRecipient] = useState("");
+  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
+  const [testSending, setTestSending] = useState(false);
+
   const deliveryTotalPages = Math.max(1, Math.ceil(deliveryTotal / DELIVERY_PAGE_SIZE));
 
   async function load(page = deliveryPage) {
@@ -134,6 +138,16 @@ export default function CommunicationsPage() {
     if (def && !def.channels.includes(channel)) setChannel(def.channels[0] || "EMAIL");
     if (def && !def.audiences.includes(audience)) setAudience(def.audiences[0] || "CANDIDATE");
   }, [def, channel, audience]);
+
+  useEffect(() => {
+    if (!def) {
+      setTestVariables({});
+      return;
+    }
+    setTestVariables((current) =>
+      Object.fromEntries(def.variables.map((variable) => [variable, current[variable] || ""])),
+    );
+  }, [def]);
 
   async function applyToggle() {
     if (!toggleTarget || toggleSaving || toggleReason.trim().length < 3) return;
@@ -229,6 +243,50 @@ export default function CommunicationsPage() {
       setError(cause instanceof Error ? cause.message : "Unable to create template.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function sendTestCommunication() {
+    if (!def || testSending || !testRecipient.trim()) return;
+
+    const missing = def.variables.filter((variable) => !testVariables[variable]?.trim());
+    if (missing.length) {
+      setError(`Enter test values for: ${missing.join(", ")}`);
+      return;
+    }
+
+    setTestSending(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/communications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventKey,
+          channel,
+          audience,
+          recipient: testRecipient.trim(),
+          variables: Object.fromEntries(
+            def.variables.map((variable) => [variable, testVariables[variable]?.trim() || ""]),
+          ),
+          locale: "en",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Test communication was not accepted by the provider.");
+      }
+
+      setNotice(
+        `Test communication accepted by ${payload.delivery?.provider || "the configured provider"}. Delivery/read confirmation is tracked separately.`,
+      );
+      setDeliveryPage(1);
+      await load(1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to send test communication.");
+    } finally {
+      setTestSending(false);
     }
   }
 
@@ -404,6 +462,70 @@ export default function CommunicationsPage() {
               </div>
             </section>
           </div>
+
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5" aria-labelledby="communication-test-heading">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 id="communication-test-heading" className="font-semibold">Safe test communication</h2>
+                <p className="mt-1 max-w-3xl text-xs text-zinc-500">
+                  Uses the selected event/channel/audience above and the currently active template. In production, the recipient must be on COMMUNICATION_TEST_RECIPIENT_ALLOWLIST.
+                </p>
+              </div>
+              <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-bold text-amber-200">
+                Provider acceptance ≠ delivered/read
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <label className="text-sm">
+                Test recipient
+                <input
+                  value={testRecipient}
+                  onChange={(event) => setTestRecipient(event.target.value)}
+                  maxLength={320}
+                  placeholder={channel === "EMAIL" ? "allowed-test@example.com" : "+91… or provider recipient id"}
+                  className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3"
+                />
+              </label>
+              <div className="rounded-xl border border-zinc-800 bg-black/20 p-3 text-xs text-zinc-400">
+                <p><strong className="text-zinc-200">Event:</strong> {def?.label || "Select an event"}</p>
+                <p className="mt-1"><strong className="text-zinc-200">Channel:</strong> {channel}</p>
+                <p className="mt-1"><strong className="text-zinc-200">Audience:</strong> {audience}</p>
+              </div>
+            </div>
+
+            {def && def.variables.length > 0 && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {def.variables.map((variable) => (
+                  <label key={variable} className="text-xs text-zinc-400">
+                    {variable}
+                    <input
+                      value={testVariables[variable] || ""}
+                      onChange={(event) =>
+                        setTestVariables((current) => ({ ...current, [variable]: event.target.value }))
+                      }
+                      maxLength={500}
+                      className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-white"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void sendTestCommunication()}
+              disabled={
+                testSending ||
+                !def ||
+                !testRecipient.trim() ||
+                def.variables.some((variable) => !testVariables[variable]?.trim())
+              }
+              className="mt-5 rounded-xl border border-white/15 bg-white px-5 py-3 text-xs font-bold text-black disabled:opacity-40"
+            >
+              {testSending ? "Sending test…" : "Send allowlisted test"}
+            </button>
+          </section>
 
           <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950" aria-labelledby="delivery-operations-heading">
             <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 md:flex-row md:items-end md:justify-between">
