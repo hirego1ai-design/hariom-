@@ -229,13 +229,13 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
 
   assert.deepEqual(
     vercel.crons,
-    [
-      { path: "/api/cron/referrals-reconciliation", schedule: "0 2 * * *" },
-      { path: "/api/cron/events-outbox", schedule: "*/5 * * * *" },
-    ],
+    [{ path: "/api/cron/referrals-reconciliation", schedule: "0 2 * * *" }],
   );
   assert(!JSON.stringify(vercel).includes("/api/cron/recorded-assessment-analysis"));
-  assert(scheduler.includes("'/api/cron/recorded-assessment-analysis'"));
+  assert(!JSON.stringify(vercel).includes("/api/cron/events-outbox"));
+  assert(scheduler.includes("/api/cron/recorded-assessment-analysis"));
+  assert(scheduler.includes("/api/cron/events-outbox"));
+  assert(scheduler.includes("RAILWAY_DIRECT_BACKGROUND_WORKER"));
   assert(scheduler.includes("process.env.CRON_SECRET"));
   assert(scheduler.includes("process.env.VERCEL_AUTOMATION_BYPASS_SECRET"));
   assert(scheduler.includes("Authorization"));
@@ -243,8 +243,8 @@ test("recorded assessment recovery is scheduled outside Vercel with a dedicated 
   assert(scheduler.includes("x-vercel-protection-bypass"));
   assert(!scheduler.includes("while ("));
   assert(scheduler.includes("AbortController"));
-  assert(!scheduler.includes("DATABASE_URL"));
-  assert(!scheduler.includes("VIDEO_ANALYSIS_INTERNAL_TOKEN"));
+  assert(scheduler.includes("DATABASE_URL"));
+  assert(scheduler.includes("VIDEO_ANALYSIS_INTERNAL_TOKEN"));
   assert(dockerfile.includes("USER node"));
 });
 
