@@ -48,13 +48,13 @@ export async function GET(request: Request) {
           rewards
             .filter((row) => statuses.includes(row.status))
             .reduce((sum, row) => sum + (row._sum?.rewardAmount ?? 0), 0);
-        const rewardCount = rewards.reduce((sum, row) => sum + (row._count?.id ?? 0), 0);
+        const rewardCount = rewards.reduce((sum, row) => sum + ((row._count as { id?: number } | undefined)?.id ?? 0), 0);
         const pendingPayoutLiability = payouts.reduce(
           (sum, row) => sum + (row._sum?.amount ?? 0),
           0,
         );
         const pendingPayoutCount = payouts.reduce(
-          (sum, row) => sum + (row._count?.id ?? 0),
+          (sum, row) => sum + ((row._count as { id?: number } | undefined)?.id ?? 0),
           0,
         );
 
