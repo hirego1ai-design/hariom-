@@ -2088,6 +2088,7 @@ class ReferralDatabaseStore {
     actorId?: string;
     ipAddress?: string;
     expectedUpdatedAt?: string;
+    expectedLastEvaluatedAt?: string;
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
