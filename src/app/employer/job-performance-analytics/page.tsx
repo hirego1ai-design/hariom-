@@ -5,7 +5,7 @@ import { PageContainer, PageHeader } from "@/components/employer/LayoutSystem";
 
 type Job = { id: string; title: string; status: string; location: string };
 type Analytics = {
-  metrics: { applications: number; completedInterviews: number; hires: number; averageTimeToHireDays: number | null };
+  metrics: { applications: number; completedInterviews: number; hiredApplications: number; averageTimeToHireDays: number | null; averageTimeToHireSampleCount: number };
   funnel: Record<string, number>;
   unavailableMetrics: string[];
 };
@@ -78,8 +78,8 @@ export default function JobPerformanceAnalyticsPage() {
             {[
               ["Applications", analytics.metrics.applications],
               ["Completed Interviews", analytics.metrics.completedInterviews],
-              ["Hires", analytics.metrics.hires],
-              ["Avg. Time to Hire", analytics.metrics.averageTimeToHireDays === null ? "Not available" : `${analytics.metrics.averageTimeToHireDays} days`],
+              ["Applications now hired", analytics.metrics.hiredApplications],
+              ["Avg. confirmed time to hire", analytics.metrics.averageTimeToHireDays === null ? "Not available" : `${analytics.metrics.averageTimeToHireDays} days (${analytics.metrics.averageTimeToHireSampleCount} confirmed)`],
             ].map(([label, value]) => (
               <article key={String(label)} className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{label}</p>
