@@ -10,6 +10,7 @@ const commonPricingFields = {
   discountPct: z.number().finite().min(0).max(100).optional(),
   taxRatePct: z.number().finite().min(0).max(100),
   replacementDays: z.number().int().min(0).max(3650),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
 };
 
 const slabSchema = z.object({
@@ -47,8 +48,8 @@ const pricingRequestSchema = z.discriminatedUnion("pricingModel", [
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_pricing_calculate", 60, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_pricing_calculate:${admin.id}`, 60, 60_000);
     const body = await readValidatedJson(req, pricingRequestSchema);
 
     const ctcAnnual = body.ctcAnnual ?? body.ctc;
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      currency: body.currency ?? null,
       calculation,
     });
   } catch (error) {
