@@ -947,3 +947,46 @@ test("admin model registry separates benchmarks and preserves incomplete telemet
   assert(usage.includes("Not fully measured"));
   assert(usage.includes("Benchmark runs are excluded from operational request, token and spend totals."));
 });
+
+
+test("admin operational evidence screens stay scoped persisted and non-simulated", () => {
+  const securityPage = fs.readFileSync(new URL("../app/admin/settings/security/page.tsx", import.meta.url), "utf8");
+  const securityRoute = fs.readFileSync(new URL("../app/api/admin/security/status/route.ts", import.meta.url), "utf8");
+  const healthPage = fs.readFileSync(new URL("../app/admin/system-health/page.tsx", import.meta.url), "utf8");
+  const healthRoute = fs.readFileSync(new URL("../app/api/admin/system-health/route.ts", import.meta.url), "utf8");
+  const auditPage = fs.readFileSync(new URL("../app/admin/settings/audit-log/page.tsx", import.meta.url), "utf8");
+  const auditRoute = fs.readFileSync(new URL("../app/api/admin/audit-logs/route.ts", import.meta.url), "utf8");
+  const infrastructure = fs.readFileSync(new URL("../app/admin/system/infrastructure/page.tsx", import.meta.url), "utf8");
+  const queuePage = fs.readFileSync(new URL("../app/admin/system/queue-broker/page.tsx", import.meta.url), "utf8");
+  const vulnerability = fs.readFileSync(new URL("../app/admin/security/vulnerability-inspector/page.tsx", import.meta.url), "utf8");
+  const backup = fs.readFileSync(new URL("../app/admin/system/backup-recovery/page.tsx", import.meta.url), "utf8");
+
+  assert(securityRoute.includes('admin_security_status:${admin.id}'));
+  assert(securityRoute.includes('Boolean(headers["Strict-Transport-Security"])'));
+  assert(securityRoute.includes('headers["Strict-Transport-Security"] || ""'));
+  assert(securityPage.includes("Unable to load security evidence."));
+  assert(securityPage.includes('cache: "no-store"'));
+
+  assert(healthRoute.includes("getProviderStatusSummary"));
+  assert(healthRoute.includes("process.env.S3_REGION"));
+  assert(healthRoute.includes('overallStatus: dbStatus === "HEALTHY" ? "APPLICATION_AVAILABLE" : "DEGRADED"'));
+  assert(healthRoute.includes('observedScope: "APPLICATION_RUNTIME_AND_CONFIGURATION"'));
+  assert(healthPage.includes("Credential presence is never presented as provider uptime."));
+  assert(healthPage.includes("No service observations were returned."));
+
+  assert(auditRoute.includes("prisma.auditLog.count"));
+  assert(auditRoute.includes("prisma.auditLog.findMany"));
+  assert(auditRoute.includes("skip: (query.page - 1) * query.limit"));
+  assert(auditRoute.includes("take: query.limit"));
+  assert(auditPage.includes("useDeferredValue(searchQuery)"));
+  assert(auditPage.includes("Results are paginated"));
+  assert(!auditPage.includes("Complete audit log"));
+
+  assert(infrastructure.includes('redirect("/admin/system-health")'));
+  assert(queuePage.includes("Workflow recovery worker"));
+  assert(queuePage.includes("workerLiveness?.workflowRecovery"));
+  assert(queuePage.includes("md:pl-[116px]"));
+
+  assert(vulnerability.includes("does not claim zero vulnerabilities"));
+  assert(backup.includes("EXTERNAL EVIDENCE REQUIRED"));
+});
