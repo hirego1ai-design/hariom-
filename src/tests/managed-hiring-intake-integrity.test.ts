@@ -75,7 +75,8 @@ test("requirement state updates are bounded and cannot claim agreement states wi
 test("commercial agreement creation uses selected template and explicit terms instead of hidden backend defaults", () => {
   const route = read("src/app/api/agreements/contracts/route.ts");
   const repository = read("src/lib/agreements-db.ts");
-  const builder = read(
+  const builder = read("src/app/admin/agreements/builder/page.tsx");
+  const retiredBuilder = read(
     "src/app/admin/managed-hiring/agreements/builder/page.tsx",
   );
 
@@ -91,8 +92,11 @@ test("commercial agreement creation uses selected template and explicit terms in
   assert.match(repository, /taxRatePct: payload\.taxRatePct \?\? 0/);
   assert.match(repository, /"CREATED", performedBy/);
 
-  assert.match(builder, /companyId: requirement\?\.companyId/);
+  assert.match(builder, /companyId: requirement\.companyId/);
+  assert.match(builder, /requirementId: requirement\.id/);
+  assert.match(builder, /templateId: template\.id/);
   assert.doesNotMatch(builder, /performedBy:\s*"Sales Admin"/);
+  assert.match(retiredBuilder, /redirect\(reqId \? `\/admin\/agreements\/builder\?reqId=/);
 });
 
 test("admin managed-hiring pipeline draft-agreement control navigates to the real builder", () => {
