@@ -6,15 +6,15 @@ import { formatMoney, revenueUnavailable } from "../_shared";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_revenue_subscriptions", 60, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_revenue_subscriptions:${admin.id}`, 60, 60_000);
 
     const [plans, payments] = await Promise.all([
       prisma.subscriptionPlan.findMany({
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: {
           subscriptions: {
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             include: {
               company: {
                 select: { id: true, name: true },
@@ -25,10 +25,11 @@ export async function GET(req: NextRequest) {
       }),
       prisma.paymentTransaction.findMany({
         where: {
+          productType: { in: ["LEGACY_SUBSCRIPTION", "SUBSCRIPTION"] },
           planId: { not: null },
           status: { in: ["SUCCESS", "PAID"] },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
           planId: true,
@@ -50,7 +51,14 @@ export async function GET(req: NextRequest) {
 
     const data = plans.map((plan) => {
       const planPayments = paymentsByPlan.get(plan.id) || [];
-      const revenueCollected = planPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      const revenueByCurrency = Object.fromEntries(
+        [...new Set(planPayments.map((payment) => payment.currency))].sort().map((currency) => {
+          const total = planPayments
+            .filter((payment) => payment.currency === currency)
+            .reduce((sum, payment) => sum + payment.amount, 0);
+          return [currency, { total, formatted: formatMoney(total, currency) }];
+        }),
+      );
       const active = plan.subscriptions.filter((subscription) => subscription.status === "ACTIVE").length;
       const expired = plan.subscriptions.filter((subscription) => subscription.status === "EXPIRED").length;
       const cancelled = plan.subscriptions.filter((subscription) => subscription.status === "CANCELLED").length;
@@ -68,8 +76,7 @@ export async function GET(req: NextRequest) {
         active,
         expired,
         cancelled,
-        revenueCollected,
-        revenueCollectedFormatted: formatMoney(revenueCollected, plan.currency),
+        revenueByCurrency,
         paymentCount: planPayments.length,
         customers: plan.subscriptions.map((subscription) => ({
           id: subscription.id,
@@ -82,15 +89,31 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const totalRevenue = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const currencies = [...new Set(payments.map((payment) => payment.currency))].sort();
+    const byCurrency = Object.fromEntries(
+      currencies.map((currency) => {
+        const currencyPayments = payments.filter((payment) => payment.currency === currency);
+        const totalRevenue = currencyPayments.reduce((sum, payment) => sum + payment.amount, 0);
+        return [
+          currency,
+          {
+            currency,
+            totalRevenue,
+            totalRevenueFormatted: formatMoney(totalRevenue, currency),
+            paymentCount: currencyPayments.length,
+          },
+        ];
+      }),
+    );
 
     return NextResponse.json({
       success: true,
       source: "database",
       totalPlans: data.length,
       summary: {
-        totalRevenue,
-        totalRevenueFormatted: formatMoney(totalRevenue),
+        currencyMode: currencies.length <= 1 ? "single" : "multiple",
+        currencies,
+        byCurrency,
         totalSubscriptions: data.reduce((sum, plan) => sum + plan.totalSubscribers, 0),
         activeSubscriptions: data.reduce((sum, plan) => sum + plan.active, 0),
       },
