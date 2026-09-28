@@ -114,10 +114,14 @@ export async function updateAdminSubscriptionPlan(
   id: string,
   updates: UpdatePlanInput,
   context: AdminMutationContext,
+  expectedUpdatedAt: string,
 ): Promise<SubscriptionPlanRecord | null> {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.subscriptionPlan.findUnique({ where: { id } });
     if (!existing) return null;
+    if (existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+      throw new ApiError("Subscription plan changed; reload before saving.", 409);
+    }
 
     const changed = await tx.subscriptionPlan.updateMany({
       where: { id, updatedAt: existing.updatedAt },
@@ -141,11 +145,15 @@ export async function updateAdminSubscriptionPlan(
 export async function archiveAdminSubscriptionPlan(
   id: string,
   context: AdminMutationContext,
+  expectedUpdatedAt?: string,
 ): Promise<SubscriptionPlanRecord | null> {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.subscriptionPlan.findUnique({ where: { id } });
     if (!existing) return null;
     if (existing.isArchived) return presentPlan(existing);
+    if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+      throw new ApiError("Subscription plan changed; reload before archiving.", 409);
+    }
 
     const changed = await tx.subscriptionPlan.updateMany({
       where: { id, isArchived: false, updatedAt: existing.updatedAt },
