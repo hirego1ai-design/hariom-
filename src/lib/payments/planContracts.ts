@@ -49,8 +49,14 @@ function validatePlanCommercialRules(value: {
 
 export const createPlanSchema = z.object(planFields).strict().superRefine(validatePlanCommercialRules);
 export const updatePlanSchema = z.object(planFields).partial()
-  .extend({ id: planIdSchema }).strict()
-  .refine(value => Object.keys(value).some(key => key !== "id"), "No plan changes supplied.")
+  .extend({
+    id: planIdSchema,
+    expectedUpdatedAt: z.string().datetime(),
+  }).strict()
+  .refine(
+    value => Object.keys(value).some(key => key !== "id" && key !== "expectedUpdatedAt"),
+    "No plan changes supplied.",
+  )
   .superRefine(validatePlanCommercialRules);
 
 export const checkoutSchema = z.object({
