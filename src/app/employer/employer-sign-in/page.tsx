@@ -15,10 +15,10 @@ function EmployerSignInContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  // If role=admin in URL, redirect directly to Admin Control Console
+  // Route admin sign-in requests to the dedicated authenticated admin login.
   useEffect(() => {
     if (roleParam === "admin") {
-      router.replace("/admin/dashboard");
+      router.replace("/admin/login");
       router.refresh();
     }
   }, [roleParam, router]);
@@ -31,7 +31,7 @@ function EmployerSignInContent() {
             progress_activity
           </span>
           <p className="text-sm font-bold text-amber-400">
-            Redirecting to Admin Control Center...
+            Redirecting to Admin Sign In...
           </p>
         </div>
       </div>
@@ -50,7 +50,7 @@ function EmployerSignInContent() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password, portal: "employer" }),
       });
       const result = await response.json();
 
@@ -59,8 +59,7 @@ function EmployerSignInContent() {
         return;
       }
 
-      const userRole = result.user?.role;
-      router.replace(userRole === "ADMIN" ? "/admin/dashboard" : "/employer/dashboard");
+      router.replace("/employer/dashboard");
       router.refresh();
     } catch {
       setError("Unable to sign in right now. Please try again.");
@@ -82,47 +81,29 @@ function EmployerSignInContent() {
             </div>
           </div>
 
-          {/* Feature Highlights */}
+          {/* Feature Highlights — capability statements only, no unsupported performance claims */}
           <div className="relative z-10 space-y-3 pl-1">
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">
-                ✓
-              </div>
+              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">✓</div>
               <div>
-                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">
-                  AI Screening
-                </p>
-                <p className="font-body-md text-xs text-text-primary font-bold">
-                  Automated Candidate Vetting
-                </p>
+                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">Evidence-first screening</p>
+                <p className="font-body-md text-xs text-text-primary font-bold">Missing profile evidence never auto-rejects a candidate</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">
-                ✓
-              </div>
+              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">✓</div>
               <div>
-                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">
-                  84% Faster
-                </p>
-                <p className="font-body-md text-xs text-text-primary font-bold">
-                  High-Velocity Hiring Pipelines
-                </p>
+                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">Job-scoped sourcing</p>
+                <p className="font-body-md text-xs text-text-primary font-bold">Confirmed-available candidates are separated from organic applicants</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">
-                ✓
-              </div>
+              <div className="w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-bold">✓</div>
               <div>
-                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">
-                  Verified Talent
-                </p>
-                <p className="font-body-md text-xs text-text-primary font-bold">
-                  Pre-screened Engineering Candidates
-                </p>
+                <p className="font-label-md text-[10px] text-amber-400 uppercase font-bold">Tenant-scoped workspace</p>
+                <p className="font-body-md text-xs text-text-primary font-bold">Employer data and actions are restricted to the authenticated company</p>
               </div>
             </div>
           </div>
@@ -223,19 +204,6 @@ function EmployerSignInContent() {
                     )}
                   </button>
                 </div>
-              </div>
-
-              {/* Remember Me */}
-              <div className="flex items-center justify-between px-1 pt-0.5">
-                <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded accent-amber-400 cursor-pointer"
-                  />
-                  <span className="text-[11px] text-text-secondary font-medium">
-                    Keep me signed in
-                  </span>
-                </label>
               </div>
 
               {/* Compact Proportioned Submit Button */}
