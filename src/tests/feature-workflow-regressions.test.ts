@@ -1717,3 +1717,55 @@ test("admin managed-hiring operations wire persisted placements and versioned co
   assert(legacyBuilder.includes("/admin/agreements/builder?reqId="));
   assert(legacyTemplates.includes('redirect("/admin/agreements/templates")'));
 });
+
+
+test("admin Copilot commerce exposes only supported checkout routing and complete versioned controls", () => {
+  const page = fs.readFileSync(new URL("../app/admin/copilot-commerce/page.tsx", import.meta.url), "utf8");
+  const pricingPage = fs.readFileSync(new URL("../app/admin/pricing-engine/page.tsx", import.meta.url), "utf8");
+  const contracts = fs.readFileSync(new URL("../lib/copilot/contracts.ts", import.meta.url), "utf8");
+  const commerceRoute = fs.readFileSync(new URL("../app/api/admin/copilot/commerce/route.ts", import.meta.url), "utf8");
+  const offersRoute = fs.readFileSync(new URL("../app/api/admin/copilot/capacity-offers/route.ts", import.meta.url), "utf8");
+  const commerce = fs.readFileSync(new URL("../lib/copilot/commerce.ts", import.meta.url), "utf8");
+  const offers = fs.readFileSync(new URL("../lib/copilot/capacityOffers.ts", import.meta.url), "utf8");
+  const taxPolicy = fs.readFileSync(new URL("../lib/copilot/taxPolicy.ts", import.meta.url), "utf8");
+
+  assert(!contracts.includes("MERCHANT_OF_RECORD"));
+  assert(contracts.includes('paymentMethod: z.enum(["STRIPE", "PAYU"]).optional()'));
+  assert(contracts.includes('paymentRoute: z.enum(["PAYU", "STRIPE"])'));
+  assert(contracts.includes('taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE"])'));
+
+  assert(page.includes("Legacy Merchant-of-Record pricing exists in persisted data."));
+  assert(page.includes("Legacy MoR — replace"));
+  assert(!page.includes('<option value="MERCHANT_OF_RECORD">Merchant of Record</option>'));
+  assert(page.includes("Catalogue display is bounded"));
+  assert(page.includes("featuresAllowed"));
+  assert(page.includes("Save entitlements"));
+  assert(page.includes("Archive plan"));
+  assert(page.includes("Archive offer"));
+  assert(page.includes("price.isActive ? \"Disable\" : \"Enable\""));
+  assert(page.includes("estimatedCostCurrency"));
+  assert(page.includes("rule.expensive ? \"Expensive\" : \"Standard\""));
+  assert(page.includes("rule.active ? \"Enabled\" : \"Disabled\""));
+  assert(page.includes('role="dialog"'));
+
+  assert(commerceRoute.includes("planTotal"));
+  assert(commerceRoute.includes("usageRuleTotal"));
+  assert(commerceRoute.includes("priceTruncatedPlanIds"));
+  assert(offersRoute.includes("offerTotal"));
+  assert(offersRoute.includes("priceTruncatedOfferIds"));
+  assert(commerceRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(offersRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+
+  assert(commerce.includes("Copilot pricing configuration is unavailable for this billing country."));
+  assert(commerce.includes("return [];"));
+  assert(offers.includes("Copilot capacity pricing configuration is unavailable for this billing country."));
+  assert(offers.includes("return [];"));
+
+  assert(taxPolicy.includes("India Copilot pricing must collect configured GST."));
+  assert(taxPolicy.includes("Non-India regions must use no-tax collection with a zero tax rate."));
+
+  assert(pricingPage.includes("Non-persistent scenario calculator"));
+  assert(pricingPage.includes("This screen does not load or save commercial terms."));
+  assert(pricingPage.includes("A calculation is not a quote, invoice, or signed agreement."));
+  assert(pricingPage.includes("Scenario only. Nothing on this page is persisted."));
+});
