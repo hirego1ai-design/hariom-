@@ -24,7 +24,9 @@ export async function GET(
       throw new ApiError("Forbidden. Employer, recruiter, or admin access required.", 403);
     }
 
-    // Fetch candidate profile from database
+    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
+
+    // Fetch only the candidate data this employer is authorized to review.
     const profile = await prisma.candidateProfile.findUnique({
       where: { id: candidateId },
       include: {
@@ -38,6 +40,7 @@ export async function GET(
           },
         },
         applications: {
+          ...(scopedCompanyId ? { where: { job: { companyId: scopedCompanyId } } } : {}),
           include: {
             job: {
               include: {
@@ -48,19 +51,18 @@ export async function GET(
           },
         },
         mcqAttempts: {
+          where: scopedCompanyId
+            ? {
+                assessment: {
+                  scope: "EMPLOYER_JOB",
+                  jobListing: { companyId: scopedCompanyId },
+                },
+              }
+            : undefined,
           include: {
             assessment: true,
           },
           orderBy: { startedAt: "desc" },
-        },
-        typingAssessments: {
-          orderBy: { createdAt: "desc" },
-        },
-        mockInterviewSessions: {
-          include: {
-            turns: true,
-          },
-          orderBy: { createdAt: "desc" },
         },
         candidateSkills: {
           where: { isVisible: true },
@@ -79,19 +81,8 @@ export async function GET(
       throw new ApiError("Candidate profile not found.", 404);
     }
 
-    // Verify company scope once and reuse it when shaping the response.
-    const scopedCompanyId = session.role === "ADMIN" ? null : (await getSessionCompany(session)).id;
-    if (scopedCompanyId) {
-      const companyId = scopedCompanyId;
-
-      // Candidate must have applied to at least one job in this company
-      const hasApplication = profile.applications.some(
-        (app) => app.job.companyId === companyId
-      );
-
-      if (!hasApplication) {
-        throw new ApiError("Access denied. Candidate has no active applications for your company.", 403);
-      }
+    if (scopedCompanyId && profile.applications.length === 0) {
+      throw new ApiError("Access denied. Candidate has no applications for your company.", 403);
     }
 
     // Parse JSON fields (education and experience)
@@ -115,9 +106,7 @@ export async function GET(
 
     // Map only persisted/measured evidence. Missing evidence stays unavailable;
     // never synthesize hiring signals or candidate attributes.
-    const scopedApplications = session.role === "ADMIN"
-      ? profile.applications
-      : profile.applications.filter((app) => app.job.companyId === scopedCompanyId);
+    const scopedApplications = profile.applications;
     const primaryApplication = scopedApplications[0];
     const overallMatch = primaryApplication?.matchScore ?? null;
 
@@ -140,7 +129,7 @@ export async function GET(
       portfolio: "",
       profileLink: null,
       avatar: profile.user?.avatarUrl || null,
-      isVerified: profile.isVerified,
+      isVerified: null,
       isEliteCandidate: null,
       isOpenToWork: null,
       appliedJob: primaryApplication?.job?.title || null,
@@ -239,14 +228,7 @@ export async function GET(
         status: att.passed ? "Passed" : "Failed",
         badgeColor: att.passed ? "success" : "danger",
       })),
-      ...profile.typingAssessments.map((att) => ({
-        name: "Typing Speed & Accuracy",
-        date: att.createdAt.toISOString().split("T")[0],
-        type: "Typing Test",
-        score: `${att.wpm} WPM / ${att.accuracy}% Acc`,
-        status: "Certified",
-        badgeColor: "success",
-      })),
+
     ];
 
     const ucpVideoAnalysis = {
