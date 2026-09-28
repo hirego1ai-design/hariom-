@@ -32,7 +32,10 @@ export async function POST(request: Request) {
     const user = await db.findUserByEmail(body.email);
     if (user && body.type === "VERIFY_EMAIL") {
       const { prisma } = await import("@/lib/prisma");
-      await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } }).catch(() => undefined);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+      });
     }
 
     const response = NextResponse.json({
