@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       prisma.user.findMany({
         where,
         select: { id: true, name: true, email: true, emailVerified: true, createdAt: true, updatedAt: true },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
