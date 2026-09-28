@@ -25,6 +25,7 @@ const serviceCostSchema = z.object({
   serviceKey: z.string().trim().min(1).max(100),
   creditCost: z.number().int().min(0).max(1000000),
   billingType: z.enum(["CREDIT_BASED", "INCLUDED", "PAID_ADDON"]),
+  expectedUpdatedAt: z.string().datetime(),
 }).strict();
 
 export async function GET(request: NextRequest) {
