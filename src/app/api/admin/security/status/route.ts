@@ -12,8 +12,8 @@ import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
  */
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_security_status", 30, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_security_status:${admin.id}`, 30, 60_000);
     const headers = configuredSecurityHeaders(process.env.NODE_ENV !== "production");
 
     return NextResponse.json({
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
           value: headers["Content-Security-Policy"],
         },
         hsts: {
-          configured: true,
-          value: "max-age=63072000; includeSubDomains; preload",
+          configured: Boolean(headers["Strict-Transport-Security"]),
+          value: headers["Strict-Transport-Security"] || "",
         },
         clickjackingProtection: headers["X-Frame-Options"] === "DENY",
         mimeSniffingProtection: headers["X-Content-Type-Options"] === "nosniff",
