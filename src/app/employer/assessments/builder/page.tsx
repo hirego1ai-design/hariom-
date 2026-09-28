@@ -71,6 +71,7 @@ export default function AssessmentBuilder() {
   // Question editing
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [questionForm, setQuestionForm] = useState<Question | null>(null);
+  const [pendingDeleteQuestionId, setPendingDeleteQuestionId] = useState<string | null>(null);
 
   const fetchAssessments = async () => {
     try {
@@ -291,7 +292,6 @@ export default function AssessmentBuilder() {
 
   const handleDeleteQuestion = async (questionId: string) => {
     if (!selectedAssessment) return;
-    if (!confirm("Are you sure you want to delete this question?")) return;
 
     try {
       const res = await fetch(`/api/employer/assessments/${selectedAssessment.id}/questions/${questionId}`, {
@@ -303,6 +303,8 @@ export default function AssessmentBuilder() {
       showSuccess("Question deleted");
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setPendingDeleteQuestionId(null);
     }
   };
 
@@ -782,7 +784,7 @@ export default function AssessmentBuilder() {
                               <Edit className="h-4 w-4" />
                             </button>
                             <button 
-                              onClick={() => handleDeleteQuestion(q.id)}
+                              onClick={() => setPendingDeleteQuestionId(q.id)}
                               className="p-2 text-gray-400 hover:text-red-400 bg-gray-950 rounded-lg border border-gray-800 hover:border-red-500/50 transition-colors"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -839,6 +841,39 @@ export default function AssessmentBuilder() {
           )}
         </div>
       </div>
+
+      {pendingDeleteQuestionId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-question-title"
+            aria-describedby="delete-question-description"
+            className="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-2xl"
+          >
+            <h2 id="delete-question-title" className="text-lg font-bold text-white">Delete question?</h2>
+            <p id="delete-question-description" className="mt-2 text-sm text-gray-400">
+              This removes the question from the assessment. This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteQuestionId(null)}
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteQuestion(pendingDeleteQuestionId)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+              >
+                Delete question
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
