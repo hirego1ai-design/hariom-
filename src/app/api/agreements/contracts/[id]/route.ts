@@ -318,13 +318,10 @@ export async function POST(
           },
         });
 
-        if (current.requirementId) {
-          await tx.hiringRequirement.update({
-            where: { id: current.requirementId },
-            data: { status: "ACTIVE" },
-          });
-        }
-
+        // Employer execution activates the commercial agreement only.
+        // The linked managed-hiring requirement is activated separately by an
+        // administrator through RequirementActivation so production jobs,
+        // outbox events, and activation audit evidence are created atomically.
         const auditLog = await tx.auditLog.create({
           data: {
             userId: session.id,
@@ -335,6 +332,7 @@ export async function POST(
             details: JSON.stringify({
               signedByName: signerName,
               signedByDesignation: designation,
+              requirementActivationPending: Boolean(current.requirementId),
             }),
           },
         });
@@ -516,7 +514,7 @@ export async function POST(
       success: true,
       message:
         body.action === "accept"
-          ? "Commercial agreement accepted and activated."
+          ? "Commercial agreement accepted. Managed-hiring operational activation remains an administrator action."
           : body.action === "request_amendment"
             ? "Amendment request recorded for administrator review."
             : "Agreement moved to employer review. Notification outcomes are recorded separately.",
