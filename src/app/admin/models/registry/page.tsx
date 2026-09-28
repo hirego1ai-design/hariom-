@@ -62,9 +62,9 @@ type ModelStat = {
 
 type Telemetry = {
   totalRequests: number;
-  totalTokens: number;
-  totalCostUsd: number;
-  avgLatencyMs: number;
+  totalTokens: number | null;
+  totalCostUsd: number | null;
+  avgLatencyMs: number | null;
   providerCounts: Record<string, number>;
   modelStats: ModelStat[];
 };
@@ -309,15 +309,15 @@ export default function AdminModelRegistryPage() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed tokens</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.totalTokens ?? 0}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.totalTokens === null || telemetry?.totalTokens === undefined ? "Not fully measured" : telemetry.totalTokens.toLocaleString()}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed spend</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{money(telemetry?.totalCostUsd ?? 0)}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{money(telemetry?.totalCostUsd ?? null)}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Average latency</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{telemetry ? `${telemetry.avgLatencyMs} ms` : "—"}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.avgLatencyMs === null || telemetry?.avgLatencyMs === undefined ? "No data" : `${telemetry.avgLatencyMs} ms`}</p>
                 </div>
               </section>
 
