@@ -19,6 +19,14 @@ export async function GET(req: NextRequest) {
       prisma.companyCredits.findUnique({ where: { companyId } }),
       prisma.interview.count({ where: { application: { job: { companyId } }, scheduledAt: { gte: now }, status: { in: ["SCHEDULED", "RESCHEDULED"] } } }),
     ]);
-    return NextResponse.json({ success: true, metrics: { activeJobsCount, totalApplicantsCount, upcomingInterviewsCount, credits: credits ?? { jobPostsLeft: 0, resumeUnlocksLeft: 0, aiInterviewsLeft: 0 } } });
+    return NextResponse.json({
+      success: true,
+      metrics: {
+        activeJobsCount,
+        totalApplicantsCount,
+        upcomingInterviewsCount,
+        credits: credits ?? null,
+      },
+    });
   } catch (error) { return handleApiError(error); }
 }
