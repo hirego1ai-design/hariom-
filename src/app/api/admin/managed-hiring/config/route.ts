@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { getAuditLogs, logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const CONFIG_ID = "global-admin-config";
+const RESOURCE = "Managed Hiring Configuration";
 
 const ALLOWED_CONFIG_KEYS = new Set([
   "frameworkName",
@@ -29,42 +37,97 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function mapManagedHiringAuditLogs(logs: Awaited<ReturnType<typeof getAuditLogs>>) {
-  return logs
-    .filter((log) => log.resource === "Managed Hiring Configuration")
-    .map((log) => ({
+function versionOf(config: Record<string, unknown>): string | null {
+  return typeof config.lastUpdated === "string" ? config.lastUpdated : null;
+}
+
+function validateConfigPayload(payload: Record<string, unknown>) {
+  const keys = Object.keys(payload);
+  if (
+    keys.some(
+      (key) =>
+        !ALLOWED_CONFIG_KEYS.has(key) ||
+        ["__proto__", "prototype", "constructor", "lastUpdated"].includes(key),
+    )
+  ) {
+    throw new ApiError("Unknown or protected managed hiring configuration section.", 400);
+  }
+
+  if (JSON.stringify(payload).length > 100_000) {
+    throw new ApiError("Managed hiring configuration payload is too large.", 413);
+  }
+}
+
+async function recentAuditLogs() {
+  const logs = await prisma.auditLog.findMany({
+    where: { resource: RESOURCE },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 100,
+    select: {
+      id: true,
+      userId: true,
+      action: true,
+      details: true,
+      createdAt: true,
+    },
+  });
+
+  return logs.map((log) => {
+    let details: Record<string, unknown> = {};
+    try {
+      const parsed = log.details ? JSON.parse(log.details) : {};
+      if (isRecord(parsed)) details = parsed;
+    } catch {
+      details = { reason: log.details || null };
+    }
+
+    return {
       id: log.id,
-      timestamp: log.timestamp,
+      timestamp: log.createdAt.toISOString(),
       adminUser: log.userId || "system",
       adminRole: "Administrator",
-      category: "Configuration",
+      category:
+        typeof details.category === "string" ? details.category : "Configuration",
       action: log.action,
       oldValue: "redacted",
       newValue: "updated",
-      reason: log.details || "Configuration update",
-    }));
+      reason:
+        typeof details.reason === "string" ? details.reason : "Configuration update",
+      changedSections: Array.isArray(details.changedSections)
+        ? details.changedSections.filter((item): item is string => typeof item === "string")
+        : [],
+    };
+  });
 }
 
-async function readManagedHiringConfig() {
-  const stored = await prisma.adminConfiguration.findUnique({ where: { id: CONFIG_ID } });
-  return isRecord(stored?.managedHiringConfig) ? stored.managedHiringConfig : {};
-}
-
-export async function GET(req: Request) {
+export async function GET(request: Request) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_managed_hiring_config_read", 30, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(
+      request,
+      `admin_managed_hiring_config_read:${admin.id}`,
+      30,
+      60_000,
+    );
 
-    const [config, persistedLogs] = await Promise.all([
-      readManagedHiringConfig(),
-      getAuditLogs(200),
+    const [stored, auditLogs] = await Promise.all([
+      prisma.adminConfiguration.findUnique({
+        where: { id: CONFIG_ID },
+        select: { managedHiringConfig: true },
+      }),
+      recentAuditLogs(),
     ]);
+
+    const config = isRecord(stored?.managedHiringConfig)
+      ? stored.managedHiringConfig
+      : {};
 
     return NextResponse.json({
       success: true,
       configured: Object.keys(config).length > 0,
       config,
-      auditLogs: mapManagedHiringAuditLogs(persistedLogs),
+      configUpdatedAt: versionOf(config),
+      auditLogs,
     });
   } catch (error) {
     return handleApiError(error);
@@ -74,74 +137,120 @@ export async function GET(req: Request) {
 const managedHiringUpdateSchema = z.object({
   updatedConfig: z.record(z.string(), z.unknown()).optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  expectedUpdatedAt: z.string().datetime().nullable(),
+  reason: z.string().trim().min(3).max(1000),
   auditEntry: z.object({
-    category: z.enum(["Pricing", "Invoice Milestone", "Replacement", "Credit Policy", "Contract Profile", "Approval Workflow"]).optional(),
+    category: z.enum([
+      "Pricing",
+      "Invoice Milestone",
+      "Replacement",
+      "Credit Policy",
+      "Contract Profile",
+      "Approval Workflow",
+      "Configuration",
+    ]).optional(),
     action: z.string().trim().min(1).max(200).optional(),
-    oldValue: z.string().trim().max(500).optional(),
-    newValue: z.string().trim().max(500).optional(),
-    reason: z.string().trim().min(3).max(1000).optional(),
   }).strict().optional(),
-  reason: z.string().trim().min(3).max(1000).optional(),
-}).strict().superRefine((value, ctx) => {
+}).strict().superRefine((value, context) => {
   if (!value.updatedConfig && !value.config) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Managed hiring configuration is required." });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Managed hiring configuration is required.",
+    });
   }
   if (value.updatedConfig && value.config) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Provide only one configuration field." });
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provide only one configuration field.",
+    });
   }
 });
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const session = await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_managed_hiring_config_write", 10, 60_000);
-    const { updatedConfig, config, auditEntry, reason } = await readValidatedJson(req, managedHiringUpdateSchema);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(
+      request,
+      `admin_managed_hiring_config_write:${admin.id}`,
+      10,
+      60_000,
+    );
 
-    const payloadConfig = updatedConfig || config;
-    if (!payloadConfig || typeof payloadConfig !== "object" || Array.isArray(payloadConfig)) {
-      throw new ApiError("Managed hiring configuration is required", 400);
+    const body = await readValidatedJson(
+      request,
+      managedHiringUpdateSchema,
+      128 * 1024,
+    );
+    const payloadConfig = body.updatedConfig || body.config;
+    if (!payloadConfig || !isRecord(payloadConfig)) {
+      throw new ApiError("Managed hiring configuration is required.", 400);
     }
+    validateConfigPayload(payloadConfig);
 
-    const configKeys = Object.keys(payloadConfig);
-    if (configKeys.some((key) => !ALLOWED_CONFIG_KEYS.has(key) || ["__proto__", "prototype", "constructor", "lastUpdated"].includes(key))) {
-      throw new ApiError("Unknown or protected managed hiring configuration section", 400);
-    }
+    const nextConfig = await prisma.$transaction(async (tx) => {
+      await tx.adminConfiguration.upsert({
+        where: { id: CONFIG_ID },
+        create: { id: CONFIG_ID, managedHiringConfig: {} },
+        update: {},
+      });
 
-    const encoded = JSON.stringify(payloadConfig);
-    if (encoded.length > 100_000) {
-      throw new ApiError("Managed hiring configuration payload is too large", 413);
-    }
+      await tx.$queryRaw`SELECT id FROM "AdminConfiguration" WHERE id = ${CONFIG_ID} FOR UPDATE`;
 
-    const current = await readManagedHiringConfig();
-    const nextConfig = {
-      ...current,
-      ...payloadConfig,
-      lastUpdated: new Date().toISOString(),
-    };
+      const stored = await tx.adminConfiguration.findUniqueOrThrow({
+        where: { id: CONFIG_ID },
+        select: { managedHiringConfig: true },
+      });
+      const current = isRecord(stored.managedHiringConfig)
+        ? stored.managedHiringConfig
+        : {};
+      const currentVersion = versionOf(current);
 
-    await prisma.adminConfiguration.upsert({
-      where: { id: CONFIG_ID },
-      create: { id: CONFIG_ID, managedHiringConfig: nextConfig },
-      update: { managedHiringConfig: nextConfig },
+      if (currentVersion !== body.expectedUpdatedAt) {
+        throw new ApiError(
+          "Managed hiring configuration changed; reload before saving.",
+          409,
+        );
+      }
+
+      const next: Record<string, unknown> = {
+        ...current,
+        ...payloadConfig,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await tx.adminConfiguration.update({
+        where: { id: CONFIG_ID },
+        data: {
+          managedHiringConfig: next as Prisma.InputJsonValue,
+        },
+      });
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action:
+            body.auditEntry?.action || "MANAGED_HIRING_CONFIGURATION_UPDATED",
+          resource: RESOURCE,
+          ipAddress: getClientIp(request) || "unknown",
+          details: JSON.stringify({
+            category: body.auditEntry?.category || "Configuration",
+            reason: body.reason,
+            changedSections: Object.keys(payloadConfig).sort(),
+            configUpdatedAt: next.lastUpdated,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+
+      return next;
     });
-
-    const action = auditEntry?.action || "Managed hiring configuration updated";
-    const auditReason = auditEntry?.reason || reason || "Managed hiring configuration updated through the admin console.";
-
-    await logAuditEvent({
-      userId: session.id,
-      action,
-      resource: "Managed Hiring Configuration",
-      details: auditReason,
-    });
-
-    const responseLogs = mapManagedHiringAuditLogs(await getAuditLogs(200));
 
     return NextResponse.json({
       success: true,
-      message: "Managed hiring configuration saved and audit logged successfully.",
+      message: "Managed hiring configuration saved and audited.",
       config: nextConfig,
-      auditLogs: responseLogs,
+      configUpdatedAt: versionOf(nextConfig),
+      auditLogs: await recentAuditLogs(),
     });
   } catch (error) {
     return handleApiError(error);
