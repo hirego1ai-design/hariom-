@@ -5,7 +5,7 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
 type Service = { name: string; type: string; provider: string; status: string; details: string; latencyMs?: number };
-type Health = { success: boolean; timestamp: string; overallStatus: string; observedScope?: string; services: Service[] };
+type Health = { success: boolean; timestamp: string; overallStatus: string; observedScope?: string; configurationWarnings?: string[]; services: Service[] };
 
 export default function AdminSystemHealthPage() {
   const [data, setData] = useState<Health | null>(null);
@@ -21,7 +21,7 @@ export default function AdminSystemHealthPage() {
   }, []);
 
   return <div className="bg-[#0A0A0C] text-white min-h-screen relative">
-    <AdminSidebar /><AdminHeader />
+    <AdminSidebar /><AdminHeader title="System Diagnostics" subtitle="Observed runtime evidence and configuration state" />
     <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-6xl mx-auto">
       <div className="border-b border-white/10 pb-4">
         <h1 className="text-2xl font-bold">System Diagnostics & Runtime Evidence</h1>
@@ -37,6 +37,12 @@ export default function AdminSystemHealthPage() {
           </div>
           <span className="text-xs font-mono text-slate-400">{new Date(data.timestamp).toLocaleString()}</span>
         </div>
+        {data.configurationWarnings && data.configurationWarnings.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-200">
+            <p className="font-bold">Configuration warnings</p>
+            {data.configurationWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+          </div>
+        )}
         {data.services.length === 0 ? (
           <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-200">No service observations were returned.</div>
         ) : (
