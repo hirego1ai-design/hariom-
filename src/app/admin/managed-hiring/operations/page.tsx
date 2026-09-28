@@ -1,33 +1,370 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 
-const queues = [
-  ["Requirement", "/admin/managed-hiring/requests"],
-  ["Agreement", "/admin/managed-hiring/requests"],
-  ["Sourcing", "/admin/managed-hiring/requests"],
-  ["Screening", "/admin/managed-hiring/requests"],
-  ["Shortlist", "/admin/managed-hiring/requests"],
-  ["Interviews", "/admin/managed-hiring/requests"],
-  ["Joined", "/admin/invoices"],
-  ["Invoice", "/admin/invoices"],
+type Requirement = {
+  id: string;
+  referenceCode: string;
+  companyName: string;
+  jobTitles: string[];
+  status: string;
+  activeAgreementStatus: string | null;
+  updatedAt: string;
+};
+
+type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  companyName: string;
+  candidateName?: string | null;
+  currency: string;
+  totalAmount: number;
+  status: string;
+};
+
+type InvoiceCurrencySummary = {
+  invoiceCount: number;
+  paidCount: number;
+  overdueCount: number;
+};
+
+type InvoiceSummary = {
+  count: number;
+  currencies: string[];
+  byCurrency: Record<string, InvoiceCurrencySummary>;
+};
+
+const requirementStages = [
+  ["Requirements", "/admin/managed-hiring/requests"],
+  ["Commercial pipeline", "/admin/managed-hiring/pipeline"],
+  ["Agreement templates", "/admin/agreements/templates"],
+  ["Agreement builder", "/admin/agreements/builder"],
+  ["Invoices", "/admin/invoices"],
 ] as const;
 
 export default function ManagedHiringOperationsPage() {
-  const [config, setConfig] = useState<any>(null);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [requirementTotal, setRequirementTotal] = useState(0);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoiceSummary, setInvoiceSummary] = useState<InvoiceSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/admin/managed-hiring/config").then((response) => response.json()),
-      fetch("/api/admin/invoices").then((response) => response.json()),
-    ]).then(([configData, invoiceData]) => {
-      setConfig(configData.config);
-      setInvoices(invoiceData.invoices || []);
-    }).finally(() => setLoading(false));
+    let mounted = true;
+
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const [requirementsResponse, invoicesResponse] = await Promise.all([
+          fetch("/api/admin/managed-hiring/requirements?page=1&limit=8", {
+            cache: "no-store",
+          }),
+          fetch("/api/admin/invoices?page=1&limit=8", { cache: "no-store" }),
+        ]);
+        const [requirementsPayload, invoicesPayload] = await Promise.all([
+          requirementsResponse.json().catch(() => ({})),
+          invoicesResponse.json().catch(() => ({})),
+        ]);
+
+        if (!requirementsResponse.ok || !requirementsPayload.success) {
+          throw new Error(
+            requirementsPayload.error || "Managed-hiring requirements are unavailable.",
+          );
+        }
+        if (!invoicesResponse.ok || !invoicesPayload.success) {
+          throw new Error(invoicesPayload.error || "Invoice evidence is unavailable.");
+        }
+        if (!mounted) return;
+
+        setRequirements(
+          Array.isArray(requirementsPayload.requirements)
+            ? requirementsPayload.requirements
+            : [],
+        );
+        setRequirementTotal(
+          typeof requirementsPayload.total === "number"
+            ? requirementsPayload.total
+            : 0,
+        );
+        setStatusCounts(
+          requirementsPayload.statusCounts &&
+            typeof requirementsPayload.statusCounts === "object"
+            ? requirementsPayload.statusCounts
+            : {},
+        );
+        setInvoices(
+          Array.isArray(invoicesPayload.invoices) ? invoicesPayload.invoices : [],
+        );
+        setInvoiceSummary(
+          invoicesPayload.summary && typeof invoicesPayload.summary === "object"
+            ? invoicesPayload.summary
+            : null,
+        );
+      } catch (cause) {
+        if (!mounted) return;
+        setRequirements([]);
+        setInvoices([]);
+        setStatusCounts({});
+        setRequirementTotal(0);
+        setInvoiceSummary(null);
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Managed-hiring operations evidence is unavailable.",
+        );
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  return <main className="min-h-screen bg-[#0A0A0C] text-white p-6 md:p-10"><div className="max-w-7xl mx-auto space-y-7"><div className="flex flex-col md:flex-row md:items-end justify-between gap-3"><div><p className="text-yellow text-xs font-bold uppercase tracking-[0.2em] mb-2">Admin operations</p><h1 className="text-3xl font-bold">Managed Hiring control center</h1><p className="text-sm text-slate-400 mt-2">Operate requirements, interview delivery, invoices, and replacement warranty decisions.</p></div><Link href="/admin/settings/managed-hiring" className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-xs font-bold">Open commercial configuration</Link></div>{loading ? <p className="text-slate-400">Loading operations...</p> : <><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[["Active SLA", config?.warranty?.guaranteeWindowDays ? `${config.warranty.guaranteeWindowDays} days` : "—"], ["Invoice trigger", config?.invoicing?.invoiceTrigger || "—"], ["Payment terms", config?.invoicing?.paymentTermsDays ? `Net ${config.invoicing.paymentTermsDays}` : "—"], ["Open invoices", String(invoices.filter((invoice) => invoice.status !== "PAID").length)]].map(([label, value]) => <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-[10px] uppercase text-slate-500">{label}</p><p className="text-lg font-bold mt-2">{value}</p></div>)}</div><section className="rounded-2xl border border-white/10 bg-[#121215] p-6"><h2 className="font-bold mb-4">Managed-hiring operating stages</h2><div className="grid md:grid-cols-4 lg:grid-cols-8 gap-2">{queues.map(([stage, href], index) => <div key={stage} className="rounded-xl border border-indigo-400/20 bg-indigo-400/5 p-3 text-center"><span className="text-indigo-300 text-xs font-bold">{index + 1}</span><p className="text-[11px] font-bold mt-2">{stage}</p><Link href={href} className="mt-3 inline-block text-[10px] text-indigo-300 hover:text-white">Open queue</Link></div>)}</div></section><section className="rounded-2xl border border-white/10 bg-[#121215] p-6"><div className="flex items-center justify-between mb-4"><h2 className="font-bold">Recent invoices</h2><Link href="/admin/invoices" className="text-xs text-indigo-300">View all</Link></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-slate-500"><tr><th className="p-2">Invoice</th><th className="p-2">Company</th><th className="p-2">Candidate</th><th className="p-2">Total</th><th className="p-2">Status</th></tr></thead><tbody>{invoices.slice(0, 8).map((invoice) => <tr key={invoice.id} className="border-t border-white/5"><td className="p-2 font-mono">{invoice.invoiceNumber}</td><td className="p-2">{invoice.companyName}</td><td className="p-2">{invoice.candidateName || "—"}</td><td className="p-2">{invoice.currency} {invoice.totalAmount}</td><td className="p-2">{invoice.status}</td></tr>)}</tbody></table></div></section></>}</div></main>;
+  const activeRequirementCount = useMemo(
+    () =>
+      Object.entries(statusCounts)
+        .filter(([status]) => status !== "CLOSED")
+        .reduce((sum, [, count]) => sum + count, 0),
+    [statusCounts],
+  );
+
+  const openInvoiceCount = useMemo(() => {
+    if (!invoiceSummary) return null;
+    return Object.values(invoiceSummary.byCurrency || {}).reduce(
+      (sum, currency) =>
+        sum + Math.max(0, currency.invoiceCount - currency.paidCount),
+      0,
+    );
+  }, [invoiceSummary]);
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0C] text-white">
+      <AdminSidebar />
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Managed Hiring Operations"
+          subtitle="Persisted requirement, agreement and invoice evidence"
+        />
+
+        <main className="mx-auto w-full max-w-[1500px] space-y-7 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-amber-300">
+                Admin operations
+              </p>
+              <h1 className="text-3xl font-bold">Managed Hiring control center</h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                Requirement stages and invoice counts are persisted database evidence.
+                Commercial fee, tax, credit and replacement terms are configured per
+                agreement template and snapshotted into each commercial agreement.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/agreements/templates"
+                className="rounded-xl bg-indigo-600 px-5 py-3 text-xs font-bold text-white"
+              >
+                Manage agreement terms
+              </Link>
+              <Link
+                href="/admin/settings/managed-hiring"
+                className="rounded-xl border border-white/10 px-5 py-3 text-xs font-bold text-white"
+              >
+                Platform controls
+              </Link>
+            </div>
+          </header>
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+            >
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div role="status" className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-slate-400">
+              Loading authoritative operations evidence…
+            </div>
+          ) : !error ? (
+            <>
+              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Managed hiring summary">
+                <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">
+                    Active requirements
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">{activeRequirementCount}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    all non-closed persisted requirements
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">
+                    Total requirements
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">{requirementTotal}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    database count
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">
+                    Invoice records
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {invoiceSummary?.count ?? "No data"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    all currencies, not combined as money
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">
+                    Unsettled invoices
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {openInvoiceCount ?? "No data"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    invoice count, not outstanding amount
+                  </p>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/10 bg-[#121215] p-6">
+                <div className="mb-4">
+                  <h2 className="font-bold">Operational surfaces</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    These links open real persisted workflow surfaces; no separate
+                    sourcing/interview queue is implied where one does not exist.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {requirementStages.map(([stage, href], index) => (
+                    <Link
+                      key={stage}
+                      href={href}
+                      className="rounded-xl border border-indigo-400/20 bg-indigo-400/5 p-4 text-center transition hover:bg-indigo-400/10"
+                    >
+                      <span className="text-xs font-bold text-indigo-300">
+                        {index + 1}
+                      </span>
+                      <p className="mt-2 text-xs font-bold">{stage}</p>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+
+              <section className="grid gap-6 xl:grid-cols-2">
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#121215]">
+                  <div className="flex items-center justify-between border-b border-white/10 p-5">
+                    <div>
+                      <h2 className="font-bold">Recent requirements</h2>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Latest 8 records; stage totals above are global.
+                      </p>
+                    </div>
+                    <Link
+                      href="/admin/managed-hiring/requests"
+                      className="text-xs text-indigo-300"
+                    >
+                      View all
+                    </Link>
+                  </div>
+                  {requirements.length === 0 ? (
+                    <div className="p-8 text-sm text-slate-500">
+                      No managed-hiring requirements are persisted.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {requirements.map((requirement) => (
+                        <div key={requirement.id} className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-mono text-[10px] text-amber-300">
+                                {requirement.referenceCode}
+                              </p>
+                              <p className="mt-1 truncate text-sm font-bold">
+                                {requirement.companyName}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-slate-500">
+                                {requirement.jobTitles.join(", ")}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded-full border border-white/10 px-2 py-1 text-[10px]">
+                              {requirement.status.replaceAll("_", " ")}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[10px] text-slate-500">
+                            Agreement:{" "}
+                            {requirement.activeAgreementStatus?.replaceAll("_", " ") ||
+                              "None active"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#121215]">
+                  <div className="flex items-center justify-between border-b border-white/10 p-5">
+                    <div>
+                      <h2 className="font-bold">Recent invoices</h2>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Latest 8 records; totals are taken from the invoice summary.
+                      </p>
+                    </div>
+                    <Link href="/admin/invoices" className="text-xs text-indigo-300">
+                      View all
+                    </Link>
+                  </div>
+                  {invoices.length === 0 ? (
+                    <div className="p-8 text-sm text-slate-500">
+                      No invoice records are persisted.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[620px] w-full text-left text-xs">
+                        <thead className="text-slate-500">
+                          <tr>
+                            <th className="p-3">Invoice</th>
+                            <th className="p-3">Company</th>
+                            <th className="p-3">Total</th>
+                            <th className="p-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoices.map((invoice) => (
+                            <tr key={invoice.id} className="border-t border-white/5">
+                              <td className="p-3 font-mono">{invoice.invoiceNumber}</td>
+                              <td className="p-3">{invoice.companyName}</td>
+                              <td className="p-3">
+                                {invoice.currency} {invoice.totalAmount.toLocaleString()}
+                              </td>
+                              <td className="p-3">{invoice.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          ) : null}
+        </main>
+      </div>
+    </div>
+  );
 }
