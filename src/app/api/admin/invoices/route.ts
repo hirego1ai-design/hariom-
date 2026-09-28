@@ -61,7 +61,8 @@ export async function GET(req: NextRequest) {
       prisma.invoice.groupBy({
         by: ["currency", "status"],
         where,
-        _count: { _all: true },
+        orderBy: [{ currency: "asc" }, { status: "asc" }],
+        _count: { id: true },
         _sum: { totalAmount: true },
       }),
     ]);
@@ -73,17 +74,17 @@ export async function GET(req: NextRequest) {
         const amountFor = (...statuses: string[]) =>
           rowsForCurrency
             .filter((row) => statuses.includes(row.status))
-            .reduce((sum, row) => sum + (row._sum.totalAmount ?? 0), 0);
+            .reduce((sum, row) => sum + (row._sum?.totalAmount ?? 0), 0);
         const countFor = (...statuses: string[]) =>
           rowsForCurrency
             .filter((row) => statuses.includes(row.status))
-            .reduce((sum, row) => sum + row._count._all, 0);
+            .reduce((sum, row) => sum + row._count?.id ?? 0, 0);
 
         return [
           currency,
           {
             currency,
-            totalBilled: rowsForCurrency.reduce((sum, row) => sum + (row._sum.totalAmount ?? 0), 0),
+            totalBilled: rowsForCurrency.reduce((sum, row) => sum + (row._sum?.totalAmount ?? 0), 0),
             totalCollected: amountFor("PAID"),
             totalOutstanding: amountFor("UNPAID", "OVERDUE", "PENDING_VERIFICATION"),
             totalOverdue: amountFor("OVERDUE"),
