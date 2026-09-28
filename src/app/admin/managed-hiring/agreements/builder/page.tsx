@@ -11,6 +11,7 @@ function BuilderContent() {
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [requirement, setRequirement] = useState<any>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     templateId: "",
@@ -84,8 +85,9 @@ function BuilderContent() {
   };
 
   const handleDraftAndSend = async () => {
-    if (!requirement?.companyId || !formData.companyName || !formData.clientEmail || !formData.templateId) {
-      alert("Load a valid managed-hiring requirement and fill Company, Email, and Template.");
+    setActionMessage(null);
+    if (!requirement?.companyId || !formData.companyName.trim() || !formData.clientEmail.trim() || !formData.templateId) {
+      setActionMessage({ type: "error", text: "Load a valid managed-hiring requirement and fill Company, Email, and Template." });
       return;
     }
 
@@ -111,32 +113,36 @@ function BuilderContent() {
       });
 
       const data = await res.json();
-      if (data.success) {
-        
-        // Auto send it to employer
-        await fetch(`/api/agreements/contracts/${data.agreement.id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_to_employer" })
-        });
-
-        if (reqId) {
-          // Link requirement
-          await fetch(`/api/agreements/requirements/${reqId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "AGREEMENT_SENT", activeAgreementId: data.agreement.id })
-          });
-        }
-
-        alert("Agreement Drafted & Sent Successfully!");
-        router.push("/admin/managed-hiring/requests");
-      } else {
-        alert(data.error);
+      if (!res.ok || !data.success || !data.agreement?.id) {
+        throw new Error(data.error || "Failed to draft agreement.");
       }
+
+      const sendRes = await fetch(`/api/agreements/contracts/${data.agreement.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send_to_employer" })
+      });
+      const sendData = await sendRes.json().catch(() => ({}));
+      if (!sendRes.ok || !sendData.success) {
+        throw new Error(sendData.error || "Agreement was drafted but could not be sent to the employer.");
+      }
+
+      if (reqId) {
+        const linkRes = await fetch(`/api/agreements/requirements/${reqId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "AGREEMENT_SENT", activeAgreementId: data.agreement.id })
+        });
+        const linkData = await linkRes.json().catch(() => ({}));
+        if (!linkRes.ok || !linkData.success) {
+          throw new Error(linkData.error || "Agreement was sent, but the hiring requirement could not be linked to it.");
+        }
+      }
+
+      router.push("/admin/managed-hiring/requests");
     } catch (err) {
       console.error(err);
-      alert("Failed to draft agreement");
+      setActionMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to draft and send agreement." });
     } finally {
       setLoading(false);
     }
@@ -144,6 +150,7 @@ function BuilderContent() {
 
   return (
     <div className="flex-1 p-6 md:p-8 ml-0 md:ml-64 transition-all duration-300">
+      {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`mb-6 rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
       
       <header className="mb-8 flex items-center gap-4">
         <button onClick={() => router.back()} className="text-text-secondary hover:text-white transition-colors">
