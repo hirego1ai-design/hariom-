@@ -2210,7 +2210,6 @@ class ReferralDatabaseStore {
     if (params.riskScore !== undefined) currentProfile.riskScore = params.riskScore;
     if (params.riskFactors) currentProfile.riskFactors = params.riskFactors;
     currentProfile.lastEvaluatedAt = new Date().toISOString();
-    currentProfile.updatedAt = currentProfile.lastEvaluatedAt;
     currentProfile.history.push(auditRecord);
     this.fraudProfiles.set(params.userId, currentProfile);
     return currentProfile;
