@@ -10,7 +10,6 @@ export default function ReferralsDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [upiId, setUpiId] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("UPI");
   const [withdrawMessage, setWithdrawMessage] = useState<string | null>(null);
@@ -27,9 +26,6 @@ export default function ReferralsDashboardPage() {
         throw new Error(data.error || "Referral data is unavailable.");
       }
       setStats(data.stats);
-      if (data.stats.availableBalance > 0) {
-        setWithdrawAmount(data.stats.availableBalance.toString());
-      }
     } catch (error) {
       setStats(null);
       setLoadError(error instanceof Error ? error.message : "Referral data is unavailable.");
@@ -54,8 +50,15 @@ export default function ReferralsDashboardPage() {
     e.preventDefault();
     if (!upiId.trim()) return;
 
-    const amt = parseFloat(withdrawAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    const amt = stats?.availableBalance ?? 0;
+    if (!stats?.programEnabled || amt < stats.minPayoutAmount) {
+      setWithdrawMessage(
+        stats?.programEnabled
+          ? `Minimum payout threshold is ₹${stats.minPayoutAmount.toLocaleString()}.`
+          : "Referral payouts are currently disabled.",
+      );
+      return;
+    }
 
     setIsProcessingWithdraw(true);
     setWithdrawMessage(null);
@@ -162,7 +165,7 @@ export default function ReferralsDashboardPage() {
                 </span>
               </div>
               <button
-                disabled={(stats?.availableBalance || 0) < 500}
+                disabled={!stats.programEnabled || stats.availableBalance < stats.minPayoutAmount}
                 onClick={() => setShowWithdrawModal(true)}
                 className="btn-3d-gold px-4 py-1.5 rounded-full text-xs font-bold text-black flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -443,17 +446,13 @@ export default function ReferralsDashboardPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-text-muted">Withdrawal Amount (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={500}
-                      max={stats?.availableBalance || 500}
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
-                    />
-                    <p className="text-[10px] text-text-muted">Minimum withdrawal threshold: ₹500</p>
+                    <label className="text-xs font-bold text-text-muted">Payout Amount</label>
+                    <div className="input-pill w-full min-h-11 px-4 flex items-center text-xs text-white font-mono">
+                      ₹{stats.availableBalance.toLocaleString()}
+                    </div>
+                    <p className="text-[10px] text-text-muted">
+                      HireGo requests the full server-confirmed eligible balance. Minimum threshold: ₹{stats.minPayoutAmount.toLocaleString()}.
+                    </p>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-2">
