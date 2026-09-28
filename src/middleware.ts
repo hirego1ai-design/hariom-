@@ -190,7 +190,11 @@ export async function middleware(request: NextRequest) {
     pathname === "/jobs/saved" ||
     /^\/jobs\/[^/]+\/apply(?:\/|$)/.test(pathname);
 
-  if (candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix)) || isCandidateJobAction) {
+  if (
+    pathname.startsWith("/candidate") ||
+    candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix)) ||
+    isCandidateJobAction
+  ) {
     if (!session || (session.role !== "CANDIDATE" && session.role !== "ADMIN")) {
       const redirectUrl = new URL("/login", request.url);
       redirectUrl.searchParams.set("redirect", pathname);
