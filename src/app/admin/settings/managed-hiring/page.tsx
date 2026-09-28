@@ -9,6 +9,7 @@ export default function AdminManagedHiringSettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/config")
@@ -35,6 +36,7 @@ export default function AdminManagedHiringSettingsPage() {
   };
 
   const handleSave = async () => {
+    setSaveMessage(null);
     setSaving(true);
     try {
       const res = await fetch("/api/admin/config", {
@@ -43,13 +45,15 @@ export default function AdminManagedHiringSettingsPage() {
         body: JSON.stringify(config),
       });
       const data = await res.json();
-      if (data.success) {
-        alert("Platform Configuration & Feature Flags updated successfully!");
+      if (res.ok && data.success) {
+        setSaveMessage({ type: "success", text: "Platform configuration updated successfully." });
+        setConfig(data.config ?? config);
       } else {
-        alert(data.error);
+        setSaveMessage({ type: "error", text: data.error || "Unable to update platform configuration." });
       }
     } catch (err) {
       console.error(err);
+      setSaveMessage({ type: "error", text: "Unable to update platform configuration. Please try again." });
     } finally {
       setSaving(false);
     }
@@ -61,6 +65,7 @@ export default function AdminManagedHiringSettingsPage() {
       <AdminHeader />
 
       <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-5xl mx-auto">
+        {saveMessage && <div role={saveMessage.type === "error" ? "alert" : "status"} aria-live={saveMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${saveMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{saveMessage.text}</div>}
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#FFCA28]/10 text-[#FFCA28] border border-[#FFCA28]/20 mb-1">
