@@ -1296,7 +1296,18 @@ class ReferralDatabaseStore {
             }
           }
 
+          const remainingAvailable = await tx.referralReward.aggregate({
+            where: {
+              referrerId: input.referrerId,
+              status: "ELIGIBLE",
+              payoutId: null,
+              currency: "INR",
+            },
+            _sum: { rewardAmount: true },
+          });
+
           // 2. Create immutable ReferralLedgerEntry for reserved liability
+          // using the actual post-reservation available balance from this transaction.
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
               id: ledgerEntryId,
@@ -1304,7 +1315,7 @@ class ReferralDatabaseStore {
               payoutId: createdPayout.id,
               entryType: ReferralLedgerEntryType.PAYOUT_RESERVED,
               amount: input.amount,
-              balanceAfter: unreservedAvailable - input.amount,
+              balanceAfter: remainingAvailable._sum.rewardAmount ?? 0,
               currency: "INR",
               correlationId,
               metadata: {
@@ -1605,7 +1616,18 @@ class ReferralDatabaseStore {
             throw new ApiError("Payout no longer matches the reserved eligible reward balance; reload before settlement.", 409);
           }
 
-          // 4. Create immutable ReferralLedgerEntry
+          const remainingAvailable = await tx.referralReward.aggregate({
+            where: {
+              referrerId: existing.referrerId,
+              status: "ELIGIBLE",
+              payoutId: null,
+              currency: existing.currency,
+            },
+            _sum: { rewardAmount: true },
+          });
+
+          // 4. Create immutable ReferralLedgerEntry using the actual remaining
+          // available balance after the settled rewards leave eligibility.
           const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
@@ -1614,7 +1636,7 @@ class ReferralDatabaseStore {
               payoutId: existing.id,
               entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,
               amount: existing.amount,
-              balanceAfter: 0,
+              balanceAfter: remainingAvailable._sum.rewardAmount ?? 0,
               currency: existing.currency,
               correlationId,
               metadata: {
@@ -1741,7 +1763,7 @@ class ReferralDatabaseStore {
             where: { id: payoutId },
           });
           if (!existing) {
-            throw new Error(`Payout with ID ${payoutId} not found.`);
+            throw new ApiError("Payout not found.", 404);
           }
           if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
             throw new ApiError("Payout changed; reload before rejecting.", 409);
@@ -1771,7 +1793,18 @@ class ReferralDatabaseStore {
             data: { payoutId: null },
           });
 
+          const availableAfterRelease = await tx.referralReward.aggregate({
+            where: {
+              referrerId: existing.referrerId,
+              status: "ELIGIBLE",
+              payoutId: null,
+              currency: existing.currency,
+            },
+            _sum: { rewardAmount: true },
+          });
+
           // Unreserve liability via financial ledger entry (PAYOUT_REFUNDED)
+          // with the actual post-release available balance.
           const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
@@ -1780,7 +1813,7 @@ class ReferralDatabaseStore {
               payoutId: existing.id,
               entryType: ReferralLedgerEntryType.PAYOUT_REFUNDED,
               amount: existing.amount,
-              balanceAfter: existing.amount,
+              balanceAfter: availableAfterRelease._sum.rewardAmount ?? 0,
               currency: existing.currency,
               correlationId,
               metadata: {
