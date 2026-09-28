@@ -807,3 +807,38 @@ test("admin subscription controls use one canonical screen and reject stale comm
   assert(page.includes("disabled={saving || !costValid}"));
   assert(!page.includes('onClick={() => void archivePlan(item.id)}'));
 });
+
+
+test("admin payment routing uses versioned database snapshots and deliberate emergency controls", () => {
+  const page = fs.readFileSync(new URL("../app/admin/payment-gateways/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/payment-gateway/config/route.ts", import.meta.url), "utf8");
+  const controller = fs.readFileSync(new URL("../lib/payments/PaymentGatewayController.ts", import.meta.url), "utf8");
+  const settingsRedirect = fs.readFileSync(new URL("../app/admin/settings/payment-gateway/page.tsx", import.meta.url), "utf8");
+  const legacyRedirect = fs.readFileSync(new URL("../app/settings/payment-gateway/page.tsx", import.meta.url), "utf8");
+
+  assert(settingsRedirect.includes('redirect("/admin/payment-gateways")'));
+  assert(legacyRedirect.includes('redirect("/admin/payment-gateways")'));
+
+  assert(route.includes("PaymentGatewayController.getAdminConfigSnapshot()"));
+  assert(route.includes("expectedUpdatedAt: z.string().datetime().nullable().optional()"));
+  assert(route.includes(".length(2)"));
+  assert(route.includes('key!=="expectedUpdatedAt"'));
+
+  assert(controller.includes("static async getAdminConfigSnapshot()"));
+  assert(controller.includes("const currentSnapshot = await this.getAdminConfigSnapshot()"));
+  assert(controller.includes("existing.updatedAt.toISOString() !== expectedUpdatedAt"));
+  assert(controller.includes("Payment gateway configuration changed; reload before saving."));
+  assert(controller.includes("enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId)"));
+
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(page.includes("expectedUpdatedAt: configUpdatedAt"));
+  assert(page.includes("setConfigUpdatedAt"));
+  assert(page.includes("movePriority"));
+  assert(page.includes('HEALTHY: "ENABLED"'));
+  assert(page.includes('DEGRADED: "LIMITED"'));
+  assert(page.includes("Disable all payment gateways?"));
+  assert(page.includes("Confirm maintenance state"));
+  assert(page.includes("No live provider-health assertion is made here."));
+});
