@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
-import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { createPlanSchema, planIdSchema, updatePlanSchema } from "@/lib/payments/planContracts";
 import {
   archiveAdminSubscriptionPlan,
@@ -70,7 +70,7 @@ export async function DELETE(request: NextRequest) {
     const id = planIdSchema.parse(searchParams.get("id"));
     const expectedUpdatedAt = searchParams.get("expectedUpdatedAt") || undefined;
     if (expectedUpdatedAt && Number.isNaN(Date.parse(expectedUpdatedAt))) {
-      throw new Error("Invalid expectedUpdatedAt timestamp.");
+      throw new ApiError("Invalid expectedUpdatedAt timestamp.", 400);
     }
     const plan = await archiveAdminSubscriptionPlan(
       id,
