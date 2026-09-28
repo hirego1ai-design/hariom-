@@ -63,6 +63,10 @@ export async function GET(
       agreement,
       events,
       linkedRequirement,
+      permissions: {
+        canExecute: session.role === "EMPLOYER" && agreement.status === "SENT_TO_EMPLOYER",
+        canRequestAmendment: session.role === "EMPLOYER" && agreement.status === "SENT_TO_EMPLOYER",
+      },
     });
   } catch (error) {
     return handleApiError(error);
