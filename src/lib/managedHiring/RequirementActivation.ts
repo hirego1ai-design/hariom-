@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/apiSecurity";
 import { OutboxPublisher } from "@/lib/events/Outbox";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 type ManagedPosition = {
   jobTitle: string;
@@ -106,6 +107,9 @@ export async function activateManagedHiringRequirement(params: {
   activeAgreementId?: string;
   assignedSalesLead?: string;
   activatedById: string;
+  expectedUpdatedAt: string;
+  reason: string;
+  ipAddress?: string;
 }) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "HiringRequirement" WHERE id = ${params.requirementId} FOR UPDATE`;
@@ -114,6 +118,9 @@ export async function activateManagedHiringRequirement(params: {
       where: { id: params.requirementId },
     });
     if (!requirement) throw new ApiError("Requirement not found.", 404);
+    if (requirement.updatedAt.toISOString() !== params.expectedUpdatedAt) {
+      throw new ApiError("Managed hiring requirement changed; reload before activation.", 409);
+    }
     if (!requirement.companyId) {
       throw new ApiError("Managed hiring requirement must be linked to a company before activation.", 409);
     }
@@ -236,8 +243,8 @@ export async function activateManagedHiringRequirement(params: {
       }
     }
 
-    const updatedRequirement = await tx.hiringRequirement.update({
-      where: { id: requirement.id },
+    const changedRequirement = await tx.hiringRequirement.updateMany({
+      where: { id: requirement.id, updatedAt: requirement.updatedAt },
       data: {
         status: "ACTIVE",
         ...(params.assignedSalesLead?.trim()
@@ -245,6 +252,28 @@ export async function activateManagedHiringRequirement(params: {
           : {}),
       },
     });
+    if (changedRequirement.count !== 1) {
+      throw new ApiError("Managed hiring requirement changed; reload before activation.", 409);
+    }
+    const updatedRequirement = await tx.hiringRequirement.findUniqueOrThrow({
+      where: { id: requirement.id },
+    });
+
+    const auditLog = await tx.auditLog.create({
+      data: {
+        userId: params.activatedById,
+        companyId: requirement.companyId,
+        action: "MANAGED_HIRING_REQUIREMENT_ACTIVATED",
+        resource: `HiringRequirement:${requirement.id}`,
+        ipAddress: params.ipAddress || "unknown",
+        details: JSON.stringify({
+          reason: params.reason,
+          agreementId: agreement.id,
+          jobIds: jobs.map((job) => job.id),
+        }),
+      },
+    });
+    await enqueueSecurityAuditEvent(tx, auditLog, params.activatedById);
 
     return {
       requirement: updatedRequirement,
