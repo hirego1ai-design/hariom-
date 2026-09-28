@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         : {}),
     };
 
-    const [total, rows, grouped] = await prisma.$transaction([
+    const [total, rows] = await prisma.$transaction([
       prisma.invoice.count({ where }),
       prisma.invoice.findMany({
         where,
@@ -58,14 +58,15 @@ export async function GET(req: NextRequest) {
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
-      prisma.invoice.groupBy({
-        by: ["currency", "status"],
-        where,
-        orderBy: [{ currency: "asc" }, { status: "asc" }],
-        _count: { id: true },
-        _sum: { totalAmount: true },
-      }),
     ]);
+
+    const grouped = await prisma.invoice.groupBy({
+      by: ["currency", "status"],
+      where,
+      orderBy: [{ currency: "asc" }, { status: "asc" }],
+      _count: true,
+      _sum: { totalAmount: true },
+    });
 
     const currencies = [...new Set(grouped.map((row) => row.currency))].sort();
     const byCurrency = Object.fromEntries(
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         const countFor = (...statuses: string[]) =>
           rowsForCurrency
             .filter((row) => statuses.includes(row.status))
-            .reduce((sum, row) => sum + row._count?.id ?? 0, 0);
+            .reduce((sum, row) => sum + row._count, 0);
 
         return [
           currency,
