@@ -356,8 +356,10 @@ export async function markAiExecutionValidationFailure(logId: string): Promise<v
 
 export async function getAiUsageStats() {
   try {
+    const operationalWhere = { task: { not: "admin-synthetic-benchmark" } } as const;
     const [overall, providerRows, modelRows, recentRows] = await Promise.all([
       prisma.aiExecutionLog.aggregate({
+        where: operationalWhere,
         _count: {
           _all: true,
           costEstUsd: true,
@@ -373,10 +375,12 @@ export async function getAiUsageStats() {
       }),
       prisma.aiExecutionLog.groupBy({
         by: ["provider"],
+        where: operationalWhere,
         _count: { _all: true },
       }),
       prisma.aiExecutionLog.groupBy({
         by: ["provider", "model", "status"],
+        where: operationalWhere,
         _count: {
           _all: true,
           costEstUsd: true,
@@ -387,6 +391,7 @@ export async function getAiUsageStats() {
         },
       }),
       prisma.aiExecutionLog.findMany({
+        where: operationalWhere,
         orderBy: [{ timestamp: "desc" }, { id: "desc" }],
         take: 50,
       }),
@@ -516,10 +521,11 @@ export async function getAiUsageStats() {
       throw new Error("Authoritative AI usage telemetry is unavailable.");
     }
 
-    const logs = executionLogsStore.slice(0, 50);
-    const totalRequests = executionLogsStore.length;
-    const measuredCost = executionLogsStore.filter((log) => typeof log.costEstUsd === "number");
-    const measuredTokens = executionLogsStore.filter((log) => typeof log.totalTokens === "number");
+    const operationalLogs = executionLogsStore.filter((log) => log.task !== "admin-synthetic-benchmark");
+    const logs = operationalLogs.slice(0, 50);
+    const totalRequests = operationalLogs.length;
+    const measuredCost = operationalLogs.filter((log) => typeof log.costEstUsd === "number");
+    const measuredTokens = operationalLogs.filter((log) => typeof log.totalTokens === "number");
     const knownCostUsd = measuredCost.reduce((sum, log) => sum + (log.costEstUsd ?? 0), 0);
     const knownTokens = measuredTokens.reduce((sum, log) => sum + (log.totalTokens ?? 0), 0);
 
@@ -536,15 +542,15 @@ export async function getAiUsageStats() {
       costCoverageRate: totalRequests ? measuredCost.length / totalRequests : null,
       avgLatencyMs:
         totalRequests
-          ? Math.round(executionLogsStore.reduce((sum, log) => sum + log.latencyMs, 0) / totalRequests)
+          ? Math.round(operationalLogs.reduce((sum, log) => sum + log.latencyMs, 0) / totalRequests)
           : null,
       providerCounts: {
-        openai: executionLogsStore.filter((log) => log.provider === "openai").length,
-        gemini: executionLogsStore.filter((log) => log.provider === "gemini").length,
-        deepseek: executionLogsStore.filter((log) => log.provider === "deepseek").length,
-        kimi: executionLogsStore.filter((log) => log.provider === "kimi").length,
-        qwen: executionLogsStore.filter((log) => log.provider === "qwen").length,
-        self_hosted: executionLogsStore.filter((log) => log.provider === "self_hosted").length,
+        openai: operationalLogs.filter((log) => log.provider === "openai").length,
+        gemini: operationalLogs.filter((log) => log.provider === "gemini").length,
+        deepseek: operationalLogs.filter((log) => log.provider === "deepseek").length,
+        kimi: operationalLogs.filter((log) => log.provider === "kimi").length,
+        qwen: operationalLogs.filter((log) => log.provider === "qwen").length,
+        self_hosted: operationalLogs.filter((log) => log.provider === "self_hosted").length,
       },
       modelStats: [],
       logs,
