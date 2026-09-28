@@ -46,7 +46,7 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
   };
 
   return (
-    <header className="fixed left-[116px] right-0 top-0 z-40 flex h-20 items-center justify-between border-b border-white/10 bg-[#0E0E0E]/90 px-6 shadow-md backdrop-blur-xl">
+    <header className="fixed left-0 right-0 top-0 z-40 flex h-20 items-center justify-between border-b border-white/10 bg-[#0E0E0E]/90 px-4 pl-20 shadow-md backdrop-blur-xl md:left-[116px] md:px-6">
       <div className="min-w-0">
         {title ? (
           <>
@@ -68,10 +68,10 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
       </div>
 
       <div className="flex items-center gap-2">
-        <Link href="/admin/settings/audit-log" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="Audit logs">
+        <Link aria-label="Open audit logs" href="/admin/settings/audit-log" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="Audit logs">
           <span className="material-symbols-outlined text-[20px]">fact_check</span>
         </Link>
-        <Link href="/admin/system-health" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="System health">
+        <Link aria-label="Open system health" href="/admin/system-health" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="System health">
           <span className="material-symbols-outlined text-[20px]">monitor_heart</span>
         </Link>
         <button
@@ -79,17 +79,18 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10"
           title="Toggle appearance"
+          aria-label="Toggle appearance"
         >
           <span className="material-symbols-outlined text-[20px]">{theme === "dark" ? "light_mode" : "dark_mode"}</span>
         </button>
-        <Link href="/admin/settings/hub" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="Platform settings">
+        <Link aria-label="Open platform settings" href="/admin/settings/hub" className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-text-secondary hover:bg-white/10" title="Platform settings">
           <span className="material-symbols-outlined text-[20px]">settings</span>
         </Link>
 
         <div className="mx-1 h-6 w-px bg-white/10" />
 
         <div className="relative">
-          <button type="button" onClick={() => setProfileOpen((value) => !value)} className="flex items-center gap-3 rounded-xl px-2 py-1 hover:bg-white/5">
+          <button type="button" aria-label="Open administrator profile menu" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)} className="flex items-center gap-3 rounded-xl px-2 py-1 hover:bg-white/5">
             <div className="hidden text-right md:block">
               <p className="text-xs font-bold text-white">{admin.name}</p>
               <p className="mt-0.5 text-[10px] uppercase tracking-wider text-text-muted">Administrator</p>
