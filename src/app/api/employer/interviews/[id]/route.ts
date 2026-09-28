@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { logAuditEvent } from "@/lib/auditLogger";
 
 const changeSchema = z.object({ action: z.enum(["CANCEL", "RESCHEDULE"]), scheduledAt: z.string().datetime().optional(), reason: z.string().max(500).optional() });
 
@@ -32,6 +34,7 @@ async function authorizedInterview(id: string, session: { id: string; role: stri
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  await enforceRateLimit(request, "employer_interview_detail", 60, 60_000);
   const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -66,11 +69,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await enforceRateLimit(req, "employer_interview_change", 20, 60_000);
   const session = await getCurrentSession(req.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   try {
     const { id } = await params;
-    const body = changeSchema.parse(await req.json());
+    const body = await readValidatedJson(req, changeSchema, 8 * 1024);
     const interview = await authorizedInterview(id, session);
     if (!interview) return NextResponse.json({ success: false, error: "Interview not found or not accessible." }, { status: 404 });
     if (body.action === "RESCHEDULE" && !body.scheduledAt) return NextResponse.json({ success: false, error: "New date and time are required." }, { status: 400 });
@@ -170,11 +174,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           recipientRef: interview.application.candidateProfile.userId,
         }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "Email dispatch failed." }));
 
+    await logAuditEvent({
+      userId: session.id,
+      companyId: interview.application.job.companyId,
+      action: body.action === "CANCEL" ? "INTERVIEW_CANCELLED" : "INTERVIEW_RESCHEDULED",
+      resource: `Interview:${interview.id}`,
+      ipAddress: req.headers.get("x-forwarded-for") || undefined,
+      details: body.action === "CANCEL"
+        ? `Cancelled interview; reason=${body.reason || "not provided"}`
+        : `Rescheduled interview to ${nextScheduledAt.toISOString()}; reason=${body.reason || "not provided"}`,
+    });
+
     return NextResponse.json({
       success: true,
       interview: { id: updated.id, status: updated.status, scheduledAt: updated.scheduledAt },
       notifications: { email },
       message: `Interview ${body.action.toLowerCase()}d successfully.`,
     });
-  } catch (error) { if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 }); if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message }, { status: 400 }); return NextResponse.json({ success: false, error: "Unable to update interview." }, { status: 500 }); }
+  } catch (error) {
+    if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") {
+      return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ success: false, error: error.issues[0]?.message }, { status: 400 });
+    }
+    return handleApiError(error);
+  }
 }
