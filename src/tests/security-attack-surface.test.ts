@@ -116,6 +116,7 @@ test("CI continuously scans dependencies, secrets and code", () => {
   // Pull-request metadata is required by the Gitleaks action; missing this
   // permission previously caused the secret scan itself to fail before
   // inspecting repository history.
+  assert.match(workflow, /actions:\s*read/);
   assert.match(workflow, /pull-requests:\s*read/);
   assert.match(workflow, /gitleaks\/gitleaks-action@v2/);
 
