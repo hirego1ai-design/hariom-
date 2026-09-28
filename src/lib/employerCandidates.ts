@@ -25,7 +25,7 @@ export const pipelineStageLabels: Record<string, string> = {
   APPLIED: "Applied",
   SCREENING: "Screening",
   ASSESSMENT: "Assessment",
-  AI_INTERVIEW: "AI Interview",
+  AI_INTERVIEW: "Interview",
   SHORTLISTED: "Shortlisted",
   HIRED: "Joined",
   REJECTED: "Rejected",
