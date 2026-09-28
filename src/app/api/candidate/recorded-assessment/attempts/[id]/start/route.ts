@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { assertCandidateRecordedAssessmentApplicationEligible } from "@/lib/recordedAssessment";
 
 /**
  * Starts a frozen recorded-assessment attempt.
@@ -16,9 +17,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const attempt = await prisma.recordedAssessmentAttempt.findFirst({
       where: { id, candidateProfile: { userId: session.id } },
-      select: { id: true, status: true, startedAt: true },
+      select: { id: true, status: true, startedAt: true, jobListingId: true },
     });
     if (!attempt) throw new ApiError("Assessment attempt not found.", 404);
+    await assertCandidateRecordedAssessmentApplicationEligible(session.id, attempt.jobListingId);
     if (attempt.status === "IN_PROGRESS") return NextResponse.json({ success: true, status: attempt.status, startedAt: attempt.startedAt });
     if (attempt.status !== "CREATED") throw new ApiError("This assessment attempt can no longer be started.", 409);
     const startedAt = new Date();
