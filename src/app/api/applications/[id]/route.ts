@@ -39,7 +39,7 @@ export async function GET(
             id: true,
             status: true,
             scheduledAt: true,
-            roomId: true,
+            roomUrl: true,
           },
           orderBy: { scheduledAt: "desc" },
         },
