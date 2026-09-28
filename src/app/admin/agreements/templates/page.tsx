@@ -10,6 +10,7 @@ export default function AdminAgreementTemplatesPage() {
   const [templates, setTemplates] = useState<AgreementTemplateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState<Partial<AgreementTemplateRecord> | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/agreements/templates")
@@ -25,6 +26,7 @@ export default function AdminAgreementTemplatesPage() {
 
   const handleSaveTemplate = async () => {
     if (!editingTemplate || !editingTemplate.name) return;
+    setActionMessage(null);
     try {
       const res = await fetch("/api/agreements/templates", {
         method: "POST",
@@ -35,11 +37,13 @@ export default function AdminAgreementTemplatesPage() {
       if (data.success) {
         setTemplates((prev) => [...prev, data.template]);
         setEditingTemplate(null);
+        setActionMessage({ type: "success", text: "Agreement template saved." });
       } else {
-        alert(data.error);
+        setActionMessage({ type: "error", text: data.error || "Unable to save agreement template." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Unable to save agreement template. Please try again." });
     }
   };
 
@@ -49,6 +53,7 @@ export default function AdminAgreementTemplatesPage() {
       <AdminHeader />
 
       <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6">
+        {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#AB47BC]/10 text-[#AB47BC] border border-[#AB47BC]/20 mb-1">
@@ -114,7 +119,7 @@ export default function AdminAgreementTemplatesPage() {
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px]">Credit Terms</span>
-                    <span className="font-bold text-slate-300">{tpl.creditDays || tpl.creditTermsDays || 15} Days</span>
+                    <span className="font-bold text-slate-300">{typeof (tpl.creditDays ?? tpl.creditTermsDays) === "number" ? `${tpl.creditDays ?? tpl.creditTermsDays} Days` : "Not specified"}</span>
                   </div>
                 </div>
 
