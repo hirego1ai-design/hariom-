@@ -1514,3 +1514,49 @@ test("admin pricing engine uses explicit server-calculated non-persistent scenar
   assert(route.includes('pricingModel: z.literal("SLAB")'));
   assert(route.includes("calculation"));
 });
+
+
+test("admin recorded-assessment governance is deliberate versioned and audited", () => {
+  const questionPage = fs.readFileSync(new URL("../app/admin/recorded-assessment/questions/page.tsx", import.meta.url), "utf8");
+  const questionRoute = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/questions/route.ts", import.meta.url), "utf8");
+  const retireRoute = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/questions/[id]/route.ts", import.meta.url), "utf8");
+  const restrictionPage = fs.readFileSync(new URL("../app/admin/recorded-assessment/restrictions/page.tsx", import.meta.url), "utf8");
+  const restrictionsRoute = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/restrictions/route.ts", import.meta.url), "utf8");
+  const reviewRoute = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/restrictions/[id]/route.ts", import.meta.url), "utf8");
+
+  assert(questionPage.includes("<AdminSidebar"));
+  assert(questionPage.includes("<AdminHeader"));
+  assert(questionPage.includes("Publication reason"));
+  assert(questionPage.includes("expectedUpdatedAt: retireTarget.updatedAt"));
+  assert(questionPage.includes('role="dialog"'));
+
+  assert(questionRoute.includes("requireAdminSession(request)"));
+  assert(questionRoute.includes('admin_recorded_question_bank_read:${admin.id}'));
+  assert(questionRoute.includes('admin_recorded_question_bank_write:${admin.id}'));
+  assert(questionRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(questionRoute.includes("RECORDED_ASSESSMENT_QUESTION_PUBLISHED"));
+  assert(questionRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(retireRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(retireRoute.includes("Question changed; reload the role bank before retiring it."));
+  assert(retireRoute.includes("RECORDED_ASSESSMENT_QUESTION_RETIRED"));
+  assert(retireRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(restrictionPage.includes("<AdminSidebar"));
+  assert(restrictionPage.includes("<AdminHeader"));
+  assert(restrictionPage.includes("Page {page} of {totalPages}"));
+  assert(restrictionPage.includes("expectedUpdatedAt: reviewTarget.item.updatedAt"));
+  assert(restrictionPage.includes('role="dialog"'));
+  assert(!restrictionPage.includes("window.prompt"));
+
+  assert(restrictionsRoute.includes('admin_assessment_restrictions_read:${admin.id}'));
+  assert(restrictionsRoute.includes('admin_assessment_restrictions_write:${admin.id}'));
+  assert(restrictionsRoute.includes("prisma.$transaction"));
+  assert(restrictionsRoute.includes("ASSESSMENT_RESTRICTION_PROPOSED"));
+  assert(restrictionsRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(reviewRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(reviewRoute.includes("Restriction changed; reload the review queue."));
+  assert(reviewRoute.includes("prisma.$transaction"));
+  assert(reviewRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+});
