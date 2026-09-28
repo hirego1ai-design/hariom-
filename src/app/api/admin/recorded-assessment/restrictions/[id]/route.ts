@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
@@ -16,15 +22,17 @@ function addCalendarMonths(from: Date, months: number) {
   const targetYear = from.getUTCFullYear() + Math.floor(targetMonth / 12);
   const normalizedMonth = ((targetMonth % 12) + 12) % 12;
   const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(
-    targetYear,
-    normalizedMonth,
-    Math.min(from.getUTCDate(), lastDay),
-    from.getUTCHours(),
-    from.getUTCMinutes(),
-    from.getUTCSeconds(),
-    from.getUTCMilliseconds(),
-  ));
+  return new Date(
+    Date.UTC(
+      targetYear,
+      normalizedMonth,
+      Math.min(from.getUTCDate(), lastDay),
+      from.getUTCHours(),
+      from.getUTCMinutes(),
+      from.getUTCSeconds(),
+      from.getUTCMilliseconds(),
+    ),
+  );
 }
 
 export async function POST(
@@ -33,15 +41,17 @@ export async function POST(
 ) {
   try {
     const admin = await requireAdminSession(request);
-    await enforceRateLimit(request, `admin_assessment_restriction_review:${admin.id}`, 30, 60_000);
+    await enforceRateLimit(request, `admin_assessment_restrictions_review:${admin.id}`, 30, 60_000);
     const { id } = await params;
-    const body = await readValidatedJson(request, schema);
+    const body = await readValidatedJson(request, schema, 8 * 1024);
 
     const updated = await prisma.$transaction(async (tx) => {
-      const restriction = await tx.recordedAssessmentRestriction.findUnique({ where: { id } });
+      const restriction = await tx.recordedAssessmentRestriction.findUnique({
+        where: { id },
+      });
       if (!restriction) throw new ApiError("Restriction review not found.", 404);
       if (restriction.updatedAt.toISOString() !== body.expectedUpdatedAt) {
-        throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
+        throw new ApiError("Restriction changed; reload the review queue.", 409);
       }
 
       if (body.decision === "REVOKE") {
@@ -52,6 +62,7 @@ export async function POST(
         throw new ApiError("This restriction proposal has already been reviewed.", 409);
       }
 
+      const now = new Date();
       const status =
         body.decision === "APPROVE"
           ? "ACTIVE"
@@ -59,7 +70,6 @@ export async function POST(
             ? "REJECTED"
             : "REVOKED";
       const expectedStatus = body.decision === "REVOKE" ? "ACTIVE" : "PENDING_REVIEW";
-      const now = new Date();
 
       const changed = await tx.recordedAssessmentRestriction.updateMany({
         where: {
@@ -79,10 +89,16 @@ export async function POST(
         },
       });
       if (changed.count !== 1) {
-        throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
+        throw new ApiError(
+          "This restriction changed while you were reviewing it. Reload the case.",
+          409,
+        );
       }
 
-      const next = await tx.recordedAssessmentRestriction.findUniqueOrThrow({ where: { id } });
+      const current = await tx.recordedAssessmentRestriction.findUniqueOrThrow({
+        where: { id },
+      });
+
       const auditLog = await tx.auditLog.create({
         data: {
           userId: admin.id,
@@ -90,17 +106,16 @@ export async function POST(
           resource: `RecordedAssessmentRestriction:${id}`,
           ipAddress: getClientIp(request) || "unknown",
           details: JSON.stringify({
-            candidateUserId: restriction.userId,
-            attemptId: restriction.attemptId,
+            fromStatus: restriction.status,
+            toStatus: status,
             proposedMonths: restriction.proposedMonths,
-            decision: body.decision,
-            reviewNote: body.reviewNote,
+            reviewNoteRecorded: true,
           }),
         },
       });
       await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
 
-      return next;
+      return current;
     });
 
     return NextResponse.json({ success: true, restriction: updated });
