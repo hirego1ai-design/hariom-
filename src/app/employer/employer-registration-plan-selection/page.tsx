@@ -78,7 +78,9 @@ export default function EmployerPlanSelectionPage() {
                 </ul>
                 {plan.copilotIncluded ? (
                   <p className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200">
-                    HireGo Co-Pilot included for {plan.copilotJobLimit ?? 0} job{(plan.copilotJobLimit ?? 0) === 1 ? "" : "s"}.
+                    {typeof plan.copilotJobLimit === "number"
+                      ? `HireGo Co-Pilot included for ${plan.copilotJobLimit} job${plan.copilotJobLimit === 1 ? "" : "s"}.`
+                      : "HireGo Co-Pilot is included, but its job quota is not configured in the published plan record."}
                   </p>
                 ) : null}
                 {plan.eligible === false ? <p className="mt-3 text-xs text-amber-300">{plan.eligibilityReason}</p> : null}
