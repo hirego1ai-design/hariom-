@@ -119,13 +119,9 @@ export async function GET(request: NextRequest) {
         latestAgreementId: requirement.agreements[0]?.id ?? null,
         latestAgreementStatus: requirement.agreements[0]?.status ?? null,
         activeAgreementId:
-          requirement.agreements.find((agreement) =>
-            ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(agreement.status),
-          )?.id ?? null,
+          requirement.agreements.find((agreement) => agreement.status === "ACTIVE")?.id ?? null,
         activeAgreementStatus:
-          requirement.agreements.find((agreement) =>
-            ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(agreement.status),
-          )?.status ?? null,
+          requirement.agreements.find((agreement) => agreement.status === "ACTIVE")?.status ?? null,
         createdAt: requirement.createdAt.toISOString(),
         updatedAt: requirement.updatedAt.toISOString(),
       })),
