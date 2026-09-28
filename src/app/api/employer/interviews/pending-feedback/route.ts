@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {

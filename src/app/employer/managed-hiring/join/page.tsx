@@ -10,48 +10,96 @@ export default function ManagedHiringJoinPage() {
   const [form, setForm] = useState({ applicationId: "", agreementId: "", annualCtc: "", joinedAt: "" });
   const [accepted, setAccepted] = useState(false);
   const [status, setStatus] = useState("");
+  const [statusType, setStatusType] = useState<"success" | "error">("success");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ placement: Placement; action: "HOLD" | "CANCEL" | "RESUME" } | null>(null);
+  const [actionReason, setActionReason] = useState("");
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/employer/managed-hiring/join");
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Unable to load placements.");
-    setPlacements(data.placements);
+    const response = await fetch("/api/employer/managed-hiring/join", { cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.error || "Unable to load placements.");
+    setPlacements(Array.isArray(data.placements) ? data.placements : []);
   }, []);
   useEffect(() => { setForm(current => ({ ...current, applicationId: params.get("applicationId") || current.applicationId })); }, [params]);
   useEffect(() => {
-    refresh().catch(error => setStatus(error.message));
-    fetch("/api/agreements/contracts?status=ACTIVE").then(async response => {
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to load agreements.");
-      setAgreements(data.agreements.filter((agreement: Agreement) => agreement.invoiceRule === "DAY_25"));
-    }).catch(error => setStatus(error.message));
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      refresh(),
+      fetch("/api/agreements/contracts?status=ACTIVE", { cache: "no-store" }).then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) throw new Error(data.error || "Unable to load agreements.");
+        if (!cancelled) {
+          setAgreements(
+            (Array.isArray(data.agreements) ? data.agreements : []).filter(
+              (agreement: Agreement) => agreement.invoiceRule === "DAY_25",
+            ),
+          );
+        }
+      }),
+    ])
+      .catch(error => {
+        if (!cancelled) {
+          setStatusType("error");
+          setStatus(error instanceof Error ? error.message : "Unable to load managed-hiring joining data.");
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [refresh]);
   async function submit(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setStatus("");
+    event.preventDefault(); setSaving(true); setStatus(""); setStatusType("success");
     try {
       const response = await fetch("/api/employer/managed-hiring/join", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, annualCtc: Number(form.annualCtc), joinedAt: new Date(form.joinedAt).toISOString(), termsAccepted: accepted }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to confirm joining.");
+      setStatusType("success");
       setStatus(`Joining recorded. Status: ${data.placement.status}. Invoice eligible: ${new Date(data.placement.invoiceEligibleAt).toLocaleString()}. No immediate invoice was created.`);
       await refresh();
-    } catch (error) { setStatus(error instanceof Error ? error.message : "Unable to save."); }
+    } catch (error) {
+      setStatusType("error");
+      setStatus(error instanceof Error ? error.message : "Unable to save.");
+    }
     finally { setSaving(false); }
   }
-  async function changeStatus(placement: Placement, action: "HOLD" | "CANCEL" | "RESUME") {
-    const reason = window.prompt("Reason for this billing change (minimum 5 characters):");
-    if (!reason) return;
+  async function confirmPlacementAction() {
+    if (!pendingAction || saving) return;
+    const reason = actionReason.trim();
+    if (reason.length < 5) {
+      setStatusType("error");
+      setStatus("Add a reason with at least 5 characters.");
+      return;
+    }
+
     setSaving(true);
+    setStatus("");
     try {
-      const response = await fetch("/api/employer/managed-hiring/join", { method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placementId: placement.id, action, reason }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to update placement.");
-      await refresh(); setStatus("Placement billing status updated.");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "Unable to update."); }
-    finally { setSaving(false); }
+      const response = await fetch("/api/employer/managed-hiring/join", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          placementId: pendingAction.placement.id,
+          action: pendingAction.action,
+          reason,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Unable to update placement.");
+      await refresh();
+      setPendingAction(null);
+      setActionReason("");
+      setStatusType("success");
+      setStatus("Placement billing status updated.");
+    } catch (error) {
+      setStatusType("error");
+      setStatus(error instanceof Error ? error.message : "Unable to update.");
+    } finally {
+      setSaving(false);
+    }
   }
   const selected = agreements.find(agreement => agreement.id === form.agreementId);
   const inputClass = "w-full rounded-lg bg-black/30 border border-white/10 p-3 text-sm text-white";
@@ -70,13 +118,30 @@ export default function ManagedHiringJoinPage() {
       <label className="flex gap-3 text-sm"><input required type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />I am authorised to approve this salary and confirm actual joining under the signed agreement, including automatic invoicing after 25 days.</label>
       <button disabled={saving || !accepted} className="w-full rounded-xl bg-emerald-500 text-black font-bold py-3 disabled:opacity-50">{saving ? "Saving..." : "Approve joining & schedule invoice"}</button>
     </form>
-    {status && <p role="status" className="text-sm text-emerald-300">{status}</p>}
+    {status && <p role={statusType === "error" ? "alert" : "status"} className={statusType === "error" ? "text-sm text-red-300" : "text-sm text-emerald-300"}>{status}</p>}
+    {loading && <p className="text-sm text-text-secondary">Loading joining and agreement records…</p>}
     <h2 className="text-xl font-bold">Recent placement billing records (up to 50)</h2>
     {placements.map(p => <div key={p.id} className="glass-card p-4 rounded-xl space-y-2"><p>Application: {p.applicationId}</p><p>{p.status} · INR {p.totalAmount}</p><p>Eligible: {new Date(p.invoiceEligibleAt).toLocaleString()}</p>{p.invoice && <p>Invoice: {p.invoice.invoiceNumber}</p>}{p.holdReason && <p>Hold: {p.holdReason}</p>}
       {["SCHEDULED", "HOLD"].includes(p.status) && <div className="flex gap-4">
-        {p.status === "SCHEDULED" && <button disabled={saving} onClick={() => changeStatus(p, "HOLD")}>Hold billing</button>}
-        {p.status === "HOLD" && <button disabled={saving} onClick={() => changeStatus(p, "RESUME")}>Resume (HireGo admin only)</button>}
-        <button disabled={saving} onClick={() => changeStatus(p, "CANCEL")}>Cancel billing</button></div>}
+        {p.status === "SCHEDULED" && <button disabled={saving} onClick={() => { setPendingAction({ placement: p, action: "HOLD" }); setActionReason(""); }}>Hold billing</button>}
+        {p.status === "HOLD" && <button disabled={saving} onClick={() => { setPendingAction({ placement: p, action: "RESUME" }); setActionReason(""); }}>Resume (HireGo admin only)</button>}
+        <button disabled={saving} onClick={() => { setPendingAction({ placement: p, action: "CANCEL" }); setActionReason(""); }}>Cancel billing</button></div>}
     </div>)}
+
+    {pendingAction && (
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="placement-action-title">
+        <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+          <h2 id="placement-action-title" className="text-xl font-bold text-white">{pendingAction.action} placement billing?</h2>
+          <p className="mt-2 text-sm text-text-secondary">Application: {pendingAction.placement.applicationId}</p>
+          <label className="mt-4 block text-sm text-text-secondary">Reason
+            <textarea value={actionReason} onChange={(event) => setActionReason(event.target.value)} maxLength={1000} rows={4} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" />
+          </label>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" disabled={saving} onClick={() => { setPendingAction(null); setActionReason(""); }} className="min-h-11 rounded-xl border border-white/10 px-4 text-xs font-bold text-white disabled:opacity-50">Cancel</button>
+            <button type="button" disabled={saving || actionReason.trim().length < 5} onClick={() => void confirmPlacementAction()} className="min-h-11 rounded-xl bg-primary px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? "Saving…" : `Confirm ${pendingAction.action.toLowerCase()}`}</button>
+          </div>
+        </div>
+      </div>
+    )}
   </div></PageContainer>;
 }

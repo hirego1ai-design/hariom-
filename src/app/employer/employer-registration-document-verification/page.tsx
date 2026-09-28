@@ -69,7 +69,7 @@ export default function EmployerDocumentVerificationPage() {
     }
   };
 
-  const uploadAndSubmit = async (file: File, docType: string, identifier: string): Promise<{ success: boolean; fileUrl?: string }> => {
+  const uploadAndSubmit = async (file: File, docType: string, identifier: string): Promise<{ success: boolean; documentId?: string }> => {
     try {
       // Upload file
       const formData = new FormData();
@@ -88,7 +88,7 @@ export default function EmployerDocumentVerificationPage() {
       const uploadBody = await uploadResponse.text();
       if (!uploadBody.trim()) throw new Error("Upload service returned an empty response.");
       const uploadJson = JSON.parse(uploadBody);
-      if (!uploadResponse.ok || !uploadJson.success || !uploadJson.file?.url) {
+      if (!uploadResponse.ok || !uploadJson.success || !uploadJson.file?.id) {
         throw new Error(uploadJson.error || "Upload failed.");
       }
 
@@ -98,19 +98,20 @@ export default function EmployerDocumentVerificationPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           docType,
-          fileUrl: uploadJson.file.url,
-          fileName: file.name,
+          storedFileId: uploadJson.file.id,
+          declaredIdentifier: identifier.trim().toUpperCase(),
         }),
       });
 
+      const verifyBody = await verifyResponse.text();
       if (!verifyResponse.ok) {
-        const verifyBody = await verifyResponse.text();
         let verifyError = verifyResponse.statusText;
         try { verifyError = JSON.parse(verifyBody).error || verifyError; } catch { /* keep status text */ }
         throw new Error(`Verification submission failed: ${verifyError}`);
       }
 
-      return { success: true, fileUrl: uploadJson.file.url };
+      const verificationJson = JSON.parse(verifyBody || "{}");
+      return { success: true, documentId: verificationJson.document?.id };
     } catch (error) {
       console.error(`Error uploading ${file.name}:`, error);
       return { success: false };
@@ -251,7 +252,7 @@ export default function EmployerDocumentVerificationPage() {
                     <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">
                       {verificationType === "GST" ? "GSTIN Number" : verificationType === "MSME" ? "MSME / Udyam Registration Number" : "CIN / Incorporation Number"} *
                     </label>
-                    <input type="text" required placeholder={verificationType === "GST" ? "27AAAAA0000A1Z5" : verificationType === "MSME" ? "UDYAM-MH-00-0000000" : "U72900MH2023PTC123456"} value={verificationType === "GST" ? docs.gstin : verificationType === "MSME" ? docs.msme : docs.cin} onChange={(e) => setDocs({ ...docs, ...(verificationType === "GST" ? { gstin: e.target.value.toUpperCase() } : verificationType === "MSME" ? { msme: e.target.value.toUpperCase() } : { cin: e.target.value.toUpperCase() }) })} className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono" />
+                    <input type="text" required maxLength={64} autoComplete="off" placeholder={verificationType === "GST" ? "27AAAAA0000A1Z5" : verificationType === "MSME" ? "UDYAM-MH-00-0000000" : "U72900MH2023PTC123456"} value={verificationType === "GST" ? docs.gstin : verificationType === "MSME" ? docs.msme : docs.cin} onChange={(e) => setDocs({ ...docs, ...(verificationType === "GST" ? { gstin: e.target.value.toUpperCase() } : verificationType === "MSME" ? { msme: e.target.value.toUpperCase() } : { cin: e.target.value.toUpperCase() }) })} className="input-pill w-full h-10 text-xs text-text-primary px-3.5 font-mono" />
                   </div>
                   <div className="space-y-1">
                     <label className="font-label-md text-[11px] font-bold text-on-surface-variant ml-1">{verificationType === "GST" ? "GST" : verificationType === "MSME" ? "MSME / Udyam" : "Incorporation"} Certificate *</label>
@@ -303,7 +304,7 @@ export default function EmployerDocumentVerificationPage() {
                     </>
                   ) : (
                     <>
-                      <span>Submit KYC & Complete Verification</span>
+                      <span>Submit KYC for Manual Review</span>
                       <ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />
                     </>
                   )}

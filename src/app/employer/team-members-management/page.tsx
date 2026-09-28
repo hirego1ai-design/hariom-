@@ -4,11 +4,11 @@ import { PageContainer, PageHeader, Modal, FormGroup, FormInput, FormSelect } fr
 
 interface Member {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   role: "Admin" | "Recruiter";
   joinedDate: string;
-  avatarUrl?: string;
   avatarFallback?: string;
 }
 
@@ -36,6 +36,9 @@ export default function EmployerTeamManagementPage() {
   const [inviteDesignation, setInviteDesignation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [pendingAccessAction, setPendingAccessAction] = useState<{ id: string; type: "MEMBER" | "INVITATION"; label: string } | null>(null);
 
   // Derive Admin permission from current server session role
   const isAdmin = currentUserRole === "EMPLOYER" || currentUserRole === "ADMIN";
@@ -48,27 +51,30 @@ export default function EmployerTeamManagementPage() {
         setCurrentUserRole(data.user.role);
       }
     } catch (err) {
-      console.error("Failed to fetch authenticated session:", err);
+      setMessageType("error");
+      setMessage(err instanceof Error ? err.message : "Unable to load your session role.");
     }
   }
 
   async function fetchTeam() {
     try {
-      const res = await fetch("/api/employer/team");
-      const data = await res.json();
+      const res = await fetch("/api/employer/team", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to load team data.");
       if (data.success) {
         if (data.team) {
           setMembers(
             data.team.map((m: any) => ({
               id: m.id,
+              userId: m.userId,
               name: m.name,
               email: m.email,
               role: m.role === "ADMIN" || m.role === "EMPLOYER" ? "Admin" : "Recruiter",
-              joinedDate: new Date(m.joinedAt || Date.now()).toLocaleDateString("en-US", {
+              joinedDate: m.joinedAt ? new Date(m.joinedAt).toLocaleDateString("en-US", {
                 month: "short",
                 day: "2-digit",
                 year: "numeric",
-              }),
+              }) : "Not available",
               avatarFallback: m.name
                 .split(" ")
                 .filter(Boolean)
@@ -84,7 +90,8 @@ export default function EmployerTeamManagementPage() {
         }
       }
     } catch (err) {
-      console.error("Failed to load team data:", err);
+      setMessageType("error");
+      setMessage(err instanceof Error ? err.message : "Failed to load team data.");
     } finally {
       setLoading(false);
     }
@@ -98,12 +105,14 @@ export default function EmployerTeamManagementPage() {
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
-      alert("Permission Denied: Only Admins can invite team members.");
+      setMessageType("error");
+      setMessage("Only company administrators can invite team members.");
       return;
     }
     if (!inviteEmail.trim() || !inviteName.trim()) return;
 
     setSubmittingInvite(true);
+    setMessage("");
     try {
       const res = await fetch("/api/employer/team", {
         method: "POST",
@@ -128,57 +137,43 @@ export default function EmployerTeamManagementPage() {
         setInviteEmail("");
         setInviteDesignation("");
         setInviteRole("RECRUITER");
+        setMessageType("success");
+        setMessage("Team invitation sent.");
       }
-    } catch (err: any) {
-      alert(err.message || "Failed to send invitation.");
+    } catch (err) {
+      setMessageType("error");
+      setMessage(err instanceof Error ? err.message : "Failed to send invitation.");
     } finally {
       setSubmittingInvite(false);
     }
   };
 
-  const handleRemoveMember = async (id: string) => {
-    if (!isAdmin) {
-      alert("Permission Denied: Only Admins can remove team members.");
-      return;
-    }
-    if (confirm("Are you sure you want to remove this team member?")) {
-      try {
-        const res = await fetch(`/api/employer/team?id=${encodeURIComponent(id)}`, {
-          method: "DELETE",
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          setMembers((prev) => prev.filter((m) => m.id !== id));
-        } else {
-          alert(data.error || "Failed to remove team member.");
-        }
-      } catch (err) {
-        alert("An error occurred while removing the team member.");
+  async function confirmAccessAction() {
+    if (!pendingAccessAction || !isAdmin) return;
+    const action = pendingAccessAction;
+    setMessage("");
+    try {
+      const res = await fetch(`/api/employer/team?id=${encodeURIComponent(action.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || (action.type === "MEMBER" ? "Failed to remove team member." : "Failed to revoke invitation."));
       }
-    }
-  };
-
-  const handleRevokeInvitation = async (id: string) => {
-    if (!isAdmin) {
-      alert("Permission Denied: Only Admins can manage team access.");
-      return;
-    }
-    if (confirm("Are you sure you want to revoke this pending invitation?")) {
-      try {
-        const res = await fetch(`/api/employer/team?id=${encodeURIComponent(id)}`, {
-          method: "DELETE",
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          setInvitations((prev) => prev.filter((inv) => inv.id !== id));
-        } else {
-          alert(data.error || "Failed to revoke invitation.");
-        }
-      } catch (err) {
-        alert("An error occurred while revoking the invitation.");
+      if (action.type === "MEMBER") {
+        setMembers((prev) => prev.filter((member) => member.id !== action.id));
+        setMessage("Team member access removed.");
+      } else {
+        setInvitations((prev) => prev.filter((invitation) => invitation.id !== action.id));
+        setMessage("Pending invitation revoked.");
       }
+      setMessageType("success");
+      setPendingAccessAction(null);
+    } catch (err) {
+      setMessageType("error");
+      setMessage(err instanceof Error ? err.message : "Unable to update team access.");
     }
-  };
+  }
 
   const filteredMembers = members.filter(
     (m) =>
@@ -214,6 +209,13 @@ export default function EmployerTeamManagementPage() {
       />
 
       <PageContainer>
+        {message && (
+          <div role={messageType === "error" ? "alert" : "status"} className={`rounded-xl border p-3.5 text-xs ${
+            messageType === "error"
+              ? "border-red-500/30 bg-red-500/10 text-red-200"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+          }`}>{message}</div>
+        )}
         {!isAdmin && !loading && (
           <div className="p-3.5 bg-yellow-500/5 border border-yellow-500/20 text-yellow-500 text-xs rounded-xl flex items-center gap-2">
             <span className="material-symbols-outlined text-sm">warning</span>
@@ -269,11 +271,7 @@ export default function EmployerTeamManagementPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-slate-800 flex items-center justify-center text-slate-200">
-                            {m.avatarUrl ? (
-                              <img className="w-full h-full object-cover" src={m.avatarUrl} alt={m.name} />
-                            ) : (
-                              <span className="font-bold tracking-wide text-xs">{m.avatarFallback}</span>
-                            )}
+                            <span className="font-bold tracking-wide text-xs">{m.avatarFallback}</span>
                           </div>
                           <div>
                             <p className="font-bold text-white">{m.name}</p>
@@ -290,7 +288,7 @@ export default function EmployerTeamManagementPage() {
                       {isAdmin && (
                         <td className="px-6 py-4 text-right">
                           <button
-                            onClick={() => handleRemoveMember(m.id)}
+                            onClick={() => setPendingAccessAction({ id: m.id, type: "MEMBER", label: m.name })}
                             className="text-red-400 hover:text-red-300 font-bold px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
                           >
                             Remove
@@ -366,7 +364,7 @@ export default function EmployerTeamManagementPage() {
                       {isAdmin && (
                         <td className="px-6 py-4 text-right">
                           <button
-                            onClick={() => handleRevokeInvitation(inv.id)}
+                            onClick={() => setPendingAccessAction({ id: inv.id, type: "INVITATION", label: inv.email })}
                             className="text-amber-400 hover:text-amber-300 font-bold px-3 py-1.5 rounded-lg hover:bg-amber-500/10 transition-colors"
                           >
                             Revoke
@@ -380,6 +378,28 @@ export default function EmployerTeamManagementPage() {
             </table>
           </div>
         </div>
+
+        <Modal
+          isOpen={!!pendingAccessAction}
+          onClose={() => setPendingAccessAction(null)}
+          title={pendingAccessAction?.type === "MEMBER" ? "Remove team member?" : "Revoke invitation?"}
+          footerActions={
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPendingAccessAction(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void confirmAccessAction()} className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white">
+                Confirm
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm text-text-secondary">
+            {pendingAccessAction?.type === "MEMBER"
+              ? `Remove ${pendingAccessAction.label} from this company team? Active sessions for that membership will be invalidated.`
+              : `Revoke the pending invitation for ${pendingAccessAction?.label}?`}
+          </p>
+        </Modal>
 
         <Modal
           isOpen={showInviteModal}

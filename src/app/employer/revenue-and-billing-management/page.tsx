@@ -1,531 +1,564 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { formatCurrency, formatDate } from "@/utils";
 import { PageContainer, PageHeader, Card, Modal, StatusBadge } from "@/components/employer/LayoutSystem";
 
+type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  agreementId: string;
+  companyName: string;
+  candidateName: string;
+  jobTitle: string;
+  amount: number;
+  taxAmount: number;
+  totalAmount: number;
+  taxRatePct: number | null;
+  creditDays: number | null;
+  invoiceRule: string | null;
+  status: string;
+  createdAt: string;
+  dueDate: string;
+  bankTransferRef?: string;
+};
+
+function taxLabel(invoice: Invoice) {
+  return typeof invoice.taxRatePct === "number"
+    ? `Tax (${invoice.taxRatePct}% per signed agreement)`
+    : "Tax";
+}
+
+function creditLabel(days: number | null) {
+  return typeof days === "number" && Number.isFinite(days)
+    ? `Net ${days} days`
+    : "Per signed agreement";
+}
+
 export default function EmployerBillingManagementPage() {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-
-  const [paymentMode, setPaymentMode] = useState<"none" | "online" | "bank">("none");
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"none" | "bank">("none");
   const [bankRef, setBankRef] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState("");
+  const [receiptData, setReceiptData] = useState("");
+  const [receiptFileName, setReceiptFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!["image/png", "image/jpeg", "application/pdf"].includes(file.type)) {
-        alert("Only PNG, JPEG, or PDF receipts are accepted.");
-        e.target.value = "";
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Receipt files must be 5 MB or smaller.");
-        e.target.value = "";
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const loadInvoices = useCallback(async () => {
+    const response = await fetch("/api/employer/billing/invoices", { cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to load billing records.");
     }
-  };
+    setInvoices(Array.isArray(data.invoices) ? data.invoices : []);
+  }, []);
 
-  const handlePayOnline = async (invoiceId: string) => {
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/employer/billing/invoices/${invoiceId}/pay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    loadInvoices()
+      .catch((error) => {
+        if (!cancelled) {
+          setMessageType("error");
+          setMessage(error instanceof Error ? error.message : "Failed to load billing records.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Payment failed");
-      if (data.success) {
-        alert("Online payment processed successfully!");
-        setSelectedInvoice(null);
-        setPaymentMode("none");
-        // Reload invoices
-        fetch("/api/employer/billing/invoices")
-          .then((res) => res.json())
-          .then((d) => {
-            if (d.success) setInvoices(d.invoices || []);
-          });
-      }
-    } catch (err: any) {
-      alert(err.message || "Online payment failed.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [loadInvoices]);
 
-  const handlePayBank = async (invoiceId: string) => {
-    if (!bankRef.trim()) {
-      alert("Please enter your bank transfer reference/transaction ID.");
+  const totalOutstanding = useMemo(
+    () =>
+      invoices
+        .filter((invoice) => !["PAID", "CANCELLED", "VOID"].includes(invoice.status))
+        .reduce((total, invoice) => total + Number(invoice.totalAmount || 0), 0),
+    [invoices],
+  );
+
+  const outstandingCreditTerms = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        invoices
+          .filter((invoice) => !["PAID", "CANCELLED", "VOID"].includes(invoice.status))
+          .map((invoice) => invoice.creditDays)
+          .filter((value): value is number => typeof value === "number"),
+      ),
+    );
+    return values.length === 1 ? creditLabel(values[0]) : "Per signed agreement";
+  }, [invoices]);
+
+  function resetReceiptForm() {
+    setPaymentMode("none");
+    setBankRef("");
+    setReceiptData("");
+    setReceiptFileName("");
+  }
+
+  function closeInvoice() {
+    setSelectedInvoice(null);
+    resetReceiptForm();
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/png", "image/jpeg", "application/pdf"].includes(file.type)) {
+      setMessageType("error");
+      setMessage("Only PNG, JPEG, or PDF receipts are accepted.");
+      event.target.value = "";
       return;
     }
-    if (!receiptUrl) {
-      alert("Please upload/attach your bank transfer receipt screenshot.");
+    if (file.size > 5 * 1024 * 1024) {
+      setMessageType("error");
+      setMessage("Receipt files must be 5 MB or smaller.");
+      event.target.value = "";
       return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result !== "string") {
+        setMessageType("error");
+        setMessage("Unable to read the selected receipt file.");
+        return;
+      }
+      setReceiptData(reader.result);
+      setReceiptFileName(file.name);
+      setMessage("");
+    };
+    reader.onerror = () => {
+      setMessageType("error");
+      setMessage("Unable to read the selected receipt file.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handlePayBank(invoiceId: string) {
+    if (submitting) return;
+    if (bankRef.trim().length < 5) {
+      setMessageType("error");
+      setMessage("Enter a valid bank transfer reference/UTR ID.");
+      return;
+    }
+    if (!receiptData) {
+      setMessageType("error");
+      setMessage("Attach the bank transfer receipt before submitting.");
+      return;
+    }
+
     setSubmitting(true);
+    setMessage("");
     try {
-      const res = await fetch(`/api/employer/billing/invoices/${invoiceId}/receipt`, {
+      const response = await fetch(`/api/employer/billing/invoices/${invoiceId}/receipt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bankTransferRef: bankRef,
-          bankTransferReceiptUrl: receiptUrl,
+          bankTransferRef: bankRef.trim(),
+          bankTransferReceiptUrl: receiptData,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Receipt submission failed");
-      if (data.success) {
-        alert("Bank transfer details and screenshot submitted for validation!");
-        setSelectedInvoice(null);
-        setPaymentMode("none");
-        setBankRef("");
-        setReceiptUrl("");
-        // Reload invoices
-        fetch("/api/employer/billing/invoices")
-          .then((res) => res.json())
-          .then((d) => {
-            if (d.success) setInvoices(d.invoices || []);
-          });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Receipt submission failed.");
       }
-    } catch (err: any) {
-      alert(err.message || "Failed to submit bank receipt.");
+
+      await loadInvoices();
+      closeInvoice();
+      setMessageType("success");
+      setMessage("Bank transfer receipt submitted for verification.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Failed to submit bank receipt.");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  useEffect(() => {
-    fetch("/api/employer/billing/invoices")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load billing records");
-        return res.json();
-      })
-      .then((data) => {
-        if (data.success) {
-          setInvoices(data.invoices || []);
-        }
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const totalOutstanding = invoices
-    .filter((i) => i.status !== "PAID")
-    .reduce((acc, i) => acc + i.totalAmount, 0);
+  }
 
   return (
     <div className="min-h-screen">
-      <PageHeader 
-        title="Billing Management" 
-        subtitle="Manage your company billing, commercial invoices, and payment receipts" 
+      <PageHeader
+        title="Billing Management"
+        subtitle="Authoritative commercial invoices and payment-receipt verification"
       />
 
       <PageContainer>
-          {/* Commercial Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <Card>
-              <span className="text-[10px] uppercase font-bold text-slate-500">Commercial Plan</span>
-              <div className="text-xl font-bold text-white mt-1">HireGo Managed Hiring™</div>
-              <div className="text-xs text-[#26A69A] mt-1">Active Master Service Agreement</div>
-            </Card>
+        {message && (
+          <p
+            role={messageType === "error" ? "alert" : "status"}
+            className={`rounded-xl border p-3 text-sm ${
+              messageType === "error"
+                ? "border-red-500/30 bg-red-500/10 text-red-200"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+            }`}
+          >
+            {message}
+          </p>
+        )}
 
-            <Card>
-              <span className="text-[10px] uppercase font-bold text-slate-500">Outstanding Balance</span>
-              <div className="text-xl font-extrabold text-[#FFCA28] font-mono mt-1">{formatCurrency(totalOutstanding)}</div>
-              <div className="text-xs text-slate-400 mt-1">Net 15 Days Credit Terms</div>
-            </Card>
-
-            <Card>
-              <span className="text-[10px] uppercase font-bold text-slate-500">Payment Method</span>
-              <div className="text-xl font-bold text-white mt-1">Bank Wire / NEFT</div>
-              <div className="text-xs text-slate-400 mt-1">Automated Receipt Matching</div>
-            </Card>
-          </div>
-
-          {/* Invoices List */}
-          <Card className="space-y-6">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#29B6F6]">receipt</span> Placement Invoices History
-            </h2>
-
-            {loading ? (
-              <div className="text-center py-12 text-xs text-slate-400">Loading billing records...</div>
-            ) : invoices.length === 0 ? (
-              <div className="text-center py-12 text-xs text-slate-400 space-y-3">
-                <span className="material-symbols-outlined text-4xl">receipt_long</span>
-                <p className="text-sm font-bold text-white">No invoices generated yet</p>
-                <p>Commercial invoices will appear here once candidates are placed.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-white/5">
-                {invoices.map((inv) => (
-                  <div key={inv.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-[#FFCA28]">{inv.invoiceNumber}</span>
-                        <StatusBadge 
-                          status={inv.status} 
-                          variant={inv.status === "PAID" ? "success" : "warning"}
-                        />
-                      </div>
-                      <p className="text-xs text-white">
-                        Placement: <strong className="text-slate-200">{inv.candidateName}</strong> ({inv.jobTitle})
-                      </p>
-                      <p className="text-[10px] text-slate-500">Issued: {formatDate(inv.createdAt)} | Due: {formatDate(inv.dueDate)}</p>
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-sm font-extrabold text-white font-mono">{formatCurrency(inv.totalAmount)}</div>
-                        <div className="text-[10px] text-slate-500">Includes 18% GST</div>
-                      </div>
-
-                      <button
-                        onClick={() => setSelectedInvoice(inv)}
-                        className="px-4 py-2 rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:bg-white/5 flex items-center gap-1 transition-all active:scale-95"
-                      >
-                        <span className="material-symbols-outlined text-sm">visibility</span> View Invoice
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <Card>
+            <span className="text-[10px] font-bold uppercase text-slate-500">Billing Source</span>
+            <div className="mt-1 text-xl font-bold text-white">Signed Commercial Agreement</div>
+            <div className="mt-1 text-xs text-[#26A69A]">Invoice terms are read from persisted agreement records</div>
           </Card>
 
-        {/* Invoice Modal Preview */}
-        {selectedInvoice && (
-          <React.Fragment>
-            <Modal
-              isOpen={!!selectedInvoice}
-            onClose={() => {
-              setSelectedInvoice(null);
-              setPaymentMode("none");
-            }}
-            title={`Commercial Tax Invoice — ${selectedInvoice.invoiceNumber}`}
-            size="4xl"
-            footerActions={
-              <>
-                <button
-                  onClick={() => window.print()}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
+          <Card>
+            <span className="text-[10px] font-bold uppercase text-slate-500">Outstanding Balance</span>
+            <div className="mt-1 font-mono text-xl font-extrabold text-[#FFCA28]">
+              {formatCurrency(totalOutstanding)}
+            </div>
+            <div className="mt-1 text-xs text-slate-400">Credit terms: {outstandingCreditTerms}</div>
+          </Card>
+
+          <Card>
+            <span className="text-[10px] font-bold uppercase text-slate-500">Current Portal Payment Flow</span>
+            <div className="mt-1 text-xl font-bold text-white">Bank Transfer Receipt</div>
+            <div className="mt-1 text-xs text-slate-400">Submitted proof remains pending until verified by billing operations</div>
+          </Card>
+        </div>
+
+        <Card className="space-y-6">
+          <h2 className="flex items-center gap-2 text-base font-bold text-white">
+            <span className="material-symbols-outlined text-[#29B6F6]">receipt</span>
+            Placement Invoice History
+          </h2>
+
+          {loading ? (
+            <div className="py-12 text-center text-xs text-slate-400">Loading billing records…</div>
+          ) : invoices.length === 0 ? (
+            <div className="space-y-3 py-12 text-center text-xs text-slate-400">
+              <span className="material-symbols-outlined text-4xl">receipt_long</span>
+              <p className="text-sm font-bold text-white">No invoices generated yet</p>
+              <p>Invoices will appear only after the configured commercial billing event occurs.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="flex flex-col justify-between gap-4 py-4 md:flex-row md:items-center"
                 >
-                  Download PDF
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedInvoice(null);
-                    setPaymentMode("none");
-                  }}
-                  className="px-5 py-2.5 rounded-xl bg-[#29B6F6] text-white text-xs font-bold hover:bg-[#29B6F6]/90 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-              </>
-            }
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-2">
-                {/* Left Column: Invoice Details */}
-                <div className="space-y-4">
-                  <div className="border border-white/5 rounded-2xl bg-[#16161B]/80 overflow-hidden divide-y divide-white/5">
-                    <div className="p-4 grid grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">Billed To</span>
-                        <span className="font-bold text-white text-sm">{selectedInvoice.companyName}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-[#FFCA28]">{invoice.invoiceNumber}</span>
+                      <StatusBadge
+                        status={invoice.status}
+                        variant={invoice.status === "PAID" ? "success" : "warning"}
+                      />
+                    </div>
+                    <p className="text-xs text-white">
+                      Placement: <strong className="text-slate-200">{invoice.candidateName}</strong> ({invoice.jobTitle})
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      Issued: {formatDate(invoice.createdAt)} | Due: {formatDate(invoice.dueDate)}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className="font-mono text-sm font-extrabold text-white">
+                        {formatCurrency(invoice.totalAmount)}
                       </div>
-                      <div>
-                        <span className="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">Placement Details</span>
-                        <span className="font-bold text-white text-sm">{selectedInvoice.candidateName}</span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">{selectedInvoice.jobTitle}</span>
+                      <div className="text-[10px] text-slate-500">
+                        {typeof invoice.taxRatePct === "number"
+                          ? `Includes ${invoice.taxRatePct}% tax per signed agreement`
+                          : "Tax per persisted invoice"}
                       </div>
                     </div>
 
-                    <div className="p-4 space-y-2.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedInvoice(invoice);
+                        resetReceiptForm();
+                      }}
+                      className="flex items-center gap-1 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-slate-300 transition-all hover:bg-white/5 active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-sm">visibility</span>
+                      View Invoice
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {selectedInvoice && (
+          <>
+            <Modal
+              isOpen
+              onClose={closeInvoice}
+              title={`Commercial Invoice — ${selectedInvoice.invoiceNumber}`}
+              size="4xl"
+              footerActions={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="rounded-xl border border-white/10 px-5 py-2.5 text-xs font-bold text-slate-300 transition-colors hover:bg-white/5"
+                  >
+                    Print / Save PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeInvoice}
+                    className="rounded-xl bg-[#29B6F6] px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#29B6F6]/90"
+                  >
+                    Close
+                  </button>
+                </>
+              }
+            >
+              <div className="my-2 grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5 bg-[#16161B]/80">
+                    <div className="grid grid-cols-2 gap-4 p-4 text-xs">
+                      <div>
+                        <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-slate-500">Billed To</span>
+                        <span className="text-sm font-bold text-white">{selectedInvoice.companyName}</span>
+                      </div>
+                      <div>
+                        <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-slate-500">Placement Details</span>
+                        <span className="block text-sm font-bold text-white">{selectedInvoice.candidateName}</span>
+                        <span className="mt-0.5 block text-[10px] text-slate-400">{selectedInvoice.jobTitle}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5 p-4 text-xs">
                       <div className="flex justify-between text-slate-400">
                         <span>Base Placement Fee</span>
-                        <span className="font-mono text-white font-semibold">{formatCurrency(selectedInvoice.amount)}</span>
+                        <span className="font-mono font-semibold text-white">{formatCurrency(selectedInvoice.amount)}</span>
                       </div>
                       <div className="flex justify-between text-slate-400">
-                        <span>GST (18% Commercial)</span>
+                        <span>{taxLabel(selectedInvoice)}</span>
                         <span className="font-mono text-slate-300">+{formatCurrency(selectedInvoice.taxAmount)}</span>
                       </div>
-                      <div className="flex justify-between text-sm font-extrabold pt-2.5 border-t border-white/5 mt-1.5">
+                      <div className="mt-1.5 flex justify-between border-t border-white/5 pt-2.5 text-sm font-extrabold">
                         <span className="text-white">Total Amount Due</span>
                         <span className="font-mono text-[#26A69A]">{formatCurrency(selectedInvoice.totalAmount)}</span>
                       </div>
+                      <div className="border-t border-white/5 pt-2 text-[10px] text-slate-500">
+                        Credit terms: {creditLabel(selectedInvoice.creditDays)}
+                        {selectedInvoice.invoiceRule ? ` · Billing rule: ${selectedInvoice.invoiceRule.replaceAll("_", " ")}` : ""}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Status-specific alert message */}
                   {selectedInvoice.status === "PENDING_VERIFICATION" && (
-                    <div className="p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl space-y-1.5 text-yellow text-xs">
-                      <p className="font-bold flex items-center gap-1.5">
+                    <div className="space-y-1.5 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-xs text-yellow">
+                      <p className="flex items-center gap-1.5 font-bold">
                         <span className="material-symbols-outlined text-sm">schedule</span>
-                        NEFT/Bank Receipt Uploaded
+                        Bank receipt submitted
                       </p>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        Our HireGo billing desks are auditing the submitted receipt details. Your account balance will clear immediately once verified.
+                      <p className="text-[11px] leading-relaxed text-slate-300">
+                        Payment is not marked paid until billing operations verify the submitted transfer evidence.
                       </p>
                       {selectedInvoice.bankTransferRef && (
-                        <p className="text-[10px] text-slate-400 font-mono">UTR ID: {selectedInvoice.bankTransferRef}</p>
+                        <p className="font-mono text-[10px] text-slate-400">UTR ID: {selectedInvoice.bankTransferRef}</p>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* Right Column: Payment Actions & Details Forms */}
-                <div className="space-y-4 bg-white/5 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+                <div className="flex flex-col justify-between space-y-4 rounded-2xl border border-white/5 bg-white/5 p-4">
                   {selectedInvoice.status === "PAID" ? (
-                    <div className="p-6 text-center space-y-2 my-auto">
+                    <div className="my-auto space-y-2 p-6 text-center">
                       <span className="material-symbols-outlined text-4xl text-[#26A69A]">check_circle</span>
-                      <h4 className="text-sm font-bold text-white">Invoice Paid In Full</h4>
-                      <p className="text-xs text-slate-400">Thank you! Your payment has been successfully cleared and settled.</p>
+                      <h4 className="text-sm font-bold text-white">Invoice Paid</h4>
+                      <p className="text-xs text-slate-400">This invoice is recorded as settled.</p>
                     </div>
                   ) : selectedInvoice.status === "PENDING_VERIFICATION" ? (
-                    <div className="p-6 text-center space-y-2 my-auto">
+                    <div className="my-auto space-y-2 p-6 text-center">
                       <span className="material-symbols-outlined text-4xl text-[#FFCA28]">pending_actions</span>
-                      <h4 className="text-sm font-bold text-white">Audit Verification Pending</h4>
-                      <p className="text-xs text-slate-400">Our accounts team is matching your bank deposit records.</p>
+                      <h4 className="text-sm font-bold text-white">Verification Pending</h4>
+                      <p className="text-xs text-slate-400">A submitted bank-transfer receipt is awaiting billing review.</p>
                     </div>
                   ) : paymentMode === "none" ? (
-                    <div className="space-y-3 my-auto">
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Select Payment Action</span>
-                      <div className="flex flex-col gap-3">
-                        <button
-                          onClick={() => setPaymentMode("online")}
-                          className="w-full py-3 bg-[#29B6F6] hover:bg-[#29B6F6]/90 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-95"
-                        >
-                          <span className="material-symbols-outlined text-sm">credit_card</span>
-                          Pay Instantly Online
-                        </button>
-                        <button
-                          onClick={() => setPaymentMode("bank")}
-                          className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                        >
-                          <span className="material-symbols-outlined text-sm">account_balance</span>
-                          Bank Transfer / NEFT
-                        </button>
+                    <div className="my-auto space-y-4">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Available Portal Action</span>
+                        <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                          Online invoice payment is not configured in this portal. After making the transfer using the beneficiary details supplied in your executed commercial agreement or official finance instructions, submit the transfer proof here.
+                        </p>
                       </div>
-                    </div>
-                  ) : paymentMode === "online" ? (
-                    <div className="space-y-4 my-auto">
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-sm text-[#29B6F6]">credit_card</span>
-                        Instant Online Checkout
-                      </h4>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Pay securely using corporate credit card, wire debit, or instant online bank routing options.
-                      </p>
-                      <div className="flex gap-2.5 justify-end mt-4">
-                        <button
-                          onClick={() => setPaymentMode("none")}
-                          className="px-4 py-2 text-xs text-slate-400 hover:text-white transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          disabled={submitting}
-                          onClick={() => handlePayOnline(selectedInvoice.id)}
-                          className="px-6 py-2 bg-[#29B6F6] hover:bg-[#29B6F6]/90 text-white text-xs font-bold rounded-xl shadow-lg flex items-center gap-1.5 transition-all"
-                        >
-                          {submitting ? "Processing..." : "Confirm & Pay Online"}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMode("bank")}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-slate-800 py-3 text-xs font-bold text-white transition-all hover:bg-slate-700 active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-sm">account_balance</span>
+                        Submit Bank Transfer Proof
+                      </button>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <h4 className="flex items-center gap-1.5 text-xs font-bold text-white">
                         <span className="material-symbols-outlined text-sm text-[#26A69A]">account_balance</span>
-                        Bank Transfer Details
+                        Bank Transfer Receipt
                       </h4>
-                      <div className="p-2.5 bg-[#121215] border border-white/5 rounded-xl text-[10px] text-slate-300 space-y-1 font-mono">
-                        <p>Beneficiary: <strong className="text-white">HireGo Private Ltd</strong></p>
-                        <p>Bank: <strong className="text-white">ICICI Bank Ltd</strong></p>
-                        <p>IFSC: <strong className="text-white">ICIC0000104</strong> | A/c: <strong className="text-white">1042302302302302</strong></p>
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] leading-relaxed text-slate-300">
+                        For safety, this screen does not invent or hardcode beneficiary bank details. Use only account details from the executed commercial agreement or an official HireGo finance instruction.
                       </div>
                       <div className="space-y-2">
                         <div>
-                          <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">UTR Number / Ref *</label>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">UTR Number / Reference *</label>
                           <input
                             value={bankRef}
-                            onChange={(e) => setBankRef(e.target.value)}
-                            placeholder="e.g. UTR290230230"
-                            className="w-full bg-[#121215] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-[#29B6F6]"
+                            onChange={(event) => setBankRef(event.target.value)}
+                            maxLength={150}
+                            placeholder="Enter transfer reference"
+                            className="w-full rounded-xl border border-white/10 bg-[#121215] px-3 py-2 text-xs text-white outline-none focus:border-[#29B6F6]"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Attach Transfer Receipt *</label>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={receiptUrl.startsWith("data:application/pdf") ? "PDF Attached (Receipt Loaded)" : receiptUrl.startsWith("data:") ? "Image Attached (Receipt Loaded)" : receiptUrl}
-                                readOnly={true}
-                                placeholder="Select receipt screenshot..."
-                                className="flex-1 bg-[#121215] border border-white/10 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 outline-none"
-                              />
-                              <label className="px-3 py-1.5 bg-slate-800 border border-white/10 hover:bg-slate-700 text-white text-xs font-bold rounded-xl whitespace-nowrap cursor-pointer transition-colors">
-                                <span>Attach Receipt</span>
-                                <input
-                                  type="file"
-                                  accept="image/png,image/jpeg,application/pdf"
-                                  className="hidden"
-                                  onChange={handleFileChange}
-                                />
-                              </label>
-                            </div>
-                            {receiptUrl && (
-                              <div className="relative mt-1 w-full max-h-24 rounded-lg overflow-hidden border border-white/10 bg-black flex items-center justify-center">
-                                {receiptUrl.startsWith("data:application/pdf") ? (
-                                  <span className="p-5 text-xs text-slate-300">PDF receipt attached</span>
-                                ) : (
-                                  <img src={receiptUrl} className="max-h-24 object-contain w-full" alt="Receipt Preview" />
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => setReceiptUrl("")}
-                                  className="absolute top-1 right-1 p-0.5 bg-red-600/80 text-white rounded-full hover:bg-red-600 transition-colors"
-                                >
-                                  <span className="material-symbols-outlined text-[12px] block">close</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Transfer Receipt *</label>
+                          <label className="flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-slate-800 px-3 text-xs font-bold text-white transition-colors hover:bg-slate-700">
+                            {receiptFileName || "Attach PNG, JPEG, or PDF receipt"}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,application/pdf"
+                              className="hidden"
+                              onChange={handleFileChange}
+                            />
+                          </label>
+                          {receiptFileName && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReceiptData("");
+                                setReceiptFileName("");
+                              }}
+                              className="text-[10px] font-bold text-red-300 hover:text-red-200"
+                            >
+                              Remove attached receipt
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex gap-2 justify-end pt-1">
+
+                      <div className="flex justify-end gap-2 pt-1">
                         <button
-                          onClick={() => setPaymentMode("none")}
-                          className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                          type="button"
+                          disabled={submitting}
+                          onClick={resetReceiptForm}
+                          className="rounded-xl px-3 py-2 text-xs text-slate-400 transition-colors hover:text-white disabled:opacity-50"
                         >
                           Cancel
                         </button>
                         <button
-                          disabled={submitting}
-                          onClick={() => handlePayBank(selectedInvoice.id)}
-                          className="px-5 py-1.5 bg-[#26A69A] text-white text-xs font-bold rounded-xl shadow-lg transition-all active:scale-95"
+                          type="button"
+                          disabled={submitting || bankRef.trim().length < 5 || !receiptData}
+                          onClick={() => void handlePayBank(selectedInvoice.id)}
+                          className="rounded-xl bg-[#26A69A] px-5 py-2 text-xs font-bold text-white shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {submitting ? "Submitting..." : "Submit Receipt Proof"}
+                          {submitting ? "Submitting…" : "Submit Receipt Proof"}
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
-            </div>
-          </Modal>
+              </div>
+            </Modal>
 
-              {/* Print Only Styles & Invoice Template with HireGo AI logo */}
-              <style dangerouslySetInnerHTML={{__html: `
-                @media print {
-                  body * {
-                    visibility: hidden;
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
+                  @media print {
+                    body * { visibility: hidden; }
+                    #print-invoice-area, #print-invoice-area * { visibility: visible; }
+                    #print-invoice-area {
+                      position: absolute;
+                      left: 0;
+                      top: 0;
+                      width: 100%;
+                      background: white !important;
+                      color: black !important;
+                      padding: 40px !important;
+                      margin: 0 !important;
+                    }
                   }
-                  #print-invoice-area, #print-invoice-area * {
-                    visibility: visible;
-                  }
-                  #print-invoice-area {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    background: white !important;
-                    color: black !important;
-                    padding: 40px !important;
-                    margin: 0 !important;
-                  }
-                }
-              `}} />
+                `,
+              }}
+            />
 
-              <div id="print-invoice-area" className="hidden print:block bg-white text-black p-8 font-sans w-full" style={{ color: '#000000', backgroundColor: '#ffffff' }}>
-                <div className="flex justify-between items-start border-b-2 border-slate-200 pb-6 mb-6">
-                  <div>
-                    {/* Professional Styled Logo mimicking the screenshot */}
-                    <div className="flex items-center gap-1 text-2xl font-black tracking-tight mb-1">
-                      <span className="text-[#0B84FF]">H</span>
-                      <span className="text-[#FF453A]">i</span>
-                      <span className="text-[#FF453A]">r</span>
-                      <span className="text-[#FF453A]">e</span>
-                      <span className="text-[#30D158]">G</span>
-                      <span className="text-[#FF9F0A]">o</span>
-                      <span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-[#FFCA28] text-black rounded font-sans uppercase">AI</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Autonomous Sourcing Engine</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-600">
-                    <h4 className="text-lg font-bold text-slate-900 mb-1">Commercial Tax Invoice</h4>
-                    <p>Invoice Number: <strong className="text-slate-900">{selectedInvoice.invoiceNumber}</strong></p>
-                    <p>Issue Date: {formatDate(selectedInvoice.createdAt)}</p>
-                    <p>Due Date: {formatDate(selectedInvoice.dueDate)}</p>
-                  </div>
+            <div
+              id="print-invoice-area"
+              className="hidden w-full bg-white p-8 font-sans text-black print:block"
+              style={{ color: "#000000", backgroundColor: "#ffffff" }}
+            >
+              <div className="mb-6 flex items-start justify-between border-b-2 border-slate-200 pb-6">
+                <div>
+                  <div className="mb-1 text-2xl font-black tracking-tight text-slate-900">HireGo AI</div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Commercial Billing</p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-8 text-xs mb-8">
-                  <div>
-                    <h5 className="font-bold text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">Billed To</h5>
-                    <p className="font-bold text-slate-900 text-sm">{selectedInvoice.companyName}</p>
-                    <p className="text-slate-500 mt-1">Corporate Client Accounts</p>
-                  </div>
-                  <div>
-                    <h5 className="font-bold text-slate-800 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">Placement Details</h5>
-                    <p className="text-slate-900"><span className="font-medium text-slate-500">Candidate:</span> <strong className="text-slate-800">{selectedInvoice.candidateName}</strong></p>
-                    <p className="text-slate-900"><span className="font-medium text-slate-500">Designation:</span> <strong className="text-slate-800">{selectedInvoice.jobTitle}</strong></p>
-                    <p className="text-slate-500 mt-1">Service Type: HireGo Autonomous Hiring™ placement</p>
-                  </div>
-                </div>
-
-                <table className="w-full text-left text-xs mb-8 border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                      <th className="py-2.5 px-3">Description</th>
-                      <th className="py-2.5 px-3 text-right">Base Fee</th>
-                      <th className="py-2.5 px-3 text-right">Tax (GST 18%)</th>
-                      <th className="py-2.5 px-3 text-right">Total Invoice Due</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
-                    <tr>
-                      <td className="py-3 px-3">
-                        <p className="font-bold text-slate-900">Professional Talent Sourcing & Placement Fee</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Sourcing and qualification services completed for {selectedInvoice.candidateName}</p>
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono">{formatCurrency(selectedInvoice.amount)}</td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-600">+{formatCurrency(selectedInvoice.taxAmount)}</td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(selectedInvoice.totalAmount)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div className="flex justify-between items-start pt-6 border-t border-slate-200 text-xs">
-                  <div className="text-slate-500 max-w-sm space-y-1.5">
-                    <h6 className="font-bold text-slate-700 uppercase tracking-wider mb-1">Payment Instructions & Terms:</h6>
-                    <p>1. Please quote Invoice ID <strong className="text-slate-700">{selectedInvoice.invoiceNumber}</strong> in NEFT bank wire references.</p>
-                    <p>2. Commercial Payment terms are Net 15 days from issue date.</p>
-                    <p>3. Wire Details: HireGo Private Ltd | ICICI Bank | IFSC: ICIC0000104 | A/c No: 1042302302302302</p>
-                  </div>
-                  <div className="text-right space-y-2">
-                    <div className="text-sm font-bold text-slate-900">
-                      Amount Due: <span className="font-mono text-[#26A69A]">{formatCurrency(selectedInvoice.totalAmount)}</span>
-                    </div>
-                    <div className="pt-6">
-                      <div className="inline-block border-t border-slate-300 pt-1 text-[10px] text-slate-400 font-medium font-mono uppercase tracking-wider">
-                        Authorized Signature, HireGo AI
-                      </div>
-                    </div>
-                  </div>
+                <div className="text-right text-xs text-slate-600">
+                  <h4 className="mb-1 text-lg font-bold text-slate-900">Commercial Invoice</h4>
+                  <p>Invoice Number: <strong className="text-slate-900">{selectedInvoice.invoiceNumber}</strong></p>
+                  <p>Issue Date: {formatDate(selectedInvoice.createdAt)}</p>
+                  <p>Due Date: {formatDate(selectedInvoice.dueDate)}</p>
                 </div>
               </div>
-            </React.Fragment>
-          )}
-        </PageContainer>
+
+              <div className="mb-8 grid grid-cols-2 gap-8 text-xs">
+                <div>
+                  <h5 className="mb-2 border-b border-slate-200 pb-1 font-bold uppercase tracking-wider text-slate-800">Billed To</h5>
+                  <p className="text-sm font-bold text-slate-900">{selectedInvoice.companyName}</p>
+                </div>
+                <div>
+                  <h5 className="mb-2 border-b border-slate-200 pb-1 font-bold uppercase tracking-wider text-slate-800">Placement Details</h5>
+                  <p className="text-slate-900"><span className="font-medium text-slate-500">Candidate:</span> <strong>{selectedInvoice.candidateName}</strong></p>
+                  <p className="text-slate-900"><span className="font-medium text-slate-500">Designation:</span> <strong>{selectedInvoice.jobTitle}</strong></p>
+                </div>
+              </div>
+
+              <table className="mb-8 w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-100 font-bold text-slate-700">
+                    <th className="px-3 py-2.5">Description</th>
+                    <th className="px-3 py-2.5 text-right">Base Fee</th>
+                    <th className="px-3 py-2.5 text-right">
+                      {typeof selectedInvoice.taxRatePct === "number" ? `Tax (${selectedInvoice.taxRatePct}%)` : "Tax"}
+                    </th>
+                    <th className="px-3 py-2.5 text-right">Total Due</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-800">
+                  <tr>
+                    <td className="px-3 py-3">
+                      <p className="font-bold text-slate-900">Talent placement fee</p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">Placement for {selectedInvoice.candidateName}</p>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono">{formatCurrency(selectedInvoice.amount)}</td>
+                    <td className="px-3 py-3 text-right font-mono text-slate-600">+{formatCurrency(selectedInvoice.taxAmount)}</td>
+                    <td className="px-3 py-3 text-right font-mono font-bold text-slate-900">{formatCurrency(selectedInvoice.totalAmount)}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="flex items-start justify-between border-t border-slate-200 pt-6 text-xs">
+                <div className="max-w-md space-y-1.5 text-slate-500">
+                  <h6 className="mb-1 font-bold uppercase tracking-wider text-slate-700">Payment Terms</h6>
+                  <p>Quote invoice ID <strong className="text-slate-700">{selectedInvoice.invoiceNumber}</strong> in the transfer reference.</p>
+                  <p>Credit terms: {creditLabel(selectedInvoice.creditDays)}.</p>
+                  <p>Use beneficiary bank details only from the executed commercial agreement or official finance instructions.</p>
+                </div>
+                <div className="text-right text-sm font-bold text-slate-900">
+                  Amount Due: <span className="font-mono text-[#26A69A]">{formatCurrency(selectedInvoice.totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </PageContainer>
     </div>
   );
 }

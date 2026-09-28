@@ -131,7 +131,7 @@ test("password reset commits audit with credential change and bounds OTP/passwor
 test("team removal rotates sessions and emits durable security audit", () => {
   const source = fs.readFileSync(new URL("../app/api/employer/team/route.ts", import.meta.url), "utf8");
   assert(source.includes("sessionVersion: { increment: 1 }"));
-  assert(source.includes("revokeAllUserSessions(member.userId"));
+  assert(source.includes("revokeAllUserSessions(removal.userId, removal.sessionVersion)"));
   assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
 

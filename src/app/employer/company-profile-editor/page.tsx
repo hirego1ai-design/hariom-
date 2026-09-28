@@ -1,241 +1,225 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import EmployerSidebar from "@/components/employer/EmployerSidebar";
-import Link from "next/link";
 
 export default function EmployerCompanyProfileEditorPage() {
   const [companyName, setCompanyName] = useState("");
-  const [industry, setIndustry] = useState("Technology & AI");
+  const [industry, setIndustry] = useState("");
   const [about, setAbout] = useState("");
-  const [companySize, setCompanySize] = useState("50-200 Employees");
+  const [companySize, setCompanySize] = useState("");
   const [website, setWebsite] = useState("");
   const [hqLocation, setHqLocation] = useState("");
-  const [taxNumber, setTaxNumber] = useState("");
-  const [healthInsurance, setHealthInsurance] = useState(true);
-  const [unlimitedPto, setUnlimitedPto] = useState(true);
-  const [gymMembership, setGymMembership] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
 
   useEffect(() => {
-    fetch("/api/employer/company")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.company) {
-          setCompanyName(data.company.name || "");
-          setIndustry(data.company.industry || "Technology & AI");
-          setAbout(data.company.description || "");
-          setCompanySize(data.company.size || "50-200 Employees");
-          setWebsite(data.company.website || "");
-          setHqLocation(data.company.location || "");
+    let cancelled = false;
+    setLoading(true);
+
+    fetch("/api/employer/company", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success || !data.company) {
+          throw new Error(data.error || "Unable to load company profile.");
+        }
+        if (cancelled) return;
+        setCompanyName(data.company.name || "");
+        setIndustry(data.company.industry || "");
+        setAbout(data.company.description || "");
+        setCompanySize(data.company.size || "");
+        setWebsite(data.company.website || "");
+        setHqLocation(data.company.location || "");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessageType("error");
+          setMessage(error instanceof Error ? error.message : "Unable to load company profile.");
         }
       })
-      .catch(() => {});
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleSave = async () => {
-    setIsLoading(true);
+  async function handleSave() {
+    if (saving) return;
+    if (companyName.trim().length < 2) {
+      setMessageType("error");
+      setMessage("Company name must contain at least 2 characters.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
     try {
-      const res = await fetch("/api/employer/company", {
+      const response = await fetch("/api/employer/company", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: companyName,
-          industry,
-          description: about,
-          size: companySize,
-          website,
-          location: hqLocation,
+          name: companyName.trim(),
+          industry: industry.trim() || null,
+          description: about.trim() || null,
+          size: companySize.trim() || null,
+          website: website.trim() || null,
+          location: hqLocation.trim() || null,
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
-        setToast("Company Profile updated successfully!");
-      } else {
-        setToast("Failed to save changes.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save company profile.");
       }
-    } catch {
-      setToast("Failed to save changes.");
+
+      setCompanyName(data.company?.name || companyName.trim());
+      setIndustry(data.company?.industry || "");
+      setAbout(data.company?.description || "");
+      setCompanySize(data.company?.size || "");
+      setWebsite(data.company?.website || "");
+      setHqLocation(data.company?.location || "");
+      setMessageType("success");
+      setMessage("Company profile saved.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Failed to save company profile.");
     } finally {
-      setIsLoading(false);
-      setTimeout(() => setToast(null), 3500);
+      setSaving(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+    <div className="flex min-h-screen bg-[#0E0E0E] text-text-primary">
       <EmployerSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
-        {toast && (
-          <div className="fixed bottom-6 right-6 z-50 bg-primary text-white px-5 py-3 rounded-2xl shadow-2xl font-bold text-xs flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px]">check_circle</span>
-            <span>{toast}</span>
-          </div>
-        )}
-
-        <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
+      <div className="ml-[100px] flex min-h-screen min-w-0 flex-1 flex-col lg:ml-[116px]">
+        <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-white/10 bg-[#0E0E0E]/90 px-6 shadow-md backdrop-blur-xl lg:px-10">
           <div>
-            <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
-              Company Profile Editor
-            </h1>
-            <p className="text-text-muted text-xs">Manage enterprise branding and verified profile details.</p>
+            <h1 className="text-xl font-bold tracking-tight text-white lg:text-2xl">Company Profile Editor</h1>
+            <p className="text-xs text-text-muted">Only persisted company profile fields are shown and saved.</p>
           </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={isLoading}
-              className="btn-3d-red px-6 py-2.5 rounded-full text-white font-bold text-xs shadow-lg hover:scale-105 transition-all disabled:opacity-50"
-            >
-              {isLoading ? "Saving..." : "Save Profile"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={loading || saving}
+            className="btn-3d-red rounded-full px-6 py-2.5 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save Profile"}
+          </button>
         </header>
 
-        <main className="flex-1 p-6 lg:p-10 space-y-6 max-w-6xl w-full mx-auto overflow-y-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4 bg-[#141418]">
-                <h3 className="font-bold text-base text-white border-b border-white/10 pb-3">
-                  Basic Information
-                </h3>
+        <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 overflow-y-auto p-6 lg:p-10">
+          {message && (
+            <div
+              role={messageType === "error" ? "alert" : "status"}
+              className={`rounded-2xl border p-4 text-sm ${
+                messageType === "error"
+                  ? "border-red-500/30 bg-red-500/10 text-red-200"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              }`}
+            >
+              {message}
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                      Company Name
-                    </label>
+          {loading ? (
+            <div role="status" className="rounded-3xl border border-white/10 bg-[#141418] p-8 text-sm text-text-muted">
+              Loading company profile…
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <section className="glass-card space-y-5 rounded-3xl border border-white/10 bg-[#141418] p-6 lg:col-span-2 lg:p-8">
+                <h2 className="border-b border-white/10 pb-3 text-base font-bold text-white">Basic Information</h2>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                    Company Name
                     <input
                       type="text"
                       value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white"
-                      placeholder="e.g. Acme Corporation"
+                      maxLength={160}
+                      onChange={(event) => setCompanyName(event.target.value)}
+                      className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
+                      placeholder="Company legal or operating name"
                     />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                      Industry
-                    </label>
-                    <select
-                      value={industry}
-                      onChange={(e) => setIndustry(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white cursor-pointer"
-                    >
-                      <option value="Technology & AI" className="bg-[#141418]">Technology & AI</option>
-                      <option value="Financial Services" className="bg-[#141418]">Financial Services</option>
-                      <option value="Healthcare & Biotech" className="bg-[#141418]">Healthcare & Biotech</option>
-                      <option value="E-Commerce & Retail" className="bg-[#141418]">E-Commerce & Retail</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                    About Company
                   </label>
-                  <textarea
-                    rows={4}
-                    value={about}
-                    onChange={(e) => setAbout(e.target.value)}
-                    className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-white focus:border-primary outline-none resize-none leading-relaxed"
-                    placeholder="Tell prospective candidates about your mission, culture, and achievements..."
-                  />
+
+                  <label className="space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                    Industry
+                    <input
+                      type="text"
+                      value={industry}
+                      maxLength={120}
+                      onChange={(event) => setIndustry(event.target.value)}
+                      className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
+                      placeholder="Industry (optional)"
+                    />
+                  </label>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                      Company Size
-                    </label>
+                <label className="block space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                  About Company
+                  <textarea
+                    rows={5}
+                    value={about}
+                    maxLength={5000}
+                    onChange={(event) => setAbout(event.target.value)}
+                    className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-xs font-normal normal-case tracking-normal text-white outline-none focus:border-primary"
+                    placeholder="Mission, culture and company information (optional)"
+                  />
+                </label>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                    Company Size
                     <input
                       type="text"
                       value={companySize}
-                      onChange={(e) => setCompanySize(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white"
-                      placeholder="e.g. 50-200 Employees"
+                      maxLength={80}
+                      onChange={(event) => setCompanySize(event.target.value)}
+                      className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
+                      placeholder="Company size (optional)"
                     />
-                  </div>
+                  </label>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                      Website URL
-                    </label>
+                  <label className="space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                    Website URL
                     <input
                       type="url"
                       value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white"
-                      placeholder="https://company.com"
+                      maxLength={500}
+                      onChange={(event) => setWebsite(event.target.value)}
+                      className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
+                      placeholder="https://company.example"
                     />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-4 bg-[#141418]">
-                <h3 className="font-bold text-base text-white border-b border-white/10 pb-3">
-                  Location & Operations
-                </h3>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
-                    HQ Location
                   </label>
+                </div>
+              </section>
+
+              <section className="glass-card h-fit space-y-4 rounded-3xl border border-white/10 bg-[#141418] p-6">
+                <h2 className="border-b border-white/10 pb-3 text-base font-bold text-white">Location & Operations</h2>
+                <label className="space-y-1.5 text-xs font-bold uppercase tracking-wider text-text-muted">
+                  HQ Location
                   <input
                     type="text"
                     value={hqLocation}
-                    onChange={(e) => setHqLocation(e.target.value)}
-                    className="input-pill w-full h-11 px-4 text-xs text-white"
-                    placeholder="e.g. San Francisco, CA / Bangalore"
+                    maxLength={200}
+                    onChange={(event) => setHqLocation(event.target.value)}
+                    className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
+                    placeholder="Headquarters location (optional)"
                   />
-                </div>
-              </div>
-
-              <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-4 bg-[#141418]">
-                <h3 className="font-bold text-base text-white border-b border-white/10 pb-3">
-                  Perks & Benefits Offered
-                </h3>
-
-                <div className="space-y-3 text-xs">
-                  <label className="flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 cursor-pointer">
-                    <span className="text-white font-medium">Full Health Cover</span>
-                    <input
-                      type="checkbox"
-                      checked={healthInsurance}
-                      onChange={(e) => setHealthInsurance(e.target.checked)}
-                      className="w-4 h-4 rounded accent-primary cursor-pointer"
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 cursor-pointer">
-                    <span className="text-white font-medium">Unlimited PTO</span>
-                    <input
-                      type="checkbox"
-                      checked={unlimitedPto}
-                      onChange={(e) => setUnlimitedPto(e.target.checked)}
-                      className="w-4 h-4 rounded accent-primary cursor-pointer"
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between p-3.5 rounded-2xl bg-white/5 border border-white/5 cursor-pointer">
-                    <span className="text-white font-medium">Remote Stipend</span>
-                    <input
-                      type="checkbox"
-                      checked={gymMembership}
-                      onChange={(e) => setGymMembership(e.target.checked)}
-                      className="w-4 h-4 rounded accent-primary cursor-pointer"
-                    />
-                  </label>
-                </div>
-              </div>
+                </label>
+                <p className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-xs leading-relaxed text-text-muted">
+                  Benefits, tax identifiers and other attributes are not displayed here until they have authoritative persisted fields. This prevents unsaved UI selections from being presented as company facts.
+                </p>
+              </section>
             </div>
-          </div>
+          )}
         </main>
       </div>
     </div>

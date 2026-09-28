@@ -14,16 +14,27 @@ type Interview = {
   mode: string;
   candidateName: string;
   jobTitle: string;
+  address?: string | null;
+  contactNumber?: string | null;
 };
 
 export default function UpcomingInterviewsPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
   const [pendingFeedback, setPendingFeedback] = useState<Array<{interviewId:string;roundName:string;jobTitle:string;candidateName:string}>>([]);
 
   useEffect(() => {
-    fetch("/api/employer/interviews/pending-feedback", { cache: "no-store" }).then(r=>r.json()).then(d=>{ if(d.success) setPendingFeedback(d.pending || []); }).catch(()=>undefined);
+    setFeedbackError("");
+    fetch("/api/employer/interviews/pending-feedback", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success) throw new Error(body.error || "Unable to load pending feedback.");
+        return body;
+      })
+      .then((body) => setPendingFeedback(Array.isArray(body.pending) ? body.pending : []))
+      .catch((reason) => setFeedbackError(reason instanceof Error ? reason.message : "Unable to load pending feedback."));
     fetch("/api/employer/interviews")
       .then(async (response) => {
         const text = await response.text();
@@ -47,13 +58,14 @@ export default function UpcomingInterviewsPage() {
           <div>
             <p className="text-primary text-xs font-bold uppercase tracking-[0.2em] mb-2">Interview operations</p>
             <h1 className="text-3xl font-bold text-text-primary">Interviews</h1>
-            <p className="text-sm text-text-secondary mt-2">Live schedule, joining links, rescheduling and final feedback.</p>
+            <p className="text-sm text-text-secondary mt-2">Current persisted schedule, joining details, rescheduling and final feedback.</p>
           </div>
           <Link href="/employer/interview-scheduler" className="btn-primary-red h-11 px-6 rounded-full text-text-primary font-bold flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px]">add</span>Schedule interview
           </Link>
         </div>
 
+        {feedbackError && <p role="alert" className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">{feedbackError}</p>}
         {pendingFeedback.length > 0 && <section className="mb-6 rounded-2xl border border-primary/30 bg-primary/5 p-5"><div className="flex items-start gap-3"><span className="material-symbols-outlined text-primary">assignment_late</span><div className="flex-1"><h2 className="font-bold text-text-primary">Feedback required before your next interview</h2><p className="mt-1 text-sm text-text-secondary">Complete your required feedback to unlock another interview session.</p><div className="mt-4 grid gap-2">{pendingFeedback.map(item=><Link key={item.interviewId} href={`/employer/final-round-feedback?interviewId=${encodeURIComponent(item.interviewId)}`} className="flex min-h-12 items-center justify-between rounded-xl border border-outline bg-bg-card px-4 text-sm"><span><strong className="text-text-primary">{item.candidateName}</strong><span className="block text-xs text-text-secondary">{item.jobTitle} · {item.roundName}</span></span><span className="font-bold text-primary">Complete feedback →</span></Link>)}</div></div></div></section>}
         {error && <p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300">{error}</p>}
         {loading ? <p className="text-text-secondary">Loading interviews...</p> : visibleInterviews.length === 0 ? (
@@ -83,7 +95,9 @@ export default function UpcomingInterviewsPage() {
                     <p><span className="material-symbols-outlined text-[16px] align-middle mr-1">location_on</span>{interview.mode}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {interview.roomUrl && <a href={interview.roomUrl} target="_blank" rel="noreferrer" className="btn-primary-red h-10 px-4 rounded-full text-white text-xs font-bold flex items-center">Join interview</a>}
+                    {interview.mode === "ONLINE" && interview.roomUrl && <a href={interview.roomUrl} className="btn-primary-red h-10 px-4 rounded-full text-white text-xs font-bold flex items-center">Join interview</a>}
+                    {interview.mode === "PHONE" && interview.contactNumber && <span className="h-10 px-4 rounded-full border border-outline text-text-secondary text-xs font-bold flex items-center">Phone: {interview.contactNumber}</span>}
+                    {interview.mode === "OFFLINE" && interview.address && <span className="min-h-10 px-4 py-2 rounded-full border border-outline text-text-secondary text-xs font-bold flex items-center">Location: {interview.address}</span>}
                     <Link href={`/employer/interview-reschedule-employer-view?interviewId=${encodeURIComponent(interview.id)}`} className="h-10 px-4 rounded-full border border-outline text-text-secondary text-xs font-bold flex items-center">Reschedule / Cancel</Link>
                     <Link href={`/employer/final-round-feedback?interviewId=${encodeURIComponent(interview.id)}`} className="h-10 px-4 rounded-full border border-outline text-text-secondary text-xs font-bold flex items-center">My feedback</Link>
                   </div>

@@ -28,6 +28,7 @@ export default function JobListingsManagementPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [busyId, setBusyId] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<Job | null>(null);
 
   async function loadJobs() {
     setLoading(true);
@@ -64,7 +65,7 @@ export default function JobListingsManagementPage() {
     setError("");
     try {
       const response = await fetch(`/api/employer/jobs/${encodeURIComponent(job.id)}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
@@ -80,7 +81,6 @@ export default function JobListingsManagementPage() {
   }
 
   async function removeJob(job: Job) {
-    if (!confirm(`Delete "${job.title}"? This action uses the authoritative job API and may be irreversible.`)) return;
     setBusyId(job.id);
     setNotice("");
     setError("");
@@ -89,6 +89,7 @@ export default function JobListingsManagementPage() {
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to delete job.");
       setJobs((current) => current.filter((item) => item.id !== job.id));
+      setPendingDelete(null);
       setNotice("Job listing deleted.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to delete job.");
@@ -174,18 +175,52 @@ export default function JobListingsManagementPage() {
                       {status === "ACTIVE" ? "Activate" : status === "PAUSED" ? "Pause" : status === "CLOSED" ? "Close" : "Move to draft"}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    disabled={busyId === job.id}
-                    onClick={() => removeJob(job)}
-                    className="rounded-lg border border-red-500/20 px-3 py-2 text-[11px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
+                  {String(job.status).toUpperCase() === "DRAFT" && (
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() => setPendingDelete(job)}
+                      className="rounded-lg border border-red-500/20 px-3 py-2 text-[11px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      Delete draft
+                    </button>
+                  )}
                 </div>
               </div>
             </article>
           ))}
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-job-title">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+            <h2 id="delete-job-title" className="text-xl font-extrabold text-white">Delete this job listing?</h2>
+            <p className="mt-2 text-sm text-text-secondary">
+              {pendingDelete.title}
+            </p>
+            <p className="mt-4 text-sm text-text-muted">
+              Only an unused draft can be deleted. Published jobs must be closed so application and interview history is preserved.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                disabled={busyId === pendingDelete.id}
+                onClick={() => setPendingDelete(null)}
+                className="min-h-11 rounded-xl border border-white/10 px-4 text-xs font-bold text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busyId === pendingDelete.id}
+                onClick={() => void removeJob(pendingDelete)}
+                className="min-h-11 rounded-xl bg-red-600 px-4 text-xs font-bold text-white disabled:opacity-50"
+              >
+                {busyId === pendingDelete.id ? "Deleting…" : "Confirm delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </PageContainer>

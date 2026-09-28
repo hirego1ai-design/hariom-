@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
+import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { logAuditEvent } from "@/lib/auditLogger";
 import {
   reconcileCopilotReservation,
   releaseCopilotReservation,
@@ -25,17 +27,19 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   let copilotSchedulingReservationId: string | null = null;
   try {
-    const body = schema.parse(await request.json());
-    const requestIdempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
-    if (body.copilotManaged && !/^[A-Za-z0-9._:-]{16,128}$/.test(requestIdempotencyKey)) {
-      return NextResponse.json({ success: false, error: "Copilot scheduling requires a valid Idempotency-Key header." }, { status: 400 });
+    await enforceRateLimit(request, "employer_interview_schedule", 20, 60_000);
+    const session = await getCurrentSession(request.headers);
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
-    const copilotRequestDigest = body.copilotManaged
-      ? crypto.createHash("sha256").update(JSON.stringify({
+    const body = await readValidatedJson(request, schema, 16 * 1024);
+    const requestIdempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(requestIdempotencyKey)) {
+      return NextResponse.json({ success: false, error: "Scheduling requires a valid Idempotency-Key header." }, { status: 400 });
+    }
+    const scheduleRequestDigest = crypto.createHash("sha256").update(JSON.stringify({
           applicationId: body.applicationId,
           roundId: body.roundId,
           scheduledAt: body.scheduledAt,
@@ -44,9 +48,9 @@ export async function POST(request: NextRequest) {
           instructions: body.instructions || null,
           notifyEmail: body.notifyEmail,
           notifyWhatsapp: body.notifyWhatsapp,
-        })).digest("hex")
-      : null;
-    if (session.role !== "CANDIDATE") {
+        })).digest("hex");
+    const copilotRequestDigest = body.copilotManaged ? scheduleRequestDigest : null;
+    {
       const blocking = await prisma.interviewRoundProgress.count({
         where: { status: "ENDED_PENDING_FEEDBACK", round: { mandatoryFeedback: true, interviewers: { some: { userId: session.id, required: true } } }, feedbacks: { none: { authorId: session.id, finalizedAt: { not: null } } } },
       });
@@ -88,9 +92,6 @@ export async function POST(request: NextRequest) {
     const existingProgress = await prisma.interviewRoundProgress.findUnique({ where: { applicationId_roundId: { applicationId: application.id, roundId: round.id } } });
     let idempotentExistingInterview: Awaited<ReturnType<typeof prisma.interview.findUnique>> | null = null;
     if (existingProgress?.interviewId) {
-      if (!body.copilotManaged || !copilotRequestDigest) {
-        return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
-      }
       const existingInterview = await prisma.interview.findUnique({ where: { id: existingProgress.interviewId } });
       let existingMetadata: Record<string, unknown> = {};
       try {
@@ -98,7 +99,13 @@ export async function POST(request: NextRequest) {
       } catch {
         existingMetadata = {};
       }
-      if (!existingInterview || existingMetadata.copilotScheduleRequestDigest !== copilotRequestDigest) {
+      const existingDigest =
+        typeof existingMetadata.scheduleRequestDigest === "string"
+          ? existingMetadata.scheduleRequestDigest
+          : typeof existingMetadata.copilotScheduleRequestDigest === "string"
+            ? existingMetadata.copilotScheduleRequestDigest
+            : null;
+      if (!existingInterview || existingDigest !== scheduleRequestDigest) {
         return NextResponse.json({ success: false, error: "This round is already scheduled with a different request." }, { status: 409 });
       }
       idempotentExistingInterview = existingInterview;
@@ -161,6 +168,7 @@ export async function POST(request: NextRequest) {
       notifyWhatsapp: body.notifyWhatsapp,
       roomId,
       copilotManaged: body.copilotManaged,
+      scheduleRequestDigest,
       copilotScheduleRequestDigest: copilotRequestDigest,
     });
     const interview = idempotentExistingInterview ?? await prisma.$transaction(async (tx) => {
@@ -264,14 +272,16 @@ export async function POST(request: NextRequest) {
       copilotSchedulingReservationId = null;
     }
 
-    const appNotification = await prisma.notification.create({
-      data: {
-        userId: application.candidateProfile.userId,
-        title: `${round.name} interview scheduled`,
-        message: `Your ${mode.toLowerCase()} interview is scheduled for ${scheduledAt.toISOString()}.`,
-        type: "INTERVIEW",
-      },
-    }).then(() => ({ status: "CREATED" as const })).catch(() => ({ status: "FAILED" as const }));
+    const appNotification = idempotentExistingInterview
+      ? { status: "ALREADY_CREATED" as const }
+      : await prisma.notification.create({
+          data: {
+            userId: application.candidateProfile.userId,
+            title: `${round.name} interview scheduled`,
+            message: `Your ${mode.toLowerCase()} interview is scheduled for ${scheduledAt.toISOString()}.`,
+            type: "INTERVIEW",
+          },
+        }).then(() => ({ status: "CREATED" as const })).catch(() => ({ status: "FAILED" as const }));
 
     const interviewLink = roomId ? `/interviews/room/${encodeURIComponent(roomId)}` : "/interviews";
     const variables = {
@@ -335,6 +345,17 @@ export async function POST(request: NextRequest) {
             } : undefined,
           }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "WhatsApp dispatch failed." }));
 
+    if (!idempotentExistingInterview) {
+      await logAuditEvent({
+        userId: session.id,
+        companyId: application.job.companyId,
+        action: "INTERVIEW_SCHEDULED",
+        resource: `Interview:${interview.id}`,
+        ipAddress: request.headers.get("x-forwarded-for") || undefined,
+        details: `Scheduled ${round.name} at ${interview.scheduledAt.toISOString()} in ${mode} mode.`,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       interviewId: interview.id,
@@ -358,6 +379,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "APPLICATION_STAGE_CHANGED") return NextResponse.json({ success: false, error: "Application stage changed while the interview was being scheduled. Refresh and try again." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 });
     if (error instanceof z.ZodError) return NextResponse.json({ success: false, error: error.issues[0]?.message || "Invalid schedule." }, { status: 400 });
-    return NextResponse.json({ success: false, error: "Unable to schedule interview." }, { status: 500 });
+    return handleApiError(error);
   }
 }

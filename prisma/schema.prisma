@@ -2180,10 +2180,11 @@ model DocumentVerification {
   employerProfile EmployerProfile           @relation(fields: [employerId], references: [id], onDelete: Cascade)
   docType         String // GST Certificate, PAN Card, Certificate of Incorporation, Tax Residency
   fileUrl         String
-  fileName        String
-  submittedAt     DateTime                  @default(now())
-  status          String                    @default("Pending Audit") // Pending Audit, Verified, Rejected
-  riskScore       String                    @default("Low") // Low, Medium, High
+  fileName           String
+  declaredIdentifier String?
+  submittedAt        DateTime                  @default(now())
+  status             String                    @default("Pending Audit") // Pending Audit, Verified, Rejected
+  riskScore          String                    @default("UNASSESSED") // Legacy field retained; no heuristic risk is presented as evidence
   verifiedBy      String?
   verifiedAt      DateTime?
   logs            DocumentVerificationLog[]

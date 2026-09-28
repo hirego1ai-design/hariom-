@@ -4,6 +4,7 @@ import { formatRecordedScore, recordedCandidateEvidence, toEmployerCandidate } f
 
 const application = {
   id: "application-a", jobId: "job-a", status: "APPLIED", matchScore: 94,
+  aiSummary: "Persisted match evaluation evidence",
   createdAt: new Date("2026-09-01T12:00:00Z"), updatedAt: new Date("2026-09-05T13:00:00Z"),
   candidateProfile: { id: "candidate-a", headline: "Engineer", bio: "Candidate supplied bio", location: "Delhi",
     experienceYears: 8.75, user: { name: "Candidate A" }, resumeUrl: "/private/resume.pdf", videoResumes: [] as { id: string }[],
@@ -15,11 +16,14 @@ const application = {
   job: { title: "Engineer" },
 };
 
-test("application match is not fabricated into assessment or interview results", () => {
+test("application match is shown only with persisted provenance and is not fabricated into assessment or interview results", () => {
   const candidate = toEmployerCandidate(application);
   assert.equal(candidate.matchScore, 94);
   assert.equal(candidate.assessmentScore, null);
   assert.equal(candidate.aiInterviewScore, null);
+
+  const withoutProvenance = toEmployerCandidate({ ...application, aiSummary: null });
+  assert.equal(withoutProvenance.matchScore, null);
 });
 
 test("document resume alone does not indicate a video resume", () => {

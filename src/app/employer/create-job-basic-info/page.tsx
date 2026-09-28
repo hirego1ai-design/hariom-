@@ -302,39 +302,41 @@ export default function EmployerPageE6() {
   const router = useRouter();
   const store = useJobCreationStore();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [jobPostsLeft, setJobPostsLeft] = useState<number | null>(null);
-  const [checkingCredits, setCheckingCredits] = useState(true);
+  const [creditError, setCreditError] = useState("");
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const draftIdempotencyKey = useRef(`job-draft-${crypto.randomUUID()}`);
 
-  // Pre-flight check for available job credits
+  // Pre-flight credit state is informational only. Draft creation must remain
+  // available even when publishing credits are exhausted or the billing API is unavailable.
   useEffect(() => {
+    let cancelled = false;
     async function checkCredits() {
+      setCreditError("");
       try {
-        const res = await fetch("/api/employer/subscribe");
-        const data = await res.json();
-        if (data.success && data.credits) {
-          setJobPostsLeft(data.credits.jobPostsLeft ?? 0);
-        } else {
-          setJobPostsLeft(0);
+        const res = await fetch("/api/employer/subscribe", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Publishing credit status is unavailable.");
         }
-      } catch {
-        setJobPostsLeft(0);
-      } finally {
-        setCheckingCredits(false);
+        if (!cancelled) {
+          setJobPostsLeft(typeof data.credits?.jobPostsLeft === "number" ? data.credits.jobPostsLeft : null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setJobPostsLeft(null);
+          setCreditError(error instanceof Error ? error.message : "Publishing credit status is unavailable.");
+        }
       }
     }
-    checkCredits();
+    void checkCredits();
+    return () => { cancelled = true; };
   }, []);
 
   // Form Validation logic
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
-    if (jobPostsLeft !== null && jobPostsLeft <= 0) {
-      newErrors.credits = "You have 0 Job Posting Credits remaining. Please upgrade your plan before posting.";
-      setErrors(newErrors);
-      return false;
-    }
 
     if (!store.selectedRoles || store.selectedRoles.length === 0) {
       newErrors.selectedRoles = "Please select at least one job role.";
@@ -365,9 +367,61 @@ export default function EmployerPageE6() {
   };
 
   const handleNext = () => {
-    setIsSubmitting(true);
     if (validateForm()) {
       router.push("/employer/create-job-requirements");
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (draftSaving) return;
+
+    const newErrors: Record<string, string> = {};
+    if (!store.jobTitle.trim()) newErrors.selectedRoles = "Please select at least one job role before saving a draft.";
+    if (!store.location.trim()) newErrors.location = "Location is required before saving a draft.";
+    if (Object.keys(newErrors).length > 0) {
+      setErrors((current) => ({ ...current, ...newErrors }));
+      return;
+    }
+
+    setDraftSaving(true);
+    setDraftError("");
+    try {
+      const salary = store.salaryMin && store.salaryMax
+        ? `${store.currency} ${store.salaryMin}-${store.salaryMax} ${store.salaryPeriod}`
+        : "Negotiable";
+
+      const response = await fetch("/api/employer/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": draftIdempotencyKey.current,
+        },
+        body: JSON.stringify({
+          title: store.jobTitle.trim(),
+          department: store.department.trim() || undefined,
+          location: store.location.trim(),
+          type: store.jobType,
+          salary,
+          status: "DRAFT",
+          requirements: store.skillRequirements.map((item) => item.name),
+          skillRequirements: store.skillRequirements,
+          screeningQuestions: store.screeningQuestions.map((question) => question.trim()).filter(Boolean),
+          aiFocusAreas: store.aiFocusAreas.trim() || undefined,
+          requiresJobSpecificAssessment: store.requiresJobSpecificAssessment,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to save job draft.");
+      }
+
+      store.reset();
+      router.replace("/employer/job-listings-management");
+      router.refresh();
+    } catch (error) {
+      setDraftError(error instanceof Error ? error.message : "Unable to save job draft.");
+    } finally {
+      setDraftSaving(false);
     }
   };
 
@@ -402,6 +456,18 @@ export default function EmployerPageE6() {
   return (
     <PageContainer>
       <div className="max-w-4xl mx-auto space-y-6">
+        {creditError && (
+          <div role="alert" className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+            {creditError} You can still save a draft; publishing will be checked again on the final step.
+          </div>
+        )}
+
+        {draftError && (
+          <div role="alert" className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-200 text-sm">
+            {draftError}
+          </div>
+        )}
+
         {/* Zero-Credits Paywall Overlay Banner */}
         {jobPostsLeft !== null && jobPostsLeft <= 0 && (
           <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
@@ -685,10 +751,11 @@ export default function EmployerPageE6() {
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               type="button"
-              onClick={() => router.push("/employer/job-listings-management")}
-              className="h-12 px-8 bg-white/5 border border-white/10 rounded-full font-bold text-xs text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer active:scale-95 flex items-center justify-center"
+              onClick={() => void handleSaveDraft()}
+              disabled={draftSaving}
+              className="h-12 px-8 bg-white/5 border border-white/10 rounded-full font-bold text-xs text-slate-300 hover:bg-white/10 hover:text-white transition-all cursor-pointer active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Draft
+              {draftSaving ? "Saving Draft…" : "Save Draft"}
             </button>
             <button 
               type="button"

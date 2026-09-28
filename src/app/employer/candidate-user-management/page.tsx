@@ -8,7 +8,7 @@ type Candidate = {
   id: string;
   applicationId: string;
   name: string;
-  matchScore: number;
+  matchScore: number | null;
   experience: string;
   stage: string;
   currentRole: string;

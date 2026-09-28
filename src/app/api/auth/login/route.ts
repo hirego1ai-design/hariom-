@@ -11,10 +11,10 @@ import {
 } from "@/lib/loginProtection";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().trim().email("Invalid email address").max(320).toLowerCase(),
+  password: z.string().min(1, "Password is required").max(200),
   portal: z.enum(["admin", "employer", "candidate"]).optional(),
-});
+}).strict();
 
 export async function POST(request: Request) {
   try {
@@ -62,16 +62,30 @@ export async function POST(request: Request) {
       );
     }
 
-    if (body.portal === "admin" && user.role !== "ADMIN") {
+    const portalAllowed =
+      !body.portal ||
+      (body.portal === "admin" && user.role === "ADMIN") ||
+      (body.portal === "employer" && ["EMPLOYER", "RECRUITER"].includes(user.role)) ||
+      (body.portal === "candidate" && user.role === "CANDIDATE");
+
+    if (!portalAllowed) {
       await logCriticalAuditEvent({
         userId: user.id,
-        action: "ADMIN_LOGIN_DENIED",
+        action: "PORTAL_LOGIN_DENIED",
         resource: "/api/auth/login",
-        details: `Non-admin account ${user.email} attempted to access the admin portal`,
+        details: `Role ${user.role} attempted to sign in through the ${body.portal} portal`,
       });
       return NextResponse.json(
-        { success: false, error: "This account does not have administrator access." },
-        { status: 403 }
+        {
+          success: false,
+          error:
+            body.portal === "admin"
+              ? "This account does not have administrator access."
+              : body.portal === "employer"
+                ? "Use an employer or recruiter account to access the employer workspace."
+                : "Use a candidate account to access the candidate portal.",
+        },
+        { status: 403 },
       );
     }
 

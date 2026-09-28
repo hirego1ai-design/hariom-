@@ -57,13 +57,13 @@ function EmployerInterviewSchedulerContent() {
       return;
     }
     setSaving(true);
-    if (useCopilot) scheduleRequestKey.current ||= crypto.randomUUID();
+    scheduleRequestKey.current ||= crypto.randomUUID();
     try {
       const response = await fetch("/api/employer/interviews/schedule", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(useCopilot && scheduleRequestKey.current ? { "Idempotency-Key": scheduleRequestKey.current } : {}),
+          ...(scheduleRequestKey.current ? { "Idempotency-Key": scheduleRequestKey.current } : {}),
         },
         body: JSON.stringify({
           applicationId,

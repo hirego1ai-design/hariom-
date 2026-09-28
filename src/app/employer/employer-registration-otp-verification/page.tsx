@@ -9,10 +9,40 @@ export default function EmployerOTPVerificationPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    setEmail(new URLSearchParams(window.location.search).get("email") || "");
+    const params = new URLSearchParams(window.location.search);
+    setEmail(params.get("email") || "");
+    if (params.get("sent") === "0") {
+      setNotice("Your account was created, but the verification email provider did not accept the first code. Use Resend Code to try again.");
+    }
   }, []);
+
+  async function resendCode() {
+    if (!email || resending) return;
+    setResending(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/auth/send-verification-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to resend verification code.");
+      }
+      setNotice(result.message || "A new verification code was requested.");
+      setOtp(["", "", "", "", "", ""]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend verification code.");
+    } finally {
+      setResending(false);
+    }
+  }
 
   const handleChange = (element: HTMLInputElement, index: number) => {
     if (isNaN(Number(element.value))) return false;
@@ -138,8 +168,8 @@ export default function EmployerOTPVerificationPage() {
                 Verify Your Identity
               </h1>
               <p className="font-body-lg text-xs text-text-secondary">
-                We've sent a 6-digit verification code to{" "}
-                <span className="text-primary font-bold">{email || "your corporate email"}</span>
+                Enter the 6-digit verification code for{" "}
+                <span className="text-primary font-bold">{email || "your email address"}</span>. If delivery failed, request a new code below.
               </p>
             </div>
 
@@ -186,10 +216,11 @@ export default function EmployerOTPVerificationPage() {
                 <p className="text-xs text-text-secondary">Didn't receive the code?</p>
                 <button
                   type="button"
-                  className="text-xs text-primary font-bold hover:underline"
-                  onClick={() => alert("Passcode re-sent to your corporate email!")}
+                  disabled={!email || resending}
+                  className="text-xs text-primary font-bold hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void resendCode()}
                 >
-                  Resend Code (0:45)
+                  {resending ? "Resending…" : "Resend Code"}
                 </button>
               </div>
 
@@ -215,23 +246,20 @@ export default function EmployerOTPVerificationPage() {
               </div>
             </form>
 
-            {/* Support Box */}
-            <div className="mt-4 pt-3 border-t border-white/10">
+            {notice && (
+              <p role="status" className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-text-secondary">{notice}</p>
+            )}
+            {error && (
+              <p role="alert" className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{error}</p>
+            )}
+            <div className="mt-4 border-t border-white/10 pt-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex-shrink-0 flex items-center justify-center">
-                  <HelpCircle className="w-4 h-4 text-primary" />
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <HelpCircle className="h-4 w-4 text-primary" />
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-text-primary">
-                    Need help with registration?
-                  </p>
-                  <p className="text-[11px] text-text-secondary">
-                    Our support team is online 24/7.{" "}
-                    <a className="text-primary hover:underline font-bold" href="#">
-                      Contact Support →
-                    </a>
-                  </p>
-                </div>
+                <p className="text-[11px] text-text-secondary">
+                  If verification remains unavailable, return to sign in and retry verification after the email service recovers.
+                </p>
               </div>
             </div>
           </div>

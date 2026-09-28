@@ -21,6 +21,7 @@ export default function ProactiveCandidateSearchPage() {
   const [query,setQuery]=useState("");
   const [actions,setActions]=useState<Record<string,string>>({});
   const [actionMessage,setActionMessage]=useState("");
+  const [actionMessageType,setActionMessageType]=useState<"success"|"error">("success");
 
   useEffect(()=>{ if(!jobId){setData(null);return;} let cancelled=false;setLoading(true);setError("");
     fetch(`/api/employer/jobs/${jobId}/source-candidates`,{cache:"no-store"}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error||"Unable to source candidates.");return b;})
@@ -28,7 +29,30 @@ export default function ProactiveCandidateSearchPage() {
     return()=>{cancelled=true};
   },[jobId]);
 
-  const act=async(candidateId:string,action:"SHORTLIST"|"INVITE")=>{if(!jobId)return;setActions(x=>({...x,[candidateId]:"BUSY"}));setActionMessage("");try{const r=await fetch(`/api/employer/jobs/${jobId}/source-candidates/action`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({candidateProfileId:candidateId,action})});const b=await r.json();if(!r.ok)throw new Error(b.error||"Action failed.");setActions(x=>({...x,[candidateId]:b.relationship.status}));setActionMessage(action==="INVITE"?"Invitation saved and candidate notified in HireGo.":"Candidate shortlisted for this sourcing job.");}catch(e){setActions(x=>({...x,[candidateId]:""}));setActionMessage(e instanceof Error?e.message:"Action failed.");}};
+  const act=async(candidateId:string,action:"SHORTLIST"|"INVITE")=>{
+    if(!jobId)return;
+    const previousStatus=actions[candidateId]||"SOURCED";
+    setActions(x=>({...x,[candidateId]:"BUSY"}));
+    setActionMessage("");
+    try{
+      const r=await fetch(`/api/employer/jobs/${jobId}/source-candidates/action`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({candidateProfileId:candidateId,action}),
+      });
+      const b=await r.json().catch(()=>({}));
+      if(!r.ok||!b.success)throw new Error(b.error||"Action failed.");
+      setActions(x=>({...x,[candidateId]:b.relationship.status}));
+      setActionMessageType("success");
+      setActionMessage(action==="INVITE"
+        ?"Invitation recorded and an in-app HireGo notification was created for the candidate."
+        :"Candidate shortlisted for this job-scoped sourcing workflow.");
+    }catch(e){
+      setActions(x=>({...x,[candidateId]:previousStatus}));
+      setActionMessageType("error");
+      setActionMessage(e instanceof Error?e.message:"Action failed.");
+    }
+  };
   const sourced=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return data?.candidates||[];return (data?.candidates||[]).filter(c=>[c.user.name,c.headline,c.location,...c.skills].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)));},[data,query]);
   const pipeline=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return pipelineCandidates;return pipelineCandidates.filter((c:any)=>[c.name,c.currentRole,c.currentLocation,c.appliedJob].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)));},[pipelineCandidates,query]);
 
@@ -41,7 +65,7 @@ export default function ProactiveCandidateSearchPage() {
         </div>
         {mode==="SOURCED"&&<label className="block text-sm font-bold">Source for job
           <select value={jobId} onChange={e=>setJobId(e.target.value)} disabled={isLoading} className="mt-2 w-full min-h-11 rounded-xl border border-outline bg-bg-elevated px-3">
-            <option value="">Select an employer job</option>{jobs.map((j:any)=><option key={j.id} value={j.id}>{j.title} · {j.status}</option>)}
+            <option value="">Select an active employer job</option>{jobs.filter((j:any)=>j.status==="ACTIVE").map((j:any)=><option key={j.id} value={j.id}>{j.title}</option>)}
           </select>
         </label>}
         <label className="block text-sm font-bold">Search visible candidates<input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Name, role, location or skill" className="mt-2 w-full min-h-11 rounded-xl border border-outline bg-bg-elevated px-3"/></label>
@@ -51,7 +75,7 @@ export default function ProactiveCandidateSearchPage() {
         <p className="font-bold">Sourcing policy for {data.job.title}</p>
         <p className="text-text-secondary mt-1">Only candidates who explicitly confirmed availability within the last {data.policy.availabilityWindowDays} days are shown{data.job.requiresJobReady?", and this job also requires a valid Job-Ready record":"."}.</p>
       </section>}
-      {actionMessage&&<div role="status" className="rounded-2xl border border-outline bg-bg-card p-4 text-sm">{actionMessage}</div>}
+      {actionMessage&&<div role={actionMessageType==="error"?"alert":"status"} className={`rounded-2xl border p-4 text-sm ${actionMessageType==="error"?"border-red-500/30 bg-red-500/10 text-red-200":"border-outline bg-bg-card"}`}>{actionMessage}</div>}
       {error&&<div role="alert" className="rounded-2xl border border-outline bg-bg-card p-5">{error}</div>}
       {mode==="SOURCED"&&!jobId&&<div className="rounded-3xl border border-outline bg-bg-card p-8 text-center"><h2 className="font-bold">Choose a job to start sourcing</h2><p className="text-sm text-text-secondary mt-2">HireGo will apply that job&apos;s availability and readiness policy before returning candidates.</p></div>}
       {mode==="SOURCED"&&loading&&<div className="rounded-3xl border border-outline bg-bg-card p-8">Checking eligible HireGo candidates…</div>}

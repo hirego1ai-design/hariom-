@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/apiSecurity";
 
 function metadata(value: string | null) {
   if (!value) return {};
@@ -13,6 +14,7 @@ function metadata(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
+  await enforceRateLimit(request, "employer_interviews_list", 60, 60_000);
   const session = await getCurrentSession(request.headers);
   if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
@@ -50,9 +52,14 @@ export async function GET(request: NextRequest) {
           scheduledAt: interview.scheduledAt.toISOString(),
           durationMins: interview.durationMins,
           status: interview.status,
-          roomUrl: interview.roomUrl,
+          roomUrl:
+            (typeof meta.mode === "string" ? meta.mode : interview.roomUrl ? "ONLINE" : "OFFLINE") === "ONLINE"
+              ? interview.roomUrl
+              : null,
           round: typeof meta.round === "string" ? meta.round : "Interview",
           mode: typeof meta.mode === "string" ? meta.mode : interview.roomUrl ? "ONLINE" : "OFFLINE",
+          address: typeof meta.address === "string" ? meta.address : null,
+          contactNumber: typeof meta.contactNumber === "string" ? meta.contactNumber : null,
           candidateName: interview.application.candidateProfile.user?.name || "Candidate",
           candidateEmail: interview.application.candidateProfile.user?.email || null,
           jobTitle: interview.application.job.title,

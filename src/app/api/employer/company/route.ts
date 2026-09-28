@@ -35,8 +35,8 @@ export async function PUT(req: NextRequest) {
     await enforceRateLimit(req, "employer_company_update", 20, 60_000);
     const session = await getCurrentSession(req.headers);
     if (!session) throw new ApiError("Authentication required.", 401);
-    // Company-wide settings are owner policy, not recruiter profile data.
-    if (session.role !== "EMPLOYER") throw new ApiError("Only the company owner can update company settings.", 403);
+    // Company-wide settings require the EMPLOYER company-admin role; recruiter sessions are read-only.
+    if (session.role !== "EMPLOYER") throw new ApiError("Only company administrators can update company settings.", 403);
     const body = await readValidatedJson(req, updateCompanySchema);
     const company = await getSessionCompany(session);
     const { designation, ...companyData } = body;

@@ -81,12 +81,6 @@ export async function POST(request: NextRequest) {
     if (session.role !== "ADMIN" && application.job.companyId !== companyId) throw new ApiError("Application access denied.", 403);
     if (application.status !== "SHORTLISTED") throw new ApiError("An offer can only be created for a selected/shortlisted application.", 409);
 
-    const activeOffer = await prisma.offer.findFirst({
-      where: { applicationId: application.id, status: { in: ["SENT", "ACCEPTED"] } },
-      select: { id: true, status: true },
-    });
-    if (activeOffer) throw new ApiError(`This application already has an active ${activeOffer.status.toLowerCase()} offer.`, 409);
-
     if (body.documentFileId) {
       const file = await prisma.storedFile.findUnique({
         where: { id: body.documentFileId },
@@ -94,24 +88,51 @@ export async function POST(request: NextRequest) {
       });
       if (!file || file.deletedAt) throw new ApiError("Offer document not found.", 404);
       if (file.scanStatus !== "CLEAN") throw new ApiError("Offer document must pass malware scanning before use.", 409);
+      if (file.category !== "employer-docs") throw new ApiError("Offer attachments must come from the approved employer-docs upload category.", 400);
       if (session.role !== "ADMIN" && file.companyId !== application.job.companyId && file.ownerId !== session.id) {
         throw new ApiError("Offer document access denied.", 403);
       }
     }
 
-    const offer = await prisma.offer.create({
-      data: {
-        applicationId: application.id,
-        companyId: application.job.companyId,
-        createdById: session.id,
-        title: body.title,
-        compensationAmount: body.compensationAmount == null ? null : new Prisma.Decimal(body.compensationAmount),
-        currency: body.currency,
-        startDate,
-        expiresAt,
-        terms: body.terms as Prisma.InputJsonValue,
-        documentFileId: body.documentFileId ?? null,
-      },
+    const offer = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${application.id} FOR UPDATE`;
+
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: application.id },
+        select: { status: true },
+      });
+      if (!lockedApplication || lockedApplication.status !== "SHORTLISTED") {
+        throw new ApiError("The application is no longer eligible for a new offer.", 409);
+      }
+
+      const activeOffer = await tx.offer.findFirst({
+        where: {
+          applicationId: application.id,
+          status: { in: ["DRAFT", "SENT", "ACCEPTED"] },
+        },
+        select: { id: true, status: true },
+      });
+      if (activeOffer) {
+        throw new ApiError(
+          `This application already has an active ${activeOffer.status.toLowerCase()} offer.`,
+          409,
+        );
+      }
+
+      return tx.offer.create({
+        data: {
+          applicationId: application.id,
+          companyId: application.job.companyId,
+          createdById: session.id,
+          title: body.title,
+          compensationAmount: body.compensationAmount == null ? null : new Prisma.Decimal(body.compensationAmount),
+          currency: body.currency,
+          startDate,
+          expiresAt,
+          terms: body.terms as Prisma.InputJsonValue,
+          documentFileId: body.documentFileId ?? null,
+        },
+      });
     });
 
     await logAuditEvent({

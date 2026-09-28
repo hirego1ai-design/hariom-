@@ -231,7 +231,7 @@ export default function ManagedHiringCandidateTrackingPage() {
                             {candidate.appliedJob}
                           </p>
                           <p className="text-[10px] text-primary mt-2">
-                            Match {candidate.matchScore}%
+                            Match {typeof candidate.matchScore === "number" && Number.isFinite(candidate.matchScore) ? `${candidate.matchScore}%` : "N/A"}
                           </p>
 
                           {!isTerminal ? (
@@ -289,7 +289,7 @@ export default function ManagedHiringCandidateTrackingPage() {
                                 href={`/employer/managed-hiring/join?applicationId=${encodeURIComponent(candidate.applicationId)}&candidateName=${encodeURIComponent(candidate.name || "Candidate")}&jobTitle=${encodeURIComponent(candidate.appliedJob || "Role")}`}
                                 className="mt-2 block text-center rounded bg-emerald-400/15 text-emerald-300 p-1.5 text-[10px] font-bold"
                               >
-                                Mark joined & generate invoice
+                                Confirm joining (accepted offer required)
                               </Link>
                             )}
 

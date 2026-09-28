@@ -120,18 +120,19 @@ export async function GET(request: NextRequest) {
       const severity = event.severity as Severity;
       return score + (SEVERITY_WEIGHT[severity] ?? 0);
     }, 0);
-    const cheatingRiskScore = Math.min(100, totalSeverityScore);
+    const advisoryReviewScore = Math.min(100, totalSeverityScore);
 
     return NextResponse.json({
       success: true,
       metrics: {
         totalViolations: events.length,
-        cheatingRiskScore,
+        advisoryReviewScore,
         // Browser telemetry is evidence, not an adverse hiring decision. A
         // trained reviewer must evaluate it alongside independent signals.
-        status: cheatingRiskScore > 40 ? "REVIEW_REQUIRED" : "NO_REVIEW_REQUIRED",
+        status: advisoryReviewScore > 40 ? "REVIEW_REQUIRED" : "NO_REVIEW_REQUIRED",
         evidenceSource: "CLIENT_REPORTED_UNVERIFIED",
-        requiresHumanReview: cheatingRiskScore > 40,
+        scoreMeaning: "RULE_BASED_REVIEW_PRIORITY_NOT_CHEATING_PROBABILITY",
+        requiresHumanReview: advisoryReviewScore > 40,
         events: events.slice(0, 20).map((event) => ({ ...event, timestamp: event.createdAt.toISOString() })),
       },
     });

@@ -7,10 +7,13 @@ import { FraudStatus } from "@/types/referral";
 
 const payoutSchema = z.object({
   amount: z.coerce.number().finite().positive().max(10_000_000),
-  payoutMethod: z.enum(["UPI", "BANK_TRANSFER"]).default("UPI"),
-  payoutAddress: z.string().trim().min(3).max(250).optional(),
-  upiId: z.string().trim().min(3).max(150).optional(),
-}).strict().refine((body) => Boolean(body.payoutAddress || body.upiId), "Payout address is required.");
+  payoutMethod: z.literal("UPI").default("UPI"),
+  payoutAddress: z.string()
+    .trim()
+    .min(3)
+    .max(150)
+    .regex(/^[A-Za-z0-9._-]{2,100}@[A-Za-z0-9.-]{2,64}$/, "Enter a valid UPI ID / VPA."),
+}).strict();
 
 export async function POST(request: Request) {
   try {
@@ -27,13 +30,11 @@ export async function POST(request: Request) {
     if (fraud.status === FraudStatus.FRAUD_HOLD) throw new ApiError("Payout requests are suspended pending security compliance review.", 403);
     if (fraud.status === FraudStatus.ADMIN_REVIEW) throw new ApiError("Payout requests are suspended while the account is under administrative review.", 403);
 
-    const payoutAddress = body.payoutAddress ?? body.upiId;
-    if (!payoutAddress) throw new ApiError("Payout address is required.", 422);
     const payout = await referralDb.requestPayout({
       referrerId: session.id,
       amount: body.amount,
-      payoutMethod: body.payoutMethod ?? "UPI",
-      payoutAddress,
+      payoutMethod: "UPI",
+      payoutAddress: body.payoutAddress,
     });
 
     return NextResponse.json({

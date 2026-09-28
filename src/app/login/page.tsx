@@ -40,7 +40,7 @@ function CandidateLoginContent() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, portal: "candidate" }),
       });
       const result = await response.json();
 
@@ -55,13 +55,7 @@ function CandidateLoginContent() {
         return;
       }
 
-      const userRole = result.user?.role;
-      const destination = userRole === "ADMIN"
-        ? "/admin/dashboard"
-        : userRole === "EMPLOYER" || userRole === "RECRUITER"
-          ? "/employer/dashboard"
-          : "/dashboard";
-      router.replace(destination);
+      router.replace("/dashboard");
       router.refresh();
     } catch (error: unknown) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to sign in. Please try again.");

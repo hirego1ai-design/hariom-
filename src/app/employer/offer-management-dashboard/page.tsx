@@ -12,7 +12,12 @@ type Offer = {
 export default function OfferManagementDashboardPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+  const [pendingSend, setPendingSend] = useState<{ offer: Offer; approvalId: string; workflowId: string } | null>(null);
+  const [pendingWithdraw, setPendingWithdraw] = useState<Offer | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/employer/offers", { cache: "no-store" });
@@ -21,55 +26,141 @@ export default function OfferManagementDashboardPage() {
     setOffers(body.offers);
   }, []);
 
-  useEffect(() => { refresh().catch((error) => setMessage(error.message)); }, [refresh]);
+  useEffect(() => {
+    refresh()
+      .catch((error) => {
+        setMessageType("error");
+        setMessage(error instanceof Error ? error.message : "Unable to load offers.");
+      })
+      .finally(() => setLoading(false));
+  }, [refresh]);
 
-  async function sendOffer(offer: Offer) {
-    setBusy(offer.id); setMessage("");
+  async function prepareSend(offer: Offer) {
+    setBusy(offer.id);
+    setMessage("");
+    setMessageType("success");
     try {
-      const first = await fetch(`/api/employer/offers/${offer.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "SEND" }) });
-      const firstBody = await first.json().catch(() => ({}));
-      if (!first.ok) throw new Error(firstBody.error || "Unable to prepare offer approval.");
-      if (first.status === 202 && firstBody.requiresConfirmation) {
-        const confirmed = window.confirm("Send this persisted offer to the candidate? This is the final human approval step.");
-        if (!confirmed) { setMessage("Offer send approval was not confirmed."); return; }
-        const second = await fetch(`/api/employer/offers/${offer.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "SEND", approvalId: firstBody.approvalId, workflowId: firstBody.workflowId, confirmApproval: true }),
-        });
-        const secondBody = await second.json().catch(() => ({}));
-        if (!second.ok) throw new Error(secondBody.error || "Unable to send offer.");
+      const response = await fetch(`/api/employer/offers/${offer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SEND" }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to prepare offer approval.");
+
+      if (response.status === 202 && body.requiresConfirmation) {
+        setPendingSend({ offer, approvalId: body.approvalId, workflowId: body.workflowId });
+        return;
       }
-      await refresh(); setMessage("Offer sent and made available to the candidate.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to send offer."); }
-    finally { setBusy(""); }
+
+      await refresh();
+      setMessage("Offer is already sent and available to the candidate.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to prepare offer approval.");
+    } finally {
+      setBusy("");
+    }
   }
 
-  async function withdraw(offer: Offer) {
-    const reason = window.prompt("Reason for withdrawing this offer:");
-    if (reason === null) return;
+  async function confirmSend() {
+    if (!pendingSend || busy) return;
+    const { offer, approvalId, workflowId } = pendingSend;
     setBusy(offer.id);
+    setMessage("");
     try {
-      const response = await fetch(`/api/employer/offers/${offer.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "WITHDRAW", reason }) });
+      const response = await fetch(`/api/employer/offers/${offer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SEND", approvalId, workflowId, confirmApproval: true }),
+      });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Unable to withdraw offer.");
-      await refresh(); setMessage("Offer withdrawn.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to withdraw offer."); }
-    finally { setBusy(""); }
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to send offer.");
+      await refresh();
+      setPendingSend(null);
+      setMessageType("success");
+      setMessage("Offer sent and made available to the candidate.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to send offer.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmWithdraw() {
+    if (!pendingWithdraw || busy) return;
+    const offer = pendingWithdraw;
+    setBusy(offer.id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/employer/offers/${offer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "WITHDRAW", ...(withdrawReason.trim() ? { reason: withdrawReason.trim() } : {}) }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to withdraw offer.");
+      await refresh();
+      setPendingWithdraw(null);
+      setWithdrawReason("");
+      setMessageType("success");
+      setMessage("Offer withdrawn.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to withdraw offer.");
+    } finally {
+      setBusy("");
+    }
   }
 
   return <PageContainer><div className="mx-auto max-w-5xl py-8 px-4 space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-3xl font-bold text-white">Offer Management</h1><p className="mt-2 text-sm text-text-secondary">Draft, approve, send and track candidate responses from persisted offer records.</p></div><a href="/employer/offer-letter-create-and-send" className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-white">Create offer</a></div>
-    {message && <p role="status" className="rounded-xl border border-white/10 p-3 text-sm text-text-secondary">{message}</p>}
+    {message && (
+      <p role={messageType === "error" ? "alert" : "status"} className={`rounded-xl border p-3 text-sm ${
+        messageType === "error" ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-white/10 text-text-secondary"
+      }`}>{message}</p>
+    )}
     <div className="space-y-3">
-      {offers.length === 0 ? <div className="glass-card rounded-2xl p-6 text-sm text-text-secondary">No offer records found.</div> : offers.map((offer) => <article key={offer.id} className="glass-card rounded-2xl p-5 space-y-3">
+      {loading ? <div className="glass-card rounded-2xl p-6 text-sm text-text-secondary">Loading offers…</div> : offers.length === 0 ? <div className="glass-card rounded-2xl p-6 text-sm text-text-secondary">No offer records found.</div> : offers.map((offer) => <article key={offer.id} className="glass-card rounded-2xl p-5 space-y-3">
         <div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-bold text-white">{offer.application.candidateProfile.user.name || "Candidate"} · {offer.application.job.title}</h2><p className="text-xs text-text-secondary">{offer.title} · expires {new Date(offer.expiresAt).toLocaleString()}</p></div><span className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold">{offer.status}</span></div>
         {offer.compensationAmount && <p className="text-sm">{offer.currency} {offer.compensationAmount}</p>}
         <div className="flex flex-wrap gap-3">
-          {offer.status === "DRAFT" && <button disabled={busy === offer.id} onClick={() => void sendOffer(offer)} className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black">Approve & send</button>}
-          {["DRAFT","SENT"].includes(offer.status) && <button disabled={busy === offer.id} onClick={() => void withdraw(offer)} className="rounded-full border border-red-400/30 px-4 py-2 text-xs font-bold text-red-300">Withdraw</button>}
+          {offer.status === "DRAFT" && <button disabled={busy === offer.id} onClick={() => void prepareSend(offer)} className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black">Approve & send</button>}
+          {["DRAFT","SENT"].includes(offer.status) && <button disabled={busy === offer.id} onClick={() => { setWithdrawReason(""); setPendingWithdraw(offer); }} className="rounded-full border border-red-400/30 px-4 py-2 text-xs font-bold text-red-300">Withdraw</button>}
           {offer.status === "ACCEPTED" && <a href={`/employer/managed-hiring/join?applicationId=${encodeURIComponent(offer.applicationId)}`} className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-bold text-emerald-300">Confirm joining</a>}
         </div>
       </article>)}
     </div>
+
+    {pendingSend && (
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="send-offer-title">
+        <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+          <h2 id="send-offer-title" className="text-xl font-bold text-white">Approve and send this offer?</h2>
+          <p className="mt-2 text-sm text-text-secondary">{pendingSend.offer.application.candidateProfile.user.name || "Candidate"} · {pendingSend.offer.application.job.title}</p>
+          <p className="mt-4 text-sm text-text-muted">This is the final human confirmation. The persisted offer will become visible to the candidate.</p>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" disabled={Boolean(busy)} onClick={() => setPendingSend(null)} className="min-h-11 rounded-xl border border-white/10 px-4 text-xs font-bold text-white disabled:opacity-50">Cancel</button>
+            <button type="button" disabled={Boolean(busy)} onClick={() => void confirmSend()} className="min-h-11 rounded-xl bg-emerald-500 px-4 text-xs font-bold text-black disabled:opacity-50">{busy ? "Sending…" : "Confirm send"}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {pendingWithdraw && (
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="withdraw-offer-title">
+        <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+          <h2 id="withdraw-offer-title" className="text-xl font-bold text-white">Withdraw this offer?</h2>
+          <p className="mt-2 text-sm text-text-secondary">{pendingWithdraw.application.candidateProfile.user.name || "Candidate"} · {pendingWithdraw.application.job.title}</p>
+          <label className="mt-4 block text-sm text-text-secondary">Reason (optional)
+            <textarea value={withdrawReason} onChange={(event) => setWithdrawReason(event.target.value)} maxLength={1000} rows={4} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" />
+          </label>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" disabled={Boolean(busy)} onClick={() => { setPendingWithdraw(null); setWithdrawReason(""); }} className="min-h-11 rounded-xl border border-white/10 px-4 text-xs font-bold text-white disabled:opacity-50">Cancel</button>
+            <button type="button" disabled={Boolean(busy)} onClick={() => void confirmWithdraw()} className="min-h-11 rounded-xl bg-red-600 px-4 text-xs font-bold text-white disabled:opacity-50">{busy ? "Withdrawing…" : "Confirm withdraw"}</button>
+          </div>
+        </div>
+      </div>
+    )}
   </div></PageContainer>;
 }

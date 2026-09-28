@@ -10,7 +10,7 @@ const schema = z.object({
   defaultAnswerSeconds: z.union([z.literal(30), z.literal(60)]),
   questionCount: z.number().int().min(1).max(20),
   proctoringEnabled: z.boolean().default(true),
-  isActive: z.boolean().default(true),
+  isActive: z.boolean().default(false),
 });
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,9 +18,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const session = await getCurrentSession(request.headers);
     if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) throw new ApiError("Employer access required.", 403);
     const { id } = await params;
-    await assertEmployerOwnsJob(session.id, session.role, id);
-    const config = await prisma.recordedAssessmentConfig.findUnique({ where: { jobListingId: id } });
-    return NextResponse.json({ success: true, config });
+    const job = await assertEmployerOwnsJob(session.id, session.role, id);
+    const [config, eligible] = await Promise.all([
+      prisma.recordedAssessmentConfig.findUnique({ where: { jobListingId: id } }),
+      selectEligibleRecordedAssessmentQuestions(job, 20),
+    ]);
+    return NextResponse.json({
+      success: true,
+      config,
+      eligibleQuestionCount: eligible.length,
+    });
   } catch (error) { return handleApiError(error); }
 }
 

@@ -3,6 +3,7 @@ type EmployerApplicationEvidence = {
   jobId: string;
   status: string;
   matchScore: number;
+  aiSummary?: string | null;
   createdAt: Date;
   updatedAt: Date;
   candidateProfile: {
@@ -45,9 +46,9 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     id: profile.id,
     applicationId: app.id,
     name,
-    matchScore: app.matchScore,
+    matchScore: app.aiSummary ? app.matchScore : null,
     experience: `${profile.experienceYears}y Exp`,
-    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+    avatar: null,
     stage: app.status === "APPLIED" ? "SCREENING" : app.status,
     applicationGates: app.gates ?? [],
     universalSkillValidationGate: (app.gates ?? []).find((gate) => gate.type === "UNIVERSAL_SKILL_VALIDATION") ?? null,

@@ -7,9 +7,13 @@ import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSe
 import { referralDb } from "@/lib/referral-db";
 
 const schema = z.object({
-  companyName: z.string().min(2), email: z.string().email(), industry: z.string().min(2), companySize: z.string().min(1),
-  password: z.string().min(8), confirmPassword: z.string().min(8),
-  referralCode: z.string().trim().toUpperCase().optional(),
+  companyName: z.string().trim().min(2).max(160),
+  email: z.string().trim().email().max(320).toLowerCase(),
+  industry: z.string().trim().min(2).max(120),
+  companySize: z.string().trim().min(1).max(80),
+  password: z.string().min(8).max(200),
+  confirmPassword: z.string().min(8).max(200),
+  referralCode: z.string().trim().toUpperCase().max(100).optional(),
 }).strict().refine((data) => data.password === data.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 
 export async function POST(request: Request) {
@@ -39,7 +43,21 @@ export async function POST(request: Request) {
       const createdUser = await tx.user.create({ data: { email, passwordHash, name: body.companyName, role: "EMPLOYER", emailVerified: false } });
       const company = await tx.company.create({ data: { name: body.companyName, industry: body.industry, size: body.companySize } });
       await tx.employerProfile.create({ data: { userId: createdUser.id, companyId: company.id } });
-      await tx.companyCredits.create({ data: { companyId: company.id, jobPostsLeft: 5, resumeUnlocksLeft: 25, aiInterviewsLeft: 5, aiAgentCreditsLeft: 0 } });
+      // New workspaces start with zero commercial entitlements. Plan checkout
+      // applies the authoritative admin-managed quota snapshot.
+      await tx.companyCredits.create({
+        data: {
+          companyId: company.id,
+          jobPostsLeft: 0,
+          resumeUnlocksLeft: 0,
+          aiInterviewsLeft: 0,
+          aiAgentCreditsLeft: 0,
+          applicationsLeft: 0,
+          resumeDownloadsLeft: 0,
+          backgroundVerificationsLeft: 0,
+          copilotJobsLeft: 0,
+        },
+      });
       // Every company gets an explicit hard budget. A missing budget must never
       // be interpreted as permission to spend without a ceiling.
       await tx.aiCompanyBudget.create({
@@ -70,14 +88,30 @@ export async function POST(request: Request) {
       }
     }
 
-    const otp = await generateAndSendOtp(email, "VERIFY_EMAIL");
+    let verificationCodeSent = false;
+    let verificationMessage =
+      "Account created. Request a verification code to verify your email.";
+    let debugOtp: string | undefined;
+    try {
+      const otp = await generateAndSendOtp(email, "VERIFY_EMAIL");
+      verificationCodeSent = true;
+      verificationMessage = otp.message;
+      debugOtp = otp.debugOtp;
+    } catch {
+      // Account creation is already committed. Keep the unverified account
+      // recoverable and let the verification screen retry delivery rather
+      // than reporting registration failure and trapping the user in a
+      // duplicate-account error on retry.
+    }
+
     return NextResponse.json({
       success: true,
       email,
       userId: user.createdUser.id,
-      message: otp.message,
-      debugOtp: otp.debugOtp,
+      message: verificationMessage,
+      verificationCodeSent,
+      debugOtp,
       referralApplied: !!(referrerId && referralCode),
-    });
+    }, { status: 201 });
   } catch (error) { return handleApiError(error); }
 }

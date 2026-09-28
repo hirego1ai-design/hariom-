@@ -9,8 +9,8 @@ import { INDUSTRY_MASTER } from "@/lib/industry-master";
 export default function EmployerCompanyInfoPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [companySize, setCompanySize] = useState("11-50");
-  const [industry, setIndustry] = useState("Information Technology (IT)");
+  const [companySize, setCompanySize] = useState("");
+  const [industry, setIndustry] = useState("");
   const [industryQuery, setIndustryQuery] = useState("");
   const [industryOpen, setIndustryOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -33,7 +33,7 @@ export default function EmployerCompanyInfoPage() {
       const data = await res.json();
       if (data.valid) {
         setRefStatus("valid");
-        setRefMsg("Valid referral code applied. Your referrer will earn rewards once you post a job.");
+        setRefMsg("Valid referral code applied. Any reward is determined by the current server-side referral rules after qualifying activity.");
       } else {
         setRefStatus("invalid");
         setRefMsg("This referral code is invalid or has expired.");
@@ -175,12 +175,16 @@ export default function EmployerCompanyInfoPage() {
                 const password = String(form.get("password") || "");
                 const confirmPassword = String(form.get("confirmPassword") || "");
                 if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+                if (!industry.trim()) { setError("Select or enter your company industry."); return; }
+                if (!companySize) { setError("Select your company size."); return; }
                 setSubmitting(true); setError("");
                 try {
                   const response = await fetch("/api/auth/employer-register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyName: form.get("companyName"), email: form.get("email"), industry: form.get("industry"), companySize, password, confirmPassword, referralCode: referralCode || undefined }) });
                   const result = await response.json();
                   if (!response.ok || !result.success) throw new Error(result.error || "Registration failed.");
-                  router.push(`/employer/employer-registration-otp-verification?email=${encodeURIComponent(result.email)}${result.debugOtp ? `&debugOtp=${result.debugOtp}` : ""}`);
+                  router.push(
+                    `/employer/employer-registration-otp-verification?email=${encodeURIComponent(result.email)}&sent=${result.verificationCodeSent ? "1" : "0"}`
+                  );
                 } catch (err) { setError(err instanceof Error ? err.message : "Registration failed."); }
                 finally { setSubmitting(false); }
               }}

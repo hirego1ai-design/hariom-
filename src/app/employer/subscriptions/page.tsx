@@ -59,7 +59,7 @@ export default function EmployerSubscriptionsStorePage() {
       setActivePlan(body.activePlan || null);
       setSubscriptionState(body.subscriptionState || null);
       setGatewayConfig(body.gatewayConfig || null);
-      setCopilotConfig(null);
+      setCopilotConfig(body.copilotConfig?.enabled ? body.copilotConfig : null);
       setSelectedGateway(body.gatewayConfig?.primaryGateway || "STRIPE");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to load hiring plans.");
@@ -77,6 +77,12 @@ export default function EmployerSubscriptionsStorePage() {
     if (!checkoutPlan) return 0;
     return checkoutPlan.price + (addCopilot && copilotConfig ? copilotConfig.addonPrice : 0);
   }, [checkoutPlan, addCopilot, copilotConfig]);
+
+  const activeGateways = useMemo(
+    () => ["STRIPE", "PAYU"].filter((gateway) => gatewayConfig?.gatewaysStatus?.[gateway] !== "DISABLED"),
+    [gatewayConfig],
+  );
+  const checkoutAvailable = activeGateways.length > 0;
 
   async function choosePlan(plan: Plan) {
     setMessage(null);
@@ -246,7 +252,7 @@ export default function EmployerSubscriptionsStorePage() {
           <div className="relative mt-6 grid gap-3 rounded-[28px] border border-white/10 bg-[#0e1732]/85 p-5 shadow-[0_22px_45px_rgba(0,0,0,.3)] md:grid-cols-[1.2fr_repeat(6,1fr)] md:items-center">
             <div>
               <p className="text-lg font-black">Everything you need to hire, in one place</p>
-              <p className="mt-1 text-xs text-slate-400">Plan benefits are controlled from Admin and loaded live.</p>
+              <p className="mt-1 text-xs text-slate-400">These are platform areas. Entitlements and quotas shown on each plan are loaded from Admin configuration.</p>
             </div>
             {["AI JD","Matching","Assessments","Virtual Interview","Proctoring","Feedback"].map(label => (
               <div key={label} className="rounded-2xl border border-white/10 bg-white/[.05] p-3 text-center text-xs font-bold text-slate-200">{label}</div>
@@ -314,7 +320,7 @@ export default function EmployerSubscriptionsStorePage() {
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-500">Payment provider</label>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    {["STRIPE","PAYU"].filter(g => gatewayConfig?.gatewaysStatus?.[g] !== "DISABLED").map(g => (
+                    {activeGateways.map(g => (
                       <button key={g} onClick={() => setSelectedGateway(g)} className={`rounded-xl border px-3 py-2 text-xs font-black ${selectedGateway === g ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-white"}`}>{g}</button>
                     ))}
                   </div>
@@ -333,9 +339,15 @@ export default function EmployerSubscriptionsStorePage() {
               <p className="mt-2 text-[11px] text-slate-400">Any valid promo discount is applied server-side before payment.</p>
             </div>
 
-            <button disabled={submitting} onClick={() => void checkout()} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_14px_30px_rgba(62,76,210,.25)] disabled:opacity-50">
-              {submitting ? "Starting secure checkout…" : "Continue to payment"}
-            </button>
+            {!checkoutAvailable ? (
+              <div role="alert" className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-50 p-4 text-sm font-bold text-amber-900">
+                Paid checkout is temporarily unavailable because no payment provider is enabled by the authoritative gateway configuration.
+              </div>
+            ) : (
+              <button disabled={submitting} onClick={() => void checkout()} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_14px_30px_rgba(62,76,210,.25)] disabled:opacity-50">
+                {submitting ? "Starting secure checkout…" : "Continue to payment"}
+              </button>
+            )}
             {!checkoutPlan.copilotIncluded && copilotConfig?.enabled && !addCopilot ? (
               <p className="mt-3 text-center text-[11px] text-slate-500">You can continue without Co-Pilot and activate it later from an eligible plan/add-on.</p>
             ) : null}
