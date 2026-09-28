@@ -1800,3 +1800,44 @@ test("admin role governance uses fixed portal roles with serialized audited sess
   assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
   assert(route.includes("revokeAllUserSessions(updated.id, updated.sessionVersion)"));
 });
+
+
+test("admin audit and security posture pages expose persisted and application-scoped evidence only", () => {
+  const auditPage = fs.readFileSync(new URL("../app/admin/settings/audit-log/page.tsx", import.meta.url), "utf8");
+  const auditRoute = fs.readFileSync(new URL("../app/api/admin/audit-logs/route.ts", import.meta.url), "utf8");
+  const securityPage = fs.readFileSync(new URL("../app/admin/settings/security/page.tsx", import.meta.url), "utf8");
+  const securityRoute = fs.readFileSync(new URL("../app/api/admin/security/status/route.ts", import.meta.url), "utf8");
+  const securityHeaders = fs.readFileSync(new URL("../lib/securityHeaders.ts", import.meta.url), "utf8");
+  const nextConfig = fs.readFileSync(new URL("../../next.config.ts", import.meta.url), "utf8");
+  const middleware = fs.readFileSync(new URL("../middleware.ts", import.meta.url), "utf8");
+  const logsRedirect = fs.readFileSync(new URL("../app/admin/logs/stream/page.tsx", import.meta.url), "utf8");
+  const vulnerabilityRedirect = fs.readFileSync(new URL("../app/admin/security/vulnerability-inspector/page.tsx", import.meta.url), "utf8");
+
+  assert(logsRedirect.includes('redirect("/admin/settings/audit-log")'));
+  assert(vulnerabilityRedirect.includes('redirect("/admin/settings/security")'));
+
+  assert(auditRoute.includes("requireAdminSession(req)"));
+  assert(auditRoute.includes("prisma.auditLog.count"));
+  assert(auditRoute.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+  assert(auditRoute.includes("skip: (query.page - 1) * query.limit"));
+  assert(auditRoute.includes('source: "persisted_audit_log"'));
+  assert(auditPage.includes("Results are paginated"));
+  assert(auditPage.includes("Page {page} of {totalPages}"));
+  assert(auditPage.includes('role="alert"'));
+
+  assert(securityRoute.includes("configuredSecurityHeaders"));
+  assert(securityRoute.includes('"APPLICATION_CONFIGURATION_EVIDENCE_ONLY"'));
+  assert(securityRoute.includes('status: "NOT_MEASURED"'));
+  assert(securityRoute.includes("Security posture is read-only."));
+  assert(securityPage.includes("CONFIGURED IN APP"));
+  assert(securityPage.includes("No simulated security score, live-WAF claim, vulnerability count, or compliance certification"));
+  assert(securityPage.includes("Measurements awaiting external evidence"));
+
+  assert(nextConfig.includes("configuredSecurityHeaders"));
+  assert(middleware.includes("configuredSecurityHeaders"));
+  assert(securityHeaders.includes('"X-Frame-Options": "DENY"'));
+  assert(securityHeaders.includes('"X-Content-Type-Options": "nosniff"'));
+  assert(securityHeaders.includes('"Strict-Transport-Security"'));
+  assert(securityHeaders.includes('"object-src \'none\'"'));
+  assert(securityHeaders.includes('"frame-ancestors \'none\'"'));
+});
