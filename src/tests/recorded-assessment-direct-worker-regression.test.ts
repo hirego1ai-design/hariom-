@@ -8,15 +8,20 @@ const route = readFileSync(
   "utf8",
 );
 const dockerfile = readFileSync("Dockerfile.recorded-assessment-scheduler", "utf8");
+const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8")) as {
+  crons?: Array<{ path: string; schedule: string }>;
+};
 
-test("Railway recorded-assessment scheduler executes the shared worker directly", () => {
+test("Railway scheduler executes recorded-assessment recovery and outbox processing directly", () => {
   assert.match(scheduler, /runRecordedAssessmentRecovery/);
+  assert.match(scheduler, /OutboxPoller/);
+  assert.match(scheduler, /registerProductionConsumers/);
   assert.doesNotMatch(scheduler, /process\\.env\\.APP_URL\\b/);
   assert.doesNotMatch(scheduler, /VERCEL_AUTOMATION_BYPASS_SECRET/);
   assert.doesNotMatch(scheduler, /fetch\s*\(/);
 });
 
-test("cron API route and Railway scheduler share the same recovery implementation", () => {
+test("cron API route and Railway scheduler share the same recorded-assessment recovery implementation", () => {
   assert.match(route, /runRecordedAssessmentRecovery/);
   assert.doesNotMatch(route, /dispatchRecordedAssessmentAnalysis/);
 });
@@ -41,4 +46,10 @@ test("Railway worker fails closed when required production configuration is abse
   ]) {
     assert.match(scheduler, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+});
+
+test("Vercel no longer schedules sub-daily background recovery", () => {
+  const crons = vercelConfig.crons ?? [];
+  assert.equal(crons.some((cron) => cron.path === "/api/cron/events-outbox"), false);
+  assert.equal(crons.some((cron) => cron.schedule === "*/5 * * * *"), false);
 });
