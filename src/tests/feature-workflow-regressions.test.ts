@@ -990,3 +990,61 @@ test("admin operational evidence screens stay scoped persisted and non-simulated
   assert(vulnerability.includes("does not claim zero vulnerabilities"));
   assert(backup.includes("EXTERNAL EVIDENCE REQUIRED"));
 });
+
+
+test("admin communications keep template state changes versioned audited and test sends controlled", () => {
+  const page = fs.readFileSync(new URL("../app/admin/communications/page.tsx", import.meta.url), "utf8");
+  const createRoute = fs.readFileSync(new URL("../app/api/admin/communications/templates/route.ts", import.meta.url), "utf8");
+  const patchRoute = fs.readFileSync(new URL("../app/api/admin/communications/templates/[id]/route.ts", import.meta.url), "utf8");
+  const deliveries = fs.readFileSync(new URL("../app/api/admin/communications/deliveries/route.ts", import.meta.url), "utf8");
+  const testRoute = fs.readFileSync(new URL("../app/api/admin/communications/test/route.ts", import.meta.url), "utf8");
+  const emailConfig = fs.readFileSync(new URL("../app/api/admin/email-delivery/config/route.ts", import.meta.url), "utf8");
+  const emailTest = fs.readFileSync(new URL("../app/api/admin/email-delivery/test/route.ts", import.meta.url), "utf8");
+  const emailHelper = fs.readFileSync(new URL("../lib/email-delivery-config.ts", import.meta.url), "utf8");
+  const smtpUi = fs.readFileSync(new URL("../app/settings/smtp/page.tsx", import.meta.url), "utf8");
+  const smtpWrapper = fs.readFileSync(new URL("../app/admin/settings/smtp/page.tsx", import.meta.url), "utf8");
+  const whatsappWrapper = fs.readFileSync(new URL("../app/admin/settings/whatsapp/page.tsx", import.meta.url), "utf8");
+
+  assert(createRoute.includes("z.literal(false).default(false)"));
+  assert(createRoute.includes("pg_advisory_xact_lock"));
+  assert(createRoute.includes("COMMUNICATION_TEMPLATE_CREATED"));
+  assert(createRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, user.id)"));
+  assert(createRoute.includes("truncated: total > templates.length"));
+
+  assert(patchRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(patchRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(patchRoute.includes("Communication template changed; reload before saving."));
+  assert(patchRoute.includes("COMMUNICATION_TEMPLATE_ACTIVATED"));
+  assert(patchRoute.includes("COMMUNICATION_TEMPLATE_DEACTIVATED"));
+  assert(patchRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, user.id)"));
+
+  assert(deliveries.includes("querySchema"));
+  assert(deliveries.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+  assert(deliveries.includes("skip: (query.page - 1) * query.limit"));
+  assert(deliveries.includes("total,"));
+
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("expectedUpdatedAt: toggleTarget.template.updatedAt"));
+  assert(page.includes('fetch("/api/admin/communications/test"'));
+  assert(page.includes("Provider acceptance ≠ delivered/read"));
+  assert(page.includes("Page {deliveryPage} of {deliveryTotalPages}"));
+
+  assert(testRoute.includes("COMMUNICATION_TEMPLATE_TEST_REQUESTED"));
+  assert(testRoute.includes("Production test sends are restricted to the configured recipient allowlist."));
+  assert(testRoute.indexOf("COMMUNICATION_TEMPLATE_TEST_REQUESTED") < testRoute.indexOf("dispatchAdminTestCommunication"));
+
+  assert(emailHelper.includes("getEmailDeliverySettingsStrict"));
+  assert(emailConfig.includes("expectedUpdatedAt: z.string().datetime().nullable()"));
+  assert(emailConfig.includes("Email delivery configuration changed; reload before saving."));
+  assert(emailConfig.includes("EMAIL_DELIVERY_CONFIG_UPDATED"));
+  assert(emailConfig.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+  assert(smtpUi.includes("expectedUpdatedAt: config.updatedAt"));
+
+  assert(emailTest.includes("COMMUNICATION_TEST_RECIPIENT_ALLOWLIST"));
+  assert(emailTest.includes("EMAIL_PROVIDER_TEST_REQUESTED"));
+  assert(emailTest.includes("Delivery/read confirmation is separate."));
+  assert(emailTest.indexOf("EMAIL_PROVIDER_TEST_REQUESTED") < emailTest.indexOf("sendEmail("));
+
+  assert(smtpWrapper.includes("md:ml-[116px]"));
+  assert(whatsappWrapper.includes("md:ml-[116px]"));
+});
