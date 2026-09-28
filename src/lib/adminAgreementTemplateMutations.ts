@@ -25,6 +25,7 @@ export type AgreementTemplateMutationInput = {
 export type AdminAgreementTemplateContext = {
   actorId: string;
   ipAddress?: string;
+  reason: string;
 };
 
 function slugBase(name: string): string {
@@ -69,7 +70,10 @@ async function writeAudit(
       action,
       resource: `AgreementTemplate:${templateId}`,
       ...(context.ipAddress ? { ipAddress: context.ipAddress } : {}),
-      details,
+      details: JSON.stringify({
+        summary: details,
+        reason: context.reason,
+      }),
     },
   });
   await enqueueSecurityAuditEvent(tx, auditLog, context.actorId);
@@ -151,12 +155,18 @@ export async function updateAdminAgreementTemplate(
 
 export async function archiveAdminAgreementTemplate(
   id: string,
+  expectedUpdatedAt: string,
   context: AdminAgreementTemplateContext,
 ): Promise<AgreementTemplateRecord | null> {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.agreementTemplate.findUnique({ where: { id } });
     if (!existing) return null;
-    if (existing.isArchived) return presentTemplate(existing);
+    if (existing.isArchived) {
+      throw new ApiError("Agreement template is already archived.", 409);
+    }
+    if (existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+      throw new ApiError("Agreement template changed; refresh before archiving.", 409);
+    }
     const changed = await tx.agreementTemplate.updateMany({
       where: { id, isArchived: false, updatedAt: existing.updatedAt },
       data: { isArchived: true },
@@ -172,11 +182,15 @@ export async function archiveAdminAgreementTemplate(
 
 export async function duplicateAdminAgreementTemplate(
   id: string,
+  expectedUpdatedAt: string,
   context: AdminAgreementTemplateContext,
 ): Promise<AgreementTemplateRecord | null> {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.agreementTemplate.findUnique({ where: { id } });
     if (!existing) return null;
+    if (existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+      throw new ApiError("Agreement template changed; refresh before cloning.", 409);
+    }
     const copyId = randomUUID();
     const copyName = `${existing.name} (Copy)`;
     const copied = await tx.agreementTemplate.create({
