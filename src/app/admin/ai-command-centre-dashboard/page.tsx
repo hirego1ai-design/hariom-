@@ -44,7 +44,7 @@ type Agent = {
     fallbackRate: number | null;
     avgLatencyMs: number | null;
     totalTokens: number;
-    observedCostUsd: number;
+    observedCostUsd: number | null;
     costPerSuccessfulTaskUsd: number | null;
     lastSuccess: string | null;
     lastFailure: string | null;
@@ -270,6 +270,11 @@ export default function AdminCommandCentrePage() {
                     Overall status: {overallStatus || "UNKNOWN"}{timestamp ? ` · observed ${new Date(timestamp).toLocaleString()}` : ""}
                   </p>
                 </div>
+                {services.length === 0 ? (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-text-muted">
+                    No infrastructure health records were returned.
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {services.map((service) => (
                     <article key={`${service.type}-${service.name}`} className="rounded-2xl border border-white/10 bg-[#121215] p-5">
@@ -285,6 +290,7 @@ export default function AdminCommandCentrePage() {
                     </article>
                   ))}
                 </div>
+                )}
               </section>
             </>
           )}
