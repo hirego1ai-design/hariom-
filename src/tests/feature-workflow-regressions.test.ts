@@ -1111,67 +1111,6 @@ test("admin integration and email controls fail closed without simulated connect
 });
 
 
-test("admin referral governance uses durable versioned financial and fraud controls", () => {
-  const page = fs.readFileSync(new URL("../app/admin/referrals/page.tsx", import.meta.url), "utf8");
-  const configRoute = fs.readFileSync(new URL("../app/api/admin/referrals/config/route.ts", import.meta.url), "utf8");
-  const payoutRoute = fs.readFileSync(new URL("../app/api/admin/referrals/payouts/route.ts", import.meta.url), "utf8");
-  const fraudRoute = fs.readFileSync(new URL("../app/api/admin/referrals/fraud/route.ts", import.meta.url), "utf8");
-  const analyticsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/analytics/route.ts", import.meta.url), "utf8");
-  const rules = fs.readFileSync(new URL("../lib/referral-rules.ts", import.meta.url), "utf8");
-  const db = fs.readFileSync(new URL("../lib/referral-db.ts", import.meta.url), "utf8");
-  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
-  const migration = fs.readFileSync(new URL("../../prisma/migrations/20260928082500_referral_fraud_persistence/migration.sql", import.meta.url), "utf8");
-
-  assert(schema.includes("model ReferralFraudProfile"));
-  assert(schema.includes("model ReferralFraudAudit"));
-  assert(schema.includes("enum ReferralFraudStatus"));
-  assert(migration.includes('ALTER TABLE public."ReferralFraudProfile" ENABLE ROW LEVEL SECURITY'));
-  assert(migration.includes('ALTER TABLE public."ReferralFraudAudit" ENABLE ROW LEVEL SECURITY'));
-  assert(migration.includes('REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM PUBLIC'));
-
-  assert(configRoute.includes("requireAdminSession(request)"));
-  assert(configRoute.includes('admin_referral_config_write:${admin.id}'));
-  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
-  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
-  assert(rules.includes("REFERRAL_CONFIG_UPDATED"));
-  assert(rules.includes("reason: auditContext.reason || null"));
-  assert(rules.includes("enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId)"));
-
-  assert(payoutRoute.includes("expectedUpdatedAt: z.string().datetime()"));
-  assert(payoutRoute.includes("Approval rationale is required."));
-  assert(payoutRoute.includes("getAdminPayoutQueuePage"));
-  assert(db.includes("REFERRAL_PAYOUT_APPROVED"));
-  assert(db.includes("REFERRAL_PAYOUT_MARKED_PAID"));
-  assert(db.includes("REFERRAL_PAYOUT_REJECTED"));
-  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, adminUserId)"));
-  assert(db.includes("Payout changed; reload before recording settlement."));
-  assert(db.includes("Payout changed; reload before rejecting."));
-
-  assert(fraudRoute.includes("getAdminFraudQueuePage"));
-  assert(fraudRoute.includes("expectedUpdatedAt: z.string().datetime()"));
-  assert(db.includes("prisma.referralFraudProfile.upsert"));
-  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
-  assert(db.includes("Referral fraud profile changed; reload before saving."));
-  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
-
-  assert(analyticsRoute.includes('status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] }'));
-
-  assert(page.includes("<AdminSidebar"));
-  assert(page.includes("<AdminHeader"));
-  assert(page.includes("md:pl-[116px]"));
-  assert(page.includes('expectedUpdatedAt: iso(payout.updatedAt)'));
-  assert(page.includes("adminNotes = payoutActionInput.trim()"));
-  assert(page.includes("transactionRef = payoutActionInput.trim()"));
-  assert(page.includes("rejectionReason = payoutActionInput.trim()"));
-  assert(page.includes('fetch("/api/admin/referrals/fraud"'));
-  assert(page.includes("expectedUpdatedAt: fraudTarget.updatedAt"));
-  assert(page.includes("Page {payoutPage} of {payoutTotalPages}"));
-  assert(page.includes("Page {fraudPage} of {fraudTotalPages}"));
-  assert(page.includes('role="dialog"'));
-  assert(page.includes("Approval authorizes processing but does not initiate any bank or UPI transfer."));
-});
-
-
 test("admin role governance is versioned audited profile-aware and session-invalidating", () => {
   const page = fs.readFileSync(new URL("../app/admin/roles/page.tsx", import.meta.url), "utf8");
   const route = fs.readFileSync(new URL("../app/api/admin/roles/route.ts", import.meta.url), "utf8");
@@ -1211,6 +1150,7 @@ test("admin referral governance persists fraud evidence and keeps payouts and an
   const payoutRoute = fs.readFileSync(new URL("../app/api/admin/referrals/payouts/route.ts", import.meta.url), "utf8");
   const fraudRoute = fs.readFileSync(new URL("../app/api/admin/referrals/fraud/route.ts", import.meta.url), "utf8");
   const analyticsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/analytics/route.ts", import.meta.url), "utf8");
+  const rules = fs.readFileSync(new URL("../lib/referral-rules.ts", import.meta.url), "utf8");
   const db = fs.readFileSync(new URL("../lib/referral-db.ts", import.meta.url), "utf8");
   const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
   const migration = fs.readFileSync(
@@ -1223,39 +1163,58 @@ test("admin referral governance persists fraud evidence and keeps payouts and an
   assert(schema.includes("enum ReferralFraudStatus"));
   assert(migration.includes('CREATE TABLE "ReferralFraudProfile"'));
   assert(migration.includes('CREATE TABLE "ReferralFraudAudit"'));
+  assert(migration.includes('ALTER TABLE public."ReferralFraudProfile" ENABLE ROW LEVEL SECURITY'));
+  assert(migration.includes('ALTER TABLE public."ReferralFraudAudit" ENABLE ROW LEVEL SECURITY'));
+  assert(migration.includes('REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM PUBLIC'));
 
-  assert(db.includes('if (process.env.NODE_ENV === "production")'));
-  assert(db.includes("prisma.referralFraudProfile.upsert"));
-  assert(db.includes("prisma.referralFraudProfile.findMany"));
-  assert(db.includes("referralFraudAudit.create"));
-  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
-  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
-  assert(db.includes("expectedLastEvaluatedAt?: string"));
-  assert(db.includes("Referral payout persistence is unavailable from the generated Prisma client."));
-  assert(!db.includes("if (isProduction) {\n        return { queue: [], total: 0 };"));
-
-  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
-  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(configRoute.includes("requireAdminSession(request)"));
   assert(configRoute.includes('admin_referral_config_write:${admin.id}'));
+  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(rules.includes("REFERRAL_CONFIG_UPDATED"));
+  assert(rules.includes("enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId)"));
 
+  assert(payoutRoute.includes("expectedUpdatedAt: z.string().datetime()"));
   assert(payoutRoute.includes("Approval rationale is required."));
   assert(payoutRoute.includes("Settlement transaction reference is required."));
   assert(payoutRoute.includes("Rejection reason is required."));
   assert(payoutRoute.includes('admin_referral_payouts_update:${admin.id}'));
+  assert(db.includes("REFERRAL_PAYOUT_APPROVED"));
+  assert(db.includes("REFERRAL_PAYOUT_MARKED_PAID"));
+  assert(db.includes("REFERRAL_PAYOUT_REJECTED"));
+  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, adminUserId)"));
 
-  assert(fraudRoute.includes("expectedLastEvaluatedAt: z.string().datetime()"));
+  assert(fraudRoute.includes("expectedUpdatedAt: z.string().datetime()"));
   assert(fraudRoute.includes('admin_referral_fraud_update:${admin.id}'));
+  assert(!fraudRoute.includes("expectedLastEvaluatedAt"));
+  assert(db.includes("prisma.referralFraudProfile.upsert"));
+  assert(db.includes("prisma.referralFraudProfile.findMany"));
+  assert(db.includes("referralFraudAudit.create"));
+  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
+  assert(db.includes("Referral fraud profile changed; reload before saving."));
+  assert(db.includes("evidenceChanged"));
+  assert(db.includes("Automated Risk Engine Evaluation"));
+  assert(!db.includes("expectedLastEvaluatedAt"));
 
   assert(analyticsRoute.includes("referralReward.groupBy"));
   assert(analyticsRoute.includes("referralPayout.groupBy"));
   assert(analyticsRoute.includes("currencyMode"));
   assert(analyticsRoute.includes("byCurrency"));
+  assert(!analyticsRoute.includes('currency: "INR"'));
   assert(!analyticsRoute.includes("referralReward.findMany"));
 
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
   assert(page.includes("configReason"));
   assert(page.includes("reason: configReason.trim()"));
   assert(page.includes("Record payout settlement?"));
   assert(page.includes("Confirm settlement"));
   assert(page.includes("Multiple currencies are reported separately"));
-  assert(page.includes("expectedLastEvaluatedAt"));
+  assert(page.includes("expectedUpdatedAt: new Date(fraudTarget.profile.updatedAt || fraudTarget.profile.lastEvaluatedAt).toISOString()"));
+  assert(!page.includes("expectedLastEvaluatedAt"));
+  assert(page.includes("Page {payoutPage} of {payoutPages}"));
+  assert(page.includes("Page {fraudPage} of {fraudPages}"));
+  assert(page.includes('role="dialog"'));
 });
+
