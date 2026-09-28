@@ -5,7 +5,7 @@ import { useEmployer } from "@/context/EmployerContext";
 import { PageContainer, PageHeader } from "@/components/employer/LayoutSystem";
 
 export default function EmployerDashboardPage() {
-  const { dashboardStats, candidates, jobs, isLoading } = useEmployer();
+  const { dashboardStats, candidates, jobs, isLoading, loadError } = useEmployer();
 
   const activeJobs = jobs.filter((job: any) => String(job.status).toUpperCase() === "ACTIVE");
   const recentCandidates = candidates.slice(0, 5);
@@ -24,6 +24,12 @@ export default function EmployerDashboardPage() {
         title="Employer Dashboard"
         subtitle="Live company hiring data from HireGo’s tenant-scoped backend. Unsupported predictions and demo metrics have been removed."
       />
+
+      {loadError && (
+        <div role="alert" className="mb-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+          {loadError}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">Loading company workspace…</div>
