@@ -11,7 +11,7 @@ export const liveInterviewProctoringPolicySchema = z.object({
 
 export type LiveInterviewProctoringPolicy = z.infer<typeof liveInterviewProctoringPolicySchema>;
 
-const DEFAULT_POLICY: LiveInterviewProctoringPolicy = {
+export const DEFAULT_LIVE_INTERVIEW_PROCTORING_POLICY: LiveInterviewProctoringPolicy = {
   enabled: false,
   trackTabSwitch: true,
   trackClipboard: true,
@@ -25,10 +25,10 @@ export async function getLiveInterviewProctoringPolicy(): Promise<LiveInterviewP
     select: { securityPolicy: true },
   });
   const root = config?.securityPolicy;
-  if (!root || typeof root !== "object" || Array.isArray(root)) return DEFAULT_POLICY;
+  if (!root || typeof root !== "object" || Array.isArray(root)) return DEFAULT_LIVE_INTERVIEW_PROCTORING_POLICY;
   const candidate = (root as Record<string, unknown>).liveInterviewProctoring;
   const parsed = liveInterviewProctoringPolicySchema.safeParse(candidate);
-  return parsed.success ? parsed.data : DEFAULT_POLICY;
+  return parsed.success ? parsed.data : DEFAULT_LIVE_INTERVIEW_PROCTORING_POLICY;
 }
 
 export async function saveLiveInterviewProctoringPolicy(policy: LiveInterviewProctoringPolicy) {
