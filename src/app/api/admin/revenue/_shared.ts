@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export function revenueUnavailable(error: unknown, resource: string) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    Number.isInteger((error as { status?: unknown }).status)
+  ) {
+    const status = Number((error as { status: number }).status);
+    const message = error instanceof Error ? error.message : "Request failed";
+    return NextResponse.json({ success: false, error: message }, { status });
+  }
+
   const detail = error instanceof Error ? error.message : "Database query failed";
   return NextResponse.json(
     {
