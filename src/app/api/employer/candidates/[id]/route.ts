@@ -41,6 +41,7 @@ export async function GET(
         },
         applications: {
           ...(scopedCompanyId ? { where: { job: { companyId: scopedCompanyId } } } : {}),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include: {
             job: {
               include: {
@@ -108,7 +109,9 @@ export async function GET(
     // never synthesize hiring signals or candidate attributes.
     const scopedApplications = profile.applications;
     const primaryApplication = scopedApplications[0];
-    const overallMatch = primaryApplication?.matchScore ?? null;
+    const overallMatch = primaryApplication?.aiSummary
+      ? primaryApplication.matchScore
+      : null;
 
     const ucpProfile = {
       id: profile.id,
