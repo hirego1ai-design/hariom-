@@ -22,12 +22,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const requestedLimit = searchParams.get("limit");
     const requestedCursor = searchParams.get("cursor");
+    const searchQuery = searchParams.get("q")?.trim() || "";
     const limit = requestedLimit === null ? DEFAULT_PAGE_SIZE : Number(requestedLimit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
       throw new ApiError(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`, 400);
     }
     if (requestedCursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedCursor)) {
       throw new ApiError("Invalid candidate cursor.", 400);
+    }
+    if (searchQuery.length > 100) {
+      throw new ApiError("Candidate search must be 100 characters or fewer.", 400);
     }
 
     let candidates: any[] = [];
@@ -54,6 +58,34 @@ export async function GET(req: NextRequest) {
                 },
               },
             },
+            ...(searchQuery
+              ? {
+                  OR: [
+                    {
+                      candidateProfile: {
+                        user: {
+                          name: { contains: searchQuery, mode: "insensitive" },
+                        },
+                      },
+                    },
+                    {
+                      candidateProfile: {
+                        headline: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                    {
+                      candidateProfile: {
+                        location: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                    {
+                      job: {
+                        title: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                  ],
+                }
+              : {}),
           },
           include: {
             candidateProfile: { include: {
