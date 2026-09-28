@@ -64,6 +64,7 @@ export async function generateAndSendOtp(
   const now = new Date();
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
   const otp = crypto.randomInt(100000, 1_000_000).toString();
+  const digest = otpDigest(normalizedEmail, type, otp);
 
   try {
     const [latest, sentRecently] = await Promise.all([
@@ -91,7 +92,7 @@ export async function generateAndSendOtp(
           data: { verified: true },
         });
         await tx.otpVerification.create({
-          data: { email: normalizedEmail, otp: otpDigest(normalizedEmail, type, otp), type, expiresAt },
+          data: { email: normalizedEmail, otp: digest, type, expiresAt },
         });
       },
       { maxWait: 10_000, timeout: 20_000 }
@@ -104,7 +105,7 @@ export async function generateAndSendOtp(
 
     inMemoryOtps.set(keyFor(normalizedEmail, type), {
       email: normalizedEmail,
-      otp: otpDigest(normalizedEmail, type, otp),
+      otp: digest,
       type,
       expiresAt,
       verified: false,
@@ -125,7 +126,26 @@ export async function generateAndSendOtp(
     </div>`;
 
   const emailResult = await sendEmail({ to: normalizedEmail, subject, html: messageHtml });
-  if (!emailResult.success) throw new OtpError("Unable to deliver the verification code.", 503);
+  if (!emailResult.success) {
+    // A code that the provider did not accept must not remain active or block
+    // an immediate retry via the resend endpoint.
+    try {
+      await prisma.otpVerification.deleteMany({
+        where: {
+          email: normalizedEmail,
+          type,
+          verified: false,
+          otp: digest,
+        },
+      });
+    } catch {
+      if (process.env.NODE_ENV === "production") {
+        throw new OtpError("Unable to deliver the verification code.", 503);
+      }
+    }
+    inMemoryOtps.delete(keyFor(normalizedEmail, type));
+    throw new OtpError("Unable to deliver the verification code.", 503);
+  }
 
   return {
     success: true,
