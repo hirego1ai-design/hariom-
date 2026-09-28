@@ -65,7 +65,7 @@ export default function EmployerSourceTrackingPage() {
             Source Intelligence
           </h1>
           <p className="font-body-lg text-text-secondary mt-2">
-            Candidate quality and recruitment ROI across all acquisition channels.
+            Recorded application-source distribution for your company pipeline. Cost-based ROI is shown only when authoritative acquisition-cost data exists.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -194,15 +194,13 @@ export default function EmployerSourceTrackingPage() {
               >
                 lightbulb
               </span>
-              <h3 className="font-headline-md text-headline-md text-on-surface">AI Strategy</h3>
+              <h3 className="font-headline-md text-headline-md text-on-surface">Source Snapshot</h3>
             </div>
 
             {data.sourceBreakdown.length === 0 ? (
               <div className="flex-1 space-y-4">
                 <p className="font-body-md text-on-surface-variant leading-relaxed text-sm">
-                  Start building your referral network. Referred candidates show{" "}
-                  <span className="text-gold-payment font-bold">higher offer acceptance</span> and{" "}
-                  <span className="text-primary font-bold">lower cost-per-hire</span> than job board applications.
+                  No source evidence is available yet for this period. Once applications are recorded, this view will summarize the measured source mix without inferring quality or cost advantages.
                 </p>
                 <Link
                   href="/employer/referrals"
@@ -261,7 +259,7 @@ export default function EmployerSourceTrackingPage() {
                     <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-700"
-                        style={{ width: `${Math.max(item.conversionRate, 2)}%` }}
+                        style={{ width: `${Math.max(0, Math.min(item.conversionRate, 100))}%` }}
                       />
                     </div>
                   </div>
