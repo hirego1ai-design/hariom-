@@ -9,6 +9,7 @@ import { JobStatus } from "@prisma/client";
 import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
 import { getJobPublicationTerms } from "@/lib/jobPlanEntitlements";
+import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
 
 const updateJobSchema = z.object({
   title: z.string().min(3).optional(),
@@ -102,7 +103,22 @@ export async function PUT(
 
     const updatedJob = isPublishingDraft
       ? await prisma.$transaction(async (tx) => {
+          // Lock the draft row inside the same transaction so concurrent publish
+          // requests cannot both consume a job-post credit.
+          const reserved = await tx.jobListing.updateMany({
+            where: { id, status: JobStatus.DRAFT },
+            data: { status: JobStatus.DRAFT },
+          });
+          if (reserved.count !== 1) {
+            throw new ApiError("This job is no longer an unpublished draft. Refresh and try again.", 409);
+          }
+
           if (session.role !== "ADMIN") {
+            await requireActiveCompanySubscription(
+              tx,
+              oldJob.companyId,
+              "An active subscription is required to publish jobs. Please purchase or renew a plan.",
+            );
             const debited = await tx.companyCredits.updateMany({
               where: { companyId: companyId!, jobPostsLeft: { gt: 0 } },
               data: { jobPostsLeft: { decrement: 1 } },
