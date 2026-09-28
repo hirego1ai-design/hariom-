@@ -39,7 +39,7 @@ const updateSchema = z.object({
 }).strict();
 
 function presentPlatformConfig(
-  stored: { platformConfig: Prisma.JsonValue | null; updatedAt: Date } | null,
+  stored: { platformConfig: Prisma.JsonValue | null } | null,
 ) {
   const raw = stored && isRecord(stored.platformConfig)
     ? stored.platformConfig
@@ -72,7 +72,8 @@ function presentPlatformConfig(
         : undefined,
     slaResponseHours:
       typeof raw.slaResponseHours === "number" ? raw.slaResponseHours : undefined,
-    lastUpdated: stored?.updatedAt.toISOString() ?? null,
+    lastUpdated:
+      typeof raw.lastUpdated === "string" ? raw.lastUpdated : null,
   };
 }
 
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     const stored = await prisma.adminConfiguration.findUnique({
       where: { id: CONFIG_ID },
-      select: { platformConfig: true, updatedAt: true },
+      select: { platformConfig: true },
     });
 
     return NextResponse.json({
@@ -114,19 +115,20 @@ export async function POST(request: NextRequest) {
     const input = await readValidatedJson(request, updateSchema, 16 * 1024);
 
     await prisma.$transaction(async (tx) => {
-      await tx.adminConfiguration.upsert({
-        where: { id: CONFIG_ID },
-        create: { id: CONFIG_ID, platformConfig: {} },
-        update: {},
-      });
+      // This row stores several independent Admin configuration domains.
+      // Serialize this domain without treating unrelated row updates as a
+      // platform-controls version change.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('admin-platform-controls'))`;
 
-      await tx.$queryRaw`SELECT id FROM "AdminConfiguration" WHERE id = ${CONFIG_ID} FOR UPDATE`;
-      const stored = await tx.adminConfiguration.findUniqueOrThrow({
+      const stored = await tx.adminConfiguration.findUnique({
         where: { id: CONFIG_ID },
-        select: { platformConfig: true, updatedAt: true },
+        select: { platformConfig: true },
       });
+      const currentRaw =
+        stored && isRecord(stored.platformConfig) ? stored.platformConfig : {};
+      const currentVersion =
+        typeof currentRaw.lastUpdated === "string" ? currentRaw.lastUpdated : null;
 
-      const currentVersion = stored.updatedAt.toISOString();
       if (currentVersion !== input.expectedUpdatedAt) {
         throw new ApiError(
           "Platform configuration changed; reload before saving.",
@@ -134,17 +136,30 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const current = isRecord(stored.platformConfig)
-        ? { ...stored.platformConfig }
-        : {};
+      const current = { ...currentRaw };
+      // Retire legacy global commercial defaults. Actual commercial terms are
+      // configured per AgreementTemplate and snapshotted to CommercialAgreement.
+      delete current.defaultPlacementFeePct;
+      delete current.defaultReplacementDays;
+      delete current.defaultCreditDays;
+      delete current.taxRatePct;
+      delete current.currency;
+
       const next = {
         ...current,
         ...input.config,
+        lastUpdated: new Date().toISOString(),
       };
 
-      await tx.adminConfiguration.update({
+      await tx.adminConfiguration.upsert({
         where: { id: CONFIG_ID },
-        data: { platformConfig: next as Prisma.InputJsonValue },
+        create: {
+          id: CONFIG_ID,
+          platformConfig: next as Prisma.InputJsonValue,
+        },
+        update: {
+          platformConfig: next as Prisma.InputJsonValue,
+        },
       });
 
       const auditLog = await tx.auditLog.create({
@@ -164,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     const updated = await prisma.adminConfiguration.findUniqueOrThrow({
       where: { id: CONFIG_ID },
-      select: { platformConfig: true, updatedAt: true },
+      select: { platformConfig: true },
     });
 
     return NextResponse.json({
