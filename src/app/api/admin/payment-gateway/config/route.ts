@@ -3,7 +3,6 @@ import { z } from "zod";
 import { PaymentGatewayController, type GatewayConfigState } from "@/lib/payments/PaymentGatewayController";
 import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { prisma } from "@/lib/prisma";
 
 const gatewayStatusSchema = z.enum(["HEALTHY", "DEGRADED", "DISABLED"]);
 const gatewayNameSchema = z.enum(["PAYU", "STRIPE"]);
@@ -18,18 +17,14 @@ const gatewayConfigSchema = z.object({
   }).strict().optional(),
   priorities: z.array(gatewayNameSchema).length(2).refine(v => new Set(v).size === v.length, "Gateway priorities must contain Stripe and PayU exactly once.").optional(),
   expectedUpdatedAt: z.string().datetime().nullable().optional(),
-}).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
+}).strict().refine(v=>Object.keys(v).some(key=>key!=="expectedUpdatedAt"),"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {
   try {
     const admin=await requireAdminSession(req);
     await enforceRateLimit(req,`admin_payment_gateway_config_get:${admin.id}`,30,60_000);
-    const config=await PaymentGatewayController.getConfig();
-    const version=await prisma.paymentGatewayConfig.findUnique({
-      where:{id:"global-gateway-config"},
-      select:{updatedAt:true},
-    });
-    return NextResponse.json({success:true,config,updatedAt:version?.updatedAt.toISOString() ?? null},{headers:{"Cache-Control":"no-store"}});
+    const snapshot=await PaymentGatewayController.getAdminConfigSnapshot();
+    return NextResponse.json({success:true,config:snapshot.config,updatedAt:snapshot.updatedAt},{headers:{"Cache-Control":"no-store"}});
   } catch(error){return handleApiError(error);}
 }
 
@@ -43,10 +38,7 @@ export async function POST(req: NextRequest) {
       actorId: admin.id,
       ipAddress: getClientIp(req),
     }, expectedUpdatedAt);
-    const version=await prisma.paymentGatewayConfig.findUnique({
-      where:{id:"global-gateway-config"},
-      select:{updatedAt:true},
-    });
-    return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig,updatedAt:version?.updatedAt.toISOString() ?? null},{headers:{"Cache-Control":"no-store"}});
+    const snapshot=await PaymentGatewayController.getAdminConfigSnapshot();
+    return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig,updatedAt:snapshot.updatedAt},{headers:{"Cache-Control":"no-store"}});
   } catch(error){return handleApiError(error);}
 }
