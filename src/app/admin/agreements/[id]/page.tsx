@@ -112,6 +112,10 @@ export default function AdminAgreementReviewPage() {
   const [sendReason, setSendReason] = useState("");
   const [sending, setSending] = useState(false);
 
+  const [activationOpen, setActivationOpen] = useState(false);
+  const [activationReason, setActivationReason] = useState("");
+  const [activating, setActivating] = useState(false);
+
   const currency = requirement?.currency || "currency";
   const canEdit = agreement ? editable(agreement.status) : false;
   const canSend = canEdit;
@@ -269,6 +273,57 @@ export default function AdminAgreementReviewPage() {
     }
   }
 
+  async function activateManagedHiring() {
+    if (
+      !agreement ||
+      !requirement ||
+      agreement.status !== "ACTIVE" ||
+      requirement.status === "ACTIVE" ||
+      activating ||
+      activationReason.trim().length < 3
+    ) {
+      return;
+    }
+
+    setActivating(true);
+    setNotice(null);
+    try {
+      const response = await fetch(
+        `/api/agreements/requirements/${encodeURIComponent(requirement.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "ACTIVE",
+            activeAgreementId: agreement.id,
+            expectedUpdatedAt: new Date(requirement.updatedAt).toISOString(),
+            reason: activationReason.trim(),
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !payload.requirement) {
+        throw new Error(payload.error || "Unable to activate managed hiring.");
+      }
+
+      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+      setActivationOpen(false);
+      setActivationReason("");
+      setNotice({
+        type: "success",
+        text: `Managed Hiring activated. ${jobs.length} production job listing${jobs.length === 1 ? "" : "s"} created or reconciled.`,
+      });
+      await load();
+    } catch (cause) {
+      setNotice({
+        type: "error",
+        text: cause instanceof Error ? cause.message : "Unable to activate managed hiring.",
+      });
+    } finally {
+      setActivating(false);
+    }
+  }
+
   async function sendToEmployer() {
     if (!agreement || sending || sendReason.trim().length < 3) return;
     setSending(true);
@@ -399,6 +454,18 @@ export default function AdminAgreementReviewPage() {
                         Send to employer
                       </button>
                     )}
+                    {agreement.status === "ACTIVE" && requirement && requirement.status !== "ACTIVE" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActivationReason("");
+                          setActivationOpen(true);
+                        }}
+                        className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white"
+                      >
+                        Activate Managed Hiring
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -414,6 +481,11 @@ export default function AdminAgreementReviewPage() {
                     Signed by {agreement.signedByName || "recorded employer signer"}
                     {agreement.signedByDesignation ? ` · ${agreement.signedByDesignation}` : ""}
                     {agreement.signedAt ? ` · ${new Date(agreement.signedAt).toLocaleString()}` : ""}
+                  </div>
+                )}
+                {agreement.status === "ACTIVE" && requirement && requirement.status !== "ACTIVE" && (
+                  <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                    Commercial agreement is signed, but operational Managed Hiring is not active yet. Administrator activation will create or reconcile production job listings through the managed-hiring activation engine.
                   </div>
                 )}
               </section>
@@ -524,6 +596,32 @@ export default function AdminAgreementReviewPage() {
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" disabled={sending} onClick={() => { setSendOpen(false); setSendReason(""); }} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40">Cancel</button>
               <button type="button" disabled={sending || sendReason.trim().length < 3} onClick={() => void sendToEmployer()} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold disabled:opacity-40">{sending ? "Sending…" : "Send for employer review"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activationOpen && agreement && requirement && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="activate-managed-hiring-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+            <h2 id="activate-managed-hiring-title" className="text-lg font-bold">Activate Managed Hiring?</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              The signed agreement will be used to activate requirement {requirement.referenceCode}. This creates or reconciles production job listings and emits durable activation events.
+            </p>
+            <label className="mt-5 block text-xs text-slate-400">
+              Activation reason
+              <textarea
+                value={activationReason}
+                onChange={(event) => setActivationReason(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                placeholder="Why is this signed mandate ready for operational activation?"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" disabled={activating} onClick={() => { setActivationOpen(false); setActivationReason(""); }} className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40">Cancel</button>
+              <button type="button" disabled={activating || activationReason.trim().length < 3} onClick={() => void activateManagedHiring()} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold disabled:opacity-40">{activating ? "Activating…" : "Confirm activation"}</button>
             </div>
           </div>
         </div>
