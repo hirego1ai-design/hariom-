@@ -33,6 +33,7 @@ export default function ManagedHiringRequirementWizard() {
   const [loading, setLoading] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState("");
+  const [prefillWarning, setPrefillWarning] = useState("");
 
   // Form state starts blank. Authenticated company/user facts are loaded
   // from server-side tenant-scoped APIs below; requirement details are never
@@ -123,9 +124,12 @@ export default function ManagedHiringRequirementWizard() {
           email: typeof user.email === "string" ? user.email : "",
         }));
       })
-      .catch(() => {
-        // The form remains blank if profile prefill is unavailable. Submission
-        // validation/server authorization remains authoritative.
+      .catch((error) => {
+        setPrefillWarning(
+          error instanceof Error
+            ? error.message
+            : "Company/account prefill could not be loaded. Enter the required details manually before submitting.",
+        );
       });
     return () => { active = false; };
   }, []);
@@ -295,6 +299,11 @@ export default function ManagedHiringRequirementWizard() {
           })}
         </div>
 
+        {prefillWarning && (
+          <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            {prefillWarning} Submission remains available with manually entered data.
+          </div>
+        )}
         {submitError && (
           <div role="alert" aria-live="assertive" className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {submitError}
@@ -609,7 +618,11 @@ export default function ManagedHiringRequirementWizard() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-slate-400">Budget Range</span>
-                  <span className="text-xs font-bold text-[#26A69A]">₹{formData.budgetMin} - ₹{formData.budgetMax}</span>
+                  <span className="text-xs font-bold text-[#26A69A]">
+                    {formData.budgetMin || formData.budgetMax
+                      ? `${formData.currency || "Currency not set"} ${formData.budgetMin || "—"} - ${formData.budgetMax || "—"}`
+                      : "Not specified"}
+                  </span>
                 </div>
               </div>
 
@@ -662,7 +675,7 @@ export default function ManagedHiringRequirementWizard() {
               <span className="material-symbols-outlined text-5xl text-[#26A69A]">check_circle</span>
               <h3 className="text-xl font-bold text-white">Requirement Submitted!</h3>
               <p className="text-xs text-slate-300">
-                Your requirement has been queued for Sales & Managed Talent Review.
+                Your requirement has been persisted for managed-hiring review. Its current status is tracked on the Managed Hiring dashboard.
               </p>
               <div className="p-3 bg-[#16161B] border border-white/10 rounded-xl text-sm font-mono text-[#FFCA28] font-bold">
                 ID: {submittedRef}
@@ -671,7 +684,7 @@ export default function ManagedHiringRequirementWizard() {
                 onClick={() => router.push("/employer/managed-hiring")}
                 className="w-full py-3 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90"
               >
-                Go to Autonomous Hiring Center
+                Go to Managed Hiring Dashboard
               </button>
             </div>
           </div>
