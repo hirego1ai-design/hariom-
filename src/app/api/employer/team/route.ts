@@ -204,8 +204,28 @@ export async function POST(req: NextRequest) {
     });
 
     if (!emailResult.success) {
-      // Rollback database record if email provider failed or is unconfigured
-      await prisma.companyInvitation.delete({ where: { id: invitation.id } }).catch(() => undefined);
+      // A token the provider did not accept must not remain as an active
+      // invitation that blocks an immediate retry. Revoke first (preserves
+      // auditability), then fall back to deletion if the state transition
+      // itself could not be persisted.
+      try {
+        const revoked = await prisma.companyInvitation.updateMany({
+          where: { id: invitation.id, status: "PENDING" },
+          data: { status: "REVOKED" },
+        });
+        if (revoked.count !== 1) {
+          await prisma.companyInvitation.deleteMany({
+            where: { id: invitation.id, status: "PENDING" },
+          });
+        }
+      } catch (cleanupError) {
+        console.error("TEAM_INVITATION_DELIVERY_CLEANUP_FAILED", {
+          invitationId: invitation.id,
+          companyId,
+          email: normalizedEmail,
+          cleanupError,
+        });
+      }
       throw new ApiError("Email delivery failed or no active email provider is configured. Invitation was not dispatched.", 502);
     }
 
