@@ -58,7 +58,7 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-[#0A0A0C] text-white">
       <AdminSidebar />
       <AdminHeader title="Admin Control Centre" subtitle="All production administration tools in one place" />
-      <main className="ml-[116px] px-6 pb-12 pt-28 lg:px-10">
+      <main className="ml-0 px-4 pb-12 pt-28 sm:px-6 md:ml-[116px] lg:px-10">
         <div className="mx-auto max-w-7xl space-y-8">
           <section className="rounded-[28px] border border-white/10 bg-gradient-to-br from-[#1C1C23] to-[#111116] p-7 shadow-2xl">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
