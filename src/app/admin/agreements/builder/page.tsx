@@ -13,6 +13,7 @@ export default function SalesAgreementBuilderPage() {
   const [selectedReqId, setSelectedReqId] = useState("");
   const [selectedTplId, setSelectedTplId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Customization fields
   const [companyName, setCompanyName] = useState("");
@@ -55,13 +56,14 @@ export default function SalesAgreementBuilderPage() {
       setFeeValue(tpl.feeValue);
       setReplacementDays(tpl.replacementDays);
       setInvoiceRule(tpl.invoiceRule);
-      setCreditDays(tpl.creditDays || 15);
+      setCreditDays(tpl.creditDays ?? 15);
     }
   };
 
   const handleGenerateAgreement = async () => {
-    if (!companyName || !contactPerson || !email) {
-      alert("Please fill in company name, contact person, and email.");
+    setActionMessage(null);
+    if (!companyName.trim() || !contactPerson.trim() || !email.trim()) {
+      setActionMessage({ type: "error", text: "Please fill in company name, contact person, and email." });
       return;
     }
     setLoading(true);
@@ -90,14 +92,14 @@ export default function SalesAgreementBuilderPage() {
       });
 
       const data = await res.json();
-      if (data.success) {
-        alert(`Agreement generated! Number: ${data.agreement.agreementNumber}`);
+      if (res.ok && data.success) {
         router.push("/admin/managed-hiring/pipeline");
       } else {
-        alert(data.error);
+        setActionMessage({ type: "error", text: data.error || "Agreement generation failed." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Agreement generation failed. Please try again." });
     } finally {
       setLoading(false);
     }
@@ -109,6 +111,7 @@ export default function SalesAgreementBuilderPage() {
       <AdminHeader />
 
       <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-5xl mx-auto">
+        {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         <div className="border-b border-white/10 pb-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#29B6F6]/10 text-[#29B6F6] border border-[#29B6F6]/20 mb-1">
             SALES WORKSPACE
