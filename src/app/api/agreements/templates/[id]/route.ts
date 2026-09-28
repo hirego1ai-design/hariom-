@@ -9,6 +9,7 @@ import {
 } from "@/lib/adminAgreementTemplateMutations";
 import {
   agreementTemplateActionSchema,
+  agreementTemplateArchiveSchema,
   agreementTemplateUpdateSchema,
 } from "@/lib/agreementTemplateContracts";
 
@@ -39,13 +40,17 @@ export async function PUT(
     await enforceRateLimit(req, `agreement_template_update:${session.id}`, 20, 60_000);
     const { id } = await params;
     const body = await readValidatedJson(req, agreementTemplateUpdateSchema, 128 * 1024);
-    const { expectedUpdatedAt, ...templateInput } = body;
+    const { expectedUpdatedAt, reason, ...templateInput } = body;
 
     const updated = await updateAdminAgreementTemplate(
       id,
       templateInput,
       expectedUpdatedAt,
-      { actorId: session.id, ipAddress: getClientIp(req) },
+      {
+        actorId: session.id,
+        ipAddress: getClientIp(req),
+        reason,
+      },
     );
     if (!updated) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
@@ -69,12 +74,17 @@ export async function POST(
     const session = await requireAdminSession(req);
     await enforceRateLimit(req, `agreement_template_duplicate:${session.id}`, 10, 60_000);
     const { id } = await params;
-    await readValidatedJson(req, agreementTemplateActionSchema);
+    const body = await readValidatedJson(req, agreementTemplateActionSchema);
 
-    const duplicated = await duplicateAdminAgreementTemplate(id, {
-      actorId: session.id,
-      ipAddress: getClientIp(req),
-    });
+    const duplicated = await duplicateAdminAgreementTemplate(
+      id,
+      body.expectedUpdatedAt,
+      {
+        actorId: session.id,
+        ipAddress: getClientIp(req),
+        reason: body.reason,
+      },
+    );
     if (!duplicated) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
@@ -96,10 +106,16 @@ export async function DELETE(
     const session = await requireAdminSession(req);
     await enforceRateLimit(req, `agreement_template_archive:${session.id}`, 10, 60_000);
     const { id } = await params;
-    const archived = await archiveAdminAgreementTemplate(id, {
-      actorId: session.id,
-      ipAddress: getClientIp(req),
-    });
+    const body = await readValidatedJson(req, agreementTemplateArchiveSchema, 8 * 1024);
+    const archived = await archiveAdminAgreementTemplate(
+      id,
+      body.expectedUpdatedAt,
+      {
+        actorId: session.id,
+        ipAddress: getClientIp(req),
+        reason: body.reason,
+      },
+    );
     if (!archived) {
       return NextResponse.json({ success: false, error: "Template not found" }, { status: 404 });
     }
