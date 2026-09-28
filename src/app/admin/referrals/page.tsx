@@ -47,6 +47,7 @@ export default function AdminReferralsPage() {
   const [coreError, setCoreError] = useState<string | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [saveMessage, setSaveMessage] = useState<Message>(null);
+  const [configReason, setConfigReason] = useState("");
 
   const [payouts, setPayouts] = useState<ReferralPayout[]>([]);
   const [payoutPage, setPayoutPage] = useState(1);
@@ -61,6 +62,8 @@ export default function AdminReferralsPage() {
   const [approvalReason, setApprovalReason] = useState("");
   const [rejectTarget, setRejectTarget] = useState<ReferralPayout | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [settlementTarget, setSettlementTarget] = useState<ReferralPayout | null>(null);
+  const [settlementRef, setSettlementRef] = useState("");
 
   const [fraudQueue, setFraudQueue] = useState<UserFraudProfile[]>([]);
   const [fraudPage, setFraudPage] = useState(1);
@@ -161,12 +164,13 @@ export default function AdminReferralsPage() {
 
   async function saveConfig(event: React.FormEvent) {
     event.preventDefault();
-    if (!config || savingConfig) return;
+    if (!config || savingConfig || configReason.trim().length < 3) return;
     setSavingConfig(true);
     setSaveMessage(null);
     try {
       const body = {
         ...Object.fromEntries(MUTABLE_CONFIG_KEYS.map((key) => [key, config[key]])),
+        reason: configReason.trim(),
         expectedUpdatedAt: new Date(config.updatedAt).toISOString(),
       };
       const response = await fetch("/api/admin/referrals/config", {
@@ -179,7 +183,8 @@ export default function AdminReferralsPage() {
         throw new Error(payload.error || "Failed to save referral configuration.");
       }
       setConfig(payload.config);
-      setSaveMessage({ type: "success", text: "Referral configuration updated." });
+      setConfigReason("");
+      setSaveMessage({ type: "success", text: "Referral configuration updated and audited." });
     } catch (error) {
       setSaveMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to save referral configuration." });
     } finally {
@@ -215,8 +220,10 @@ export default function AdminReferralsPage() {
     }
   }
 
-  async function markPaid(payout: ReferralPayout) {
-    const transactionRef = utrInputs[payout.id]?.trim();
+  async function markPaid() {
+    if (!settlementTarget) return;
+    const payout = settlementTarget;
+    const transactionRef = settlementRef.trim();
     if (!transactionRef) {
       setPayoutActionMsg((current) => ({ ...current, [payout.id]: "Enter the settlement UTR / transaction reference first." }));
       return;
@@ -241,6 +248,8 @@ export default function AdminReferralsPage() {
         delete next[payout.id];
         return next;
       });
+      setSettlementTarget(null);
+      setSettlementRef("");
       await Promise.all([loadPayouts(), loadCore()]);
     } catch (error) {
       setPayoutActionMsg((current) => ({ ...current, [payout.id]: error instanceof Error ? error.message : "Settlement update failed." }));
@@ -349,10 +358,22 @@ export default function AdminReferralsPage() {
                     <h2 className="font-bold">Authoritative referral economics</h2>
                     <p className="mt-1 text-xs text-slate-400">Managed Hiring fields are canonical; legacy PPH fields are compatibility fallback only.</p>
                   </div>
-                  <button disabled={savingConfig} className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold disabled:opacity-40">
+                  <button disabled={savingConfig || configReason.trim().length < 3} className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold disabled:opacity-40">
                     {savingConfig ? "Saving…" : "Save configuration"}
                   </button>
                 </div>
+
+                <label className="block rounded-xl border border-white/10 bg-white/[0.03] p-4 text-xs text-slate-400">
+                  Change reason
+                  <textarea
+                    value={configReason}
+                    onChange={(event) => setConfigReason(event.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Why are referral economics or program rules changing?"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+                  />
+                </label>
 
                 {saveMessage && (
                   <div role={saveMessage.type === "error" ? "alert" : "status"} className={`rounded-xl border p-3 text-xs ${saveMessage.type === "error" ? "border-red-400/20 bg-red-500/10 text-red-200" : "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"}`}>
@@ -465,7 +486,22 @@ export default function AdminReferralsPage() {
                                 <button type="button" onClick={() => { setApprovalReason(""); setApproveTarget(payout); }} className="rounded-lg border border-blue-400/20 px-3 py-1.5 text-blue-300">Approve</button>
                               )}
                               {payout.status === "APPROVED" && (
-                                <button type="button" onClick={() => void markPaid(payout)} disabled={payoutActionLoading[payout.id]} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold disabled:opacity-40">Mark paid</button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentRef = utrInputs[payout.id]?.trim() || "";
+                                    if (!currentRef) {
+                                      setPayoutActionMsg((current) => ({ ...current, [payout.id]: "Enter the settlement UTR / transaction reference first." }));
+                                      return;
+                                    }
+                                    setSettlementRef(currentRef);
+                                    setSettlementTarget(payout);
+                                  }}
+                                  disabled={payoutActionLoading[payout.id]}
+                                  className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold disabled:opacity-40"
+                                >
+                                  Mark paid
+                                </button>
                               )}
                               {(payout.status === "PENDING_ADMIN_APPROVAL" || payout.status === "APPROVED") && (
                                 <button type="button" onClick={() => { setRejectionReason(""); setRejectTarget(payout); }} className="rounded-lg border border-red-400/20 px-3 py-1.5 text-red-300">Reject</button>
@@ -597,6 +633,32 @@ export default function AdminReferralsPage() {
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => { setRejectTarget(null); setRejectionReason(""); }} className="rounded-lg border border-white/10 px-4 py-2 text-xs">Cancel</button>
               <button type="button" disabled={rejectionReason.trim().length < 3 || payoutActionLoading[rejectTarget.id]} onClick={() => void rejectPayout()} className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold disabled:opacity-40">Reject payout</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settlementTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="settle-payout-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#141418] p-6">
+            <h2 id="settle-payout-title" className="text-lg font-bold">Record payout settlement?</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Confirm that {money(settlementTarget.amount, settlementTarget.currency)} has actually been settled externally. This action marks the payout PAID and writes the immutable settlement ledger entry.
+            </p>
+            <label className="mt-4 block text-xs text-slate-400">
+              UTR / transaction reference
+              <input
+                value={settlementRef}
+                onChange={(event) => setSettlementRef(event.target.value)}
+                maxLength={200}
+                className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 font-mono text-white"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => { setSettlementTarget(null); setSettlementRef(""); }} disabled={payoutActionLoading[settlementTarget.id]} className="rounded-lg border border-white/10 px-4 py-2 text-xs disabled:opacity-40">Cancel</button>
+              <button type="button" disabled={settlementRef.trim().length < 3 || payoutActionLoading[settlementTarget.id]} onClick={() => void markPaid()} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold disabled:opacity-40">
+                {payoutActionLoading[settlementTarget.id] ? "Saving…" : "Confirm settlement"}
+              </button>
             </div>
           </div>
         </div>
