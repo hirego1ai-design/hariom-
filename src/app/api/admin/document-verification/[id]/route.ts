@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, handleApiError, jsonError } from "@/lib";
-import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { enforceRateLimit, readValidatedJson } from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
+import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const verificationActionSchema = z.object({
   action: z.enum(["Verified", "Rejected"]),
@@ -11,13 +18,11 @@ const verificationActionSchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) return jsonError("Authentication required", 401);
-    if (session.role !== "ADMIN") return jsonError("Administrator access required", 403);
-    await enforceRateLimit(req, "admin_document_verification_write", 20, 60_000);
+    const session = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_document_verification_write:${session.id}`, 20, 60_000);
 
     const { id: documentId } = await params;
     const { action, notes } = await readValidatedJson(
@@ -26,11 +31,10 @@ export async function POST(
       8 * 1024,
     );
 
-    // Keep the status transition and immutable audit trail in one transaction.
-    // The acting admin always comes from the verified session; never trust a
-    // client-supplied verifiedBy value. The conditional update makes the
-    // pending-state transition atomic, so two admins cannot process the same
-    // document concurrently and create duplicate audit entries.
+    if (action === "Rejected" && !notes?.trim()) {
+      throw new ApiError("A rejection reason is required for KYC review.", 400);
+    }
+
     const updatedDocument = await prisma.$transaction(async (tx) => {
       const transitioned = await tx.documentVerification.updateMany({
         where: { id: documentId, status: "Pending Audit" },
@@ -42,8 +46,11 @@ export async function POST(
       });
       if (transitioned.count !== 1) return null;
 
-      const updated = await tx.documentVerification.findUnique({ where: { id: documentId } });
+      const updated = await tx.documentVerification.findUnique({
+        where: { id: documentId },
+      });
       if (!updated) return null;
+
       await tx.documentVerificationLog.create({
         data: {
           documentId,
@@ -52,11 +59,23 @@ export async function POST(
           notes: notes || null,
         },
       });
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          action: action === "Verified" ? "KYC_DOCUMENT_VERIFIED" : "KYC_DOCUMENT_REJECTED",
+          resource: `DocumentVerification:${documentId}`,
+          ipAddress: getClientIp(req) || "unknown",
+          details: `KYC ${updated.docType} review completed; reviewer note recorded=${Boolean(notes?.trim())}`,
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+
       return updated;
     });
 
     if (!updatedDocument) {
-      return jsonError("Document not found or already processed", 409);
+      throw new ApiError("Document not found or already processed.", 409);
     }
 
     return NextResponse.json({
