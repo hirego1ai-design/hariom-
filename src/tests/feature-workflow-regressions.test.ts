@@ -511,3 +511,48 @@ test("recorded assessment question-bank publication and retirement are atomicall
   assert(retire.includes("updateMany"));
   assert(retire.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
+
+
+test("admin shell stays responsive and dashboard navigation targets canonical pages", () => {
+  const sidebar = fs.readFileSync(new URL("../components/admin/AdminSidebar.tsx", import.meta.url), "utf8");
+  const header = fs.readFileSync(new URL("../components/admin/AdminHeader.tsx", import.meta.url), "utf8");
+  const dashboard = fs.readFileSync(new URL("../app/admin/dashboard/page.tsx", import.meta.url), "utf8");
+
+  assert(sidebar.includes('id="admin-mobile-navigation"'));
+  assert(sidebar.includes("hidden md:flex"));
+  assert(sidebar.includes('aria-label="Open admin navigation"'));
+  assert(sidebar.includes("aria-current={isActive ? \"page\" : undefined}"));
+
+  assert(header.includes("md:left-[116px]"));
+  assert(header.includes('aria-label="Open audit logs"'));
+  assert(header.includes('aria-label="Open system health"'));
+  assert(header.includes('aria-label="Toggle appearance"'));
+
+  assert(dashboard.includes("md:ml-[116px]"));
+  for (const href of [
+    "/admin/users",
+    "/admin/employers",
+    "/admin/jobs",
+    "/admin/signups",
+    "/admin/document-verification",
+    "/admin/managed-hiring/requests",
+    "/admin/managed-hiring/pipeline",
+    "/admin/managed-hiring/operations",
+    "/admin/agreements/templates",
+    "/admin/agreements/builder",
+    "/admin/settings/managed-hiring",
+    "/admin/revenue",
+    "/admin/invoices",
+    "/admin/subscriptions",
+    "/admin/pricing-engine",
+    "/admin/payment-gateways",
+    "/admin/referrals",
+    "/admin/system-health",
+    "/admin/ai-command-centre-dashboard",
+    "/admin/system/infrastructure",
+    "/admin/settings/audit-log",
+    "/admin/settings/hub",
+  ]) {
+    assert(dashboard.includes(href), `dashboard must link to ${href}`);
+  }
+});
