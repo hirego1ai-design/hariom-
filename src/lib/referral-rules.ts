@@ -81,6 +81,7 @@ export async function getReferralProgramConfig(): Promise<ReferralProgramConfig>
 type ReferralConfigAuditContext = {
   actorId: string;
   ipAddress?: string;
+  reason?: string;
 };
 
 export async function updateReferralProgramConfig(
