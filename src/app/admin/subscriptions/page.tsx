@@ -38,7 +38,7 @@ export default function AdminSubscriptionsPage() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [pendingArchive, setPendingArchive] = useState<{ kind: "plan" | "promo"; id: string; label: string } | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<{ kind: "plan" | "promo"; id: string; label: string; expectedUpdatedAt?: string } | null>(null);
 
   const [promo, setPromo] = useState({ code: "", discountType: "PERCENTAGE", discountValue: "", maxUsage: "", validUntil: "" });
 
@@ -122,7 +122,10 @@ export default function AdminSubscriptionsPage() {
         badgeText: plan.badgeText.trim() || null,
         displayOrder: Number(plan.displayOrder),
       };
-      if (plan.id) payload.id = plan.id;
+      if (plan.id) {
+        payload.id = plan.id;
+        payload.expectedUpdatedAt = plan.updatedAt;
+      }
       const response = await fetch("/api/admin/subscription-plans", {
         method: plan.id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -140,14 +143,16 @@ export default function AdminSubscriptionsPage() {
     }
   }
 
-  async function archivePlan(id: string) {
+  async function archivePlan(id: string, expectedUpdatedAt?: string) {
     if (!configLoaded) {
       setMessage("Authoritative subscription configuration must load before plans can be changed.");
       return;
     }
     setSaving(true);
     try {
-      const response = await fetch(`/api/admin/subscription-plans?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const params = new URLSearchParams({ id });
+      if (expectedUpdatedAt) params.set("expectedUpdatedAt", expectedUpdatedAt);
+      const response = await fetch(`/api/admin/subscription-plans?${params.toString()}`, { method: "DELETE" });
       const body = await response.json();
       if (!response.ok || !body.success) throw new Error(body.error || "Unable to archive plan.");
       await load();
@@ -189,10 +194,18 @@ export default function AdminSubscriptionsPage() {
       setMessage("Authoritative subscription configuration must load before promotions can be changed.");
       return;
     }
-    const response = await fetch(`/api/admin/subscriptions/settings?code=${encodeURIComponent(code)}`, { method: "DELETE" });
-    const body = await response.json();
-    if (!response.ok || !body.success) setMessage(body.error || "Unable to archive promo.");
-    await load();
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/settings?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to archive promo.");
+      setMessage("Promo archived.");
+      await load();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Unable to archive promo.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveService(service: any, creditCost: number, billingType: string) {
@@ -205,7 +218,7 @@ export default function AdminSubscriptionsPage() {
       const response = await fetch("/api/admin/subscriptions/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serviceKey: service.serviceKey, creditCost, billingType }),
+        body: JSON.stringify({ serviceKey: service.serviceKey, creditCost, billingType, expectedUpdatedAt: service.updatedAt }),
       });
       const body = await response.json();
       if (!response.ok || !body.success) throw new Error(body.error || "Unable to save internal AI cost.");
@@ -321,7 +334,7 @@ export default function AdminSubscriptionsPage() {
                     </div>
                     <div className="mt-4 flex gap-2">
                       <button onClick={() => editPlan(item)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-black">Edit</button>
-                      {!item.isArchived ? <button type="button" onClick={() => setPendingArchive({ kind: "plan", id: item.id, label: item.name })} className="rounded-xl border border-red-400/20 px-3 py-2 text-xs font-black text-red-300">Archive</button> : null}
+                      {!item.isArchived ? <button type="button" onClick={() => setPendingArchive({ kind: "plan", id: item.id, label: item.name, expectedUpdatedAt: item.updatedAt })} className="rounded-xl border border-red-400/20 px-3 py-2 text-xs font-black text-red-300">Archive</button> : null}
                     </div>
                   </article>
                 ))}
@@ -378,7 +391,7 @@ export default function AdminSubscriptionsPage() {
                 onClick={async () => {
                   const target = pendingArchive;
                   setPendingArchive(null);
-                  if (target.kind === "plan") await archivePlan(target.id);
+                  if (target.kind === "plan") await archivePlan(target.id, target.expectedUpdatedAt);
                   else await archivePromo(target.id);
                 }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
@@ -396,10 +409,13 @@ export default function AdminSubscriptionsPage() {
 function ServiceRow({ service, saving, onSave }: { service: any; saving: boolean; onSave: (service: any, cost: number, type: string) => Promise<void> }) {
   const [cost, setCost] = useState(String(service.creditCost));
   const [type, setType] = useState(service.billingType);
+  const parsedCost = Number(cost);
+  const costValid = cost.trim() !== "" && Number.isSafeInteger(parsedCost) && parsedCost >= 0;
+
   return <div className="grid gap-3 rounded-2xl border border-white/10 bg-[#0d1224] p-4 md:grid-cols-[1fr_160px_160px_auto] md:items-center">
     <div><p className="font-black">{service.serviceName}</p><p className="text-xs font-mono text-slate-500">{service.serviceKey}</p></div>
     <select value={type} onChange={e => setType(e.target.value)} className="rounded-xl border border-white/10 bg-[#090d19] px-3 py-2 text-xs"><option value="INCLUDED">Included</option><option value="CREDIT_BASED">Internal metered</option><option value="PAID_ADDON">Paid add-on</option></select>
-    <input type="number" min="0" value={cost} onChange={e => setCost(e.target.value)} className="rounded-xl border border-white/10 bg-[#090d19] px-3 py-2 text-xs" />
-    <button disabled={saving} onClick={() => void onSave(service, Number(cost), type)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950">Save</button>
+    <input aria-label={`${service.serviceName} internal cost`} type="number" min="0" step="1" value={cost} onChange={e => setCost(e.target.value)} className="rounded-xl border border-white/10 bg-[#090d19] px-3 py-2 text-xs" />
+    <button disabled={saving || !costValid} onClick={() => void onSave(service, parsedCost, type)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">Save</button>
   </div>;
 }
