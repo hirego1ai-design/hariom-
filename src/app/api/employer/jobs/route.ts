@@ -89,7 +89,16 @@ export async function POST(request: Request) {
     const isPublishing = requestedStatus === "ACTIVE";
     const requiresGeneratedAssessment = isPublishing && body.requiresJobSpecificAssessment;
 
-    const idempotencyKey = request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key");
+    const idempotencyKey =
+      request.headers.get("idempotency-key")?.trim() ||
+      request.headers.get("x-idempotency-key")?.trim() ||
+      "";
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+      throw new ApiError(
+        "A valid Idempotency-Key header (16-128 safe characters) is required for job creation.",
+        400,
+      );
+    }
     let requestHash = "";
 
     if (idempotencyKey) {
