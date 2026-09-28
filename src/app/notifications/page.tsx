@@ -19,6 +19,7 @@ export default function NotificationsCenterPage() {
   const [decisionId, setDecisionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [notificationError, setNotificationError] = useState("");
+  const [invitationError, setInvitationError] = useState("");
   const [markingRead, setMarkingRead] = useState(false);
 
   async function fetchNotifications() {
@@ -39,9 +40,13 @@ export default function NotificationsCenterPage() {
 
   useEffect(() => {
     fetchNotifications();
+    setInvitationError("");
     fetch("/api/candidate/sourcing-invitations", { cache: "no-store" }).then(async (response) => {
-      const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to load invitations."); return body;
-    }).then((body) => setInvitations(body.invitations || [])).catch(() => undefined);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to load job invitations.");
+      return body;
+    }).then((body) => setInvitations(Array.isArray(body.invitations) ? body.invitations : []))
+      .catch((error) => setInvitationError(error instanceof Error ? error.message : "Unable to load job invitations."));
   }, []);
 
   const decideInvitation = async (id: string, decision: "ACCEPT" | "DECLINE") => {
@@ -127,6 +132,7 @@ export default function NotificationsCenterPage() {
 
         <main className="flex-1 p-6 lg:p-10 space-y-4 max-w-4xl w-full mx-auto overflow-y-auto">
           {notificationError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{notificationError}</div>}
+          {invitationError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{invitationError}</div>}
           {invitations.length > 0 && <section aria-labelledby="job-invitations-heading" className="rounded-3xl border border-outline bg-bg-card p-5 space-y-4">
             <div><h2 id="job-invitations-heading" className="font-bold">Job invitations</h2><p className="text-xs text-text-secondary mt-1">An invitation is not an application until you choose Accept.</p></div>
             {actionError && <p role="alert" className="text-sm text-text-secondary">{actionError}</p>}
