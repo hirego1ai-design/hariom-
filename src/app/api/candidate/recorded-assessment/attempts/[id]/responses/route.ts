@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { dispatchRecordedAssessmentAnalysis, enqueueRecordedAssessmentAnalysis } from "@/lib/recordedAssessmentAnalysis";
+import { assertCandidateRecordedAssessmentApplicationEligible } from "@/lib/recordedAssessment";
 
 const schema = z.object({
   attemptQuestionId: z.string().uuid(),
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       include: { questions: { select: { id: true, answerDurationSeconds: true } } },
     });
     if (!attempt) throw new ApiError("Active assessment attempt not found.", 404);
+    await assertCandidateRecordedAssessmentApplicationEligible(session.id, attempt.jobListingId);
     const question = attempt.questions.find((q) => q.id === body.attemptQuestionId);
     if (!question) throw new ApiError("Question does not belong to this attempt.", 403);
     if (body.durationSeconds > question.answerDurationSeconds) throw new ApiError("Recorded answer exceeds the configured question duration.", 400);
