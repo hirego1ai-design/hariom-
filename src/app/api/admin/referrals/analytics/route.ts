@@ -1,25 +1,12 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 
 export async function GET(request: Request) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
-    }
-    if (session.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Administrator access required" },
-        { status: 403 }
-      );
-    }
-
-    await enforceRateLimit(request, "admin_referral_analytics", 30, 60_000);
+    const session = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_referral_analytics:${session.id}`, 30, 60_000);
 
     let totalAttributions = 0;
     let candidateAttributions = 0;
