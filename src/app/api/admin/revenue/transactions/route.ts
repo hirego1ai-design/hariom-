@@ -1,33 +1,64 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { loadRevenueTransactions, revenueUnavailable } from "../_shared";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { enforceRateLimit } from "@/lib/apiSecurity";
+import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+
+const querySchema = z.object({
+  search: z.string().trim().max(200).optional(),
+  source: z.string().trim().max(80).optional(),
+  status: z.enum(["Success", "Pending", "Refunded", "Failed", "Cancelled"]).optional(),
+  gateway: z.string().trim().max(40).optional(),
+  customerType: z.string().trim().max(40).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminSession(request);
-    await enforceRateLimit(request, "admin_revenue_transactions", 60, 60_000);
-    const { searchParams } = request.nextUrl;
-    const search = searchParams.get("search")?.trim().toLowerCase().slice(0, 200) || "";
-    const source = searchParams.get("source") || "All";
-    const status = searchParams.get("status") || "All";
-    const gateway = searchParams.get("gateway") || "All";
-    const customerType = searchParams.get("customerType") || "All";
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_revenue_transactions:${admin.id}`, 60, 60_000);
+    const query = querySchema.parse(Object.fromEntries(request.nextUrl.searchParams.entries()));
+    const search = query.search?.toLowerCase() || "";
+
     const transactions = await loadRevenueTransactions();
-    const data = transactions.filter((transaction) => {
+    const filtered = transactions.filter((transaction) => {
       if (
         search &&
-        ![transaction.id, transaction.invoiceNo, transaction.customerName, transaction.company, transaction.email, transaction.mobile]
-          .some((value) => value.toLowerCase().includes(search))
+        ![
+          transaction.id,
+          transaction.invoiceNo,
+          transaction.customerName,
+          transaction.company,
+          transaction.email,
+          transaction.mobile,
+        ].some((value) => value.toLowerCase().includes(search))
       ) return false;
-      if (source !== "All" && transaction.revenueSource !== source) return false;
-      if (status !== "All" && transaction.status !== status) return false;
-      if (gateway !== "All" && transaction.gateway !== gateway) return false;
-      if (customerType !== "All" && transaction.customerType !== customerType) return false;
+      if (query.source && transaction.revenueSource !== query.source) return false;
+      if (query.status && transaction.status !== query.status) return false;
+      if (query.gateway && transaction.gateway !== query.gateway) return false;
+      if (query.customerType && transaction.customerType !== query.customerType) return false;
+      if (query.currency && transaction.currency !== query.currency) return false;
       return true;
     });
-    return NextResponse.json({ success: true, total: data.length, data, source: "database" });
+
+    const offset = (query.page - 1) * query.limit;
+    return NextResponse.json({
+      success: true,
+      total: filtered.length,
+      page: query.page,
+      limit: query.limit,
+      data: filtered.slice(offset, offset + query.limit),
+      source: "database",
+      filters: {
+        revenueSources: [...new Set(transactions.map((transaction) => transaction.revenueSource))].sort(),
+        currencies: [...new Set(transactions.map((transaction) => transaction.currency))].sort(),
+        gateways: [...new Set(transactions.map((transaction) => transaction.gateway).filter(Boolean))].sort(),
+      },
+    });
   } catch (error) {
+    if (error instanceof z.ZodError) return handleApiError(error);
     if (error instanceof Error && "status" in error) {
       return NextResponse.json({ success: false, error: error.message }, { status: (error as any).status });
     }
