@@ -879,3 +879,38 @@ test("admin AI control centre uses exact telemetry and audited versioned control
   assert(page.includes('role="dialog"'));
   assert(page.includes("No infrastructure health records were returned."));
 });
+
+
+test("admin model registry and LLM usage preserve telemetry coverage and canonical endpoint wiring", () => {
+  const registry = fs.readFileSync(new URL("../app/admin/models/registry/page.tsx", import.meta.url), "utf8");
+  const usagePage = fs.readFileSync(new URL("../app/admin/settings/llm-usage/page.tsx", import.meta.url), "utf8");
+  const usageRoute = fs.readFileSync(new URL("../app/api/admin/llm-usage/route.ts", import.meta.url), "utf8");
+  const benchmark = fs.readFileSync(new URL("../app/api/admin/model-benchmark/route.ts", import.meta.url), "utf8");
+
+  assert(usagePage.includes('fetch("/api/admin/llm-usage"'));
+  assert(!usagePage.includes('fetch("/api/admin/ai-routing"'));
+  assert(usagePage.includes("totalTokens: number | null"));
+  assert(usagePage.includes("totalCostUsd: number | null"));
+  assert(usagePage.includes("avgLatencyMs: number | null"));
+  assert(usagePage.includes("Not fully measured"));
+  assert(usagePage.includes("Known priced spend"));
+
+  assert(usageRoute.includes("getAiRoutingConfig()"));
+  assert(usageRoute.includes("getAiUsageStats()"));
+  assert(usageRoute.includes("knownTokens: stats.knownTokens"));
+  assert(usageRoute.includes("tokenCoverageRate: stats.tokenCoverageRate"));
+  assert(usageRoute.includes("knownCostUsd: stats.knownCostUsd"));
+  assert(usageRoute.includes("costCoverageRate: stats.costCoverageRate"));
+  assert(usageRoute.includes('admin_llm_usage:${admin.id}'));
+
+  assert(registry.includes("totalTokens: number | null"));
+  assert(registry.includes("totalCostUsd: number | null"));
+  assert(registry.includes("avgLatencyMs: number | null"));
+  assert(registry.includes('"Not fully measured"'));
+  assert(registry.includes('money(telemetry?.totalCostUsd ?? null)'));
+
+  assert(benchmark.includes("SYNTHETIC_PROMPT"));
+  assert(benchmark.includes("containsRealUserData: false"));
+  assert(benchmark.includes('admin_model_benchmark:${admin.id}'));
+  assert(benchmark.includes("bypassCache: true"));
+});
