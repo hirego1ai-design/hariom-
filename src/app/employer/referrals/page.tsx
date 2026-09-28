@@ -9,7 +9,6 @@ import {
   SanitizedReferralAttributionDTO,
   ReferralStatus,
   ReferralProductType,
-  PayoutMethod,
 } from "@/types/referral";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -57,16 +56,13 @@ export default function EmployerReferralsPage() {
   const [stats, setStats] = useState<ReferralDashboardStatsDTO | null>(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  // Payout withdrawal state
-  const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [payoutMethod, setPayoutMethod] = useState<"UPI" | "BANK_TRANSFER">("UPI");
+  // Payout withdrawal state. UPI is the only payout destination currently
+  // supported by the authoritative API; bank details are not collected until
+  // secure structured storage is implemented.
   const [payoutAmount, setPayoutAmount] = useState("");
   const [payoutAddress, setPayoutAddress] = useState("");
-  const [accountHolderName, setAccountHolderName] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [ifscCode, setIfscCode] = useState("");
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [payoutMsg, setPayoutMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -80,12 +76,13 @@ export default function EmployerReferralsPage() {
   const [historyTab, setHistoryTab] = useState<"rewards" | "attributions">("rewards");
 
   useEffect(() => {
-    fetch("/api/referrals")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.stats) setStats(data.stats);
+    fetch("/api/referrals", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success || !data.stats) throw new Error(data.error || "Unable to load referral data.");
+        setStats(data.stats);
       })
-      .catch(() => {})
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "Unable to load referral data."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -117,20 +114,11 @@ export default function EmployerReferralsPage() {
     setPayoutMsg(null);
 
     try {
-      const body: Record<string, unknown> = {
-        payoutMethod,
+      const body = {
+        payoutMethod: "UPI",
         payoutAddress: payoutAddress.trim(),
         amount: amt,
-        accountHolderName: accountHolderName.trim() || undefined,
       };
-
-      if (payoutMethod === "BANK_TRANSFER") {
-        body.bankDetails = {
-          bankName: bankName.trim() || undefined,
-          accountNumber: accountNumber.trim() || undefined,
-          ifscCode: ifscCode.trim().toUpperCase() || undefined,
-        };
-      }
 
       const res = await fetch("/api/referrals/payout", {
         method: "POST",
@@ -145,10 +133,6 @@ export default function EmployerReferralsPage() {
         setPayoutMsg({ type: "success", text: data.message ?? "Withdrawal request submitted. Pending admin approval." });
         setPayoutAmount("");
         setPayoutAddress("");
-        setAccountHolderName("");
-        setBankName("");
-        setAccountNumber("");
-        setIfscCode("");
         // Refresh stats
         const refreshed = await fetch("/api/referrals").then((r) => r.json());
         if (refreshed.success && refreshed.stats) setStats(refreshed.stats);
@@ -184,7 +168,7 @@ export default function EmployerReferralsPage() {
       } else {
         setInviteMsg({
           type: "success",
-          text: `Invite registered for ${inviteEmail}. Their eligibility will be evaluated under the current referral rules.`,
+          text: data.message || `Referral invitation accepted by the email provider for ${inviteEmail}.`,
         });
         setInviteEmail("");
         setInviteName("");
@@ -202,6 +186,14 @@ export default function EmployerReferralsPage() {
         <div className="flex items-center justify-center h-64">
           <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
         </div>
+      </PageContainer>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <PageContainer>
+        <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">{loadError}</div>
       </PageContainer>
     );
   }
@@ -311,7 +303,7 @@ export default function EmployerReferralsPage() {
             Invite a Partner Company
           </h3>
           <p className="text-xs text-text-muted">
-            Register an email invite. Any future reward is evaluated by the current server-side referral qualification rules.
+            Send a referral invitation through the configured email provider. Provider acceptance is not the same as inbox delivery; reward eligibility is evaluated by server-side referral rules.
           </p>
           <form onSubmit={handleInviteSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -370,22 +362,8 @@ export default function EmployerReferralsPage() {
           </div>
 
           <form onSubmit={handlePayoutSubmit} className="space-y-3">
-            {/* Method selector */}
-            <div className="flex gap-2">
-              {(["UPI", "BANK_TRANSFER"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPayoutMethod(m)}
-                  className={`flex-1 h-9 rounded-xl border text-[11px] font-bold transition-all ${
-                    payoutMethod === m
-                      ? "bg-green-500/20 border-green-500/40 text-green-300"
-                      : "bg-white/5 border-white/10 text-text-muted hover:bg-white/10"
-                  }`}
-                >
-                  {m === "UPI" ? "UPI / VPA" : "Bank Transfer"}
-                </button>
-              ))}
+            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-text-muted">
+              Payout method: <strong className="text-white">UPI / VPA</strong>. Bank-transfer payout is disabled until secure structured bank-detail storage is available.
             </div>
 
             {/* Amount */}
@@ -403,84 +381,19 @@ export default function EmployerReferralsPage() {
               />
             </div>
 
-            {/* UPI address */}
-            {payoutMethod === "UPI" && (
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">UPI ID / VPA *</label>
-                <input
-                  type="text"
-                  required
-                  value={payoutAddress}
-                  onChange={(e) => setPayoutAddress(e.target.value)}
-                  placeholder="yourname@upi"
-                  className="input-pill w-full h-10 px-3 text-xs text-white font-mono"
-                />
-              </div>
-            )}
-
-            {/* Bank fields */}
-            {payoutMethod === "BANK_TRANSFER" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Account Holder *</label>
-                    <input
-                      type="text"
-                      required
-                      value={accountHolderName}
-                      onChange={(e) => setAccountHolderName(e.target.value)}
-                      placeholder="Full name"
-                      className="input-pill w-full h-10 px-3 text-xs text-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Bank Name</label>
-                    <input
-                      type="text"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      placeholder="HDFC Bank"
-                      className="input-pill w-full h-10 px-3 text-xs text-white"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Account Number *</label>
-                    <input
-                      type="text"
-                      required
-                      value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value)}
-                      placeholder="00001234567890"
-                      className="input-pill w-full h-10 px-3 text-xs text-white font-mono"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">IFSC Code *</label>
-                    <input
-                      type="text"
-                      required
-                      value={ifscCode}
-                      onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                      placeholder="HDFC0001234"
-                      className="input-pill w-full h-10 px-3 text-xs text-white font-mono"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Beneficiary Address (Bank Account no.) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={payoutAddress}
-                    onChange={(e) => setPayoutAddress(e.target.value)}
-                    placeholder="Account number or IFSC+Account"
-                    className="input-pill w-full h-10 px-3 text-xs text-white font-mono"
-                  />
-                </div>
-              </div>
-            )}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">UPI ID / VPA *</label>
+              <input
+                type="text"
+                required
+                maxLength={150}
+                pattern="[A-Za-z0-9._-]{2,100}@[A-Za-z0-9.-]{2,64}"
+                value={payoutAddress}
+                onChange={(e) => setPayoutAddress(e.target.value)}
+                placeholder="yourname@upi"
+                className="input-pill w-full h-10 px-3 text-xs text-white font-mono"
+              />
+            </div>
 
             {payoutMsg && (
               <p className={`text-xs font-bold px-3 py-2 rounded-xl border ${
@@ -508,7 +421,7 @@ export default function EmployerReferralsPage() {
               )}
             </button>
             <p className="text-[10px] text-text-muted text-center">
-              Withdrawals are reviewed and approved by the HireGo AI compliance team within 2 business days.
+              Withdrawal status changes only after the recorded compliance/admin review workflow completes. No fixed processing time is promised here.
             </p>
           </form>
         </div>
