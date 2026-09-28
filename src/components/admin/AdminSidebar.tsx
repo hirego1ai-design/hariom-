@@ -53,14 +53,90 @@ const modelItems: NavRailItem[] = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const [activeTabGroup, setActiveTabGroup] = useState<"main" | "si" | "lm">("main");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const currentNavItems =
     activeTabGroup === "main" ? mainNavItems : activeTabGroup === "si" ? infrastructureItems : modelItems;
 
   return (
     <>
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open admin navigation"
+        aria-expanded={mobileOpen}
+        aria-controls="admin-mobile-navigation"
+        className="fixed left-4 top-5 z-[60] flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#17171C]/95 text-white shadow-xl backdrop-blur md:hidden"
+      >
+        <span className="material-symbols-outlined text-[20px]">menu</span>
+      </button>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-[70] md:hidden">
+          <button
+            type="button"
+            aria-label="Close admin navigation"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside
+            id="admin-mobile-navigation"
+            aria-label="Admin navigation"
+            className="relative h-full w-[min(88vw,340px)] overflow-y-auto border-r border-white/10 bg-[#141418] p-4 shadow-2xl"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <Link href="/admin/dashboard" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-bold text-white">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white">
+                  <span className="material-symbols-outlined text-[20px]">shield_person</span>
+                </span>
+                HireGo AI Admin
+              </Link>
+              <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close admin navigation" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-white">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2" aria-label="Admin navigation groups">
+              {([
+                ["main", "Main"],
+                ["si", "Infra"],
+                ["lm", "Models"],
+              ] as const).map(([group, label]) => (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() => setActiveTabGroup(group)}
+                  aria-pressed={activeTabGroup === group}
+                  className={`rounded-xl px-3 py-2 text-xs font-bold transition ${activeTabGroup === group ? "bg-primary text-white" : "bg-white/5 text-text-secondary"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <nav className="space-y-1" aria-label="Admin mobile links">
+              {currentNavItems.map((item) => {
+                const isActive = pathname === item.href || (pathname.startsWith("/admin/") && pathname.includes(item.id));
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${isActive ? "bg-primary/15 text-primary" : "text-text-secondary hover:bg-white/5 hover:text-white"}`}
+                  >
+                    <span className="material-symbols-outlined text-[19px]">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+        </div>
+      )}
+
       {/* Floating Vertical Navigation Rail */}
-      <aside className="fixed top-4 left-4 h-[calc(100vh-32px)] w-[78px] z-50 flex flex-col items-center justify-between py-5 bg-[#141418]/90 backdrop-blur-xl border border-white/10 rounded-[26px] shadow-[0_20px_50px_rgba(0,0,0,0.6)] select-none transition-all duration-300">
+      <aside aria-label="Admin navigation" className="fixed top-4 left-4 h-[calc(100vh-32px)] w-[78px] z-50 hidden md:flex flex-col items-center justify-between py-5 bg-[#141418]/90 backdrop-blur-xl border border-white/10 rounded-[26px] shadow-[0_20px_50px_rgba(0,0,0,0.6)] select-none transition-all duration-300">
         
         {/* Top: Brand Capsule */}
         <div className="flex flex-col items-center gap-3">
@@ -87,6 +163,8 @@ export default function AdminSidebar() {
                   : "text-text-muted hover:text-white hover:bg-white/10"
               }`}
               title="Main Console"
+              aria-label="Show main admin navigation"
+              aria-pressed={activeTabGroup === "main"}
             >
               <span className="material-symbols-outlined text-[16px]">grid_view</span>
               <div className="absolute left-[64px] top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-[#1C1C22] border border-white/10 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50">
@@ -102,6 +180,8 @@ export default function AdminSidebar() {
                   : "text-text-muted hover:text-white hover:bg-white/10"
               }`}
               title="Infrastructure (SI1-SI3)"
+              aria-label="Show infrastructure navigation"
+              aria-pressed={activeTabGroup === "si"}
             >
               <span className="material-symbols-outlined text-[16px]">router</span>
               <div className="absolute left-[64px] top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-[#1C1C22] border border-white/10 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50">
@@ -117,6 +197,8 @@ export default function AdminSidebar() {
                   : "text-text-muted hover:text-white hover:bg-white/10"
               }`}
               title="Models & Licenses (LM1-LM7)"
+              aria-label="Show model and license navigation"
+              aria-pressed={activeTabGroup === "lm"}
             >
               <span className="material-symbols-outlined text-[16px]">model_training</span>
               <div className="absolute left-[64px] top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-[#1C1C22] border border-white/10 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-50">
@@ -134,6 +216,8 @@ export default function AdminSidebar() {
               <Link
                 key={item.id}
                 href={item.href}
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
                 className={`w-[48px] h-[48px] rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${
                   isActive
                     ? "bg-gradient-to-tr from-primary to-primary-light text-white shadow-[0_0_20px_rgba(255,180,170,0.4)] scale-105"
