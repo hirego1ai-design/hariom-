@@ -175,14 +175,16 @@ export default function JobListingsManagementPage() {
                       {status === "ACTIVE" ? "Activate" : status === "PAUSED" ? "Pause" : status === "CLOSED" ? "Close" : "Move to draft"}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    disabled={busyId === job.id}
-                    onClick={() => setPendingDelete(job)}
-                    className="rounded-lg border border-red-500/20 px-3 py-2 text-[11px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
+                  {String(job.status).toUpperCase() === "DRAFT" && (
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() => setPendingDelete(job)}
+                      className="rounded-lg border border-red-500/20 px-3 py-2 text-[11px] font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                    >
+                      Delete draft
+                    </button>
+                  )}
                 </div>
               </div>
             </article>
@@ -198,7 +200,7 @@ export default function JobListingsManagementPage() {
               {pendingDelete.title}
             </p>
             <p className="mt-4 text-sm text-text-muted">
-              This deletes the authoritative job record. If the job has dependent hiring data, the server may reject the deletion.
+              Only an unused draft can be deleted. Published jobs must be closed so application and interview history is preserved.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
