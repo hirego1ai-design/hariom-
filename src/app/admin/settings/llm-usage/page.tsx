@@ -259,7 +259,7 @@ export default function AdminLlmUsagePage() {
               <div>
                 <h2 className="text-xl font-bold">Safe Model Comparison</h2>
                 <p className="mt-1 max-w-3xl text-xs text-text-muted">
-                  Compare up to five enabled models using the same synthetic structured-summary task. No real candidate, employer, resume, or conversation data is used.
+                  Compare up to five enabled models using the same synthetic structured-summary task. No real candidate, employer, resume, or conversation data is used. Benchmark runs are excluded from operational request, token and spend totals.
                 </p>
               </div>
 
