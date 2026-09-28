@@ -18,6 +18,7 @@ import {
   RewardQualificationResult,
 } from "@/types/referral";
 import { prisma } from "./prisma";
+import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 
 export const DEFAULT_REFERRAL_CONFIG: ReferralProgramConfig = {
   id: "global-referral-config",
@@ -52,9 +53,9 @@ export async function getReferralProgramConfig(): Promise<ReferralProgramConfig>
           candidateMaxQualifyingTransactions: config.candidateMaxQualifyingTransactions,
           employerJobRewardAmount: config.employerJobRewardAmount,
           employerMaxQualifyingTransactions: config.employerMaxQualifyingTransactions,
-          managedHiringRewardAmount: config.managedHiringRewardAmount || config.pphRewardAmount || 5000.0,
-          managedHiringMaxRewards: config.managedHiringMaxRewards || config.pphMaxQualifyingHires || 1,
-          managedHiringDefaultLockDays: config.managedHiringDefaultLockDays || config.pphDefaultLockingPeriodDays || 90,
+          managedHiringRewardAmount: config.managedHiringRewardAmount ?? config.pphRewardAmount ?? 5000.0,
+          managedHiringMaxRewards: config.managedHiringMaxRewards ?? config.pphMaxQualifyingHires ?? 1,
+          managedHiringDefaultLockDays: config.managedHiringDefaultLockDays ?? config.pphDefaultLockingPeriodDays ?? 90,
           minPayoutAmount: config.minPayoutAmount,
           attributionWindowDays: config.attributionWindowDays,
           updatedAt: config.updatedAt.toISOString(),
@@ -73,8 +74,14 @@ export async function getReferralProgramConfig(): Promise<ReferralProgramConfig>
   return cachedConfig;
 }
 
+type ReferralConfigAuditContext = {
+  actorId: string;
+  ipAddress?: string;
+};
+
 export async function updateReferralProgramConfig(
-  updates: Partial<ReferralProgramConfig>
+  updates: Partial<ReferralProgramConfig>,
+  auditContext?: ReferralConfigAuditContext,
 ): Promise<ReferralProgramConfig> {
   const isProduction = process.env.NODE_ENV === "production";
   const current = await getReferralProgramConfig();
@@ -87,33 +94,49 @@ export async function updateReferralProgramConfig(
   try {
     const client = prisma as any;
     if (client.referralProgramConfig) {
-      await client.referralProgramConfig.upsert({
-        where: { id: "global-referral-config" },
-        update: {
-          isEnabled: nextConfig.isEnabled,
-          candidateRewardAmount: nextConfig.candidateRewardAmount,
-          candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
-          employerJobRewardAmount: nextConfig.employerJobRewardAmount,
-          employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
-          managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
-          managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
-          managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
-          minPayoutAmount: nextConfig.minPayoutAmount,
-          attributionWindowDays: nextConfig.attributionWindowDays,
-        },
-        create: {
-          id: "global-referral-config",
-          isEnabled: nextConfig.isEnabled,
-          candidateRewardAmount: nextConfig.candidateRewardAmount,
-          candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
-          employerJobRewardAmount: nextConfig.employerJobRewardAmount,
-          employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
-          managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
-          managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
-          managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
-          minPayoutAmount: nextConfig.minPayoutAmount,
-          attributionWindowDays: nextConfig.attributionWindowDays,
-        },
+      await prisma.$transaction(async (tx) => {
+        const txClient = tx as any;
+        await txClient.referralProgramConfig.upsert({
+          where: { id: "global-referral-config" },
+          update: {
+            isEnabled: nextConfig.isEnabled,
+            candidateRewardAmount: nextConfig.candidateRewardAmount,
+            candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
+            employerJobRewardAmount: nextConfig.employerJobRewardAmount,
+            employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
+            managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
+            managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
+            managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
+            minPayoutAmount: nextConfig.minPayoutAmount,
+            attributionWindowDays: nextConfig.attributionWindowDays,
+          },
+          create: {
+            id: "global-referral-config",
+            isEnabled: nextConfig.isEnabled,
+            candidateRewardAmount: nextConfig.candidateRewardAmount,
+            candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
+            employerJobRewardAmount: nextConfig.employerJobRewardAmount,
+            employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
+            managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
+            managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
+            managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
+            minPayoutAmount: nextConfig.minPayoutAmount,
+            attributionWindowDays: nextConfig.attributionWindowDays,
+          },
+        });
+
+        if (auditContext) {
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: auditContext.actorId,
+              action: "REFERRAL_CONFIG_UPDATED",
+              resource: "ReferralProgramConfig:global-referral-config",
+              ...(auditContext.ipAddress ? { ipAddress: auditContext.ipAddress } : {}),
+              details: `changedKeys:${Object.keys(updates).sort().join(",")}`,
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId);
+        }
       });
       cachedConfig = nextConfig;
       return nextConfig;
@@ -238,7 +261,7 @@ export async function evaluateTransactionQualification(
         };
       }
 
-      const warrantyDays = ctx.agreementWarrantyDays || config.managedHiringDefaultLockDays || 90;
+      const warrantyDays = ctx.agreementWarrantyDays ?? config.managedHiringDefaultLockDays ?? 90;
       const hiredDate = ctx.customHiredDate || new Date();
       const lockExpiresAt = new Date(hiredDate.getTime() + warrantyDays * 24 * 60 * 60 * 1000);
 
