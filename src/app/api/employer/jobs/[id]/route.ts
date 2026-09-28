@@ -192,6 +192,14 @@ export async function DELETE(
       throw new ApiError("Forbidden: job listing does not belong to your company.", 403);
     }
 
+    const applicationCount = await prisma.application.count({ where: { jobId: id } });
+    if (job.status !== JobStatus.DRAFT || applicationCount > 0) {
+      throw new ApiError(
+        "Only unused draft jobs can be deleted. Close published jobs to preserve applications, interviews, offers, and audit history.",
+        409,
+      );
+    }
+
     await prisma.jobListing.delete({ where: { id } });
 
     logAuditEvent({
