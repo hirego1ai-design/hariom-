@@ -21,7 +21,7 @@ const fraudUpdateSchema = z.object({
   userId: z.string().trim().min(1).max(191),
   newStatus: z.nativeEnum(FraudStatus),
   reason: z.string().trim().min(3).max(1000),
-  expectedLastEvaluatedAt: z.string().datetime(),
+  expectedUpdatedAt: z.string().datetime(),
   riskScore: z.number().finite().min(0).max(100).optional(),
   riskFactors: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
 }).strict();
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       reason: body.reason,
       actorId: admin.id,
       ipAddress: getClientIp(request),
-      expectedLastEvaluatedAt: body.expectedLastEvaluatedAt,
+      expectedUpdatedAt: body.expectedUpdatedAt,
       riskScore: body.riskScore,
       riskFactors: body.riskFactors,
     });
