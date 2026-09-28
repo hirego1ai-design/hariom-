@@ -17,6 +17,7 @@ type Agreement = {
   id: string;
   agreementNumber?: string;
   status: string;
+  feeType?: "PERCENTAGE" | "FIXED";
   feeValue?: number;
   replacementDays?: number;
 };
@@ -117,7 +118,13 @@ export default function EmployerManagedHiringDashboard() {
                     <div>
                       <p className="font-mono text-xs text-yellow">{agreement.agreementNumber || agreement.id}</p>
                       <p className="mt-2 text-xs text-text-muted">
-                        Placement fee: {typeof agreement.feeValue === "number" ? `${agreement.feeValue}% of CTC` : "See agreement"}
+                        Placement fee: {typeof agreement.feeValue === "number"
+                          ? agreement.feeType === "PERCENTAGE"
+                            ? `${agreement.feeValue}% of CTC`
+                            : agreement.feeType === "FIXED"
+                              ? `Fixed fee ${agreement.feeValue}`
+                              : `See signed agreement (${agreement.feeValue})`
+                          : "See agreement"}
                         {typeof agreement.replacementDays === "number" ? ` · Replacement: ${agreement.replacementDays} days` : ""}
                       </p>
                     </div>
