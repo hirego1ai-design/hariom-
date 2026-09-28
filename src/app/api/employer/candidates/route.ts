@@ -38,18 +38,18 @@ export async function GET(req: NextRequest) {
       throw new ApiError("Invalid candidate scope.", 400);
     }
 
+    const companyId = session.role === "ADMIN"
+      ? searchParams.get("companyId")
+      : (await getSessionCompany(session)).id;
+    if (!companyId) {
+      throw new ApiError("companyId query parameter is required for administrators.", 400);
+    }
+
     let candidates: any[] = [];
     let nextCursor: string | null = null;
 
     try {
-      const companyId = session.role === "ADMIN"
-        ? searchParams.get("companyId")
-        : (await getSessionCompany(session)).id;
-      if (!companyId) throw new ApiError("companyId query parameter is required for administrators.", 400);
-
-      {
-
-        // Cursor pagination prevents a large tenant's pipeline from loading
+      // Cursor pagination prevents a large tenant's pipeline from loading
         // every application and nested profile into one request.
         const applications = await prisma.application.findMany({
           where: {
@@ -144,17 +144,14 @@ export async function GET(req: NextRequest) {
           take: limit + 1,
         });
 
-        const page = applications.slice(0, limit);
-        nextCursor = applications.length > limit ? page[page.length - 1]?.id || null : null;
+      const page = applications.slice(0, limit);
+      nextCursor = applications.length > limit ? page[page.length - 1]?.id || null : null;
 
-        // Transform applications to candidate format
-        candidates = page.map(toEmployerCandidate);
-      }
+      // Transform applications to candidate format
+      candidates = page.map(toEmployerCandidate);
     } catch (dbError) {
       console.error("Candidates DB error:", dbError);
-      if (process.env.NODE_ENV === "production") {
-        throw new Error("Candidate pipeline database is unavailable.");
-      }
+      throw new Error("Candidate pipeline database is unavailable.");
     }
 
     return NextResponse.json({
