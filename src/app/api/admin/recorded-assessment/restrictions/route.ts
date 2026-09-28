@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RecordedAssessmentRestrictionStatus } from "@prisma/client";
 import { z } from "zod";
-import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+
+const querySchema = z.object({
+  status: z.nativeEnum(RecordedAssessmentRestrictionStatus).default("PENDING_REVIEW"),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 
 const proposalSchema = z.object({
   userId: z.string().uuid(),
@@ -13,19 +25,13 @@ const proposalSchema = z.object({
   reason: z.string().trim().min(10).max(1000),
 }).strict();
 
-const querySchema = z.object({
-  status: z.nativeEnum(RecordedAssessmentRestrictionStatus).default("PENDING_REVIEW"),
-  page: z.coerce.number().int().min(1).max(10_000).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-});
-
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_assessment_restrictions_read:${admin.id}`, 60, 60_000);
     const query = querySchema.parse(Object.fromEntries(request.nextUrl.searchParams.entries()));
-    const where = { status: query.status };
 
+    const where = { status: query.status };
     const [total, restrictions] = await prisma.$transaction([
       prisma.recordedAssessmentRestriction.count({ where }),
       prisma.recordedAssessmentRestriction.findMany({
@@ -33,7 +39,11 @@ export async function GET(request: NextRequest) {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
-        include: { user: { select: { id: true, name: true, email: true } } },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
       }),
     ]);
 
@@ -52,15 +62,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireAdminSession(request);
-    await enforceRateLimit(request, `admin_assessment_restriction_proposal:${admin.id}`, 20, 60_000);
-    const body = await readValidatedJson(request, proposalSchema);
+    await enforceRateLimit(request, `admin_assessment_restrictions_write:${admin.id}`, 20, 60_000);
+    const body = await readValidatedJson(request, proposalSchema, 12 * 1024);
 
     const restriction = await prisma.$transaction(async (tx) => {
       const attempt = await tx.recordedAssessmentAttempt.findFirst({
-        where: { id: body.attemptId, candidateProfile: { userId: body.userId } },
-        include: { proctoringEvents: { orderBy: { createdAt: "asc" }, take: 100 } },
+        where: {
+          id: body.attemptId,
+          candidateProfile: { userId: body.userId },
+        },
+        include: {
+          proctoringEvents: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: 100,
+          },
+        },
       });
-      if (!attempt) throw new ApiError("Assessment attempt does not belong to this candidate.", 404);
+      if (!attempt) {
+        throw new ApiError("Assessment attempt does not belong to this candidate.", 404);
+      }
       if (!attempt.proctoringEvents.length) {
         throw new ApiError("Restriction proposals require preserved proctoring evidence.", 409);
       }
@@ -89,7 +109,7 @@ export async function POST(request: NextRequest) {
               severity: event.severity,
               warningNumber: event.warningNumber,
               evidence: event.evidence,
-              createdAt: event.createdAt,
+              createdAt: event.createdAt.toISOString(),
             })),
           },
         },
@@ -103,13 +123,13 @@ export async function POST(request: NextRequest) {
           ipAddress: getClientIp(request) || "unknown",
           details: JSON.stringify({
             attemptId: body.attemptId,
-            userId: body.userId,
             proposedMonths: body.proposedMonths,
-            reason: body.reason,
+            evidenceEvents: attempt.proctoringEvents.length,
           }),
         },
       });
       await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+
       return created;
     });
 
