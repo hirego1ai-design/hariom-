@@ -1423,3 +1423,22 @@ test("admin Copilot commerce keeps commercial changes versioned audited and fail
   assert(offers.includes("COPILOT_CAPACITY_OFFER_UPDATED"));
   assert(offers.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
+
+
+test("admin proctoring control panel stays aligned with versioned policy governance", () => {
+  const page = fs.readFileSync(new URL("../app/admin/proctoring-control-panel/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/proctoring-policy/route.ts", import.meta.url), "utf8");
+
+  assert(route.includes("expectedPolicyVersion: z.string().trim().min(1).max(64)"));
+  assert(route.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(route.includes("Proctoring policy changed; reload before saving."));
+  assert(route.includes("LIVE_INTERVIEW_PROCTORING_POLICY_UPDATED"));
+  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(page.includes("expectedPolicyVersion: policy.policyVersion"));
+  assert(page.includes("reason: reason.trim()"));
+  assert(page.includes("Current policy version:"));
+  assert(page.includes("Save audited policy"));
+  assert(!page.includes('value={policy.policyVersion} onChange='));
+  assert(page.includes("No persisted policy exists yet."));
+});
