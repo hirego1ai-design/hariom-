@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_analytics", 60, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_analytics:${admin.id}`, 60, 60_000);
     const [candidateSignups, applications, interviews, paidSubscriptions] = await prisma.$transaction([
       prisma.user.count({ where: { role: "CANDIDATE" } }),
       prisma.application.count(),
