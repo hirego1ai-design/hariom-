@@ -46,6 +46,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
   const [interviewId, setInterviewId] = useState("");
   const [isHost, setIsHost] = useState(false);
   const [participantLabels, setParticipantLabels] = useState<Record<string, string>>({});
+  const [selfParticipantId, setSelfParticipantId] = useState("");
   const [resolvedRoundTitle, setResolvedRoundTitle] = useState(roundTitle);
 
   const signal = async (action: string, targetId?: string, payload: Record<string, unknown> = {}) => {
@@ -96,6 +97,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
         const room = await readRoom(roomId);
         if (room.status !== "ACTIVE") throw new Error("This interview room is closed.");
         selfId.current = room.participantId;
+        setSelfParticipantId(room.participantId);
         hostRef.current = room.isHost;
         setIsHost(room.isHost);
         setParticipantLabels(room.participantLabels || {});
@@ -262,7 +264,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
     {error && <div role="alert" className="px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-xs text-red-300">{error}</div>}
     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4 min-h-0 overflow-auto">
       {remotes.map(([peerId, remote]) => <RemoteVideo key={peerId} stream={remote} label={participantLabels[peerId] || interviewerName || "Interview participant"} />)}
-      <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{participantLabels[selfId.current] || candidateName || "You"} (You)</span></div>
+      <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={localVideo} muted autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{participantLabels[selfParticipantId] || candidateName || "You"} (You)</span></div>
     </div>
     <div className="min-h-16 bg-[#141418] border-t border-white/10 px-4 py-2 flex flex-wrap items-center justify-center gap-3"><button onClick={() => toggleTrack("audio")} className="w-11 h-11 rounded-xl bg-white/10">{micOn ? "🎙" : "🔇"}</button><button onClick={() => toggleTrack("video")} className="w-11 h-11 rounded-xl bg-white/10">{cameraOn ? "📹" : "🚫"}</button><button onClick={toggleShare} className={`px-4 h-11 rounded-xl font-bold text-xs ${sharing ? "bg-primary" : "bg-white/10"}`}>{sharing ? "Stop sharing" : "Share screen"}</button>{isHost && <button onClick={finish} className="px-5 h-11 rounded-xl bg-red-600 font-bold text-xs">End interview</button>}</div>
   </div>;
