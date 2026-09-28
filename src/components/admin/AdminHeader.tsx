@@ -47,23 +47,25 @@ export default function AdminHeader({ title, subtitle, onSearch }: AdminHeaderPr
 
   return (
     <header className="fixed left-0 right-0 top-0 z-40 flex h-20 items-center justify-between border-b border-white/10 bg-[#0E0E0E]/90 px-4 pl-20 shadow-md backdrop-blur-xl md:left-[116px] md:px-6">
-      <div className="min-w-0">
-        {title ? (
-          <>
+      <div className="flex min-w-0 flex-1 items-center gap-4">
+        {title && (
+          <div className="min-w-0 shrink">
             <h1 className="truncate text-lg font-bold text-white">{title}</h1>
-            {subtitle && <p className="mt-1 truncate text-xs text-white/60">{subtitle}</p>}
-          </>
-        ) : (
-          <div className="relative w-[min(24rem,45vw)]">
+            {subtitle && <p className="mt-1 hidden truncate text-xs text-white/60 sm:block">{subtitle}</p>}
+          </div>
+        )}
+        {onSearch && (
+          <label className="relative ml-auto w-[min(22rem,46vw)] min-w-32">
+            <span className="sr-only">Search this admin view</span>
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[18px] text-white/40">search</span>
             <input
               type="search"
               value={searchQuery}
               onChange={handleSearchChange}
               className="h-10 w-full rounded-full border border-white/10 bg-[#1E1E1E] pl-11 pr-4 text-xs text-white outline-none placeholder:text-white/40 focus:border-primary/50"
-              placeholder="Search this admin view…"
+              placeholder="Search…"
             />
-          </div>
+          </label>
         )}
       </div>
 
