@@ -1203,3 +1203,59 @@ test("admin role governance is versioned audited profile-aware and session-inval
   assert(route.includes("skip: (query.page - 1) * query.limit"));
   assert(route.includes("take: query.limit"));
 });
+
+
+test("admin referral governance persists fraud evidence and keeps payouts and analytics deliberate", () => {
+  const page = fs.readFileSync(new URL("../app/admin/referrals/page.tsx", import.meta.url), "utf8");
+  const configRoute = fs.readFileSync(new URL("../app/api/admin/referrals/config/route.ts", import.meta.url), "utf8");
+  const payoutRoute = fs.readFileSync(new URL("../app/api/admin/referrals/payouts/route.ts", import.meta.url), "utf8");
+  const fraudRoute = fs.readFileSync(new URL("../app/api/admin/referrals/fraud/route.ts", import.meta.url), "utf8");
+  const analyticsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/analytics/route.ts", import.meta.url), "utf8");
+  const db = fs.readFileSync(new URL("../lib/referral-db.ts", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const migration = fs.readFileSync(
+    new URL("../../prisma/migrations/20260928082500_referral_fraud_persistence/migration.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert(schema.includes("model ReferralFraudProfile"));
+  assert(schema.includes("model ReferralFraudAudit"));
+  assert(schema.includes("enum ReferralFraudStatus"));
+  assert(migration.includes('CREATE TABLE "ReferralFraudProfile"'));
+  assert(migration.includes('CREATE TABLE "ReferralFraudAudit"'));
+
+  assert(db.includes('if (process.env.NODE_ENV === "production")'));
+  assert(db.includes("prisma.referralFraudProfile.upsert"));
+  assert(db.includes("prisma.referralFraudProfile.findMany"));
+  assert(db.includes("referralFraudAudit.create"));
+  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
+  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
+  assert(db.includes("expectedLastEvaluatedAt?: string"));
+  assert(db.includes("Referral payout persistence is unavailable from the generated Prisma client."));
+  assert(!db.includes("if (isProduction) {\n        return { queue: [], total: 0 };"));
+
+  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(configRoute.includes('admin_referral_config_write:${admin.id}'));
+
+  assert(payoutRoute.includes("Approval rationale is required."));
+  assert(payoutRoute.includes("Settlement transaction reference is required."));
+  assert(payoutRoute.includes("Rejection reason is required."));
+  assert(payoutRoute.includes('admin_referral_payouts_update:${admin.id}'));
+
+  assert(fraudRoute.includes("expectedLastEvaluatedAt: z.string().datetime()"));
+  assert(fraudRoute.includes('admin_referral_fraud_update:${admin.id}'));
+
+  assert(analyticsRoute.includes("referralReward.groupBy"));
+  assert(analyticsRoute.includes("referralPayout.groupBy"));
+  assert(analyticsRoute.includes("currencyMode"));
+  assert(analyticsRoute.includes("byCurrency"));
+  assert(!analyticsRoute.includes("referralReward.findMany"));
+
+  assert(page.includes("configReason"));
+  assert(page.includes("reason: configReason.trim()"));
+  assert(page.includes("Record payout settlement?"));
+  assert(page.includes("Confirm settlement"));
+  assert(page.includes("Multiple currencies are reported separately"));
+  assert(page.includes("expectedLastEvaluatedAt"));
+});
