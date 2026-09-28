@@ -86,12 +86,14 @@ export default function EmployerCopilotHubPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutPlan, setCheckoutPlan] = useState<PublicPlan | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
+  const [loadWarning, setLoadWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const checkoutKey = useRef<string | null>(null);
 
   const load = useCallback(async (countryOverride?: string) => {
     setLoading(true);
     setCheckoutError("");
+    setLoadWarning("");
     try {
       const suffix = countryOverride ? `?country=${encodeURIComponent(countryOverride.toUpperCase())}` : "";
       const [plansRes, capacityRes, offersRes] = await Promise.all([
@@ -99,16 +101,30 @@ export default function EmployerCopilotHubPage() {
         fetch("/api/employer/copilot/capacity", { cache: "no-store" }),
         fetch(`/api/copilot/capacity-offers${suffix}`, { cache: "no-store" }),
       ]);
-      const plansData = await plansRes.json();
-      const capacityData = await capacityRes.json();
-      const offersData = await offersRes.json();
-      if (!plansRes.ok || !plansData.success) throw new Error(plansData.error || "Unable to load Copilot plans.");
-      setPlans(plansData.plans || []);
+      const plansData = await plansRes.json().catch(() => ({}));
+      const capacityData = await capacityRes.json().catch(() => ({}));
+      const offersData = await offersRes.json().catch(() => ({}));
+      if (!plansRes.ok || !plansData.success) {
+        throw new Error(plansData.error || "Unable to load Copilot plans.");
+      }
+      setPlans(Array.isArray(plansData.plans) ? plansData.plans : []);
       setCountry(plansData.countryCode || countryOverride || "US");
-      if (capacityRes.ok && capacityData.success) setCapacity(capacityData.capacity);
-      else setCapacity(null);
-      if (offersRes.ok && offersData.success) setOffers(offersData.offers || []);
-      else setOffers([]);
+
+      const warnings: string[] = [];
+      if (capacityRes.ok && capacityData.success) {
+        setCapacity(capacityData.capacity ?? null);
+      } else {
+        setCapacity(null);
+        warnings.push(capacityData.error || "Current Copilot capacity could not be loaded.");
+      }
+
+      if (offersRes.ok && offersData.success) {
+        setOffers(Array.isArray(offersData.offers) ? offersData.offers : []);
+      } else {
+        setOffers([]);
+        warnings.push(offersData.error || "Add-capacity offers could not be loaded.");
+      }
+      setLoadWarning(warnings.join(" "));
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Unable to load HireGo Copilot.");
     } finally {
@@ -261,6 +277,12 @@ export default function EmployerCopilotHubPage() {
           </div>
         </div>
       </section>
+
+      {loadWarning && (
+        <div role="alert" className="mb-5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          {loadWarning} Missing capacity or offer data is not interpreted as zero usage or no entitlement.
+        </div>
+      )}
 
       {capacity?.active && (
         <section className="rounded-[24px] border border-white/10 bg-[#16161B] p-6">
