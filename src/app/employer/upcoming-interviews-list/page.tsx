@@ -24,6 +24,8 @@ export default function UpcomingInterviewsPage() {
   const [error, setError] = useState("");
   const [feedbackError, setFeedbackError] = useState("");
   const [pendingFeedback, setPendingFeedback] = useState<Array<{interviewId:string;roundName:string;jobTitle:string;candidateName:string}>>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setFeedbackError("");
@@ -35,16 +37,39 @@ export default function UpcomingInterviewsPage() {
       })
       .then((body) => setPendingFeedback(Array.isArray(body.pending) ? body.pending : []))
       .catch((reason) => setFeedbackError(reason instanceof Error ? reason.message : "Unable to load pending feedback."));
-    fetch("/api/employer/interviews")
+    fetch("/api/employer/interviews?scope=upcoming&limit=50", { cache: "no-store" })
       .then(async (response) => {
         const text = await response.text();
         const data = text ? JSON.parse(text) : null;
         if (!response.ok || !data?.success) throw new Error(data?.error || "Unable to load interviews.");
-        setInterviews(data.interviews || []);
+        setInterviews(Array.isArray(data.interviews) ? data.interviews : []);
+        setNextCursor(data.pagination?.nextCursor ?? null);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load interviews."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ scope: "upcoming", limit: "50", cursor: nextCursor });
+      const response = await fetch(`/api/employer/interviews?${params.toString()}`, { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Unable to load more interviews.");
+      const next = Array.isArray(data.interviews) ? data.interviews as Interview[] : [];
+      setInterviews((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...next.filter((item) => !seen.has(item.id))];
+      });
+      setNextCursor(data.pagination?.nextCursor ?? null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load more interviews.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const visibleInterviews = useMemo(
     () => interviews.filter((item) => item.status !== "CANCELLED"),
@@ -104,6 +129,18 @@ export default function UpcomingInterviewsPage() {
                 </article>
               );
             })}
+          </div>
+        )}
+        {nextCursor && !loading && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="min-h-11 rounded-xl border border-outline px-5 text-sm font-bold text-text-primary disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load more interviews"}
+            </button>
           </div>
         )}
       </div>
