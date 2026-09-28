@@ -634,3 +634,28 @@ test("admin new-signups view defines explicit time windows over authoritative ca
   assert(page.includes("Page {page} of {totalPages}"));
   assert(!page.includes("&limit=100"));
 });
+
+
+test("admin assessment policy governance distinguishes missing config and audits writes atomically", () => {
+  const universal = fs.readFileSync(new URL("../app/api/admin/skill-validation-policy/route.ts", import.meta.url), "utf8");
+  const jobSpecific = fs.readFileSync(new URL("../app/api/admin/job-specific-assessment-policy/route.ts", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/admin/assessment/skill-validation/page.tsx", import.meta.url), "utf8");
+
+  for (const source of [universal, jobSpecific]) {
+    assert(source.includes("prisma.$transaction"));
+    assert(source.includes('FOR UPDATE'));
+    assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+    assert(source.includes("previousStoredValueValid"));
+    assert(!source.includes("catch {\n      policy = null;"));
+  }
+
+  assert(universal.includes('admin_skill_validation_policy_read:${session.id}'));
+  assert(jobSpecific.includes('admin_job_specific_assessment_policy_read:${session.id}'));
+  assert(universal.includes("requires administrator repair"));
+  assert(jobSpecific.includes("requires administrator repair"));
+
+  assert(page.includes("universalReason"));
+  assert(page.includes("jobSpecificReason"));
+  assert(page.includes("Why are you changing the job-specific policy?"));
+  assert(!page.includes("const [reason, setReason]"));
+});
