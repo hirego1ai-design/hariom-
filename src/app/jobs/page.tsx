@@ -10,11 +10,52 @@ type Job = {
   title: string;
   location: string;
   type: string;
+  workMode?: string | null;
+  experienceLevel?: string | null;
+  numberOfOpenings?: number | null;
   salaryRange: string | null;
   description: string;
   requirements: string[];
   company: { name: string; logoUrl: string | null; location: string | null };
 };
+
+const PAGE_SIZE = 20;
+
+type JobsSearchPayload = {
+  success?: boolean;
+  jobs?: Job[];
+  pagination?: {
+    page?: number;
+    totalPages?: number;
+  };
+  error?: string;
+};
+
+async function fetchJobsPage(query: string, page: number, signal?: AbortSignal) {
+  const params = new URLSearchParams({
+    q: query,
+    page: String(page),
+    limit: String(PAGE_SIZE),
+  });
+  const response = await fetch(`/api/jobs/search?${params.toString()}`, {
+    cache: "no-store",
+    signal,
+  });
+  const raw: unknown = await response.json().catch(() => null);
+  const data: JobsSearchPayload =
+    raw && typeof raw === "object" ? (raw as JobsSearchPayload) : {};
+
+  if (!response.ok || data.success !== true || !Array.isArray(data.jobs)) {
+    throw new Error(data.error || "Could not load jobs.");
+  }
+
+  const totalPages = Number(data.pagination?.totalPages);
+  return {
+    jobs: data.jobs,
+    page,
+    totalPages: Number.isInteger(totalPages) && totalPages > 0 ? totalPages : 1,
+  };
+}
 
 type JobRecommendation = {
   jobId: string;
@@ -35,6 +76,9 @@ export default function JobsPage() {
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<Record<string, JobRecommendation>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [candidateStateLoading, setCandidateStateLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,15 +89,10 @@ export default function JobsPage() {
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(`/api/jobs/search?q=${encodeURIComponent(query)}`, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data.success || !Array.isArray(data.jobs)) {
-          throw new Error(data.error || "Could not load jobs.");
-        }
-        setJobs(data.jobs);
+        const page = await fetchJobsPage(query, 1, controller.signal);
+        setJobs(page.jobs);
+        setCurrentPage(1);
+        setTotalPages(page.totalPages);
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
         setError(cause instanceof Error ? cause.message : "Could not load jobs.");
@@ -116,6 +155,27 @@ export default function JobsPage() {
     void loadCandidateState();
     return () => { cancelled = true; };
   }, []);
+
+  const loadMoreJobs = async () => {
+    if (loadingMore || currentPage >= totalPages) return;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const nextPage = currentPage + 1;
+      const page = await fetchJobsPage(query, nextPage);
+      setJobs((current) => {
+        const seen = new Set(current.map((job) => job.id));
+        const additions = page.jobs.filter((job) => !seen.has(job.id));
+        return [...current, ...additions];
+      });
+      setCurrentPage(nextPage);
+      setTotalPages(page.totalPages);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load more jobs.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const apply = async (job: Job) => {
     if (appliedJobs.includes(job.id)) return;
@@ -200,7 +260,7 @@ export default function JobsPage() {
           id="job-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by title, skill, or company"
+          placeholder="Search by title, description, department, or company"
           className="mt-6 w-full min-h-11 rounded-xl border border-outline bg-bg-card px-4 py-3 text-sm text-text-primary outline-none focus:border-primary"
         />
 
@@ -221,8 +281,15 @@ export default function JobsPage() {
               <article key={job.id} className="rounded-xl border border-outline bg-bg-card p-6">
                 <p className="text-sm text-primary">{job.company.name}</p>
                 <h2 className="mt-1 text-xl font-semibold">{job.title}</h2>
-                <p className="mt-2 text-sm text-text-muted">{job.location} · {job.type}</p>
-                {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>}
+                <p className="mt-2 text-sm text-text-muted">
+                  {[job.location, job.type, job.workMode, job.experienceLevel].filter(Boolean).join(" · ")}
+                </p>
+                {typeof job.numberOfOpenings === "number" && job.numberOfOpenings > 0 && (
+                  <p className="mt-1 text-xs text-text-muted">
+                    {job.numberOfOpenings} opening{job.numberOfOpenings === 1 ? "" : "s"}
+                  </p>
+                )}
+                {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>
 
                 {recommendation?.matchScore !== null && recommendation?.matchScore !== undefined ? (
                   <div className="mt-3 rounded-xl border border-outline bg-surface-container-high p-3 text-xs">
@@ -275,6 +342,19 @@ export default function JobsPage() {
             );
           })}
         </div>
+
+        {!loading && currentPage < totalPages && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadMoreJobs()}
+              disabled={loadingMore}
+              className="min-h-11 rounded-xl border border-outline px-5 text-sm font-bold text-text-primary hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load more jobs"}
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );
