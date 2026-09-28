@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { enforceRateLimit } from "@/lib/apiSecurity";
+import { enforceRateLimit, readValidatedJson } from "@/lib/apiSecurity";
 
 const verificationActionSchema = z.object({
   action: z.enum(["Verified", "Rejected"]),
@@ -20,9 +20,11 @@ export async function POST(
     await enforceRateLimit(req, "admin_document_verification_write", 20, 60_000);
 
     const { id: documentId } = await params;
-    const parsed = verificationActionSchema.safeParse(await req.json());
-    if (!parsed.success) return jsonError("Invalid verification action or notes", 400);
-    const { action, notes } = parsed.data;
+    const { action, notes } = await readValidatedJson(
+      req,
+      verificationActionSchema,
+      8 * 1024,
+    );
 
     // Keep the status transition and immutable audit trail in one transaction.
     // The acting admin always comes from the verified session; never trust a
