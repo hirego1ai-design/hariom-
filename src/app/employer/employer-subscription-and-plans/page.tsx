@@ -1,23 +1,22 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { PageContainer, PageHeader, Card } from "@/components/employer/LayoutSystem";
 import { useRouter } from "next/navigation";
 
 export default function EmployerCommercialPlansPage() {
   const router = useRouter();
   const [agreements, setAgreements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     async function fetchAgreements() {
       try {
-        const res = await fetch("/api/agreements/contracts");
-        const data = await res.json();
-        if (data.success) {
-          setAgreements(data.agreements);
-        }
+        const res = await fetch("/api/agreements/contracts", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || "Failed to load agreements.");
+        setAgreements(Array.isArray(data.agreements) ? data.agreements : []);
       } catch (err) {
-        console.error("Failed to load agreements", err);
+        setError(err instanceof Error ? err.message : "Failed to load agreements.");
       } finally {
         setLoading(false);
       }
@@ -43,6 +42,8 @@ export default function EmployerCommercialPlansPage() {
           <div className="flex justify-center items-center py-20">
             <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
           </div>
+        ) : error ? (
+          <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
@@ -138,30 +139,24 @@ export default function EmployerCommercialPlansPage() {
             {/* Right Column: Platform Capabilities Info */}
             <div className="lg:col-span-4 space-y-6">
               <div className="glass-card rounded-2xl p-6 border border-white/5">
-                <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">The Managed Hiring™ Advantage</h3>
-                <ul className="space-y-4 text-sm text-text-secondary">
-                  <li className="flex gap-3 items-start">
-                    <span className="material-symbols-outlined text-green text-[18px] shrink-0 mt-0.5">verified</span>
-                    <div>
-                      <strong className="block text-white mb-0.5">Zero Upfront Cost</strong>
-                      Platform access is free. Fees apply only on successful candidate onboarding.
-                    </div>
-                  </li>
-                  <li className="flex gap-3 items-start">
-                    <span className="material-symbols-outlined text-green text-[18px] shrink-0 mt-0.5">verified</span>
-                    <div>
-                      <strong className="block text-white mb-0.5">Comprehensive Warranty</strong>
-                      Includes 30 to 120-day replacement SLA if the candidate leaves early.
-                    </div>
-                  </li>
-                  <li className="flex gap-3 items-start">
-                    <span className="material-symbols-outlined text-green text-[18px] shrink-0 mt-0.5">verified</span>
-                    <div>
-                      <strong className="block text-white mb-0.5">End-to-End AI Automation</strong>
-                      Free AI proctoring, coding evaluations, and background checks included in all agreements.
-                    </div>
-                  </li>
-                </ul>
+                <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Agreement-specific terms</h3>
+                <div className="space-y-4 text-sm text-text-secondary">
+                  <p>
+                    Placement fee, replacement window, invoicing rule, tax and credit terms are defined by each persisted commercial agreement. This page does not add benefits or guarantees that are absent from the signed record.
+                  </p>
+                  {activeAgreements.length > 0 ? (
+                    activeAgreements.slice(0, 3).map((agreement) => (
+                      <div key={agreement.id} className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                        <p className="font-bold text-white">{agreement.agreementNumber}</p>
+                        <p className="mt-1 text-xs text-text-secondary">
+                          {agreement.feeValue}% placement fee · {agreement.replacementDays} day replacement window · {String(agreement.invoiceRule || "Invoice rule not recorded").replaceAll("_", " ")}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-text-muted">No active agreement terms are available to summarize.</p>
+                  )}
+                </div>
               </div>
             </div>
 
