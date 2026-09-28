@@ -101,6 +101,7 @@ export default function MockInterviewActivePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId,
+          questionIndex: currentQuestionIndex,
           answer: answerText.trim(),
           durationMs,
         }),
@@ -149,13 +150,13 @@ export default function MockInterviewActivePage() {
           body: JSON.stringify({ sessionId }),
         });
         const data = await res.json();
-        if (res.ok && data.success) {
-          router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
-        } else {
-          router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Could not complete this practice session.");
         }
-      } catch {
         router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Could not complete this practice session.");
+        setIsSubmitting(false);
       }
     }
   };
