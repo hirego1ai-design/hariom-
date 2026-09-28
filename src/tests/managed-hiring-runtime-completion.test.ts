@@ -46,14 +46,18 @@ test("managed hiring activation creates traceable jobs and only safe sourcing re
 
 test("durable outbox worker is scheduled and registers production consumers", () => {
   const route = read("../app/api/cron/events-outbox/route.ts");
+  const recovery = read("../lib/events/OutboxRecovery.ts");
+  const recordedRecoveryRoute = read("../app/api/cron/recorded-assessment-analysis/route.ts");
   const scheduler = read("../../scripts/run-recorded-assessment-scheduler.mjs");
   const vercel = read("../../vercel.json");
 
   assert.match(route, /CRON_SECRET/);
   assert.match(route, /timingSafeEqual/);
-  assert.match(route, /registerProductionConsumers\(\)/);
-  assert.match(route, /OutboxPoller\.pollAndProcess/);
-  assert.match(route, /totalUnhandled/);
+  assert.match(route, /runEventsOutboxRecovery/);
+  assert.match(recovery, /registerProductionConsumers\(\)/);
+  assert.match(recovery, /OutboxPoller\.pollAndProcess/);
+  assert.match(recovery, /totalUnhandled/);
+  assert.match(recordedRecoveryRoute, /runEventsOutboxRecovery/);
   assert.match(scheduler, /\/api\/cron\/events-outbox/);
   assert.match(scheduler, /OutboxPoller/);
   assert.doesNotMatch(vercel, /\/api\/cron\/events-outbox/);
