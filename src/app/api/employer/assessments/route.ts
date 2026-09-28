@@ -78,6 +78,20 @@ export async function GET(request: Request) {
     await enforceRateLimit(request, "employer_get_assessments", 50, 60000);
     const session = await requireEmployerOrAdminSession(request);
 
+    const { searchParams } = new URL(request.url);
+    const requestedLimit = searchParams.get("limit");
+    const requestedCursor = searchParams.get("cursor");
+    const limit = requestedLimit === null ? null : Number(requestedLimit);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      throw new ApiError("limit must be an integer between 1 and 100.", 400);
+    }
+    if (
+      requestedCursor &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedCursor)
+    ) {
+      throw new ApiError("Invalid assessment cursor.", 400);
+    }
+
     let whereClause = {};
 
     if (session.role !== "ADMIN") {
@@ -102,10 +116,25 @@ export async function GET(request: Request) {
           select: { questions: true }
         }
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      cursor: requestedCursor ? { id: requestedCursor } : undefined,
+      skip: requestedCursor ? 1 : 0,
+      take: limit === null ? undefined : limit + 1,
     });
 
-    return NextResponse.json({ success: true, assessments });
+    const page = limit === null ? assessments : assessments.slice(0, limit);
+    const nextCursor =
+      limit !== null && assessments.length > limit
+        ? page[page.length - 1]?.id || null
+        : null;
+
+    return NextResponse.json({
+      success: true,
+      assessments: page,
+      ...(limit !== null
+        ? { pagination: { limit, nextCursor, hasMore: nextCursor !== null } }
+        : {}),
+    });
   } catch (error) {
     return handleApiError(error);
   }
