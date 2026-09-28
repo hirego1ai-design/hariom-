@@ -11,8 +11,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminSession(request);
-    await enforceRateLimit(request, "admin_ai_agent_control_read", 60, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_ai_agent_control_read:${admin.id}`, 60, 60_000);
 
     const registry = AgentRegistry.getInstance();
     const agents = registry.getRegisteredAgents();
@@ -26,12 +26,18 @@ export async function GET(request: NextRequest) {
       new Set(agents.map((agent) => agent.routingTaskType).filter((value): value is string => Boolean(value))),
     );
 
-    const [logs, killSwitches] = await Promise.all([
+    const [telemetryRows, killSwitches] = await Promise.all([
       taskTypes.length
-        ? prisma.aiExecutionLog.findMany({
+        ? prisma.aiExecutionLog.groupBy({
+            by: ["task", "status"],
             where: { task: { in: taskTypes } },
-            orderBy: { timestamp: "desc" },
-            take: 5_000,
+            _count: { _all: true },
+            _sum: {
+              costEstUsd: true,
+              totalTokens: true,
+              latencyMs: true,
+            },
+            _max: { timestamp: true },
           })
         : Promise.resolve([]),
       prisma.killSwitchConfig.findMany({
@@ -50,11 +56,11 @@ export async function GET(request: NextRequest) {
 
     const killByAgent = new Map(killSwitches.map((item) => [item.targetId, item]));
 
-    const taskLogs = new Map<string, typeof logs>();
-    for (const log of logs) {
-      const existing = taskLogs.get(log.task) ?? [];
-      existing.push(log);
-      taskLogs.set(log.task, existing);
+    const telemetryByTask = new Map<string, typeof telemetryRows>();
+    for (const row of telemetryRows) {
+      const existing = telemetryByTask.get(row.task) ?? [];
+      existing.push(row);
+      telemetryByTask.set(row.task, existing);
     }
 
     const responseAgents = agents.map((agent) => {
@@ -79,23 +85,27 @@ export async function GET(request: NextRequest) {
         return model.enabled && Boolean(provider?.configured) && supportsTask;
       });
 
-      const observed = taskType ? taskLogs.get(taskType) ?? [] : [];
-      const successes = observed.filter(
-        (log) => log.status === "SUCCESS" || log.status === "FALLBACK",
-      );
-      const failures = observed.filter((log) => log.status === "FAILED");
-      const fallbacks = observed.filter((log) => log.status === "FALLBACK");
-      const totalCost = observed.reduce(
-        (total, log) => total + (typeof log.costEstUsd === "number" ? log.costEstUsd : 0),
-        0,
-      );
-      const totalTokens = observed.reduce(
-        (total, log) => total + (typeof log.totalTokens === "number" ? log.totalTokens : 0),
-        0,
-      );
+      const observed = taskType ? telemetryByTask.get(taskType) ?? [] : [];
+      const countFor = (...statuses: string[]) =>
+        observed
+          .filter((row) => statuses.includes(row.status))
+          .reduce((sum, row) => sum + row._count._all, 0);
+      const requests = observed.reduce((sum, row) => sum + row._count._all, 0);
+      const successes = countFor("SUCCESS", "FALLBACK");
+      const failures = countFor("FAILED");
+      const fallbackCount = countFor("FALLBACK");
+      const totalCost = observed.reduce((sum, row) => sum + (row._sum.costEstUsd ?? 0), 0);
+      const totalTokens = observed.reduce((sum, row) => sum + (row._sum.totalTokens ?? 0), 0);
+      const totalLatencyMs = observed.reduce((sum, row) => sum + (row._sum.latencyMs ?? 0), 0);
+      const latestFor = (...statuses: string[]) =>
+        observed
+          .filter((row) => statuses.includes(row.status))
+          .map((row) => row._max.timestamp)
+          .filter((value): value is Date => value instanceof Date)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
       const kill = killByAgent.get(agent.agentId);
-      const lastSuccess = successes[0]?.timestamp ?? null;
-      const lastFailure = failures[0]?.timestamp ?? null;
+      const lastSuccess = latestFor("SUCCESS", "FALLBACK");
+      const lastFailure = latestFor("FAILED");
 
       let status:
         | "DETERMINISTIC_NO_LLM"
@@ -153,22 +163,17 @@ export async function GET(request: NextRequest) {
             }
           : null,
         telemetry: {
-          requests: observed.length,
-          successes: successes.length,
-          failures: failures.length,
-          fallbackCount: fallbacks.length,
-          successRate: observed.length ? successes.length / observed.length : null,
-          fallbackRate: observed.length ? fallbacks.length / observed.length : null,
-          avgLatencyMs: observed.length
-            ? Math.round(
-                observed.reduce((total, log) => total + Math.max(0, log.latencyMs), 0) /
-                  observed.length,
-              )
-            : null,
+          requests,
+          successes,
+          failures,
+          fallbackCount,
+          successRate: requests ? successes / requests : null,
+          fallbackRate: requests ? fallbackCount / requests : null,
+          avgLatencyMs: requests ? Math.round(totalLatencyMs / requests) : null,
           totalTokens,
-          observedCostUsd: Number(totalCost.toFixed(6)),
-          costPerSuccessfulTaskUsd: successes.length
-            ? Number((totalCost / successes.length).toFixed(6))
+          observedCostUsd: requests ? Number(totalCost.toFixed(6)) : null,
+          costPerSuccessfulTaskUsd: successes
+            ? Number((totalCost / successes).toFixed(6))
             : null,
           lastSuccess,
           lastFailure,
