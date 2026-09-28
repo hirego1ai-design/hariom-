@@ -1263,4 +1263,23 @@ test("managed-hiring agreements keep commercial terms versioned immutable and au
   assert(employerReview.includes("expectedUpdatedAt: new Date(agreement.updatedAt).toISOString()"));
   assert(employerReview.includes('action: "accept"'));
   assert(employerReview.includes('action: "request_amendment"'));
+
+  const requirementsRoute = fs.readFileSync(new URL("../app/api/agreements/requirements/route.ts", import.meta.url), "utf8");
+  const requirementDetail = fs.readFileSync(new URL("../app/api/agreements/requirements/[id]/route.ts", import.meta.url), "utf8");
+  const activation = fs.readFileSync(new URL("../lib/managedHiring/RequirementActivation.ts", import.meta.url), "utf8");
+
+  assert(requirementsRoute.includes('agreements_requirements_get:${session.id}'));
+  assert(requirementsRoute.includes('agreements_requirements_post:${session.id}'));
+
+  assert(requirementDetail.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(requirementDetail.includes("reason: z.string().trim().min(3).max(1000)"));
+  assert(requirementDetail.includes('agreement_requirement_detail_read:${session.id}'));
+  assert(requirementDetail.includes("MANAGED_HIRING_REQUIREMENT_UPDATED"));
+  assert(requirementDetail.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(requirementDetail.includes("Managed hiring requirement changed; reload before saving."));
+
+  assert(activation.includes("expectedUpdatedAt: string"));
+  assert(activation.includes("reason: string"));
+  assert(activation.includes("MANAGED_HIRING_REQUIREMENT_ACTIVATED"));
+  assert(activation.includes("enqueueSecurityAuditEvent(tx, auditLog, params.activatedById)"));
 });
