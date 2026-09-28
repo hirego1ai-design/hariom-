@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import { requireAdminSession } from "@/lib/routeAuthorization";
