@@ -84,7 +84,8 @@ export async function GET(req: NextRequest) {
         name: member.user?.name || "Team Member",
         email: member.user?.email,
         role: member.user?.role,
-        designation: member.designation || "Recruiter",
+        designation: member.designation || (member.user?.role === "EMPLOYER" || member.user?.role === "ADMIN" ? "Administrator" : "Recruiter"),
+        avatarUrl: member.user?.avatarUrl || null,
         status: "ACTIVE",
         joinedAt: member.createdAt,
       })),
@@ -303,38 +304,69 @@ export async function DELETE(req: NextRequest) {
       if (companyId && member.companyId !== companyId) {
         throw new ApiError("Forbidden: Cannot remove a member from another company.", 403);
       }
-
-      // Prevent removing self if the user is the sole team member
-      const memberCount = await prisma.employerProfile.count({
-        where: { companyId: member.companyId },
-      });
-
-      if (memberCount <= 1) {
-        throw new ApiError("Cannot remove the last remaining company team member.", 400);
+      if (session.role !== "ADMIN" && member.userId === session.id) {
+        throw new ApiError("You cannot remove your own company-admin membership from this screen.", 409);
       }
 
-      const newSessionVersion = await prisma.$transaction(async (tx) => {
+      const removal = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${member.companyId} FOR UPDATE`;
+
+        const lockedMember = await tx.employerProfile.findUnique({
+          where: { id: targetId },
+          include: { user: { select: { id: true, email: true, role: true, sessionVersion: true } } },
+        });
+        if (!lockedMember) throw new ApiError("Team member no longer exists.", 404);
+        if (lockedMember.companyId !== member.companyId) {
+          throw new ApiError("Team membership changed; refresh and retry.", 409);
+        }
+        if (companyId && lockedMember.companyId !== companyId) {
+          throw new ApiError("Forbidden: Cannot remove a member from another company.", 403);
+        }
+        if (session.role !== "ADMIN" && lockedMember.userId === session.id) {
+          throw new ApiError("You cannot remove your own company-admin membership from this screen.", 409);
+        }
+
+        const memberCount = await tx.employerProfile.count({
+          where: { companyId: lockedMember.companyId },
+        });
+        if (memberCount <= 1) {
+          throw new ApiError("Cannot remove the last remaining company team member.", 409);
+        }
+
+        if (lockedMember.user?.role === "EMPLOYER") {
+          const adminCount = await tx.employerProfile.count({
+            where: {
+              companyId: lockedMember.companyId,
+              user: { role: "EMPLOYER" },
+            },
+          });
+          if (adminCount <= 1) {
+            throw new ApiError("Cannot remove the last company administrator. Promote or invite another administrator first.", 409);
+          }
+        }
+
         await tx.employerProfile.delete({ where: { id: targetId } });
         const updatedUser = await tx.user.update({
-          where: { id: member.userId },
+          where: { id: lockedMember.userId },
           data: { sessionVersion: { increment: 1 } },
           select: { sessionVersion: true },
         });
         const auditLog = await tx.auditLog.create({
           data: {
             userId: session.id,
-            companyId: member.companyId,
+            companyId: lockedMember.companyId,
             action: "TEAM_MEMBER_REMOVED",
             resource: `EmployerProfile:${targetId}`,
-            details: `Removed team member ${member.user?.email || targetId}`,
+            details: `Removed team member ${lockedMember.user?.email || targetId}`,
             ipAddress: req.headers.get("x-forwarded-for") || undefined,
           },
         });
         await enqueueSecurityAuditEvent(tx, auditLog, session.id);
-        return updatedUser.sessionVersion;
+        return { sessionVersion: updatedUser.sessionVersion, userId: lockedMember.userId };
       });
-      await revokeAllUserSessions(member.userId, newSessionVersion).catch((error) => {
-        console.error("TEAM_MEMBER_SESSION_CACHE_REFRESH_FAILED", { userId: member.userId, error });
+
+      await revokeAllUserSessions(removal.userId, removal.sessionVersion).catch((error) => {
+        console.error("TEAM_MEMBER_SESSION_CACHE_REFRESH_FAILED", { userId: removal.userId, error });
       });
 
       return NextResponse.json({
