@@ -842,3 +842,40 @@ test("admin payment routing uses versioned database snapshots and deliberate eme
   assert(page.includes("Confirm maintenance state"));
   assert(page.includes("No live provider-health assertion is made here."));
 });
+
+
+test("admin AI control centre uses exact telemetry and audited versioned controls", () => {
+  const page = fs.readFileSync(new URL("../app/admin/ai-command-centre-dashboard/page.tsx", import.meta.url), "utf8");
+  const agents = fs.readFileSync(new URL("../app/api/admin/ai-agents/route.ts", import.meta.url), "utf8");
+  const routing = fs.readFileSync(new URL("../app/api/admin/ai-routing/route.ts", import.meta.url), "utf8");
+  const control = fs.readFileSync(new URL("../app/api/admin/ai-agents/[id]/control/route.ts", import.meta.url), "utf8");
+
+  assert(agents.includes('admin_ai_agent_control_read:${admin.id}'));
+  assert(agents.includes("aiExecutionLog.groupBy"));
+  assert(agents.includes('_count: { _all: true }'));
+  assert(agents.includes("_max: { timestamp: true }"));
+  assert(!agents.includes("take: 5_000"));
+  assert(agents.includes("observedCostUsd: requests ?"));
+  assert(agents.includes("controlUpdatedAt: kill?.updatedAt.toISOString() ?? null"));
+
+  assert(routing.includes("prisma.$transaction"));
+  assert(routing.includes('FOR UPDATE'));
+  assert(routing.includes("nextConfig.version !== previous.version + 1"));
+  assert(routing.includes("AI_ROUTING_CONFIG_UPDATED"));
+  assert(routing.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(routing.includes('admin_ai_routing_read:${admin.id}'));
+
+  assert(control.includes('action: z.enum(["PAUSE", "RESUME"])'));
+  assert(control.includes("expectedUpdatedAt: z.string().datetime().nullable()"));
+  assert(control.includes("Agent control state changed; reload before saving."));
+  assert(control.includes("AI_AGENT_PAUSED"));
+  assert(control.includes("AI_AGENT_RESUMED"));
+  assert(control.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(page.includes('observedCostUsd: number | null'));
+  assert(page.includes("expectedUpdatedAt: controlTarget.agent.controlUpdatedAt"));
+  assert(page.includes("Pause agent"));
+  assert(page.includes("Resume agent"));
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("No infrastructure health records were returned."));
+});
