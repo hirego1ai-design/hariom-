@@ -45,11 +45,12 @@ export default function EmployerTeamManagementPage() {
 
   async function fetchCurrentUser() {
     try {
-      const res = await fetch("/api/auth/me");
-      const data = await res.json();
-      if (data.success && data.user) {
-        setCurrentUserRole(data.user.role);
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.user) {
+        throw new Error(data.error || "Unable to load your session role.");
       }
+      setCurrentUserRole(data.user.role);
     } catch (err) {
       setMessageType("error");
       setMessage(err instanceof Error ? err.message : "Unable to load your session role.");
