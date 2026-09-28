@@ -11,9 +11,6 @@ interface JobDetail {
   department?: string;
   location: string;
   type: string;
-  workMode: string;
-  experienceLevel: string;
-  numberOfOpenings: number;
   salaryRange?: string;
   description: string;
   requirements?: string[];
@@ -244,7 +241,7 @@ export default function JobDetailPage() {
               </div>
 
               {/* Quick Metrics Pill Row */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
                   <span className="text-[10px] text-text-muted uppercase font-bold block">
                     Salary Range
@@ -266,20 +263,14 @@ export default function JobDetailPage() {
                     Work Mode
                   </span>
                   <span className="text-xs font-bold text-text-primary">
-                    {job.workMode}
+                    {job.type}
                   </span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
                   <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Experience
+                    Application requirement
                   </span>
-                  <span className="text-xs font-bold text-text-primary">{job.experienceLevel}</span>
-                </div>
-                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Openings
-                  </span>
-                  <span className="text-xs font-bold text-text-primary">{job.numberOfOpenings}</span>
+                  <span className="text-xs font-bold text-text-secondary">See application details</span>
                 </div>
               </div>
             </div>
