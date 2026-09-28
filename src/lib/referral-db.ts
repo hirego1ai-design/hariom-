@@ -1415,7 +1415,7 @@ class ReferralDatabaseStore {
         };
       }
       if (isProduction) {
-        return { queue: [], total: 0 };
+        throw new Error("Referral payout persistence is unavailable from the generated Prisma client.");
       }
     } catch (error: any) {
       if (isProduction) {
