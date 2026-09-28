@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -5,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 
 const createSchema = z.object({
   applicationId: z.string().uuid(),
@@ -65,10 +68,20 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let recordCompanyId = "";
+  let recordKey = "";
   try {
     const { session, companyId } = await actor(request);
     await enforceRateLimit(request, "employer_offers_create", 20, 60_000);
     const body = await readValidatedJson(request, createSchema, 32 * 1024);
+    const rawKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (!IDEMPOTENCY_KEY.test(rawKey)) {
+      throw new ApiError(
+        "A valid Idempotency-Key header (16-128 safe characters) is required.",
+        400,
+      );
+    }
+
     const expiresAt = new Date(body.expiresAt);
     if (expiresAt.getTime() <= Date.now()) throw new ApiError("Offer expiry must be in the future.", 400);
     const startDate = body.startDate ? new Date(body.startDate) : null;
@@ -79,7 +92,78 @@ export async function POST(request: NextRequest) {
     });
     if (!application) throw new ApiError("Application not found.", 404);
     if (session.role !== "ADMIN" && application.job.companyId !== companyId) throw new ApiError("Application access denied.", 403);
-    if (application.status !== "SHORTLISTED") throw new ApiError("An offer can only be created for a selected/shortlisted application.", 409);
+
+    recordCompanyId = application.job.companyId;
+    recordKey = `OFFER_CREATE:${application.id}:${rawKey}`;
+    const requestHash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(body))
+      .digest("hex");
+
+    const existingRecord = await prisma.idempotencyRecord.findUnique({
+      where: {
+        companyId_idempotencyKey: {
+          companyId: recordCompanyId,
+          idempotencyKey: recordKey,
+        },
+      },
+    });
+
+    if (existingRecord) {
+      if (existingRecord.requestHash !== requestHash) {
+        throw new ApiError(
+          "Idempotency key already used with a different offer request.",
+          409,
+        );
+      }
+      if (existingRecord.status === "SUCCESS" && existingRecord.responsePayload) {
+        return NextResponse.json(existingRecord.responsePayload as any, { status: 201 });
+      }
+      if (existingRecord.status === "PROCESSING") {
+        throw new ApiError("This offer creation request is already processing.", 409);
+      }
+      await prisma.idempotencyRecord.update({
+        where: {
+          companyId_idempotencyKey: {
+            companyId: recordCompanyId,
+            idempotencyKey: recordKey,
+          },
+        },
+        data: { status: "PROCESSING", responsePayload: undefined },
+      });
+    } else {
+      try {
+        await prisma.idempotencyRecord.create({
+          data: {
+            companyId: recordCompanyId,
+            idempotencyKey: recordKey,
+            requestHash,
+            status: "PROCESSING",
+            jobId: application.jobId,
+          },
+        });
+      } catch {
+        const concurrent = await prisma.idempotencyRecord.findUnique({
+          where: {
+            companyId_idempotencyKey: {
+              companyId: recordCompanyId,
+              idempotencyKey: recordKey,
+            },
+          },
+        });
+        if (concurrent?.requestHash === requestHash) {
+          if (concurrent.status === "SUCCESS" && concurrent.responsePayload) {
+            return NextResponse.json(concurrent.responsePayload as any, { status: 201 });
+          }
+          throw new ApiError("This offer creation request is already processing.", 409);
+        }
+        throw new ApiError("Unable to reserve this offer request safely.", 409);
+      }
+    }
+
+    if (application.status !== "SHORTLISTED") {
+      throw new ApiError("An offer can only be created for a selected/shortlisted application.", 409);
+    }
 
     if (body.documentFileId) {
       const file = await prisma.storedFile.findUnique({
@@ -135,6 +219,22 @@ export async function POST(request: NextRequest) {
       });
     });
 
+    const responsePayload = JSON.parse(JSON.stringify({ success: true, offer }));
+
+    await prisma.idempotencyRecord.update({
+      where: {
+        companyId_idempotencyKey: {
+          companyId: recordCompanyId,
+          idempotencyKey: recordKey,
+        },
+      },
+      data: {
+        status: "SUCCESS",
+        jobId: application.jobId,
+        responsePayload,
+      },
+    });
+
     await logAuditEvent({
       userId: session.id,
       companyId: application.job.companyId,
@@ -142,8 +242,18 @@ export async function POST(request: NextRequest) {
       resource: `Offer:${offer.id}`,
       details: JSON.stringify({ applicationId: application.id, expiresAt: offer.expiresAt.toISOString(), hasDocument: Boolean(offer.documentFileId) }),
     });
-    return NextResponse.json({ success: true, offer }, { status: 201 });
+    return NextResponse.json(responsePayload, { status: 201 });
   } catch (error) {
+    if (recordCompanyId && recordKey) {
+      await prisma.idempotencyRecord.updateMany({
+        where: {
+          companyId: recordCompanyId,
+          idempotencyKey: recordKey,
+          status: "PROCESSING",
+        },
+        data: { status: "FAILED" },
+      }).catch(() => undefined);
+    }
     return handleApiError(error);
   }
 }
