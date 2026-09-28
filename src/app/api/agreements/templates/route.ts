@@ -1,11 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agreementsDb } from "@/lib/agreements-db";
 import { requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
-import { handleApiError } from "@/lib/apiSecurity";
+import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { createAdminAgreementTemplate } from "@/lib/adminAgreementTemplateMutations";
+import { z } from "zod";
+
+export const agreementTemplateMutationSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000),
+  category: z.string().trim().min(1).max(100),
+  feeType: z.enum(["PERCENTAGE", "FIXED"]),
+  feeValue: z.number().finite().positive().max(1_000_000_000),
+  invoiceRule: z.enum(["ON_OFFER", "ON_JOINING", "DAY_25", "DAY_30", "SPLIT_50_50"]),
+  replacementDays: z.number().int().min(0).max(3650),
+  validityMonths: z.number().int().min(1).max(120),
+  advancePayment: z.number().finite().min(0).max(1_000_000_000),
+  creditTermsDays: z.number().int().min(0).max(365),
+  standardDiscountPct: z.number().finite().min(0).max(100),
+  taxRatePct: z.number().finite().min(0).max(100),
+  specialClauses: z.array(z.string().trim().min(1).max(10_000)).max(100),
+  commercialNotes: z.string().trim().max(10_000).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.feeType === "PERCENTAGE" && value.feeValue > 100) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["feeValue"], message: "Percentage fee cannot exceed 100%." });
+  }
+});
 
 export async function GET(req: NextRequest) {
   try {
-    await requireEmployerOrAdminSession(req);
+    const session = await requireEmployerOrAdminSession(req);
+    await enforceRateLimit(req, `agreement_templates_read:${session.id}`, 60, 60_000);
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get("includeArchived") === "true";
     const templates = await agreementsDb.getTemplates(includeArchived);
@@ -17,39 +41,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    const body = await req.json();
+    const session = await requireAdminSession(req);
+    await enforceRateLimit(req, `agreement_templates_create:${session.id}`, 20, 60_000);
+    const body = await readValidatedJson(req, agreementTemplateMutationSchema, 128 * 1024);
 
-    if (!body.name || !body.category) {
-      return NextResponse.json(
-        { success: false, error: "Template name and category are required." },
-        { status: 400 }
-      );
-    }
-
-    const newTpl = await agreementsDb.createTemplate({
-      name: body.name,
-      description: body.description || "",
-      category: body.category || "Custom",
-      feeType: body.feeType || "PERCENTAGE",
-      feeValue: Number(body.feeValue) || 8.33,
-      invoiceRule: body.invoiceRule || "ON_JOINING",
-      replacementDays: Number(body.replacementDays) || 90,
-      validityMonths: Number(body.validityMonths) || 12,
-      advancePayment: Number(body.advancePayment) || 0,
-      creditTermsDays: Number(body.creditTermsDays) || 15,
-      standardDiscountPct: Number(body.standardDiscountPct) || 0,
-      taxRatePct: Number(body.taxRatePct) || 18.0,
-      specialClauses: Array.isArray(body.specialClauses) ? body.specialClauses : [],
-      commercialNotes: body.commercialNotes || "",
-      isArchived: false,
+    const template = await createAdminAgreementTemplate(body, {
+      actorId: session.id,
+      ipAddress: getClientIp(req),
     });
 
     return NextResponse.json({
       success: true,
       message: "Agreement template created successfully",
-      template: newTpl,
-    });
+      template,
+    }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }
