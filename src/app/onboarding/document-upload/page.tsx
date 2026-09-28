@@ -33,8 +33,10 @@ export default function DocumentUploadPage() {
   const router = useRouter();
   const { state, updateState, markStepComplete } = useOnboarding();
   const [uploadedDocs, setUploadedDocs] = useState<{ [key: string]: boolean }>({});
+  const [uploadError, setUploadError] = useState("");
 
   const handleFileUpload = async (docType: string, file: File) => {
+    setUploadError("");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("category", "onboarding-docs");
@@ -45,18 +47,18 @@ export default function DocumentUploadPage() {
         body: formData,
       });
 
-      const uploadJson = await uploadRes.json();
-      
-      if (uploadRes.ok && uploadJson.file?.url) {
-        setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
-        updateState({ [docType]: true });
-        return true;
+      const uploadJson = await uploadRes.json().catch(() => ({}));
+
+      if (!uploadRes.ok || !uploadJson.file?.url) {
+        throw new Error(uploadJson.error || "Document upload failed.");
       }
+
+      setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
+      return true;
     } catch (err) {
-      console.error("Document upload failed:", err);
+      setUploadError(err instanceof Error ? err.message : "Document upload failed.");
       return false;
     }
-    return false;
   };
 
   const handleNext = () => {
@@ -89,6 +91,11 @@ export default function DocumentUploadPage() {
 
         <main className="p-6 lg:p-8 flex-1 max-w-[1000px] mx-auto">
           <div className="glass-card rounded-2xl p-6 lg:p-8 space-y-6">
+            {uploadError && (
+              <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                {uploadError}
+              </div>
+            )}
             <div className="bg-yellow/10 border border-yellow/20 rounded-xl p-4 mb-6">
               <div className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-yellow text-[20px] mt-1">info</span>
@@ -122,7 +129,7 @@ export default function DocumentUploadPage() {
                         <h3 className="font-bold text-sm text-text-primary">{doc.name}</h3>
                         {uploadedDocs[doc.id] && (
                           <span className="text-[10px] font-bold text-green px-2 py-0.5 rounded-full bg-green/10 border border-green/20">
-                            Verified
+                            Uploaded
                           </span>
                         )}
                       </div>
