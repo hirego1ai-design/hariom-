@@ -6,6 +6,7 @@ import { logAuditEvent } from "@/lib/auditLogger";
 import { z } from "zod";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 import { UNIVERSAL_VALIDATION_SENIORITY } from "@/lib/universalSkillValidation";
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
 
 const StartAssessmentSchema = z.object({
   assessmentId: z.string().uuid("Invalid assessment ID"),
@@ -103,6 +104,24 @@ export async function POST(req: NextRequest) {
         },
       });
       if (!application) throw new ApiError("You are not assigned to this job assessment.", 403);
+
+      const gate = await prisma.applicationGate.findUnique({
+        where: {
+          applicationId_type: {
+            applicationId: application.id,
+            type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+          },
+        },
+        select: { id: true, assessmentId: true, status: true },
+      });
+      if (
+        !gate ||
+        gate.assessmentId !== assessment.id ||
+        ![ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(gate.status)
+      ) {
+        throw new ApiError("This assessment is not currently assigned to your application.", 403);
+      }
+
       const eligibleStatuses = new Set(["APPLIED", "SCREENING", "AI_INTERVIEW", "ASSESSMENT", "SHORTLISTED"]);
       if (!eligibleStatuses.has(application.status)) {
         throw new ApiError(`Application is in '${application.status}' status and is not eligible to take assessments.`, 403);
@@ -175,6 +194,29 @@ export async function POST(req: NextRequest) {
           throw createErr;
         }
       }
+    }
+
+    if (assessment.scope === "EMPLOYER_JOB" && assessment.jobListingId) {
+      const application = await prisma.application.findUnique({
+        where: {
+          candidateProfileId_jobId: {
+            candidateProfileId: candidateProfile.id,
+            jobId: assessment.jobListingId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!application) throw new ApiError("Application assignment changed before assessment start.", 409);
+
+      await prisma.applicationGate.updateMany({
+        where: {
+          applicationId: application.id,
+          type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
+          assessmentId: assessment.id,
+          status: ApplicationGateStatus.REQUIRED,
+        },
+        data: { status: ApplicationGateStatus.IN_PROGRESS },
+      });
     }
 
     await logAuditEvent({
