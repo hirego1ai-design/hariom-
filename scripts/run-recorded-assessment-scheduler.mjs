@@ -1,58 +1,27 @@
-const secret = process.env.CRON_SECRET?.trim();
-const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
-const endpoint = new URL('/api/cron/recorded-assessment-analysis', process.env.APP_URL || '');
+import { runRecordedAssessmentRecovery } from "../src/lib/recordedAssessmentRecovery.ts";
 
-if (!secret || secret.length < 32) {
-  throw new Error('Configure CRON_SECRET with at least 32 characters.');
-}
-if (vercelBypassSecret && vercelBypassSecret.length < 32) {
-  throw new Error('VERCEL_AUTOMATION_BYPASS_SECRET must be at least 32 characters when configured.');
-}
-if (endpoint.username || endpoint.password) {
-  throw new Error('APP_URL must not contain credentials.');
-}
-const internalHttp =
-  process.env.ALLOW_INTERNAL_HTTP === '1' &&
-  ['app', 'localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
-if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && internalHttp)) {
-  throw new Error('APP_URL must use HTTPS outside the private local app network.');
-}
+const batchSize = Number(process.env.RECORDED_ASSESSMENT_RECOVERY_BATCH_SIZE || 20);
 
-const headers = {
-  Authorization: `Bearer ${secret}`,
-};
-if (vercelBypassSecret) {
-  headers['x-vercel-protection-bypass'] = vercelBypassSecret;
-}
-
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 90_000);
 try {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    redirect: 'error',
-    signal: controller.signal,
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.success !== true) {
-    throw new Error(`Recorded assessment recovery tick failed with HTTP ${response.status}`);
-  }
-  console.log(JSON.stringify({
-    worker: 'recorded-assessment-analysis-recovery',
-    at: new Date().toISOString(),
-    status: 'completed',
-    scanned: result.scanned ?? null,
-    staleProcessingMinutes: result.staleProcessingMinutes ?? null,
-  }));
+  const result = await runRecordedAssessmentRecovery(batchSize);
+  console.log(
+    JSON.stringify({
+      worker: "recorded-assessment-analysis-recovery",
+      at: new Date().toISOString(),
+      status: "completed",
+      scanned: result.scanned,
+      staleProcessingMinutes: result.staleProcessingMinutes,
+      dispatched: result.results.filter((entry) => entry.dispatched).length,
+    }),
+  );
 } catch (error) {
-  console.error(JSON.stringify({
-    worker: 'recorded-assessment-analysis-recovery',
-    at: new Date().toISOString(),
-    status: 'failed',
-    message: error instanceof Error ? error.message : 'Request failed',
-  }));
+  console.error(
+    JSON.stringify({
+      worker: "recorded-assessment-analysis-recovery",
+      at: new Date().toISOString(),
+      status: "failed",
+      message: error instanceof Error ? error.message : "Recovery worker failed",
+    }),
+  );
   process.exitCode = 1;
-} finally {
-  clearTimeout(timeout);
 }
