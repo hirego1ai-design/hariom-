@@ -14,6 +14,7 @@ const fraudUpdateSchema = z.object({
   userId: z.string().trim().min(1).max(191),
   newStatus: z.nativeEnum(FraudStatus),
   reason: z.string().trim().min(3).max(1000),
+  expectedUpdatedAt: z.string().datetime(),
   riskScore: z.number().finite().min(0).max(100).optional(),
   riskFactors: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
 }).strict();
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
   try {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_referral_fraud_update:${admin.id}`, 20, 60_000);
-    const { userId, newStatus, reason, riskScore, riskFactors } = await readValidatedJson(
+    const { userId, newStatus, reason, expectedUpdatedAt, riskScore, riskFactors } = await readValidatedJson(
       request,
       fraudUpdateSchema,
       16 * 1024,
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       reason,
       actorId: admin.id,
       ipAddress: getClientIp(request),
+      expectedUpdatedAt,
       riskScore,
       riskFactors,
     });
