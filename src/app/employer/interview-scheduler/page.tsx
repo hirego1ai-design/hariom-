@@ -19,6 +19,7 @@ function EmployerInterviewSchedulerContent() {
   const [success, setSuccess] = useState<{ interviewId: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [copilotAvailable, setCopilotAvailable] = useState(false);
+  const [copilotLoadError, setCopilotLoadError] = useState("");
   const [useCopilot, setUseCopilot] = useState(false);
   const scheduleRequestKey = useRef<string | null>(null);
 
@@ -31,18 +32,23 @@ function EmployerInterviewSchedulerContent() {
 
   useEffect(() => {
     let cancelled = false;
+    setCopilotLoadError("");
     fetch("/api/employer/copilot/capacity", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success) {
+          throw new Error(body.error || "Copilot capacity could not be loaded.");
+        }
         if (cancelled) return;
-        const active = Boolean(response.ok && body.success && body.capacity?.active);
+        const active = Boolean(body.capacity?.active);
         setCopilotAvailable(active);
         setUseCopilot(active);
       })
-      .catch(() => {
+      .catch((reason) => {
         if (!cancelled) {
           setCopilotAvailable(false);
           setUseCopilot(false);
+          setCopilotLoadError(reason instanceof Error ? reason.message : "Copilot capacity could not be loaded.");
         }
       });
     return () => { cancelled = true; };
@@ -112,8 +118,6 @@ function EmployerInterviewSchedulerContent() {
           </label>
           <div className="grid md:grid-cols-2 gap-4">
             <label className="block text-sm text-text-secondary">
-            </label>
-            <label className="block text-sm text-text-secondary">
               Date
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
             </label>
@@ -132,6 +136,11 @@ function EmployerInterviewSchedulerContent() {
                 HireGo contact number (required for configured in-person rounds)
                 <input value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} className="mt-2 w-full input-pill h-11 px-4 text-text-primary" />
               </label>
+            </div>
+          )}
+          {copilotLoadError && (
+            <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs text-amber-100">
+              {copilotLoadError} Manual scheduling remains available; Copilot has not been assumed inactive because of this load failure.
             </div>
           )}
           {copilotAvailable && (
