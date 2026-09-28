@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
-import { logAuditEvent } from "@/lib/auditLogger";
 
 export async function POST(
   req: NextRequest,
