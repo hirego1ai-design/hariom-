@@ -64,10 +64,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Historical Integrity: Cannot mutate scoring rules if candidate attempts exist
-    const attemptCount = await prisma.mcqAttempt.count({ where: { assessmentId: id } });
-    if (attemptCount > 0 && (data.durationMinutes !== undefined || data.passingPercentage !== undefined)) {
-      throw new ApiError("Cannot modify duration or passing percentage for an assessment that already has candidate attempts.", 400);
+    // Historical Integrity: freeze scoring rules once assigned or attempted.
+    const [attemptCount, assignmentCount] = await Promise.all([
+      prisma.mcqAttempt.count({ where: { assessmentId: id } }),
+      prisma.applicationGate.count({ where: { assessmentId: id } }),
+    ]);
+    if ((attemptCount > 0 || assignmentCount > 0) && (data.durationMinutes !== undefined || data.passingPercentage !== undefined)) {
+      throw new ApiError("Cannot modify duration or passing percentage after this assessment has been assigned to a candidate.", 409);
     }
 
     const updatedAssessment = await prisma.mcqAssessment.update({
@@ -116,10 +119,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
     }
 
-    // Historical Integrity: Cannot destroy assessments that have candidate attempts
-    const attemptCount = await prisma.mcqAttempt.count({ where: { assessmentId: id } });
-    if (attemptCount > 0) {
-      throw new ApiError("Cannot delete an assessment that has candidate attempts. Archive it instead by setting isActive to false.", 400);
+    // Historical Integrity: assigned, acknowledged, or attempted assessments are immutable history.
+    const [attemptCount, assignmentCount, acknowledgementCount] = await Promise.all([
+      prisma.mcqAttempt.count({ where: { assessmentId: id } }),
+      prisma.applicationGate.count({ where: { assessmentId: id } }),
+      prisma.assessmentNoticeAcknowledgement.count({ where: { assessmentId: id } }),
+    ]);
+    if (attemptCount > 0 || assignmentCount > 0 || acknowledgementCount > 0) {
+      throw new ApiError("Cannot delete an assessment after it has been assigned, acknowledged, or attempted. Archive it by setting isActive to false.", 409);
     }
 
     await prisma.mcqAssessment.delete({
