@@ -522,12 +522,6 @@ export default function HiringPipelinePage() {
               ))}
             </div>
 
-            <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Recorded recommendations</p>
-              <p className="mt-2 text-xs text-text-secondary">
-                Recommendations appear only when persisted evidence exists for the application. Unassessed candidates are not ranked or labeled.
-              </p>
-            </div>
           </aside>
         )}
       </div>
@@ -586,10 +580,6 @@ function CandidateCard({
           <span>{candidate.currentLocation}</span>
           <span className="text-white font-bold">{candidate.expectedSalary}</span>
         </div>
-      </div>
-
-      {/* Recommendation and reason badge */}
-      <div className="flex flex-col gap-1">
       </div>
 
       {/* Expanded Notes section */}
