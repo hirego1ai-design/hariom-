@@ -11,8 +11,9 @@ type AnalyticsData = {
     applicationGrowthPercent: number | null;
     activeJobs: number;
     completedInterviews: number;
-    hires: number;
+    hiredApplications: number;
     averageTimeToHireDays: number | null;
+    averageTimeToHireSampleCount: number;
   };
   funnel: Record<string, number>;
   departments: Array<{ name: string; applications: number; hires: number; conversionPercent: number }>;
@@ -50,7 +51,7 @@ export default function EmployerAnalyticsDashboard() {
         ["Applications", data.metrics.applications.toLocaleString(), data.metrics.applicationGrowthPercent === null ? "No prior-period baseline" : `${data.metrics.applicationGrowthPercent >= 0 ? "+" : ""}${data.metrics.applicationGrowthPercent}% vs prior period`],
         ["Active Jobs", data.metrics.activeJobs.toLocaleString(), "Currently accepting applications"],
         ["Completed Interviews", data.metrics.completedInterviews.toLocaleString(), `Last ${data.rangeDays} days`],
-        ["Hires", data.metrics.hires.toLocaleString(), data.metrics.averageTimeToHireDays === null ? "Time-to-hire not available yet" : `${data.metrics.averageTimeToHireDays} day average time-to-hire`],
+        ["Applications now hired", data.metrics.hiredApplications.toLocaleString(), data.metrics.averageTimeToHireDays === null ? "No confirmed joining timestamp available in this period" : `${data.metrics.averageTimeToHireDays} day average from ${data.metrics.averageTimeToHireSampleCount} confirmed joining record${data.metrics.averageTimeToHireSampleCount === 1 ? "" : "s"}`],
       ]
     : [];
 
