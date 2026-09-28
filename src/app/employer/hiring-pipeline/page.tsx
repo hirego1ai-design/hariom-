@@ -38,7 +38,7 @@ const STAGES: StageConfig[] = [
 ];
 
 export default function HiringPipelinePage() {
-  const { candidates, jobs, updateCandidateStage } = useEmployer();
+  const { candidates, jobs, updateCandidateStage, actionError, clearActionError } = useEmployer();
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,6 +62,7 @@ export default function HiringPipelinePage() {
 
   // Handle Drag / Move candidate action
   const handleMove = async (applicationId: string, targetStage: StageId) => {
+    clearActionError();
     const candidate = candidates.find((c) => c.applicationId === applicationId);
     if (!candidate) return;
     if (await updateCandidateStage(applicationId, targetStage)) showToast(`Moved ${candidate.name} to ${targetStage}`);
@@ -86,7 +87,9 @@ export default function HiringPipelinePage() {
         (selectedExperience === "<5y" && parseInt(c.experience) < 5);
       const matchesRecommendation =
         selectedRecommendation === "All" || c.recommendation === selectedRecommendation;
-      const matchesScore = c.matchScore >= selectedMinScore;
+      const matchesScore =
+        selectedMinScore === 0 ||
+        (typeof c.matchScore === "number" && Number.isFinite(c.matchScore) && c.matchScore >= selectedMinScore);
       const matchesLocation =
         selectedLocation === "All" || c.currentLocation.toLowerCase().includes(selectedLocation.toLowerCase());
 
@@ -97,8 +100,13 @@ export default function HiringPipelinePage() {
   // Stats calculation
   const stats = useMemo(() => {
     const total = filteredCandidates.length;
-    const avgScore = total ? Math.round(filteredCandidates.reduce((acc, c) => acc + c.matchScore, 0) / total) : 0;
-    const highlyRecCount = filteredCandidates.filter((c) => c.recommendation === "Highly Recommended").length;
+    const scoredCandidates = filteredCandidates.filter(
+      (candidate) => typeof candidate.matchScore === "number" && Number.isFinite(candidate.matchScore),
+    );
+    const avgScore = scoredCandidates.length
+      ? Math.round(scoredCandidates.reduce((acc, candidate) => acc + candidate.matchScore, 0) / scoredCandidates.length)
+      : null;
+    const jobReadyCount = filteredCandidates.filter((candidate) => candidate.jobReady).length;
     const joinedCount = filteredCandidates.filter((c) => c.stage === "Joined").length;
     const offersCount = filteredCandidates.filter((c) => c.stage === "Shortlisted").length;
     
@@ -110,11 +118,11 @@ export default function HiringPipelinePage() {
     return {
       total,
       avgScore,
-      highlyRecCount,
+      jobReadyCount,
       joinedCount,
       offersCount,
       avgExpVal,
-      openJobsCount: jobs.filter(j => j.status === "Active").length,
+      openJobsCount: jobs.filter((job) => String(job.status).toUpperCase() === "ACTIVE").length,
     };
   }, [filteredCandidates, jobs]);
 
@@ -128,7 +136,12 @@ export default function HiringPipelinePage() {
   const getStageStats = (stageId: StageId) => {
     const stageCandidates = filteredCandidates.filter((c) => c.stage === stageId);
     const count = stageCandidates.length;
-    const avgScore = count ? Math.round(stageCandidates.reduce((acc, c) => acc + c.matchScore, 0) / count) : 0;
+    const scoredCandidates = stageCandidates.filter(
+      (candidate) => typeof candidate.matchScore === "number" && Number.isFinite(candidate.matchScore),
+    );
+    const avgScore = scoredCandidates.length
+      ? Math.round(scoredCandidates.reduce((acc, candidate) => acc + candidate.matchScore, 0) / scoredCandidates.length)
+      : null;
     const avgExp = count
       ? (stageCandidates.reduce((acc, c) => acc + (parseInt(c.experience) || 0), 0) / count).toFixed(1)
       : "0";
@@ -138,6 +151,12 @@ export default function HiringPipelinePage() {
   return (
     <div className="pt-24 pb-12 pr-2 min-h-screen text-text-primary">
       {/* Toast Notification */}
+      {actionError && (
+        <div role="alert" className="mb-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          {actionError}
+        </div>
+      )}
+
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1C1C22] border border-secondary/40 text-white px-5 py-3 rounded-2xl shadow-2xl font-bold text-xs flex items-center gap-3">
           <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-ping" />
@@ -157,7 +176,7 @@ export default function HiringPipelinePage() {
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
           <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Avg AI Match</p>
-          <p className="font-display text-2xl text-green mt-1">{stats.avgScore}%</p>
+          <p className="font-display text-2xl text-green mt-1">{stats.avgScore === null ? "N/A" : `${stats.avgScore}%`}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
           <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Shortlisted</p>
@@ -168,8 +187,8 @@ export default function HiringPipelinePage() {
           <p className="font-display text-2xl text-green mt-1">{stats.joinedCount}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
-          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Highly Recommended</p>
-          <p className="font-display text-2xl text-yellow mt-1">{stats.highlyRecCount}</p>
+          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Job Ready</p>
+          <p className="font-display text-2xl text-yellow mt-1">{stats.jobReadyCount}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
           <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Avg Experience</p>
@@ -189,18 +208,8 @@ export default function HiringPipelinePage() {
           </div>
           <div className="flex gap-6 text-xs text-text-muted">
             <div>
-              <p>Activity Level</p>
-              <p className="text-white font-bold">{pinnedJobDetails.activityLevel}</p>
-            </div>
-            <div>
-              <p>Applications Rec.</p>
-              <p className="text-white font-bold">{pinnedJobDetails.applications}</p>
-            </div>
-            <div>
-              <p>Hiring Progress</p>
-              <div className="w-24 bg-white/10 h-1.5 rounded-full mt-1.5 overflow-hidden">
-                <div className="bg-secondary h-full" style={{ width: "35%" }}></div>
-              </div>
+              <p>Status</p>
+              <p className="text-white font-bold">{String(pinnedJobDetails.status || "Not available").toUpperCase()}</p>
             </div>
           </div>
         </section>
@@ -267,7 +276,7 @@ export default function HiringPipelinePage() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-              <span>AI Insights</span>
+              <span>Evidence</span>
             </button>
             <Link
               href="/employer/create-job-basic-info"
@@ -404,7 +413,7 @@ export default function HiringPipelinePage() {
                       {stageStat.count > 0 && (
                         <div className="flex items-center justify-between text-[10px] text-text-muted font-mono">
                           <span>Avg Exp: {stageStat.avgExp}y</span>
-                          <span>Avg Match: {stageStat.avgScore}%</span>
+                          <span>Avg Match: {stageStat.avgScore === null ? "N/A" : `${stageStat.avgScore}%`}</span>
                         </div>
                       )}
                     </div>
@@ -441,7 +450,9 @@ export default function HiringPipelinePage() {
                 className="glass-card p-5 rounded-2xl border border-white/10 bg-[#141418] hover:border-secondary/40 hover:scale-[1.01] transition-all duration-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
               >
                 <Link href={`/employer/full-candidate-profile-employer-view?id=${c.id}`} className="flex items-start gap-4 hover:opacity-80 transition-opacity relative z-10">
-                  <img src={c.avatar} alt={c.name} className="w-14 h-14 rounded-full object-cover border-2 border-secondary/30 shadow-sm" />
+                  <div className="w-14 h-14 rounded-full border-2 border-secondary/30 shadow-sm bg-secondary/10 flex items-center justify-center text-sm font-extrabold text-secondary" aria-hidden="true">
+                    {(c.name || "C").slice(0, 1).toUpperCase()}
+                  </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-secondary underline decoration-secondary/30">
@@ -569,11 +580,9 @@ function CandidateCard({
           href={`/employer/full-candidate-profile-employer-view?id=${candidate.id}`}
           className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-80 transition-opacity relative z-10"
         >
-          <img
-            src={candidate.avatar}
-            alt={candidate.name}
-            className="w-10 h-10 rounded-full object-cover border-2 border-secondary/30"
-          />
+          <div className="w-10 h-10 rounded-full border-2 border-secondary/30 bg-secondary/10 flex items-center justify-center text-xs font-extrabold text-secondary" aria-hidden="true">
+            {(candidate.name || "C").slice(0, 1).toUpperCase()}
+          </div>
           <div className="min-w-0">
             <h4 className="font-bold text-xs text-secondary underline decoration-secondary/30 truncate">
               {candidate.name}
@@ -694,7 +703,16 @@ function CandidateCard({
 }
 
 /* Color Coded Score badge widget */
-function ScoreBadge({ score, size = "md" }: { score: number; size?: "sm" | "md" }) {
+function ScoreBadge({ score, size = "md" }: { score: number | null; size?: "sm" | "md" }) {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    const sizeClass = size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-xs";
+    return (
+      <span className={`rounded-full border border-white/10 bg-white/5 text-text-muted font-bold font-mono ${sizeClass}`}>
+        N/A
+      </span>
+    );
+  }
+
   const isHigh = score >= 90;
   const isMedium = score >= 70;
 
