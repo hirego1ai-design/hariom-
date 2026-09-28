@@ -128,7 +128,7 @@ export async function loadRevenueTransactions() {
     gateway: "",
     paymentMethod: "",
     currency: invoice.currency,
-    status: invoice.status === "PAID" ? "Success" : invoice.status === "OVERDUE" ? "Failed" : "Pending",
+    status: invoice.status === "PAID" ? "Success" : invoice.status === "OVERDUE" ? "Overdue" : "Pending",
     createdDate: invoice.createdAt.toISOString(),
     paidDate: invoice.paidDate || "",
     updatedDate: invoice.updatedAt.toISOString(),
@@ -159,55 +159,78 @@ export async function loadManagedHiringRevenue() {
   const agreementById = new Map(agreements.map((agreement) => [agreement.id, agreement]));
   const placements = invoices.map((invoice) => {
     const agreement = agreementById.get(invoice.agreementId);
-    const joinedAt = invoice.placement?.joinedAt
-      ? invoice.placement.joinedAt.toISOString()
-      : invoice.createdAt.toISOString();
-    const annualSalary = invoice.placement?.annualCtc ? Number(invoice.placement.annualCtc) : 0;
+    const annualSalary = invoice.placement?.annualCtc ? Number(invoice.placement.annualCtc) : null;
     return {
       id: invoice.id,
       candidateName: invoice.candidateName || "",
-      candidateEmail: "",
+      candidateEmail: null,
       employerCompany: invoice.companyName,
-      employerContact: agreement?.clientEmail || "",
-      recruiterPartner: "",
+      employerContact: agreement?.clientEmail || null,
+      recruiterPartner: null,
       jobTitle: invoice.jobTitle || "",
-      jobRoleLevel: "",
+      jobRoleLevel: null,
       annualSalary,
-      salaryFormatted: annualSalary ? formatMoney(annualSalary, invoice.currency) : "Unavailable",
-      commissionPct: agreement?.feeType === "PERCENTAGE" ? agreement.feeValue : 0,
+      salaryFormatted: annualSalary === null ? null : formatMoney(annualSalary, invoice.currency),
+      commissionPct: agreement?.feeType === "PERCENTAGE" ? agreement.feeValue : null,
       commissionAmount: invoice.amount,
       commissionFormatted: formatMoney(invoice.amount, invoice.currency),
       hiringFee: invoice.totalAmount,
-      replacementWarrantyDays: agreement?.replacementDays || 0,
-      joiningDate: joinedAt,
-      paymentStatus: invoice.status === "PAID" ? "Success" : invoice.status,
+      replacementWarrantyDays: agreement?.replacementDays ?? null,
+      joiningDate: invoice.placement?.joinedAt?.toISOString() || null,
+      paymentStatus: invoice.status === "PAID" ? "Success" : invoice.status === "OVERDUE" ? "Overdue" : "Pending",
       invoiceId: invoice.invoiceNumber,
-      offerLetterRef: "",
+      offerLetterRef: null,
       persisted: true,
     };
   });
+
   const paid = invoices.filter((invoice) => invoice.status === "PAID");
-  const totalCommissionEarned = paid.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const hiringFeesCollected = paid.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
-  const hiresWithSalary = paid.filter((invoice) => invoice.placement?.annualCtc);
-  const averageSalaryNumber = hiresWithSalary.length
-    ? hiresWithSalary.reduce((sum, invoice) => sum + Number(invoice.placement!.annualCtc), 0) / hiresWithSalary.length
-    : 0;
+  const currencies = [...new Set(invoices.map((invoice) => invoice.currency))].sort();
+  const byCurrency = Object.fromEntries(
+    currencies.map((currency) => {
+      const currencyInvoices = invoices.filter((invoice) => invoice.currency === currency);
+      const paidCurrencyInvoices = currencyInvoices.filter((invoice) => invoice.status === "PAID");
+      const placementsWithSalary = paidCurrencyInvoices.filter((invoice) => invoice.placement?.annualCtc);
+      const commissionCollected = paidCurrencyInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+      const billedCollected = paidCurrencyInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+      const averageSalary = placementsWithSalary.length
+        ? placementsWithSalary.reduce((sum, invoice) => sum + Number(invoice.placement!.annualCtc), 0) / placementsWithSalary.length
+        : null;
+      const averageCommission = paidCurrencyInvoices.length
+        ? commissionCollected / paidCurrencyInvoices.length
+        : null;
+
+      return [
+        currency,
+        {
+          currency,
+          invoicedPlacements: currencyInvoices.length,
+          paidPlacements: paidCurrencyInvoices.length,
+          pendingInvoices: currencyInvoices.filter((invoice) => invoice.status === "UNPAID" || invoice.status === "PENDING_VERIFICATION").length,
+          overdueInvoices: currencyInvoices.filter((invoice) => invoice.status === "OVERDUE").length,
+          commissionCollected,
+          commissionCollectedFormatted: formatMoney(commissionCollected, currency),
+          billedCollected,
+          billedCollectedFormatted: formatMoney(billedCollected, currency),
+          averageHireSalary: averageSalary === null ? null : formatMoney(averageSalary, currency),
+          averageCommissionPerPaidPlacement: averageCommission === null ? null : formatMoney(averageCommission, currency),
+        },
+      ];
+    }),
+  );
 
   return {
     summary: {
-      totalHires: invoices.length,
-      successfulHires: paid.length,
-      pendingHires: invoices.filter((invoice) => invoice.status === "UNPAID").length,
-      cancelledOrReplaced: 0,
-      totalCommissionEarned,
-      totalCommissionFormatted: formatMoney(totalCommissionEarned),
-      hiringFeesCollected,
-      replacementWarrantyCost: 0,
-      netProfit: totalCommissionEarned,
-      netProfitFormatted: formatMoney(totalCommissionEarned),
-      averageHireSalary: averageSalaryNumber ? formatMoney(averageSalaryNumber, paid[0]?.currency || "INR") : "Unavailable",
-      averageCommissionPerHire: formatMoney(paid.length ? totalCommissionEarned / paid.length : 0),
+      currencyMode: currencies.length <= 1 ? "single" : "multiple",
+      currencies,
+      invoicedPlacements: invoices.length,
+      paidPlacements: paid.length,
+      pendingInvoices: invoices.filter((invoice) => invoice.status === "UNPAID" || invoice.status === "PENDING_VERIFICATION").length,
+      overdueInvoices: invoices.filter((invoice) => invoice.status === "OVERDUE").length,
+      cancelledOrReplaced: null,
+      replacementWarrantyCost: null,
+      netProfit: null,
+      byCurrency,
     },
     placements,
     agreements,
