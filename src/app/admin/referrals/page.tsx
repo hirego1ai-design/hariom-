@@ -298,7 +298,7 @@ export default function AdminReferralsPage() {
           userId: fraudTarget.profile.userId,
           newStatus: fraudTarget.newStatus,
           reason: fraudReason.trim(),
-          expectedLastEvaluatedAt: new Date(fraudTarget.profile.lastEvaluatedAt).toISOString(),
+          expectedUpdatedAt: new Date(fraudTarget.profile.updatedAt || fraudTarget.profile.lastEvaluatedAt).toISOString(),
         }),
       });
       const payload = await response.json().catch(() => ({}));
