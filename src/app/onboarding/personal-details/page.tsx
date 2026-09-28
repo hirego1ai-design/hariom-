@@ -18,6 +18,8 @@ export default function PersonalDetailsPage() {
     dateOfBirth: state.personalDetails?.dateOfBirth || "",
     linkedinUrl: state.personalDetails?.linkedinUrl || "",
   });
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   React.useEffect(() => {
     fetch("/api/candidate/profile")
@@ -35,25 +37,35 @@ export default function PersonalDetailsPage() {
       .catch(() => {});
   }, []);
 
-  const handleNext = (e: React.FormEvent) => {
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateState({ personalDetails: formData });
-    markStepComplete(3);
+    if (isSaving) return;
 
-    // Persist to backend
-    fetch("/api/candidate/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fullName: formData.fullName,
-        phone: formData.phone,
-        location: formData.location,
-        linkedinUrl: formData.linkedinUrl,
-        bio: formData.location ? `Professional based in ${formData.location}` : "",
-      }),
-    }).catch(() => {});
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          location: formData.location,
+          linkedinUrl: formData.linkedinUrl,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) {
+        throw new Error(body.error || "Could not save your profile.");
+      }
 
-    router.push("/onboarding/education");
+      updateState({ personalDetails: formData });
+      markStepComplete(3);
+      router.push("/onboarding/education");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save your profile.");
+      setIsSaving(false);
+    }
   };
 
 
@@ -66,11 +78,11 @@ export default function PersonalDetailsPage() {
       <CandidateSidebar />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
         {/* Premium Ambient Background Grid & Dual Glows */}
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30 ml-[116px]" />
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-30 ml-0 md:ml-[116px]" />
         <div
-          className="fixed inset-0 pointer-events-none -z-10 ml-[116px]"
+          className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]"
           style={{
             background:
               "radial-gradient(ellipse at 80% 20%, rgba(255,82,82,0.09) 0%, transparent 55%), radial-gradient(ellipse at 20% 80%, rgba(68,138,255,0.09) 0%, transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(156,39,176,0.05) 0%, transparent 60%)",
@@ -79,7 +91,7 @@ export default function PersonalDetailsPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -98,7 +110,7 @@ export default function PersonalDetailsPage() {
                 Profile setup
               </span>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Personal Profile Verification
+                Personal Profile Setup
               </span>
             </div>
             <h1
@@ -149,7 +161,7 @@ export default function PersonalDetailsPage() {
                 Candidate Contact Details
               </h2>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                Verified for Enterprise Recruiters
+                Visible to authorized employers
               </span>
             </div>
 
@@ -180,7 +192,7 @@ export default function PersonalDetailsPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  EMAIL ADDRESS · VERIFIED
+                  EMAIL ADDRESS
                 </label>
                 <input
                   type="email"
@@ -273,6 +285,12 @@ export default function PersonalDetailsPage() {
               </div>
             </div>
 
+            {saveError && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+                {saveError}
+              </div>
+            )}
+
             {/* Bottom Actions */}
             <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--outline)" }}>
               <Link
@@ -290,13 +308,14 @@ export default function PersonalDetailsPage() {
 
               <button
                 type="submit"
-                className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+                disabled={isSaving}
+                className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                   boxShadow: "var(--shadow-btn-red)",
                 }}
               >
-                <span>Next: Education History</span>
+                <span>{isSaving ? "Saving..." : "Next: Education History"}</span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>

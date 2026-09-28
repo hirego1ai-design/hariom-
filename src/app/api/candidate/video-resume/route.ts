@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
+import { enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
 import { getVideoAnalysisConfig } from "@/lib/env";
 import { getWorkerDownloadUrlForCleanStoredFile } from "@/lib/storage";
-import crypto from "crypto";
 import { claimVideoAnalysisJob, releaseVideoAnalysisClaimForRetry } from "@/lib/videoAnalysisQueue";
 import { assertSafeOutboundNetworkTarget, parseAllowedHosts } from "@/lib/security/outboundUrl";
 
@@ -18,6 +17,7 @@ const videoResumeSubmissionSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_video_resume_get", 60, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
@@ -46,12 +46,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "candidate_video_resume_post", 6, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session) return jsonError("Unauthorized access", 401);
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const body = await readValidatedJson(request, videoResumeSubmissionSchema);
-
     const fileId = body.videoUrl.slice("/api/files/".length);
     const file = await prisma.storedFile.findFirst({
       where: {
@@ -75,39 +75,100 @@ export async function POST(request: NextRequest) {
     const config = getVideoAnalysisConfig();
     const initialStatus = config.enabled ? "PENDING" : "BLOCKED_INFRA";
 
-    const saved = await prisma.videoResume.create({
-      data: {
+    const loadExisting = () => prisma.videoResume.findFirst({
+      where: {
         candidateProfileId: profile.id,
-        videoUrl: body.videoUrl,
-        durationSeconds: body.durationSeconds,
-        // Client-supplied transcripts are never authoritative. The isolated
-        // worker may populate a transcript after processing CLEAN media.
-        transcript: null,
-        analysisStatus: initialStatus,
-        communicationScore: null,
-        clarityScore: null,
-        confidenceScore: null,
-        professionalism: null,
+        OR: [{ storedFileId: file.id }, { videoUrl: body.videoUrl }],
+      },
+      include: {
+        analysisJobs: { orderBy: { createdAt: "desc" }, take: 1 },
       },
     });
 
-    const idempotencyKey = `analysis-job-${saved.id}-${crypto.randomUUID()}`;
-    const job = await prisma.videoAnalysisJob.create({
-      data: {
-        videoResumeId: saved.id,
-        status: initialStatus,
-        idempotencyKey,
-        payload: {
+    const presentExisting = async (existing: Awaited<ReturnType<typeof loadExisting>>) => {
+      if (!existing) return null;
+      if (!existing.storedFileId) {
+        await prisma.videoResume.updateMany({
+          where: { id: existing.id, candidateProfileId: profile.id, storedFileId: null },
+          data: { storedFileId: file.id },
+        }).catch(() => undefined);
+      }
+      const latestJob = existing.analysisJobs[0] || null;
+      if (config.enabled && config.workerUrl && latestJob?.status === "PENDING") {
+        await dispatchWorkerJob({
+          jobId: latestJob.id,
+          videoResumeId: existing.id,
           fileId: file.id,
           objectKey: file.objectKey,
-          durationSeconds: body.durationSeconds,
-          candidateUserId: session.id,
-        },
-      },
-    });
+          durationSeconds: existing.durationSeconds,
+          workerUrl: config.workerUrl,
+          token: config.internalToken,
+          callbackOrigin: request.nextUrl.origin,
+        });
+      }
+      const refreshed = await prisma.videoResume.findUnique({
+        where: { id: existing.id },
+        include: { analysisJobs: { orderBy: { createdAt: "desc" }, take: 1 } },
+      });
+      return NextResponse.json({
+        success: true,
+        reused: true,
+        videoId: existing.id,
+        jobId: refreshed?.analysisJobs[0]?.id ?? latestJob?.id ?? null,
+        analysisStatus: refreshed?.analysisStatus ?? existing.analysisStatus,
+        video: refreshed ?? existing,
+      }, { status: 200 });
+    };
 
-    // Await acceptance before returning. Detached promises are not durable in
-    // a serverless runtime and can be terminated when the response completes.
+    const existing = await loadExisting();
+    const existingResponse = await presentExisting(existing);
+    if (existingResponse) return existingResponse;
+
+    let saved;
+    let job;
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const createdVideo = await tx.videoResume.create({
+          data: {
+            candidateProfileId: profile.id,
+            storedFileId: file.id,
+            videoUrl: body.videoUrl,
+            durationSeconds: body.durationSeconds,
+            transcript: null,
+            analysisStatus: initialStatus,
+            communicationScore: null,
+            clarityScore: null,
+            confidenceScore: null,
+            professionalism: null,
+          },
+        });
+
+        const createdJob = await tx.videoAnalysisJob.create({
+          data: {
+            videoResumeId: createdVideo.id,
+            status: initialStatus,
+            idempotencyKey: `analysis-job-file-${file.id}`,
+            payload: {
+              fileId: file.id,
+              objectKey: file.objectKey,
+              durationSeconds: body.durationSeconds,
+              candidateUserId: session.id,
+            },
+          },
+        });
+        return { saved: createdVideo, job: createdJob };
+      });
+      saved = created.saved;
+      job = created.job;
+    } catch (error: any) {
+      if (error?.code === "P2002") {
+        const raced = await loadExisting();
+        const racedResponse = await presentExisting(raced);
+        if (racedResponse) return racedResponse;
+      }
+      throw error;
+    }
+
     if (config.enabled && config.workerUrl) {
       await dispatchWorkerJob({
         jobId: job.id,
@@ -121,15 +182,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const current = await prisma.videoResume.findUnique({ where: { id: saved.id } });
     return NextResponse.json(
       {
         success: true,
         videoId: saved.id,
         jobId: job.id,
-        analysisStatus: saved.analysisStatus,
-        video: saved,
+        analysisStatus: current?.analysisStatus ?? saved.analysisStatus,
+        video: current ?? saved,
       },
-      { status: 202 }
+      { status: 202 },
     );
   } catch (error) {
     return handleApiError(error);

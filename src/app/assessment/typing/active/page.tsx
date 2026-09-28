@@ -102,8 +102,8 @@ export default function TypingTestActivePage() {
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen">
-        <header className="fixed top-0 left-[116px] right-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-gutter h-20 shadow-md">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
+        <header className="fixed top-0 left-0 md:left-[116px] right-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-gutter h-20 shadow-md">
           <div>
             <h1 className="font-bold text-lg text-white">Typing Practice</h1>
             <p className="text-text-muted text-xs">Self-reported practice only. It is not a verified hiring assessment.</p>

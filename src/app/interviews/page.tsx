@@ -24,10 +24,10 @@ export default function CandidateInterviewsPage() {
   return (
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       <CandidateSidebar />
-      <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div><h1 className="text-2xl font-bold">Scheduled interviews</h1><p className="mt-1 text-sm text-text-muted">Only interviews associated with your account are shown here.</p></div>
-          <Link href="/ai/mock-interview/active" className="min-h-11 inline-flex items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white">Practice with AI</Link>
+          <Link href="/ai/mock-interview/setup" className="min-h-11 inline-flex items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white">Practice with AI</Link>
         </div>
         {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">{error}</div>}
         {loading && <p className="text-sm text-text-muted">Loading interviews…</p>}

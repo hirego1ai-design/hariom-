@@ -20,23 +20,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!profile) throw new ApiError("Candidate profile not found.", 404);
 
     const now = new Date();
-    const offer = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Offer" WHERE id = ${id} FOR UPDATE`;
       const current = await tx.offer.findUnique({
         where: { id },
         include: { application: { select: { candidateProfileId: true, status: true, jobId: true } } },
       });
       if (!current || current.application.candidateProfileId !== profile.id) throw new ApiError("Offer not found.", 404);
-      if (current.status === "ACCEPTED" && body.action === "ACCEPT") return current;
-      if (current.status === "DECLINED" && body.action === "DECLINE") return current;
+
+      if (current.status === "ACCEPTED" && body.action === "ACCEPT") {
+        const joiningWorkflow = await tx.workflowInstance.findUnique({
+          where: { correlationId: `offer-send:${current.id}` },
+          select: { id: true, status: true, currentStep: true },
+        });
+        return { offer: current, expired: false, joiningWorkflow };
+      }
+      if (current.status === "DECLINED" && body.action === "DECLINE") {
+        return { offer: current, expired: false, joiningWorkflow: null };
+      }
       if (current.status !== "SENT") throw new ApiError(`This offer cannot be ${body.action.toLowerCase()}ed from status ${current.status}.`, 409);
+
       if (current.expiresAt <= now) {
-        await tx.offer.update({ where: { id }, data: { status: "EXPIRED" } });
-        throw new ApiError("This offer has expired.", 409);
+        const expiredOffer = await tx.offer.update({ where: { id }, data: { status: "EXPIRED" } });
+        return { offer: expiredOffer, expired: true, joiningWorkflow: null };
       }
       if (["HIRED", "REJECTED", "WITHDRAWN"].includes(current.application.status)) {
         throw new ApiError("This application is no longer eligible for an offer response.", 409);
       }
+
       const updatedOffer = await tx.offer.update({
         where: { id },
         data: body.action === "ACCEPT"
@@ -47,6 +58,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       const correlationId = `offer-send:${current.id}`;
       const workflow = await tx.workflowInstance.findUnique({ where: { correlationId } });
+      let joiningWorkflow: { id: string; status: string; currentStep: string } | null = null;
+
       if (body.action === "ACCEPT") {
         if (workflow) {
           if (
@@ -62,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           const checkpoint = workflow.checkpointState && typeof workflow.checkpointState === "object" && !Array.isArray(workflow.checkpointState)
             ? workflow.checkpointState as Record<string, unknown>
             : {};
-          await tx.workflowInstance.update({
+          joiningWorkflow = await tx.workflowInstance.update({
             where: { id: workflow.id },
             data: {
               status: "RUNNING",
@@ -75,9 +88,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 acceptedByCandidateUserId: session.id,
               },
             },
+            select: { id: true, status: true, currentStep: true },
           });
         } else {
-          await tx.workflowInstance.create({
+          joiningWorkflow = await tx.workflowInstance.create({
             data: {
               companyId: current.companyId,
               jobId: current.application.jobId,
@@ -96,6 +110,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 acceptedByCandidateUserId: session.id,
               },
             },
+            select: { id: true, status: true, currentStep: true },
           });
         }
       } else if (workflow && ["RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"].includes(workflow.status)) {
@@ -118,30 +133,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
       }
 
-      return updatedOffer;
+      await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: updatedOffer.companyId,
+          action: body.action === "ACCEPT" ? "OFFER_ACCEPTED" : "OFFER_DECLINED",
+          resource: `Offer:${updatedOffer.id}`,
+          details: body.note || null,
+        },
+      });
+
+      return { offer: updatedOffer, expired: false, joiningWorkflow };
     });
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.id,
-        companyId: offer.companyId,
-        action: body.action === "ACCEPT" ? "OFFER_ACCEPTED" : "OFFER_DECLINED",
-        resource: `Offer:${offer.id}`,
-        details: body.note || null,
-      },
-    });
-    const joiningWorkflow = body.action === "ACCEPT"
-      ? await prisma.workflowInstance.findUnique({
-          where: { correlationId: `offer-send:${offer.id}` },
-          select: { id: true, status: true, currentStep: true },
-        })
-      : null;
+    if (result.expired) throw new ApiError("This offer has expired.", 409);
 
     return NextResponse.json({
       success: true,
-      offer,
-      joiningWorkflowStarted: body.action === "ACCEPT" && joiningWorkflow?.currentStep === "OFFER_ACCEPTED",
-      joiningWorkflow,
+      offer: result.offer,
+      joiningWorkflowStarted: body.action === "ACCEPT" && result.joiningWorkflow?.currentStep === "OFFER_ACCEPTED",
+      joiningWorkflow: result.joiningWorkflow,
     });
   } catch (error) {
     return handleApiError(error);

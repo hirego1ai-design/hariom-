@@ -18,16 +18,21 @@ export default function NotificationsCenterPage() {
   const [invitations, setInvitations] = useState<Array<{id:string;status:string;invitedAt:string|null;job:{id:string;title:string;location:string|null;company:{name:string}}}>>([]);
   const [decisionId, setDecisionId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [notificationError, setNotificationError] = useState("");
+  const [invitationError, setInvitationError] = useState("");
+  const [markingRead, setMarkingRead] = useState(false);
 
   async function fetchNotifications() {
+    setNotificationError("");
     try {
-      const res = await fetch("/api/notifications");
-      const data = await res.json();
-      if (data.success && data.notifications) {
-        setItems(data.notifications);
+      const res = await fetch("/api/notifications", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !Array.isArray(data.notifications)) {
+        throw new Error(data.error || "Unable to load notifications.");
       }
-    } catch {
-      // Fallback
+      setItems(data.notifications);
+    } catch (error) {
+      setNotificationError(error instanceof Error ? error.message : "Unable to load notifications.");
     } finally {
       setLoading(false);
     }
@@ -35,9 +40,13 @@ export default function NotificationsCenterPage() {
 
   useEffect(() => {
     fetchNotifications();
+    setInvitationError("");
     fetch("/api/candidate/sourcing-invitations", { cache: "no-store" }).then(async (response) => {
-      const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to load invitations."); return body;
-    }).then((body) => setInvitations(body.invitations || [])).catch(() => undefined);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to load job invitations.");
+      return body;
+    }).then((body) => setInvitations(Array.isArray(body.invitations) ? body.invitations : []))
+      .catch((error) => setInvitationError(error instanceof Error ? error.message : "Unable to load job invitations."));
   }, []);
 
   const decideInvitation = async (id: string, decision: "ACCEPT" | "DECLINE") => {
@@ -51,30 +60,42 @@ export default function NotificationsCenterPage() {
   };
 
   const markAllRead = async () => {
-    setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+    if (markingRead) return;
+    setMarkingRead(true);
+    setNotificationError("");
     try {
-      await fetch("/api/notifications", {
+      const response = await fetch("/api/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAll: true }),
       });
-    } catch {
-      // Ignore
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to mark notifications as read.");
+      setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+    } catch (error) {
+      setNotificationError(error instanceof Error ? error.message : "Unable to mark notifications as read.");
+    } finally {
+      setMarkingRead(false);
     }
   };
 
   const markItemRead = async (id: string) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isRead: true } : item))
-    );
+    if (markingRead || items.find((item) => item.id === id)?.isRead) return;
+    setMarkingRead(true);
+    setNotificationError("");
     try {
-      await fetch("/api/notifications", {
+      const response = await fetch("/api/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notificationId: id }),
       });
-    } catch {
-      // Ignore
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to update this notification.");
+      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)));
+    } catch (error) {
+      setNotificationError(error instanceof Error ? error.message : "Unable to update this notification.");
+    } finally {
+      setMarkingRead(false);
     }
   };
 
@@ -88,13 +109,13 @@ export default function NotificationsCenterPage() {
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
               Notifications & Alerts
             </h1>
-            <p className="text-text-muted text-xs">Real-time alerts for applications, matches, and interviews.</p>
+            <p className="text-text-muted text-xs">Latest alerts for applications, matches, and interviews.</p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={markAllRead}
-              disabled={loading || items.length === 0 || items.every((item) => item.isRead)}
+              disabled={loading || markingRead || items.length === 0 || items.every((item) => item.isRead)}
               className="min-h-11 px-4 py-2 rounded-full bg-surface-container-high hover:opacity-90 text-text-primary text-xs font-bold transition-all border border-outline disabled:opacity-50"
             >
               Mark All Read
@@ -110,6 +131,8 @@ export default function NotificationsCenterPage() {
         </header>
 
         <main className="flex-1 p-6 lg:p-10 space-y-4 max-w-4xl w-full mx-auto overflow-y-auto">
+          {notificationError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{notificationError}</div>}
+          {invitationError && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{invitationError}</div>}
           {invitations.length > 0 && <section aria-labelledby="job-invitations-heading" className="rounded-3xl border border-outline bg-bg-card p-5 space-y-4">
             <div><h2 id="job-invitations-heading" className="font-bold">Job invitations</h2><p className="text-xs text-text-secondary mt-1">An invitation is not an application until you choose Accept.</p></div>
             {actionError && <p role="alert" className="text-sm text-text-secondary">{actionError}</p>}

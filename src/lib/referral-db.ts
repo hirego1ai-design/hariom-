@@ -30,6 +30,7 @@ import {
   UserFraudProfile,
 } from "@/types/referral";
 import { prisma } from "./prisma";
+import { randomBytes } from "node:crypto";
 import {
   evaluateTransactionQualification,
   getReferralProgramConfig,
@@ -102,8 +103,16 @@ class ReferralDatabaseStore {
     const cleanCode = code.trim().toUpperCase();
     const correlationId = generateCorrelationId("corr-res-code");
 
-    // 1. Look up referral code in ReferralAttribution table (authoritative source)
+    // 1. Resolve the durable per-user code first, then legacy attribution codes.
     try {
+      if (isProduction) {
+        const owner = await prisma.user.findUnique({
+          where: { referralCode: cleanCode },
+          select: { id: true },
+        });
+        if (owner) return owner.id;
+      }
+
       const client = prisma as any;
       if (client.referralAttribution) {
         const attr = await client.referralAttribution.findFirst({
@@ -113,10 +122,7 @@ class ReferralDatabaseStore {
         if (attr) return attr.referrerId;
       }
 
-      if (isProduction) {
-        // In production: fail-closed, DB is single source of truth
-        return null;
-      }
+      if (isProduction) return null;
     } catch (error: any) {
       if (isProduction) {
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error resolving referral code "${cleanCode}":`, error);
@@ -134,6 +140,40 @@ class ReferralDatabaseStore {
 
   public registerReferralCodeForUser(userId: string, code: string): void {
     this.referralCodeToUserMap.set(code.trim().toUpperCase(), userId);
+  }
+
+  private async getOrCreateReferralCode(userId: string, userName?: string): Promise<string> {
+    if (process.env.NODE_ENV !== "production") {
+      const testCode = (userName ? userName.replace(/\s+/g, "").toUpperCase() : "HIREGO") + "2026";
+      this.registerReferralCodeForUser(userId, testCode);
+      return testCode;
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { referralCode: true },
+    });
+    if (!existing) throw new Error("Referral owner account not found.");
+    if (existing.referralCode) return existing.referralCode;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidateCode = `HG${randomBytes(8).toString("hex").toUpperCase()}`;
+      try {
+        const updated = await prisma.user.updateMany({
+          where: { id: userId, referralCode: null },
+          data: { referralCode: candidateCode },
+        });
+        if (updated.count === 1) return candidateCode;
+        const raced = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { referralCode: true },
+        });
+        if (raced?.referralCode) return raced.referralCode;
+      } catch (error: any) {
+        if (error?.code !== "P2002") throw error;
+      }
+    }
+    throw new Error("Could not allocate a unique referral code.");
   }
 
   public async createAttribution(input: {
@@ -905,9 +945,9 @@ class ReferralDatabaseStore {
     userName?: string
   ): Promise<ReferralDashboardStatsDTO> {
     const isProduction = process.env.NODE_ENV === "production";
+    const programConfig = await getReferralProgramConfig();
     const correlationId = generateCorrelationId("corr-user-stats");
-    const code = (userName ? userName.replace(/\s+/g, "").toUpperCase() : "HIREGO") + "2026";
-    this.registerReferralCodeForUser(userId, code);
+    const code = await this.getOrCreateReferralCode(userId, userName);
 
     const userRewards: ReferralReward[] = [];
     const userAttributions: ReferralAttribution[] = [];
@@ -1138,7 +1178,7 @@ class ReferralDatabaseStore {
 
     return {
       referralCode: code,
-      referralLink: `https://hirego.ai/register?ref=${code}`,
+      referralLink: `https://hiregoai.com/register?ref=${code}`,
       totalAttributions: userAttributions.length,
       totalQualifiedConversions: userRewards.filter((r) => r.rewardAmount > 0).length,
       lifetimeEarnings,
@@ -1147,6 +1187,8 @@ class ReferralDatabaseStore {
       pendingPayoutBalance,
       paidBalance,
       currency: "INR",
+      programEnabled: programConfig.isEnabled,
+      minPayoutAmount: programConfig.minPayoutAmount,
       recentRewards,
       recentAttributions,
     };

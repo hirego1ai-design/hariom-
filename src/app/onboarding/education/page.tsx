@@ -15,6 +15,8 @@ export default function EducationPage() {
       ? state.education
       : []
   );
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = () => {
     setEduList([...eduList, { degree: "", university: "", year: "", gpa: "" }]);
@@ -30,27 +32,30 @@ export default function EducationPage() {
     setEduList(updated);
   };
 
-  const handleNext = () => {
-    updateState({ education: eduList });
-    markStepComplete(4);
+  const persistEducationAndContinue = async (education: EducationEntry[]) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const response = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ education }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Could not save education.");
 
-    // Persist to backend
-    fetch("/api/candidate/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        education: eduList,
-      }),
-    }).catch(() => {});
-
-    router.push("/onboarding/experience");
+      updateState({ education });
+      markStepComplete(4);
+      router.push("/onboarding/experience");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save education.");
+      setIsSaving(false);
+    }
   };
 
-  const handleSkip = () => {
-    updateState({ education: [] });
-    markStepComplete(4);
-    router.push("/onboarding/experience");
-  };
+  const handleNext = () => persistEducationAndContinue(eduList);
+  const handleSkip = () => persistEducationAndContinue([]);
 
 
   return (
@@ -62,11 +67,11 @@ export default function EducationPage() {
       <CandidateSidebar />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
         {/* Google-Style Ambient Lining Background & Quad Glows */}
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-[116px]" />
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
         <div
-          className="fixed inset-0 pointer-events-none -z-10 ml-[116px]"
+          className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]"
           style={{
             background:
               "radial-gradient(ellipse at 85% 15%, rgba(66,133,244,0.1) 0%, transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 10%, rgba(251,188,5,0.06) 0%, transparent 45%), radial-gradient(ellipse at 50% 90%, rgba(52,168,83,0.08) 0%, transparent 50%)",
@@ -75,7 +80,7 @@ export default function EducationPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -270,6 +275,12 @@ export default function EducationPage() {
             Add Another Education Entry
           </button>
 
+          {saveError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+              {saveError}
+            </div>
+          )}
+
           {/* Bottom Actions */}
           <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: "var(--outline)" }}>
             <Link
@@ -289,6 +300,7 @@ export default function EducationPage() {
             <button
               type="button"
               onClick={handleSkip}
+              disabled={isSaving}
               className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
               style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
             >
@@ -296,13 +308,14 @@ export default function EducationPage() {
             </button>
             <button
               onClick={handleNext}
+              disabled={isSaving}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                 boxShadow: "var(--shadow-btn-red)",
               }}
             >
-              <span>Next: Work Experience</span>
+              <span>{isSaving ? "Saving..." : "Next: Work Experience"}</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
             </div>

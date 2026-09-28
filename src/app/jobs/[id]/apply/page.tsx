@@ -16,23 +16,52 @@ export default function JobApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [profileLoadError, setProfileLoadError] = useState("");
+  const [jobLoadError, setJobLoadError] = useState("");
 
   useEffect(() => {
-    fetch("/api/candidate/profile")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.profile) {
-          setProfile(data.profile);
+    let cancelled = false;
+
+    async function loadProfile() {
+      setProfileLoadError("");
+      try {
+        const response = await fetch("/api/candidate/profile", { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success || !data.profile) {
+          throw new Error(data.error || "Your candidate profile could not be loaded.");
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    if (jobId) {
-      fetch(`/api/jobs/${jobId}`)
-        .then((res) => res.json())
-        .then((data) => setJobTitle(data.success ? data.job?.title || null : null))
-        .catch(() => setJobTitle(null));
+        if (!cancelled) setProfile(data.profile);
+      } catch (error) {
+        if (!cancelled) {
+          setProfile(null);
+          setProfileLoadError(error instanceof Error ? error.message : "Your candidate profile could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    async function loadJob() {
+      if (!jobId) return;
+      setJobLoadError("");
+      try {
+        const response = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success || !data.job) {
+          throw new Error(data.error || "This job listing could not be loaded.");
+        }
+        if (!cancelled) setJobTitle(data.job.title || null);
+      } catch (error) {
+        if (!cancelled) {
+          setJobTitle(null);
+          setJobLoadError(error instanceof Error ? error.message : "This job listing could not be loaded.");
+        }
+      }
+    }
+
+    void loadProfile();
+    void loadJob();
+    return () => { cancelled = true; };
   }, [jobId]);
 
   const handleSubmitApplication = async () => {
@@ -54,7 +83,15 @@ export default function JobApplyPage() {
         return;
       }
 
-      router.push("/jobs/apply/success");
+      if (res.status === 202 && data.assessmentRequired && data.noticeUrl) {
+        router.push(data.noticeUrl);
+        return;
+      }
+      if (data.assessmentRequired && data.assessmentType === "JOB_SPECIFIC_ASSESSMENT" && data.assessmentUrl) {
+        router.push(data.assessmentUrl);
+        return;
+      }
+      router.push("/applications");
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to submit application.");
       setSubmitting(false);
@@ -65,7 +102,7 @@ export default function JobApplyPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
 
-      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-5xl">
+      <main className="flex-1 ml-0 md:ml-[116px] p-6 lg:p-10 max-w-5xl">
         {/* Stepper Progress */}
         <div className="max-w-2xl mx-auto mb-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -90,7 +127,7 @@ export default function JobApplyPage() {
               2
             </div>
             <span className="text-xs font-bold text-text-primary hidden sm:inline">
-              Screening Questions
+              Application Requirements
             </span>
           </div>
           <div className="flex-1 h-0.5 bg-white/10 mx-3" />
@@ -107,6 +144,12 @@ export default function JobApplyPage() {
             </span>
           </div>
         </div>
+
+        {(profileLoadError || jobLoadError) && (
+          <div role="alert" className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-300">
+            {profileLoadError || jobLoadError}
+          </div>
+        )}
 
         {errorMessage && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-400 flex items-center gap-2">
@@ -134,7 +177,7 @@ export default function JobApplyPage() {
                       Full Name
                     </span>
                     <span className="text-text-primary font-bold text-sm">
-                      {profile?.name || "Not provided"}
+                      {profile?.user?.name || "Not provided"}
                     </span>
                   </div>
                   <div>
@@ -161,20 +204,20 @@ export default function JobApplyPage() {
 
                 <div>
                   <span className="text-text-muted block text-[10px] uppercase font-bold mb-2">
-                    Verified Skills
+                    Skill Evidence
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {(profile?.skills || []).map(
-                      (skill: string, i: number) => (
+                    {(profile?.candidateSkills || []).map(
+                      (skill: any) => (
                         <span
-                          key={i}
+                          key={skill.id || skill.normalizedName || skill.name}
                           className="px-3 py-1 bg-primary/10 border border-primary/20 text-primary text-xs rounded-full font-semibold"
                         >
-                          {skill}
+                          {skill.name} · {skill.verificationStatus === "VERIFIED" || skill.verificationStatus === "ASSESSMENT_VALIDATED" ? "validated" : "claimed"}
                         </span>
                       )
                     )}
-                    {(!profile?.skills || profile.skills.length === 0) && <span className="text-text-secondary">No skills provided.</span>}
+                    {(!profile?.candidateSkills || profile.candidateSkills.length === 0) && <span className="text-text-secondary">No skill evidence recorded.</span>}
                   </div>
                 </div>
               </div>
@@ -189,7 +232,8 @@ export default function JobApplyPage() {
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="btn-3d-red px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
+                  disabled={loading || !profile || Boolean(profileLoadError) || Boolean(jobLoadError) || !jobTitle}
+                  className="btn-3d-red disabled:opacity-50 disabled:cursor-not-allowed px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
                 >
                   <span>Continue</span>
                   <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -205,12 +249,12 @@ export default function JobApplyPage() {
                   Screening Questions
                 </h1>
                 <p className="text-xs text-text-secondary">
-                  This listing has no additional stored screening questions. Continue to review your application.
+                  HireGo will check the server-managed requirements for this job when you submit. If Skill Validation or a job-specific assessment is required, you will be taken to that step before the application workflow continues.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-secondary">
-                Screening questions will appear here only after the employer has configured questions that HireGo can store with your application.
+                No application answer is invented on this screen. Assessment requirements are assigned from the active job configuration after submission.
               </div>
 
               <div className="flex justify-between items-center pt-2">
@@ -251,7 +295,7 @@ export default function JobApplyPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-muted">Applicant:</span>
-                  <span className="text-text-primary font-bold">{profile?.name || "Not provided"}</span>
+                  <span className="text-text-primary font-bold">{profile?.user?.name || "Not provided"}</span>
                 </div>
               </div>
 
@@ -266,7 +310,7 @@ export default function JobApplyPage() {
                 <button
                   type="button"
                   onClick={handleSubmitApplication}
-                  disabled={submitting}
+                  disabled={submitting || loading || !profile || Boolean(profileLoadError) || Boolean(jobLoadError) || !jobTitle}
                   className="btn-3d-red px-10 py-3 rounded-full text-xs font-bold text-white flex items-center gap-2 shadow-lg disabled:opacity-50"
                 >
                   {submitting ? (

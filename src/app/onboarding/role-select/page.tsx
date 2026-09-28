@@ -65,9 +65,9 @@ export default function RoleSelectPage() {
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
       <CandidateSidebar />
-      <div className="flex-1 ml-[116px] min-w-0 min-h-screen relative overflow-hidden">
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-[116px]" />
-        <div className="fixed inset-0 pointer-events-none -z-10 ml-[116px]" style={{ background: "radial-gradient(ellipse at 82% 16%, rgba(66,133,244,0.12) 0%, transparent 52%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 48%)" }} />
+      <div className="flex-1 ml-0 md:ml-[116px] min-w-0 min-h-screen relative overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
+        <div className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]" style={{ background: "radial-gradient(ellipse at 82% 16%, rgba(66,133,244,0.12) 0%, transparent 52%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 48%)" }} />
 
         <main className="min-h-screen px-6 py-10 lg:px-12 lg:py-14 max-w-[1120px] w-full mx-auto flex flex-col justify-center">
           <header className="text-center max-w-2xl mx-auto mb-9">

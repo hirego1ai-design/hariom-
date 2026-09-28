@@ -27,6 +27,9 @@ export default function MockInterviewSummaryPage() {
         if (!res.ok) throw new Error("Could not load interview summary.");
         const data = await res.json();
         if (!data.success || !data.session) throw new Error(data.error || "Session not found.");
+        if (data.session.status !== "COMPLETED") {
+          throw new Error("This practice session has not been completed yet.");
+        }
         setSession(data.session);
       } catch (err: any) {
         setErrorMessage(err.message || "Failed to load summary.");
@@ -68,9 +71,7 @@ export default function MockInterviewSummaryPage() {
   }
 
   const turns = session.turns || [];
-  const overallScore = session.overallScore ?? (turns.length > 0
-    ? Math.round(turns.reduce((acc: number, t: any) => acc + (t.score || 0), 0) / turns.length)
-    : 0);
+  const overallScore = typeof session.overallScore === "number" ? Math.round(session.overallScore) : null;
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col">
@@ -123,7 +124,7 @@ export default function MockInterviewSummaryPage() {
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-white/50 font-bold">Overall Practice Score</div>
                 <div className="text-3xl font-mono font-bold text-emerald-400">
-                  {overallScore}<span className="text-sm text-white/40">/100</span>
+                  {overallScore === null ? "Not available" : <>{overallScore}<span className="text-sm text-white/40">/100</span></>}
                 </div>
               </div>
             </div>

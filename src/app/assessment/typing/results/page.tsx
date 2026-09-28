@@ -37,7 +37,7 @@ export default function TypingResultsPage() {
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex">
       <CandidateSidebar />
-      <main className="w-full max-w-3xl mx-auto px-6 py-10">
+      <main className="w-full max-w-3xl mx-auto px-6 py-10 pb-24 md:pb-10 md:ml-[116px]">
         <h1 className="text-3xl font-bold">Typing practice result</h1>
         <p className="mt-2 text-sm text-gray-400">This is unproctored practice, not a hiring credential or pass/fail result.</p>
         {error && <p className="mt-6 rounded-lg border border-red-800 bg-red-950/40 p-4 text-red-300">{error}</p>}

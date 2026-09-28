@@ -19,6 +19,24 @@ const publicRoutes = new Set([
 
 const securityHeaders = configuredSecurityHeaders(process.env.NODE_ENV !== "production");
 
+const candidateProtectedPrefixes = [
+  "/candidate",
+  "/dashboard",
+  "/profile",
+  "/onboarding",
+  "/ai/",
+  "/assessment/",
+  "/video-assessment/",
+  "/interviews",
+  "/applications",
+  "/messages",
+  "/notifications",
+  "/offers",
+  "/referrals",
+  "/leaderboard",
+  "/credits",
+];
+
 interface SessionPayload {
   id: string;
   email: string;
@@ -165,8 +183,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 4. Candidate Protected Routes (/candidate/*)
-  if (pathname.startsWith("/candidate")) {
+  // 4. Candidate Protected Routes. Candidate-facing legacy and canonical
+  // routes are role-gated here so an authenticated employer/recruiter cannot
+  // render Candidate UI and discover data/actions by route guessing.
+  const isCandidateJobAction =
+    pathname === "/jobs/saved" ||
+    /^\/jobs\/[^/]+\/apply(?:\/|$)/.test(pathname);
+
+  if (
+    pathname.startsWith("/candidate") ||
+    candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix)) ||
+    isCandidateJobAction
+  ) {
     if (!session || (session.role !== "CANDIDATE" && session.role !== "ADMIN")) {
       const redirectUrl = new URL("/login", request.url);
       redirectUrl.searchParams.set("redirect", pathname);
@@ -174,7 +202,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 5. General Authenticated Routes (dashboard, profile, onboarding, AI, assessments, interviews)
+  // 5. General Authenticated Routes (billing/settings surfaces are audited separately)
   const authRequiredPrefixes = [
     "/dashboard", "/profile", "/onboarding", "/ai/",
     "/assessment/", "/video-assessment/", "/interviews",

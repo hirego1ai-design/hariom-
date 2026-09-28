@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
+import Link from "next/link";
 
 interface CandidateProfileData {
   id?: string;
@@ -22,7 +23,6 @@ interface CandidateProfileData {
     validUntil?: string | null;
   }>;
   experienceYears?: number;
-  hireGoScore?: number;
   isVerified?: boolean;
   resumeUrl?: string | null;
   education?: Array<{ degree: string; university: string; year: string; gpa?: string }>;
@@ -41,6 +41,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   // Edit form state
   const [headline, setHeadline] = useState("");
@@ -49,18 +51,22 @@ export default function ProfilePage() {
   const [skillsInput, setSkillsInput] = useState("");
 
   async function fetchProfile() {
+    setLoadError("");
+    setSaveError("");
     try {
-      const res = await fetch("/api/candidate/profile");
-      const data = await res.json();
-      if (data.success && data.profile) {
-        setProfile(data.profile);
-        setHeadline(data.profile.headline || "");
-        setBio(data.profile.bio || "");
-        setLocation(data.profile.location || "");
-        setSkillsInput(data.profile.skills?.join(", ") || "");
+      const res = await fetch("/api/candidate/profile", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.profile) {
+        throw new Error(data.error || "Could not load your profile.");
       }
+      setProfile(data.profile);
+      setHeadline(data.profile.headline || "");
+      setBio(data.profile.bio || "");
+      setLocation(data.profile.location || "");
+      setSkillsInput(data.profile.skills?.join(", ") || "");
     } catch (err) {
-      console.error("Failed to load profile:", err);
+      setProfile(null);
+      setLoadError(err instanceof Error ? err.message : "Could not load your profile.");
     } finally {
       setLoading(false);
     }
@@ -89,17 +95,22 @@ export default function ProfilePage() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success && data.profile) {
-        setProfile((prev) => ({ ...prev, ...data.profile, skills: skillsArray }));
-        setIsEditing(false);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.profile) {
+        throw new Error(data.error || "Could not save your profile.");
       }
+      setProfile((prev) => ({ ...prev, ...data.profile, skills: skillsArray }));
+      setIsEditing(false);
+      setSaveSuccess(true);
+      window.setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      console.error("Failed to save profile:", err);
+      setSaveError(err instanceof Error ? err.message : "Could not save your profile.");
     }
   };
+
+  const validatedSkills = (profile?.candidateSkills ?? []).filter(
+    (skill) => skill.verificationStatus === "VERIFIED" || skill.verificationStatus === "ASSESSMENT_VALIDATED",
+  );
 
   return (
     <div className="min-h-screen bg-bg-page flex text-text-primary font-sans">
@@ -118,6 +129,16 @@ export default function ProfilePage() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-6 lg:p-8 max-w-6xl w-full mx-auto space-y-6 z-10 relative">
+          {loadError && (
+            <div role="alert" className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-300">
+              {loadError}
+            </div>
+          )}
+          {saveError && (
+            <div role="alert" className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-300">
+              {saveError}
+            </div>
+          )}
           {saveSuccess && (
             <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-xs text-green-400 flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]">check_circle</span>
@@ -167,20 +188,17 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Profile Completion / Hire Score */}
             <div className="w-full md:w-64 space-y-2 p-3 bg-white/5 rounded-2xl border border-white/5">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-400">HireGo Score™</span>
-                <span className="text-green-400 font-bold text-sm">
-                  {typeof profile?.hireGoScore === "number" ? `${profile.hireGoScore} / 100` : "Not calculated"}
-                </span>
+                <span className="text-gray-400">Validated skill evidence</span>
+                <span className="text-green-400 font-bold text-sm">{validatedSkills.length}</span>
               </div>
-              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-green-400 transition-all duration-300"
-                  style={{ width: `${typeof profile?.hireGoScore === "number" ? profile.hireGoScore : 0}%` }}
-                />
-              </div>
+              <p className="text-[11px] text-gray-400">
+                Only assessment-backed or explicitly verified skills are counted here.
+              </p>
+              <Link href="/assessment/readiness" className="inline-block text-xs font-bold text-primary hover:underline">
+                View Skill Validation →
+              </Link>
             </div>
           </div>
 
@@ -411,14 +429,14 @@ export default function ProfilePage() {
             <div className="lg:col-span-4 space-y-6">
               <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  AI Resume Score
+                  Evidence status
                 </h3>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-extrabold text-text-primary">{typeof profile?.hireGoScore === "number" ? profile.hireGoScore : "—"}</span>
-                  <span className="text-xs text-gray-400">/ 100</span>
+                  <span className="text-4xl font-extrabold text-text-primary">{validatedSkills.length}</span>
+                  <span className="text-xs text-gray-400">validated skill{validatedSkills.length === 1 ? "" : "s"}</span>
                 </div>
                 <p className="text-[11px] text-gray-400">
-                  Your profile matches high-growth tech opportunities. Keep your skills updated to maintain high search visibility.
+                  HireGo does not infer a resume or hiring score from profile text. Assessment-backed evidence appears in your Skill Validation record.
                 </p>
               </div>
             </div>

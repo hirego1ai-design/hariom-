@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { handleApiError, ApiError } from "@/lib/apiSecurity";
+import { handleApiError, ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { ApplicationStatus } from "@prisma/client";
 import { validateKnowledgeScreeningAssessment } from "@/lib/assessmentPolicyValidation";
 
@@ -15,6 +15,7 @@ const eligibleStatuses: ApplicationStatus[] = [
 
 export async function GET(request: NextRequest) {
   try {
+    await enforceRateLimit(request, "assessment_mcq_assigned", 60, 60000);
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== "CANDIDATE") {
       throw new ApiError("Candidate access required", 403);

@@ -497,7 +497,7 @@ export default function CandidateDashboardPage() {
                 </div>
               </div>
 
-              {/* Trajectory & Skills */}
+              {/* Verified skill validation summary */}
               <div
                 className="rounded-2xl p-6 space-y-4"
                 style={{
@@ -507,45 +507,38 @@ export default function CandidateDashboardPage() {
                 }}
               >
                 <h3 className="font-bold text-base flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                  <span className="material-symbols-outlined text-[20px]" style={{ color: "var(--primary)" }}>trending_up</span>
-                  Career Trajectory
+                  <span className="material-symbols-outlined text-[20px]" style={{ color: "var(--primary)" }}>verified</span>
+                  Skill Validation
                 </h3>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: "var(--text-muted)" }}>React & Next.js Architecture</span>
-                      <span className="font-bold" style={{ color: "var(--color-green)" }}>98%</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-container-high)" }}>
-                      <div className="h-full w-[98%]" style={{ backgroundColor: "var(--color-green)" }} />
-                    </div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span style={{ color: "var(--text-muted)" }}>Target role</span>
+                    <span className="font-semibold text-right" style={{ color: "var(--text-primary)" }}>
+                      {skillValidation?.targetRole || "Not set"}
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: "var(--text-muted)" }}>System Design & Scalability</span>
-                      <span className="font-bold" style={{ color: "var(--primary)" }}>88%</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-container-high)" }}>
-                      <div className="h-full w-[88%]" style={{ backgroundColor: "var(--primary)" }} />
-                    </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span style={{ color: "var(--text-muted)" }}>Validated skills</span>
+                    <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {skillValidation?.validatedSkillCount ?? 0}
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: "var(--text-muted)" }}>Speech & Communication Clarity</span>
-                      <span className="font-bold" style={{ color: "var(--secondary)" }}>92%</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-container-high)" }}>
-                      <div className="h-full w-[92%]" style={{ backgroundColor: "var(--secondary)" }} />
-                    </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span style={{ color: "var(--text-muted)" }}>Assessment score</span>
+                    <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {typeof skillValidation?.validation?.score === "number"
+                        ? `${skillValidation.validation.score}%`
+                        : "Not assessed"}
+                    </span>
                   </div>
                 </div>
 
                 <Link
-                  href="/ai/skill-gap"
+                  href="/assessment/readiness"
                   className="block text-center pt-2 text-xs font-bold hover:underline"
                   style={{ color: "var(--primary)" }}
                 >
-                  View Full Skill Gap Matrix →
+                  View verified assessment details →
                 </Link>
               </div>
             </div>

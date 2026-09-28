@@ -33,6 +33,7 @@ export default function JobDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [feedbackType, setFeedbackType] = useState<"success" | "error">("success");
   const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
@@ -46,32 +47,66 @@ export default function JobDetailPage() {
           setJob(data.job);
         } else throw new Error(data.error || "Job listing not found.");
       })
-      .catch((cause) => setFeedbackMessage(cause instanceof Error ? cause.message : "Job listing could not be loaded."))
+      .catch((cause) => {
+        setFeedbackType("error");
+        setFeedbackMessage(cause instanceof Error ? cause.message : "Job listing could not be loaded.");
+      })
       .finally(() => setLoading(false));
 
-    // Check if saved
-    fetch("/api/candidate/saved-jobs")
-      .then((res) => res.json())
+    // Load candidate-specific state only when authenticated as a candidate.
+    fetch("/api/candidate/saved-jobs", { cache: "no-store" })
+      .then(async (res) => {
+        if (res.status === 401 || res.status === 403) return null;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || "Saved-job state is unavailable.");
+        return data;
+      })
       .then((data) => {
-        if (data.success && data.savedJobs) {
+        if (data?.savedJobs) {
           const exists = data.savedJobs.some((s: any) => s.jobId === jobId);
           setIsSaved(exists);
         }
       })
-      .catch(() => {});
+      .catch((cause) => {
+        setFeedbackType("error");
+        setFeedbackMessage(cause instanceof Error ? cause.message : "Saved-job state is unavailable.");
+      });
+
+    fetch("/api/applications", { cache: "no-store" })
+      .then(async (res) => {
+        if (res.status === 401 || res.status === 403) return null;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || "Application state is unavailable.");
+        return data;
+      })
+      .then((data) => {
+        if (Array.isArray(data?.applications)) {
+          setIsApplied(data.applications.some((application: any) => application.jobId === jobId));
+        }
+      })
+      .catch((cause) => {
+        setFeedbackType("error");
+        setFeedbackMessage(cause instanceof Error ? cause.message : "Application state is unavailable.");
+      });
   }, [jobId]);
 
   const handleApply = async () => {
     if (!jobId || isApplied || isApplying) return;
     setIsApplying(true);
     setFeedbackMessage(null);
+    setFeedbackType("success");
     try {
       const response = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        router.push(`/login?redirect=${encodeURIComponent(`/jobs/${jobId}`)}`);
+        return;
+      }
 
       if (response.status === 202 && data.success && data.assessmentRequired && data.noticeUrl) {
         router.push(data.noticeUrl);
@@ -87,8 +122,10 @@ export default function JobDetailPage() {
         router.push(data.assessmentUrl);
         return;
       }
+      setFeedbackType("success");
       setFeedbackMessage("Application submitted successfully.");
     } catch (cause) {
+      setFeedbackType("error");
       setFeedbackMessage(cause instanceof Error ? cause.message : "Application could not be submitted.");
       setIsApplying(false);
     }
@@ -107,10 +144,17 @@ export default function JobDetailPage() {
         : await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
           method: "DELETE",
         });
-      const data = await response.json();
+      if (response.status === 401) {
+        router.push(`/login?redirect=${encodeURIComponent(`/jobs/${jobId}`)}`);
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success) throw new Error(data.error || "Could not update saved jobs.");
       setIsSaved(nextState);
+      setFeedbackType("success");
+      setFeedbackMessage(nextState ? "Job saved." : "Job removed from saved jobs.");
     } catch (cause) {
+      setFeedbackType("error");
       setFeedbackMessage(cause instanceof Error ? cause.message : "Could not update saved jobs.");
     }
   };
@@ -119,7 +163,7 @@ export default function JobDetailPage() {
     return (
       <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
         <CandidateSidebar />
-        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+        <main className="flex-1 ml-0 md:ml-[116px] p-8 flex items-center justify-center">
           <div className="text-center space-y-3">
             <span className="material-symbols-outlined text-4xl text-primary animate-spin">
               progress_activity
@@ -135,7 +179,7 @@ export default function JobDetailPage() {
     return (
       <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
         <CandidateSidebar />
-        <main className="flex-1 ml-[100px] lg:ml-[116px] p-8 flex items-center justify-center">
+        <main className="flex-1 ml-0 md:ml-[116px] p-8 flex items-center justify-center">
           <div className="glass-card max-w-md p-8 rounded-3xl border border-white/10 text-center space-y-4">
             <span className="material-symbols-outlined text-4xl text-primary">work_off</span>
             <h1 className="text-lg font-bold">Job listing unavailable</h1>
@@ -151,7 +195,7 @@ export default function JobDetailPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
 
-      <main className="flex-1 ml-[100px] lg:ml-[116px] p-6 lg:p-10 max-w-6xl">
+      <main className="flex-1 ml-0 md:ml-[116px] p-6 lg:p-10 max-w-6xl">
         {/* Top Back Link */}
         <Link
           href="/jobs"
@@ -162,8 +206,15 @@ export default function JobDetailPage() {
         </Link>
 
         {feedbackMessage && (
-          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-xs text-green-400 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+          <div
+            role={feedbackType === "error" ? "alert" : "status"}
+            className={`mb-6 p-4 rounded-2xl text-xs flex items-center gap-2 ${
+              feedbackType === "error"
+                ? "bg-red-500/10 border border-red-500/30 text-red-300"
+                : "bg-green-500/10 border border-green-500/30 text-green-400"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{feedbackType === "error" ? "error" : "check_circle"}</span>
             <span>{feedbackMessage}</span>
           </div>
         )}

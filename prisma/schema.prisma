@@ -155,6 +155,7 @@ model User {
   phoneNumber    String?
   avatarUrl      String?
   emailVerified  Boolean  @default(false)
+  referralCode   String?  @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -656,6 +657,8 @@ model VideoResume {
   id                        String           @id @default(uuid())
   candidateProfileId        String
   candidateProfile          CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  storedFileId              String?          @unique
+  storedFile                StoredFile?      @relation(fields: [storedFileId], references: [id], onDelete: SetNull)
   videoUrl                  String
   durationSeconds           Int
   transcript                String?
@@ -879,6 +882,7 @@ model StoredFile {
   createdAt                  DateTime                     @default(now())
   RecordedAssessmentResponse RecordedAssessmentResponse[]
   offerDocuments             Offer[]
+  videoResume                VideoResume?
 
   @@index([ownerId, createdAt])
   @@index([companyId, createdAt])
@@ -2903,6 +2907,7 @@ model MockInterviewSession {
   id                   String              @id @default(uuid())
   candidateProfileId   String
   candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  idempotencyKey       String?             @unique
   roleTarget           String
   focusSkills          String[]            @default([])
   status               MockInterviewStatus @default(IN_PROGRESS)

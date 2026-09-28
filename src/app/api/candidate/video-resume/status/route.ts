@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!videoResume) return jsonError("Video resume not found", 404);
-    if (videoResume.retentionExpiresAt && videoResume.retentionExpiresAt <= new Date() && session.role !== "ADMIN" && videoResume.candidateProfile.userId !== session.id) {
+    if (videoResume.retentionExpiresAt && videoResume.retentionExpiresAt <= new Date() && session.role !== "ADMIN") {
       return jsonError("Video resume is no longer available", 404);
     }
 

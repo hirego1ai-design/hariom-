@@ -27,7 +27,7 @@ const callbackSchema = z.object({
       transcriptConfidence: z.number().finite().min(0).max(1).optional(),
       lowConfidence: z.boolean().optional(),
       audioQuality: z.string().max(500).optional(),
-      actualDurationSeconds: z.number().finite().min(0).max(121).optional(),
+      actualDurationSeconds: z.number().finite().min(0).max(86_400).optional(),
     })
     .optional(),
 }).superRefine((value, ctx) => {
@@ -82,8 +82,47 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
 
+    if (body.status === "COMPLETED") {
+      const actualDurationSeconds = body.result?.actualDurationSeconds;
+      const durationFailure = !body.result
+        ? "Completed video analysis did not include a result."
+        : actualDurationSeconds === undefined
+          ? "Video analysis worker did not return a verified media duration."
+          : actualDurationSeconds < 1 || actualDurationSeconds > 120
+            ? "Verified video duration must be between 1 and 120 seconds."
+            : null;
+
+      if (durationFailure) {
+        const applied = await prisma.$transaction(async (tx) => {
+          const claim = await tx.videoAnalysisJob.updateMany({
+            where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
+            data: {
+              status: "FAILED",
+              error: durationFailure,
+              completedAt: now,
+              claimToken: null,
+              claimedAt: null,
+              leaseExpiresAt: null,
+            },
+          });
+          if (claim.count !== 1) return false;
+          await tx.videoResume.update({
+            where: { id: body.videoResumeId },
+            data: {
+              analysisStatus: "FAILED",
+              analysisError: durationFailure,
+            },
+          });
+          return true;
+        });
+        if (!applied) return NextResponse.json({ success: true, message: "Job already terminal (idempotent)" });
+        return NextResponse.json({ success: true, jobId: body.jobId, status: "FAILED", message: durationFailure });
+      }
+    }
+
     if (body.status === "COMPLETED" && body.result) {
       const res = body.result;
+      const verifiedDurationSeconds = Math.ceil(res.actualDurationSeconds!);
       const applied = await prisma.$transaction(async (tx) => {
         const claim = await tx.videoAnalysisJob.updateMany({
           where: { id: body.jobId, videoResumeId: body.videoResumeId, status: "PROCESSING", claimToken: body.claimToken },
@@ -103,6 +142,7 @@ export async function POST(request: NextRequest) {
           where: { id: body.videoResumeId },
           data: {
             analysisStatus: "COMPLETED",
+            durationSeconds: verifiedDurationSeconds,
             transcript: res.transcript ?? undefined,
             detectedLanguage: res.detectedLanguage ?? null,
             wordsPerMinute: res.wordsPerMinute ?? null,

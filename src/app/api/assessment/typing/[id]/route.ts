@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, handleApiError, enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await enforceRateLimit(request, "typing_result_get", 60, 60000);
     const session = await getCurrentSession(request.headers);
     if (!session || session.role !== "CANDIDATE") throw new ApiError("Candidate access required", 403);
     const { id } = await params;

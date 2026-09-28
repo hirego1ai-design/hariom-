@@ -13,7 +13,12 @@ export async function GET(req: NextRequest) {
     }
     
     const candidateProfile = await prisma.candidateProfile.findUnique({
-      where: { userId: session.id }
+      where: { userId: session.id },
+      include: {
+        candidateSkills: {
+          where: { isVisible: true },
+        },
+      },
     });
     
     if (!candidateProfile) {
@@ -31,13 +36,22 @@ export async function GET(req: NextRequest) {
       return {
         jobId: job.id,
         title: job.title,
-        company: job.company?.name || 'Unknown',
+        company: job.company?.name || null,
         location: job.location,
-        matchScore: match.matchScore,
+        matchScore:
+          match.breakdown.skillScore !== null || match.breakdown.experienceScore !== null
+            ? match.matchScore
+            : null,
         matchingSkills: match.matchingSkills,
-        missingSkills: match.missingSkills
+        notEvidencedRequiredSkills: match.notEvidencedRequiredSkills,
+        requiredSkillEvidenceCoverage: match.requiredSkillEvidenceCoverage,
+        requiredSkillVerificationCoverage: match.requiredSkillVerificationCoverage,
+        verificationCoverage: match.verificationCoverage,
+        candidateSkillEvidenceAvailable: match.candidateSkillEvidenceAvailable,
+        experienceEvidenceAvailable: match.experienceEvidenceAvailable,
+        jobRequirementsAvailable: match.jobRequirementsAvailable
       };
-    }).sort((a, b) => b.matchScore - a.matchScore);
+    }).sort((a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1));
     
     return NextResponse.json({ success: true, recommendations });
   } catch (error) {

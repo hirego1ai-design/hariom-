@@ -31,10 +31,12 @@ const SUPPORTING_DOCUMENTS = [
 
 export default function DocumentUploadPage() {
   const router = useRouter();
-  const { state, updateState, markStepComplete } = useOnboarding();
+  const { markStepComplete } = useOnboarding();
   const [uploadedDocs, setUploadedDocs] = useState<{ [key: string]: boolean }>({});
+  const [uploadError, setUploadError] = useState("");
 
   const handleFileUpload = async (docType: string, file: File) => {
+    setUploadError("");
     const formData = new FormData();
     formData.append("file", file);
     formData.append("category", "onboarding-docs");
@@ -45,18 +47,18 @@ export default function DocumentUploadPage() {
         body: formData,
       });
 
-      const uploadJson = await uploadRes.json();
-      
-      if (uploadRes.ok && uploadJson.file?.url) {
-        setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
-        updateState({ [docType]: true });
-        return true;
+      const uploadJson = await uploadRes.json().catch(() => ({}));
+
+      if (!uploadRes.ok || !uploadJson.file?.url) {
+        throw new Error(uploadJson.error || "Document upload failed.");
       }
+
+      setUploadedDocs((prev) => ({ ...prev, [docType]: true }));
+      return true;
     } catch (err) {
-      console.error("Document upload failed:", err);
+      setUploadError(err instanceof Error ? err.message : "Document upload failed.");
       return false;
     }
-    return false;
   };
 
   const handleNext = () => {
@@ -67,8 +69,8 @@ export default function DocumentUploadPage() {
   return (
     <div className="min-h-screen flex">
       <CandidateSidebar />
-      <div className="flex-1 ml-[116px] flex flex-col min-h-screen">
-        <header className="sticky top-0 z-40 px-8 py-4 bg-page border-b border-white/10 backdrop-blur-xl">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-h-screen">
+        <header className="sticky top-0 z-40 px-4 sm:px-8 py-4 bg-page border-b border-white/10 backdrop-blur-xl">
           <div className="flex items-center justify-between">
             <div>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary-container-bg text-primary">
@@ -78,7 +80,7 @@ export default function DocumentUploadPage() {
                 Supporting documents
               </h1>
               <p className="text-xs text-text-muted mt-1">
-                Upload optional documents that support your candidate profile
+                Upload optional private documents that support your candidate profile. Uploading does not verify them.
               </p>
             </div>
             <span className="text-xs font-mono text-text-muted">
@@ -89,6 +91,11 @@ export default function DocumentUploadPage() {
 
         <main className="p-6 lg:p-8 flex-1 max-w-[1000px] mx-auto">
           <div className="glass-card rounded-2xl p-6 lg:p-8 space-y-6">
+            {uploadError && (
+              <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+                {uploadError}
+              </div>
+            )}
             <div className="bg-yellow/10 border border-yellow/20 rounded-xl p-4 mb-6">
               <div className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-yellow text-[20px] mt-1">info</span>
@@ -114,7 +121,7 @@ export default function DocumentUploadPage() {
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <span className="material-symbols-outlined text-primary text-[24px]">
-                        {uploadedDocs[doc.id] ? "verified" : "description"}
+                        {uploadedDocs[doc.id] ? "check_circle" : "description"}
                       </span>
                     </div>
                     <div className="flex-1">
@@ -122,7 +129,7 @@ export default function DocumentUploadPage() {
                         <h3 className="font-bold text-sm text-text-primary">{doc.name}</h3>
                         {uploadedDocs[doc.id] && (
                           <span className="text-[10px] font-bold text-green px-2 py-0.5 rounded-full bg-green/10 border border-green/20">
-                            Verified
+                            Uploaded
                           </span>
                         )}
                       </div>
@@ -151,7 +158,7 @@ export default function DocumentUploadPage() {
                       ) : (
                         <div className="mt-3 flex items-center gap-2 text-xs text-green font-bold">
                           <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                          Document submitted for admin verification
+                          Document uploaded privately
                         </div>
                       )}
                     </div>
@@ -171,7 +178,6 @@ export default function DocumentUploadPage() {
 
               <button
                 onClick={handleNext}
-                disabled={Object.values(uploadedDocs).every(Boolean) === false}
                 className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",

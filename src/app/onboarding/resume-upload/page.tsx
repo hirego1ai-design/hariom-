@@ -8,11 +8,10 @@ import { useOnboarding } from "@/context/OnboardingContext";
 
 export default function ResumeUploadPage() {
   const router = useRouter();
-  const { state, updateState, markStepComplete } = useOnboarding();
+  const { updateState, markStepComplete } = useOnboarding();
 
   const [fileName, setFileName] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(state.resumeAnalysis);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileDrop = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,10 +59,9 @@ export default function ResumeUploadPage() {
           throw new Error(profileJson.error || "Resume could not be saved to your profile.");
         }
 
-        // Do not invent an AI score from a filename. Resume analysis is enabled
-        // only when a private-file parsing provider is configured.
-        setAnalysis(null);
-        updateState({ resumeUploaded: true, resumeAnalysis: null });
+        // Upload success means only that the private resume file was stored and
+        // attached to the candidate profile. No resume score is synthesized.
+        updateState({ resumeUploaded: true });
       } catch (err) {
         setFileName(null);
         setUploadError(err instanceof Error ? err.message : "Resume upload failed. Please try again.");
@@ -80,7 +78,7 @@ export default function ResumeUploadPage() {
   };
 
   const handleSkip = () => {
-    updateState({ resumeUploaded: false, resumeAnalysis: null });
+    updateState({ resumeUploaded: false });
     markStepComplete(7);
     router.push("/onboarding/video-resume");
   };
@@ -94,11 +92,11 @@ export default function ResumeUploadPage() {
       <CandidateSidebar />
 
       {/* Main Content Workspace */}
-      <div className="flex-1 ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen relative overflow-hidden">
         {/* Google-Style Ambient Lining Background & Quad Glows */}
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-[116px]" />
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
         <div
-          className="fixed inset-0 pointer-events-none -z-10 ml-[116px]"
+          className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]"
           style={{
             background:
               "radial-gradient(ellipse at 85% 15%, rgba(66,133,244,0.1) 0%, transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 10%, rgba(251,188,5,0.06) 0%, transparent 45%), radial-gradient(ellipse at 50% 90%, rgba(52,168,83,0.08) 0%, transparent 50%)",
@@ -107,7 +105,7 @@ export default function ResumeUploadPage() {
 
         {/* Top Header */}
         <header
-          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-8 flex items-center justify-center text-center"
+          className="sticky top-0 z-40 h-20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-center text-center"
           style={{
             backgroundColor: "var(--bg-page)",
             borderBottom: "1px solid var(--outline)",
@@ -188,6 +186,7 @@ export default function ResumeUploadPage() {
             >
               <input
                 type="file"
+                disabled={analyzing}
                 accept=".pdf,.docx,.doc"
                 onChange={handleFileDrop}
                 className="absolute inset-0 opacity-0 cursor-pointer z-10"
@@ -230,51 +229,6 @@ export default function ResumeUploadPage() {
               </div>
             )}
 
-            {/* Analysis Results */}
-            {analysis && !analyzing && (
-              <div
-                className="p-6 rounded-2xl border space-y-4"
-                style={{
-                  backgroundColor: "var(--surface-container-low)",
-                  borderColor: "var(--outline)",
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[20px]" style={{ color: "var(--color-green-light, #2E7D32)" }}>verified</span>
-                    <h3 className="font-extrabold text-xs uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>AI Quality Score Breakdown</h3>
-                  </div>
-                  <span className="text-lg font-extrabold font-mono" style={{ color: "var(--color-green-light, #2E7D32)" }}>
-                    {analysis.qualityScore} / 100
-                  </span>
-                </div>
-
-                <p className="text-xs font-semibold leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                  {analysis.summary}
-                </p>
-
-                <div className="space-y-2 pt-1">
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest block" style={{ color: "var(--text-muted)" }}>
-                    Extracted Skills:
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {analysis.extractedSkills.map((sk) => (
-                      <span
-                        key={sk}
-                        className="px-3 py-1 rounded-full text-xs font-bold"
-                        style={{
-                          backgroundColor: "var(--surface-container-high)",
-                          border: "1px solid var(--outline)",
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {sk}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Bottom Actions */}
@@ -296,6 +250,7 @@ export default function ResumeUploadPage() {
             <button
               type="button"
               onClick={handleSkip}
+              disabled={analyzing}
               className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
               style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
             >
@@ -303,6 +258,7 @@ export default function ResumeUploadPage() {
             </button>
             <button
               onClick={handleNext}
+              disabled={analyzing}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",

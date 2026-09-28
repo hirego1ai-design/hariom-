@@ -10,25 +10,28 @@ export default function ReferralsDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [upiId, setUpiId] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("UPI");
   const [withdrawMessage, setWithdrawMessage] = useState<string | null>(null);
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  const fetchStats = () => {
-    fetch("/api/referrals")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.stats) {
-          setStats(data.stats);
-          if (data.stats.availableBalance > 0) {
-            setWithdrawAmount(data.stats.availableBalance.toString());
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchStats = async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/referrals", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !data.stats) {
+        throw new Error(data.error || "Referral data is unavailable.");
+      }
+      setStats(data.stats);
+    } catch (error) {
+      setStats(null);
+      setLoadError(error instanceof Error ? error.message : "Referral data is unavailable.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -47,8 +50,15 @@ export default function ReferralsDashboardPage() {
     e.preventDefault();
     if (!upiId.trim()) return;
 
-    const amt = parseFloat(withdrawAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    const amt = stats?.availableBalance ?? 0;
+    if (!stats?.programEnabled || amt < stats.minPayoutAmount) {
+      setWithdrawMessage(
+        stats?.programEnabled
+          ? `Minimum payout threshold is ₹${stats.minPayoutAmount.toLocaleString()}.`
+          : "Referral payouts are currently disabled.",
+      );
+      return;
+    }
 
     setIsProcessingWithdraw(true);
     setWithdrawMessage(null);
@@ -81,17 +91,45 @@ export default function ReferralsDashboardPage() {
     }
   };
 
-  const shareText = `Join me on HireGo AI, the autonomous neural talent & recruitment network! Use my referral code: ${
-    stats?.referralCode || "HIREGO2026"
-  }`;
+  const shareText = stats
+    ? `Join me on HireGo AI. Use my referral code: ${stats.referralCode}`
+    : "";
   const encodedShareText = encodeURIComponent(shareText);
-  const encodedShareUrl = encodeURIComponent(stats?.referralLink || "https://hirego.ai");
+  const encodedShareUrl = encodeURIComponent(stats?.referralLink || "");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+        <CandidateSidebar />
+        <main className="flex-1 ml-0 md:ml-[116px] grid place-items-center p-6">
+          <p className="text-sm text-text-muted">Loading referral account…</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+        <CandidateSidebar />
+        <main className="flex-1 ml-0 md:ml-[116px] grid place-items-center p-6">
+          <section className="max-w-lg rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+            <h1 className="text-xl font-bold">Referral account unavailable</h1>
+            <p className="mt-2 text-sm text-text-secondary">{loadError || "Referral data could not be loaded."}</p>
+            <button type="button" onClick={() => void fetchStats()} className="mt-5 min-h-11 rounded-full bg-primary px-5 text-sm font-bold text-white">
+              Try again
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <CandidateSidebar />
 
-      <div className="flex-1 ml-[100px] lg:ml-[116px] flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen">
         <header className="sticky top-0 z-40 bg-[#0E0E0E]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-6 lg:px-10 h-20 shadow-md">
           <div>
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
@@ -127,7 +165,7 @@ export default function ReferralsDashboardPage() {
                 </span>
               </div>
               <button
-                disabled={(stats?.availableBalance || 0) < 500}
+                disabled={!stats.programEnabled || stats.availableBalance < stats.minPayoutAmount}
                 onClick={() => setShowWithdrawModal(true)}
                 className="btn-3d-gold px-4 py-1.5 rounded-full text-xs font-bold text-black flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -193,11 +231,12 @@ export default function ReferralsDashboardPage() {
                 <input
                   type="text"
                   readOnly
-                  value={stats?.referralLink || "https://hirego.ai/register?ref=HIREGO2026"}
+                  value={stats.referralLink}
                   className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
                 />
                 <button
                   onClick={handleCopy}
+                  disabled={!stats.referralLink}
                   className="btn-3d-red px-6 py-2.5 rounded-full text-white text-xs font-bold shrink-0 transition-all shadow-md"
                 >
                   {copied ? "Copied! ✓" : "Copy Link"}
@@ -407,17 +446,13 @@ export default function ReferralsDashboardPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-text-muted">Withdrawal Amount (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={500}
-                      max={stats?.availableBalance || 500}
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="input-pill w-full h-11 px-4 text-xs text-white font-mono"
-                    />
-                    <p className="text-[10px] text-text-muted">Minimum withdrawal threshold: ₹500</p>
+                    <label className="text-xs font-bold text-text-muted">Payout Amount</label>
+                    <div className="input-pill w-full min-h-11 px-4 flex items-center text-xs text-white font-mono">
+                      ₹{stats.availableBalance.toLocaleString()}
+                    </div>
+                    <p className="text-[10px] text-text-muted">
+                      HireGo requests the full server-confirmed eligible balance. Minimum threshold: ₹{stats.minPayoutAmount.toLocaleString()}.
+                    </p>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-2">

@@ -221,6 +221,8 @@ export interface ReferralDashboardStatsDTO {
   pendingPayoutBalance: number;
   paidBalance: number;
   currency: string;
+  programEnabled: boolean;
+  minPayoutAmount: number;
   recentRewards: SanitizedReferralRewardDTO[];
   recentAttributions: SanitizedReferralAttributionDTO[];
 }
