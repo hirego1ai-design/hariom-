@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/apiSecurity";
 import { runRecordedAssessmentRecovery } from "@/lib/recordedAssessmentRecovery";
 
 function authorized(request: NextRequest) {
@@ -14,15 +15,19 @@ function authorized(request: NextRequest) {
 }
 
 async function run(request: NextRequest) {
-  if (!authorized(request)) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized." },
-      { status: 401 },
-    );
-  }
+  try {
+    if (!authorized(request)) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 },
+      );
+    }
 
-  const result = await runRecordedAssessmentRecovery();
-  return NextResponse.json(result);
+    const result = await runRecordedAssessmentRecovery();
+    return NextResponse.json(result);
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function GET(request: NextRequest) {
