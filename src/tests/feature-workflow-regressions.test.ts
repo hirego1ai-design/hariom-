@@ -1079,3 +1079,33 @@ test("admin system health and queue pages scope status claims to observed eviden
     assert(source.includes('redirect("/admin/system-health")'));
   }
 });
+
+
+test("admin integration and email controls fail closed without simulated connection state", () => {
+  const integrations = fs.readFileSync(new URL("../app/admin/settings/integrations/page.tsx", import.meta.url), "utf8");
+  const smtp = fs.readFileSync(new URL("../app/settings/smtp/page.tsx", import.meta.url), "utf8");
+  const emailConfig = fs.readFileSync(new URL("../app/api/admin/email-delivery/config/route.ts", import.meta.url), "utf8");
+  const emailHelper = fs.readFileSync(new URL("../lib/email-delivery-config.ts", import.meta.url), "utf8");
+
+  assert(integrations.includes("No general integrations registry is connected"));
+  assert(integrations.includes('href="/admin/settings/smtp"'));
+  assert(integrations.includes('href="/admin/settings/whatsapp"'));
+  assert(integrations.includes('href="/admin/payment-gateways"'));
+  assert(integrations.includes('href="/admin/communications"'));
+  assert(!integrations.includes("CandidateSidebar"));
+  assert(!integrations.includes("G07Component"));
+
+  assert(emailHelper.includes('if (process.env.NODE_ENV === "production") throw error;'));
+  assert(emailConfig.includes("effectiveSendgridKey"));
+  assert(emailConfig.includes("effectiveZeptoMailKey"));
+  assert(emailConfig.includes("effectiveSendgridSender"));
+  assert(emailConfig.includes("effectiveZeptoMailSender"));
+  assert(emailConfig.includes("SendGrid cannot be enabled until a sender address and API key are configured."));
+  assert(emailConfig.includes("ZeptoMail cannot be enabled until a sender address and API key are configured."));
+
+  assert(smtp.includes("Test email provider acceptance"));
+  assert(smtp.includes("Acceptance does not prove inbox delivery or reading."));
+  assert(smtp.includes("error?: string"));
+  assert(smtp.includes("result.error || result.message"));
+  assert(smtp.includes("Delivery/read confirmation is separate."));
+});
