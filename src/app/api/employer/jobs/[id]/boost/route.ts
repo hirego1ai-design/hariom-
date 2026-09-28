@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       success: true,
       tiers: [],
-      purchaseStatus: "UNAVAILABLE",
+      purchaseStatus: "PAYMENT_INTEGRATION_REQUIRED",
       boostStatus: {
         isBoosted: isBoosted && !isExpired,
         boostTier: config.boostTier || null,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     await resolveEmployerJob(request, id);
     throw new ApiError(
-      "Job Boost purchase is unavailable until boost products are admin-managed and provider-backed payment fulfillment is enabled.",
+      "PAYMENT_INTEGRATION_REQUIRED: Job Boost purchase is unavailable until boost products are admin-managed and provider-backed payment fulfillment is enabled.",
       503,
     );
   } catch (error) {
