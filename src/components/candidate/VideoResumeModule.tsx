@@ -63,6 +63,7 @@ export default function VideoResumeModule() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const pollAttemptsRef = useRef(0);
 
   const MAX_DURATION = 120; // 2 minutes max
 
@@ -277,22 +278,41 @@ export default function VideoResumeModule() {
   const startPolling = useCallback((videoId: string) => {
     setAnalysisPolling(true);
     setAnalysisReport(null);
+    pollAttemptsRef.current = 0;
+    if (pollRef.current) clearInterval(pollRef.current);
 
     const poll = async () => {
+      pollAttemptsRef.current += 1;
+      if (pollAttemptsRef.current > 120) {
+        setAnalysisPolling(false);
+        setUploadError("Video analysis is still pending. You can leave this page and check again later.");
+        if (pollRef.current) clearInterval(pollRef.current);
+        return;
+      }
+
       try {
-        const res = await fetch(`/api/candidate/video-resume/status?videoId=${videoId}`);
-        if (!res.ok) return;
-        const data = await res.json();
+        const res = await fetch(`/api/candidate/video-resume/status?videoId=${encodeURIComponent(videoId)}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 403) {
+            setAnalysisPolling(false);
+            setUploadError(data.error || "This video resume is no longer available.");
+            if (pollRef.current) clearInterval(pollRef.current);
+          }
+          return;
+        }
         if (data.analysisStatus === "COMPLETED" || data.analysisStatus === "FAILED" || data.analysisStatus === "BLOCKED_INFRA") {
           setAnalysisReport(data as AnalysisReport);
           setAnalysisPolling(false);
           if (pollRef.current) clearInterval(pollRef.current);
         }
-      } catch { /* continue polling on network errors */ }
+      } catch {
+        // A transient network error does not change persisted analysis state.
+      }
     };
 
-    poll(); // immediate first check
-    pollRef.current = setInterval(poll, 5000);
+    void poll();
+    pollRef.current = setInterval(() => void poll(), 5000);
   }, []);
 
   useEffect(() => {
