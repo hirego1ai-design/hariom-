@@ -136,6 +136,7 @@ export async function GET(request: NextRequest) {
         taskType,
         status,
         pausedReason: kill?.isActive ? kill.reason ?? "Agent kill switch is active." : null,
+        controlUpdatedAt: kill?.updatedAt.toISOString() ?? null,
         routing: policy
           ? {
               mode: policy.mode,
