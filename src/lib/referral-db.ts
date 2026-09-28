@@ -30,6 +30,8 @@ import {
   UserFraudProfile,
 } from "@/types/referral";
 import { prisma } from "./prisma";
+import { ReferralFraudStatus as DbReferralFraudStatus } from "@prisma/client";
+import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 import { randomBytes } from "node:crypto";
 import {
   evaluateTransactionQualification,
@@ -1855,7 +1857,99 @@ class ReferralDatabaseStore {
   // Transitions: NORMAL -> FLAGGED -> FRAUD_HOLD -> ADMIN_REVIEW
   // ================================================================
 
+  private fraudFactors(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  private mapFraudProfile(row: {
+    userId: string;
+    status: DbReferralFraudStatus;
+    riskScore: number;
+    riskFactors: unknown;
+    lastEvaluatedAt: Date;
+    history?: Array<{
+      id: string;
+      userId: string;
+      previousStatus: DbReferralFraudStatus;
+      newStatus: DbReferralFraudStatus;
+      reason: string;
+      actorId: string;
+      riskScore: number;
+      riskFactors: unknown;
+      createdAt: Date;
+    }>;
+  }): UserFraudProfile {
+    return {
+      userId: row.userId,
+      status: row.status as FraudStatus,
+      riskScore: row.riskScore,
+      riskFactors: this.fraudFactors(row.riskFactors),
+      lastEvaluatedAt: row.lastEvaluatedAt.toISOString(),
+      history: (row.history || []).map((audit) => ({
+        id: audit.id,
+        userId: audit.userId,
+        previousStatus: audit.previousStatus as FraudStatus,
+        newStatus: audit.newStatus as FraudStatus,
+        reason: audit.reason,
+        actorId: audit.actorId,
+        riskScore: audit.riskScore,
+        riskFactors: this.fraudFactors(audit.riskFactors),
+        createdAt: audit.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  private validFraudTransitions(): Record<FraudStatus, FraudStatus[]> {
+    return {
+      [FraudStatus.NORMAL]: [
+        FraudStatus.FLAGGED,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.NORMAL,
+      ],
+      [FraudStatus.FLAGGED]: [
+        FraudStatus.NORMAL,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.FLAGGED,
+      ],
+      [FraudStatus.FRAUD_HOLD]: [
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.NORMAL,
+        FraudStatus.FLAGGED,
+        FraudStatus.FRAUD_HOLD,
+      ],
+      [FraudStatus.ADMIN_REVIEW]: [
+        FraudStatus.NORMAL,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.FLAGGED,
+        FraudStatus.ADMIN_REVIEW,
+      ],
+    };
+  }
+
   public async getUserFraudProfile(userId: string): Promise<UserFraudProfile> {
+    if (process.env.NODE_ENV === "production") {
+      const row = await prisma.referralFraudProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          status: DbReferralFraudStatus.NORMAL,
+          riskScore: 0,
+          riskFactors: [],
+        },
+        update: {},
+        include: {
+          history: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
+        },
+      });
+      return this.mapFraudProfile(row);
+    }
+
     if (!this.fraudProfiles.has(userId)) {
       this.fraudProfiles.set(userId, {
         userId,
@@ -1877,19 +1971,94 @@ class ReferralDatabaseStore {
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
+    const actorId = params.actorId || "SYSTEM";
+    const validTransitions = this.validFraudTransitions();
+
+    if (process.env.NODE_ENV === "production") {
+      return prisma.$transaction(async (tx) => {
+        await tx.referralFraudProfile.upsert({
+          where: { userId: params.userId },
+          create: {
+            userId: params.userId,
+            status: DbReferralFraudStatus.NORMAL,
+            riskScore: 0,
+            riskFactors: [],
+          },
+          update: {},
+        });
+        await tx.$queryRaw`SELECT "userId" FROM "ReferralFraudProfile" WHERE "userId" = ${params.userId} FOR UPDATE`;
+
+        const current = await tx.referralFraudProfile.findUniqueOrThrow({
+          where: { userId: params.userId },
+        });
+        const previousStatus = current.status as FraudStatus;
+        if (!validTransitions[previousStatus].includes(params.newStatus)) {
+          throw new Error(
+            `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
+          );
+        }
+
+        const nextRiskScore = params.riskScore ?? current.riskScore;
+        const nextRiskFactors = params.riskFactors ?? this.fraudFactors(current.riskFactors);
+        const now = new Date();
+
+        await tx.referralFraudProfile.update({
+          where: { userId: params.userId },
+          data: {
+            status: params.newStatus as DbReferralFraudStatus,
+            riskScore: nextRiskScore,
+            riskFactors: nextRiskFactors,
+            lastEvaluatedAt: now,
+          },
+        });
+
+        const fraudAudit = await tx.referralFraudAudit.create({
+          data: {
+            userId: params.userId,
+            previousStatus: current.status,
+            newStatus: params.newStatus as DbReferralFraudStatus,
+            reason: params.reason,
+            actorId,
+            riskScore: nextRiskScore,
+            riskFactors: nextRiskFactors,
+          },
+        });
+
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            action: "REFERRAL_FRAUD_STATUS_UPDATED",
+            resource: `ReferralFraudProfile:${params.userId}`,
+            details: JSON.stringify({
+              previousStatus,
+              newStatus: params.newStatus,
+              reason: params.reason,
+              riskScore: nextRiskScore,
+              fraudAuditId: fraudAudit.id,
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, actorId);
+
+        const row = await tx.referralFraudProfile.findUniqueOrThrow({
+          where: { userId: params.userId },
+          include: {
+            history: {
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 100,
+            },
+          },
+        });
+        return this.mapFraudProfile(row);
+      });
+    }
+
     const currentProfile = await this.getUserFraudProfile(params.userId);
     const previousStatus = currentProfile.status;
-
-    // Validate state machine transitions
-    const validTransitions: Record<FraudStatus, FraudStatus[]> = {
-      [FraudStatus.NORMAL]: [FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW, FraudStatus.NORMAL],
-      [FraudStatus.FLAGGED]: [FraudStatus.NORMAL, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW, FraudStatus.FLAGGED],
-      [FraudStatus.FRAUD_HOLD]: [FraudStatus.ADMIN_REVIEW, FraudStatus.NORMAL, FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD],
-      [FraudStatus.ADMIN_REVIEW]: [FraudStatus.NORMAL, FraudStatus.FRAUD_HOLD, FraudStatus.FLAGGED, FraudStatus.ADMIN_REVIEW],
-    };
-
     if (!validTransitions[previousStatus].includes(params.newStatus)) {
-      throw new Error(`Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`);
+      throw new Error(
+        `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
+      );
     }
 
     const auditRecord: FraudAuditRecord = {
@@ -1898,7 +2067,7 @@ class ReferralDatabaseStore {
       previousStatus,
       newStatus: params.newStatus,
       reason: params.reason,
-      actorId: params.actorId || "SYSTEM",
+      actorId,
       riskScore: params.riskScore !== undefined ? params.riskScore : currentProfile.riskScore,
       riskFactors: params.riskFactors || currentProfile.riskFactors,
       createdAt: new Date().toISOString(),
@@ -1909,7 +2078,6 @@ class ReferralDatabaseStore {
     if (params.riskFactors) currentProfile.riskFactors = params.riskFactors;
     currentProfile.lastEvaluatedAt = new Date().toISOString();
     currentProfile.history.push(auditRecord);
-
     this.fraudProfiles.set(params.userId, currentProfile);
     return currentProfile;
   }
@@ -1929,13 +2097,13 @@ class ReferralDatabaseStore {
     const factors = new Set(profile.riskFactors);
 
     if (context?.triggers) {
-      for (const t of context.triggers) {
-        factors.add(t);
-        if (t === "SELF_REFERRAL_ATTEMPT") riskScore = Math.max(riskScore, 45);
-        if (t === "NORMALIZED_IDENTITY_COLLISION") riskScore = Math.max(riskScore, 65);
-        if (t === "ABNORMAL_VELOCITY") riskScore = Math.max(riskScore, 50);
-        if (t === "PAYOUT_IP_MISMATCH") riskScore = Math.max(riskScore, 35);
-        if (t === "CRITICAL_SUSPICIOUS_PATTERN") riskScore = Math.max(riskScore, 85);
+      for (const trigger of context.triggers) {
+        factors.add(trigger);
+        if (trigger === "SELF_REFERRAL_ATTEMPT") riskScore = Math.max(riskScore, 45);
+        if (trigger === "NORMALIZED_IDENTITY_COLLISION") riskScore = Math.max(riskScore, 65);
+        if (trigger === "ABNORMAL_VELOCITY") riskScore = Math.max(riskScore, 50);
+        if (trigger === "PAYOUT_IP_MISMATCH") riskScore = Math.max(riskScore, 35);
+        if (trigger === "CRITICAL_SUSPICIOUS_PATTERN") riskScore = Math.max(riskScore, 85);
       }
     }
 
@@ -1946,6 +2114,7 @@ class ReferralDatabaseStore {
       targetStatus = FraudStatus.FLAGGED;
     }
 
+    const riskFactors = Array.from(factors);
     if (targetStatus !== profile.status) {
       return this.updateFraudStatus({
         userId,
@@ -1953,18 +2122,59 @@ class ReferralDatabaseStore {
         reason: `Automated Risk Engine Evaluation (Risk Score: ${riskScore})`,
         actorId: context?.actorId || "FRAUD_ENGINE",
         riskScore,
-        riskFactors: Array.from(factors),
+        riskFactors,
       });
     }
 
+    if (process.env.NODE_ENV === "production") {
+      const row = await prisma.referralFraudProfile.update({
+        where: { userId },
+        data: {
+          riskScore,
+          riskFactors,
+          lastEvaluatedAt: new Date(),
+        },
+        include: {
+          history: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
+        },
+      });
+      return this.mapFraudProfile(row);
+    }
+
     profile.riskScore = riskScore;
-    profile.riskFactors = Array.from(factors);
+    profile.riskFactors = riskFactors;
     profile.lastEvaluatedAt = new Date().toISOString();
     this.fraudProfiles.set(userId, profile);
     return profile;
   }
 
   public async getAdminFraudQueue(): Promise<UserFraudProfile[]> {
+    if (process.env.NODE_ENV === "production") {
+      const rows = await prisma.referralFraudProfile.findMany({
+        where: {
+          status: {
+            in: [
+              DbReferralFraudStatus.FLAGGED,
+              DbReferralFraudStatus.FRAUD_HOLD,
+              DbReferralFraudStatus.ADMIN_REVIEW,
+            ],
+          },
+        },
+        orderBy: [{ riskScore: "desc" }, { updatedAt: "desc" }, { userId: "asc" }],
+        take: 250,
+        include: {
+          history: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 20,
+          },
+        },
+      });
+      return rows.map((row) => this.mapFraudProfile(row));
+    }
+
     return Array.from(this.fraudProfiles.values());
   }
 }
