@@ -26,6 +26,7 @@ export async function GET(request: Request) {
       }),
       prisma.referralPayout.groupBy({
         by: ["currency", "status"],
+        where: { status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] } },
         orderBy: [{ currency: "asc" }, { status: "asc" }],
         _count: { id: true },
         _sum: { amount: true },
@@ -43,21 +44,25 @@ export async function GET(request: Request) {
       currencies.map((currency) => {
         const rewards = rewardGroups.filter((row) => row.currency === currency);
         const payouts = payoutGroups.filter((row) => row.currency === currency);
-
         const rewardAmountFor = (...statuses: string[]) =>
           rewards
             .filter((row) => statuses.includes(row.status))
             .reduce((sum, row) => sum + (row._sum?.rewardAmount ?? 0), 0);
-
-        const payoutAmountFor = (...statuses: string[]) =>
-          payouts
-            .filter((row) => statuses.includes(row.status))
-            .reduce((sum, row) => sum + (row._sum?.amount ?? 0), 0);
+        const rewardCount = rewards.reduce((sum, row) => sum + (row._count?.id ?? 0), 0);
+        const pendingPayoutLiability = payouts.reduce(
+          (sum, row) => sum + (row._sum?.amount ?? 0),
+          0,
+        );
+        const pendingPayoutCount = payouts.reduce(
+          (sum, row) => sum + (row._count?.id ?? 0),
+          0,
+        );
 
         return [
           currency,
           {
             currency,
+            rewardCount,
             totalRewardsValue: rewards.reduce(
               (sum, row) => sum + (row._sum?.rewardAmount ?? 0),
               0,
@@ -65,18 +70,8 @@ export async function GET(request: Request) {
             totalEligibleValue: rewardAmountFor("ELIGIBLE"),
             totalLockedValue: rewardAmountFor("LOCKED"),
             totalPaidValue: rewardAmountFor("PAID"),
-            pendingPayoutLiability: payoutAmountFor(
-              "PENDING_ADMIN_APPROVAL",
-              "APPROVED",
-            ),
-            rewardCount: rewards.reduce(
-              (sum, row) => sum + (row._count?.id ?? 0),
-              0,
-            ),
-            payoutCount: payouts.reduce(
-              (sum, row) => sum + (row._count?.id ?? 0),
-              0,
-            ),
+            pendingPayoutLiability,
+            pendingPayoutCount,
           },
         ];
       }),
@@ -97,7 +92,7 @@ export async function GET(request: Request) {
           leadToRegisterRate: null,
           registerToQualifyingRate: null,
           pphWarrantyRetentionRate: null,
-          note: "Conversion funnel metrics require persisted stage-event analytics and are not inferred from attribution counts.",
+          status: "NOT_MEASURED",
         },
       },
     });
