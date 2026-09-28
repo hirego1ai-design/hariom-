@@ -55,3 +55,42 @@ ALTER TABLE "ReferralFraudAudit"
   REFERENCES "ReferralFraudProfile"("userId")
   ON DELETE CASCADE
   ON UPDATE CASCADE;
+
+
+-- Materialize the historical referral rules as authoritative configuration.
+-- Runtime production code fails closed if this row is later missing.
+INSERT INTO "ReferralProgramConfig" (
+  "id",
+  "isEnabled",
+  "candidateRewardAmount",
+  "candidateMaxQualifyingTransactions",
+  "employerJobRewardAmount",
+  "employerMaxQualifyingTransactions",
+  "managedHiringRewardAmount",
+  "managedHiringMaxRewards",
+  "managedHiringDefaultLockDays",
+  "pphRewardAmount",
+  "pphMaxQualifyingHires",
+  "pphDefaultLockingPeriodDays",
+  "minPayoutAmount",
+  "attributionWindowDays",
+  "updatedAt"
+)
+VALUES (
+  'global-referral-config',
+  TRUE,
+  250.0,
+  2,
+  1000.0,
+  2,
+  5000.0,
+  1,
+  90,
+  5000.0,
+  1,
+  90,
+  500.0,
+  30,
+  CURRENT_TIMESTAMP
+)
+ON CONFLICT ("id") DO NOTHING;
