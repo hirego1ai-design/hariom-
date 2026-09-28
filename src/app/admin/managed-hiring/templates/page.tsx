@@ -7,6 +7,8 @@ export default function AdminAgreementTemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [pendingArchiveId, setPendingArchiveId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -27,6 +29,7 @@ export default function AdminAgreementTemplatesPage() {
   }
 
   const handleDuplicate = async (id: string) => {
+    setActionMessage(null);
     try {
       const res = await fetch(`/api/agreements/templates/${id}`, {
         method: "POST",
@@ -34,30 +37,35 @@ export default function AdminAgreementTemplatesPage() {
         body: JSON.stringify({ action: "duplicate" }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Template cloned successfully." });
         fetchTemplates();
       } else {
-        alert(data.error);
+        setActionMessage({ type: "error", text: data.error || "Unable to clone template." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Unable to clone template. Please try again." });
     }
   };
 
   const handleArchive = async (id: string) => {
-    if (!confirm("Archive this template?")) return;
+    setActionMessage(null);
     try {
       const res = await fetch(`/api/agreements/templates/${id}`, {
         method: "DELETE",
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Template archived." });
+        setPendingArchiveId(null);
         fetchTemplates();
       } else {
-        alert(data.error);
+        setActionMessage({ type: "error", text: data.error || "Unable to archive template." });
       }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Unable to archive template. Please try again." });
     }
   };
 
@@ -65,6 +73,7 @@ export default function AdminAgreementTemplatesPage() {
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <AdminSidebar />
       <div className="flex-1 p-6 md:p-8 ml-0 md:ml-64 transition-all duration-300">
+        {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`mb-6 rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         
         <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -129,7 +138,7 @@ export default function AdminAgreementTemplatesPage() {
                     <span className="material-symbols-outlined text-[14px]">content_copy</span> Clone
                   </button>
                   {!tpl.isArchived && (
-                    <button onClick={() => handleArchive(tpl.id)} className="py-2 px-3 bg-red/10 hover:bg-red/20 text-red rounded-lg transition-colors flex justify-center items-center">
+                    <button onClick={() => setPendingArchiveId(tpl.id)} className="py-2 px-3 bg-red/10 hover:bg-red/20 text-red rounded-lg transition-colors flex justify-center items-center" aria-label={`Archive ${tpl.name}`}>
                       <span className="material-symbols-outlined text-[14px]">archive</span>
                     </button>
                   )}
@@ -139,6 +148,19 @@ export default function AdminAgreementTemplatesPage() {
           </div>
         )}
       </div>
+
+      {pendingArchiveId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-template-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+            <h2 id="archive-template-title" className="text-lg font-bold text-white">Archive template?</h2>
+            <p className="mt-2 text-sm text-text-secondary">The template will no longer be available for new agreements. Existing agreements are not changed.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setPendingArchiveId(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={() => void handleArchive(pendingArchiveId)} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500">Archive template</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
