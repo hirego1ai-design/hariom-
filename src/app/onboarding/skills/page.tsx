@@ -28,8 +28,6 @@ export default function SkillsPage() {
     }
     setIsSaving(true);
     setSaveError("");
-    updateState({ skills: nextSkills, targetRole });
-    markStepComplete(6);
     try {
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
@@ -40,10 +38,13 @@ export default function SkillsPage() {
           preferences: { targetRole: targetRole.trim() },
         }),
       });
-      if (!response.ok) throw new Error("Profile save failed");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Profile save failed");
+      updateState({ skills: nextSkills, targetRole });
+      markStepComplete(6);
       router.push("/onboarding/resume-upload");
-    } catch {
-      setSaveError("We could not save your skills. Please try again.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "We could not save your skills. Please try again.");
       setIsSaving(false);
     }
   };
