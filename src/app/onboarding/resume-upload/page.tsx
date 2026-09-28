@@ -186,6 +186,7 @@ export default function ResumeUploadPage() {
             >
               <input
                 type="file"
+                disabled={analyzing}
                 accept=".pdf,.docx,.doc"
                 onChange={handleFileDrop}
                 className="absolute inset-0 opacity-0 cursor-pointer z-10"
@@ -294,6 +295,7 @@ export default function ResumeUploadPage() {
             <button
               type="button"
               onClick={handleSkip}
+              disabled={analyzing}
               className="px-5 h-11 rounded-full font-bold text-xs border transition-all"
               style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}
             >
@@ -301,6 +303,7 @@ export default function ResumeUploadPage() {
             </button>
             <button
               onClick={handleNext}
+              disabled={analyzing}
               className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
               style={{
                 background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
