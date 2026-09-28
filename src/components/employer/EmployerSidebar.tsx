@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -24,11 +24,12 @@ const employerNavItems: NavRailItem[] = [
   { id: "analytics", label: "Analytics", href: "/employer/employer-analytics-dashboard", icon: "analytics" },
   { id: "billing", label: "Revenue & Billing", href: "/employer/revenue-and-billing-management", icon: "receipt_long" },
   { id: "subscriptions", label: "Subscriptions & Credits", href: "/employer/subscriptions", icon: "credit_score" },
-  { id: "settings", label: "Company Settings", href: "/employer/employer-company-settings-hub", icon: "settings" },
+  { id: "settings", label: "Company Settings", href: "/employer/company-profile-editor", icon: "settings" },
 ];
 
 export default function EmployerSidebar() {
   const pathname = usePathname() || "";
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   if (
     !pathname.startsWith("/employer") ||
@@ -93,7 +94,7 @@ export default function EmployerSidebar() {
 
       <nav className="md:hidden fixed left-3 right-3 bottom-3 z-50 rounded-2xl border border-white/10 bg-[#141418]/95 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.55)] px-2 py-2">
         <div className="grid grid-cols-5 gap-1">
-          {employerNavItems.slice(0, 5).map((item) => {
+          {employerNavItems.slice(0, 4).map((item) => {
             const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/employer");
             return (
               <Link
@@ -101,6 +102,7 @@ export default function EmployerSidebar() {
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
+                onClick={() => setMobileMoreOpen(false)}
                 className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
                   isActive ? "bg-secondary text-white" : "text-text-muted hover:text-white hover:bg-white/10"
                 }`}
@@ -110,8 +112,68 @@ export default function EmployerSidebar() {
               </Link>
             );
           })}
+          <button
+            type="button"
+            aria-expanded={mobileMoreOpen}
+            aria-controls="employer-mobile-more"
+            onClick={() => setMobileMoreOpen((open) => !open)}
+            className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              mobileMoreOpen ? "bg-secondary text-white" : "text-text-muted hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[21px]">more_horiz</span>
+            <span className="text-[9px] font-bold leading-none">More</span>
+          </button>
         </div>
       </nav>
+
+      {mobileMoreOpen && (
+        <div
+          id="employer-mobile-more"
+          className="md:hidden fixed inset-0 z-[49] bg-black/60 backdrop-blur-sm px-3 pb-20 pt-20"
+          role="dialog"
+          aria-modal="true"
+          aria-label="More employer navigation"
+          onClick={() => setMobileMoreOpen(false)}
+        >
+          <div
+            className="absolute left-3 right-3 bottom-[84px] max-h-[65vh] overflow-y-auto rounded-3xl border border-white/10 bg-[#141418] p-3 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between px-2 py-1">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-text-muted">More</span>
+              <button
+                type="button"
+                aria-label="Close more navigation"
+                onClick={() => setMobileMoreOpen(false)}
+                className="h-9 w-9 rounded-xl text-text-muted hover:bg-white/10 hover:text-white"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {employerNavItems.slice(4).map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setMobileMoreOpen(false)}
+                    className={`min-h-16 rounded-2xl border px-3 py-3 flex items-center gap-3 ${
+                      isActive
+                        ? "border-secondary/50 bg-secondary/15 text-white"
+                        : "border-white/10 bg-white/[0.03] text-text-secondary"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[21px]">{item.icon}</span>
+                    <span className="text-xs font-bold">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
