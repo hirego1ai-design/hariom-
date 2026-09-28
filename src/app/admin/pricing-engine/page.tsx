@@ -1,232 +1,426 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
-import { calculateCommercialFee, formatCurrency, CommercialPricingModel } from "@/utils";
+
+type PricingModel = "PERCENTAGE" | "FIXED" | "HYBRID" | "SLAB";
+
+type Calculation = {
+  baseFee: number;
+  retainerFee: number;
+  successFee: number;
+  grossFee: number;
+  discountPct: number;
+  discountAmount: number;
+  subtotal: number;
+  taxRatePct: number;
+  taxAmount: number;
+  totalAmount: number;
+  effectivePct: number;
+  replacementWarrantyDays: number;
+};
+
+type SlabInput = {
+  upperBound: string;
+  feePct: string;
+};
+
+function parseRequiredNumber(value: string, label: string) {
+  if (!value.trim()) throw new Error(`${label} is required.`);
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a valid number.`);
+  return parsed;
+}
+
+function money(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
 
 export default function AdminPricingEnginePage() {
-  const [ctcAnnual, setCtcAnnual] = useState(2400000);
-  const [pricingModel, setPricingModel] = useState<CommercialPricingModel>("PERCENTAGE");
-  const [feeValue, setFeeValue] = useState(8.33);
-  const [retainerAmount, setRetainerAmount] = useState(30000);
-  const [discountPct, setDiscountPct] = useState(0);
-  const [replacementDays, setReplacementDays] = useState(90);
-  const [taxRatePct, setTaxRatePct] = useState(18);
+  const [currency, setCurrency] = useState("");
+  const [ctcAnnual, setCtcAnnual] = useState("");
+  const [pricingModel, setPricingModel] = useState<PricingModel>("PERCENTAGE");
+  const [feeValue, setFeeValue] = useState("");
+  const [retainerAmount, setRetainerAmount] = useState("");
+  const [discountPct, setDiscountPct] = useState("");
+  const [replacementDays, setReplacementDays] = useState("");
+  const [taxRatePct, setTaxRatePct] = useState("");
+  const [slabs, setSlabs] = useState<SlabInput[]>([{ upperBound: "", feePct: "" }]);
 
-  const calc = useMemo(() => {
-    return calculateCommercialFee({
-      ctcAnnual,
-      pricingModel,
-      feeValue,
-      retainerAmount,
-      discountPct,
-      taxRatePct,
-      replacementDays,
-    });
-  }, [ctcAnnual, pricingModel, feeValue, retainerAmount, discountPct, taxRatePct, replacementDays]);
+  const [calculation, setCalculation] = useState<Calculation | null>(null);
+  const [calculatedCurrency, setCalculatedCurrency] = useState("");
+  const [calculating, setCalculating] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setCalculation(null);
+    setCalculatedCurrency("");
+    setError("");
+  }, [
+    currency,
+    ctcAnnual,
+    pricingModel,
+    feeValue,
+    retainerAmount,
+    discountPct,
+    replacementDays,
+    taxRatePct,
+    slabs,
+  ]);
+
+  function addFiniteSlab() {
+    setSlabs((current) => [
+      ...current.slice(0, -1),
+      { upperBound: "", feePct: "" },
+      current[current.length - 1] || { upperBound: "", feePct: "" },
+    ]);
+  }
+
+  function updateSlab(index: number, patch: Partial<SlabInput>) {
+    setSlabs((current) =>
+      current.map((slab, slabIndex) => (slabIndex === index ? { ...slab, ...patch } : slab)),
+    );
+  }
+
+  function removeFiniteSlab(index: number) {
+    setSlabs((current) => current.filter((_, slabIndex) => slabIndex !== index));
+  }
+
+  async function calculate(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setCalculation(null);
+
+    try {
+      const normalizedCurrency = currency.trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
+        throw new Error("Enter a valid 3-letter currency code.");
+      }
+
+      const body: Record<string, unknown> = {
+        ctcAnnual: parseRequiredNumber(ctcAnnual, "Annual CTC"),
+        currency: normalizedCurrency,
+        pricingModel,
+        discountPct: discountPct.trim() ? parseRequiredNumber(discountPct, "Discount") : 0,
+        taxRatePct: parseRequiredNumber(taxRatePct, "Tax rate"),
+        replacementDays: parseRequiredNumber(replacementDays, "Replacement warranty"),
+      };
+
+      if (pricingModel === "PERCENTAGE" || pricingModel === "FIXED") {
+        body.feeValue = parseRequiredNumber(
+          feeValue,
+          pricingModel === "PERCENTAGE" ? "Placement rate" : "Fixed fee",
+        );
+      } else if (pricingModel === "HYBRID") {
+        body.feeValue = parseRequiredNumber(feeValue, "Success fee rate");
+        body.retainerAmount = parseRequiredNumber(retainerAmount, "Retainer amount");
+      } else {
+        body.slabs = slabs.map((slab, index) => ({
+          upToCtcAnnual:
+            index === slabs.length - 1
+              ? null
+              : parseRequiredNumber(slab.upperBound, `Slab ${index + 1} upper bound`),
+          feePct: parseRequiredNumber(slab.feePct, `Slab ${index + 1} fee rate`),
+        }));
+      }
+
+      setCalculating(true);
+      const response = await fetch("/api/admin/pricing/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !payload.calculation) {
+        throw new Error(payload.error || "Unable to calculate commercial fee.");
+      }
+
+      setCalculation(payload.calculation);
+      setCalculatedCurrency(normalizedCurrency);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to calculate commercial fee.");
+    } finally {
+      setCalculating(false);
+    }
+  }
 
   return (
-    <div className="bg-[#0A0A0C] text-white min-h-screen relative">
+    <div className="min-h-screen bg-[#0A0A0C] text-white">
       <AdminSidebar />
-      <AdminHeader />
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Commercial Pricing Calculator"
+          subtitle="Non-persistent scenario calculator; signed managed-hiring agreements remain authoritative."
+        />
 
-      <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-6xl mx-auto">
-        <div className="border-b border-white/10 pb-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#FFCA28]/10 text-[#FFCA28] border border-[#FFCA28]/20 mb-1">
-            COMMERCIAL ENGINE
+        <main className="mx-auto max-w-6xl space-y-6 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+            This screen does not load or save commercial terms. Enter every scenario input explicitly. A calculation is not a quote, invoice, or signed agreement.
           </div>
-          <h1 className="text-2xl font-bold text-white">Commercial Pricing & Replacement Engine</h1>
-          <p className="text-xs text-slate-400">Non-persistent commercial fee calculator. Saved commercial terms remain authoritative only in managed-hiring agreements.</p>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Controls Form (Left Column) */}
-          <div className="lg:col-span-7 bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-6 shadow-2xl">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#29B6F6]">tune</span> Commercial Calculator Inputs
-            </h2>
-
-            {/* CTC Slider */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-bold text-slate-300">Annual CTC (INR)</label>
-                <span className="text-sm font-mono font-bold text-[#FFCA28]">{formatCurrency(ctcAnnual)}</span>
-              </div>
-              <input
-                type="range"
-                min={300000}
-                max={10000000}
-                step={100000}
-                value={ctcAnnual}
-                onChange={(e) => setCtcAnnual(Number(e.target.value))}
-                className="w-full h-2 bg-[#16161B] rounded-lg appearance-none cursor-pointer accent-[#29B6F6]"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
-                <span>₹3 LPA</span>
-                <span>₹50 LPA</span>
-                <span>₹1 Cr</span>
-              </div>
+          {error && (
+            <div role="alert" className="rounded-xl border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-200">
+              {error}
             </div>
+          )}
 
-            {/* Pricing Model Selector */}
-            <div>
-              <label className="text-xs font-bold text-slate-400 mb-2 block">Pricing Model</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { id: "PERCENTAGE", name: "Percentage CTC", icon: "percent" },
-                  { id: "FIXED", name: "Fixed Fee", icon: "payments" },
-                  { id: "HYBRID", name: "Hybrid Model", icon: "widgets" },
-                  { id: "SLAB", name: "Slab-based CTC", icon: "stacked_bar_chart" },
-                ].map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => {
-                      setPricingModel(model.id as CommercialPricingModel);
-                      if (model.id === "PERCENTAGE") setFeeValue(8.33);
-                      if (model.id === "FIXED") setFeeValue(75000);
-                    }}
-                    className={`p-3 rounded-xl border text-center flex flex-col items-center gap-1 transition-all ${
-                      pricingModel === model.id
-                        ? "bg-[#29B6F6]/10 border-[#29B6F6] text-white"
-                        : "bg-[#16161B] border-white/5 text-slate-400 hover:border-white/20"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">{model.icon}</span>
-                    <span className="text-[10px] font-bold">{model.name}</span>
-                  </button>
-                ))}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
+            <form onSubmit={calculate} className="space-y-6 rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+              <div>
+                <h1 className="text-xl font-bold">Scenario inputs</h1>
+                <p className="mt-1 text-xs text-slate-400">No production commercial defaults are prefilled.</p>
               </div>
-            </div>
 
-            {/* Parameters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              {pricingModel === "PERCENTAGE" && (
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Placement Rate (%)</label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-xs text-slate-400">
+                  Currency
                   <input
+                    value={currency}
+                    onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+                    maxLength={3}
+                    placeholder="e.g. INR"
+                    required
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-4 py-2.5 text-sm uppercase text-white"
+                  />
+                </label>
+                <label className="text-xs text-slate-400">
+                  Annual CTC
+                  <input
+                    value={ctcAnnual}
+                    onChange={(event) => setCtcAnnual(event.target.value)}
                     type="number"
+                    min="0.01"
                     step="0.01"
-                    value={feeValue}
-                    onChange={(e) => setFeeValue(Number(e.target.value))}
-                    className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
+                    placeholder="Enter annual CTC"
+                    required
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-4 py-2.5 text-sm text-white"
                   />
-                </div>
-              )}
+                </label>
+              </div>
 
-              {pricingModel === "FIXED" && (
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Fixed Placement Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={feeValue}
-                    onChange={(e) => setFeeValue(Number(e.target.value))}
-                    className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                  />
+              <fieldset>
+                <legend className="mb-2 text-xs font-bold text-slate-400">Pricing model</legend>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([
+                    ["PERCENTAGE", "Percentage"],
+                    ["FIXED", "Fixed fee"],
+                    ["HYBRID", "Hybrid"],
+                    ["SLAB", "Slab"],
+                  ] as const).map(([model, label]) => (
+                    <button
+                      key={model}
+                      type="button"
+                      aria-pressed={pricingModel === model}
+                      onClick={() => setPricingModel(model)}
+                      className={`rounded-xl border p-3 text-xs font-bold transition ${
+                        pricingModel === model
+                          ? "border-[#29B6F6] bg-[#29B6F6]/10 text-white"
+                          : "border-white/10 bg-[#16161B] text-slate-400"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
+              </fieldset>
+
+              {(pricingModel === "PERCENTAGE" || pricingModel === "FIXED") && (
+                <label className="block text-xs text-slate-400">
+                  {pricingModel === "PERCENTAGE" ? "Placement rate (%)" : "Fixed fee amount"}
+                  <input
+                    value={feeValue}
+                    onChange={(event) => setFeeValue(event.target.value)}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-4 py-2.5 text-sm text-white"
+                  />
+                </label>
               )}
 
               {pricingModel === "HYBRID" && (
-                <>
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Retainer Amount (₹)</label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-xs text-slate-400">
+                    Retainer amount
                     <input
-                      type="number"
                       value={retainerAmount}
-                      onChange={(e) => setRetainerAmount(Number(e.target.value))}
-                      className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Success Fee Rate (%)</label>
-                    <input
+                      onChange={(event) => setRetainerAmount(event.target.value)}
                       type="number"
-                      step="0.1"
-                      value={feeValue}
-                      onChange={(e) => setFeeValue(Number(e.target.value))}
-                      className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
+                      min="0"
+                      step="0.01"
+                      required
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-4 py-2.5 text-sm text-white"
                     />
-                  </div>
-                </>
+                  </label>
+                  <label className="text-xs text-slate-400">
+                    Success fee rate (%)
+                    <input
+                      value={feeValue}
+                      onChange={(event) => setFeeValue(event.target.value)}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      required
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-4 py-2.5 text-sm text-white"
+                    />
+                  </label>
+                </div>
               )}
 
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Replacement Warranty Period</label>
-                <select
-                  value={replacementDays}
-                  onChange={(e) => setReplacementDays(Number(e.target.value))}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                >
-                  <option value={15}>15 Calendar Days</option>
-                  <option value={30}>30 Calendar Days</option>
-                  <option value={60}>60 Calendar Days</option>
-                  <option value={90}>90 Calendar Days</option>
-                  <option value={120}>120 Calendar Days</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Special Discount (%)</label>
-                <input
-                  type="number"
-                  value={discountPct}
-                  onChange={(e) => setDiscountPct(Number(e.target.value))}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Breakdown Card (Right Column) */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-6 shadow-2xl">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#26A69A]">receipt_long</span> Commercial Fee Breakdown
-              </h2>
-
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between py-2 border-b border-white/5">
-                  <span className="text-slate-400">Target Candidate CTC</span>
-                  <span className="font-mono font-bold text-white">{formatCurrency(ctcAnnual)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-white/5">
-                  <span className="text-slate-400">Gross Placement Fee</span>
-                  <span className="font-mono font-bold text-white">{formatCurrency(calc.grossFee)}</span>
-                </div>
-                {calc.discountAmount > 0 && (
-                  <div className="flex justify-between py-2 border-b border-white/5 text-[#FF5252]">
-                    <span>Discount ({calc.discountPct}%)</span>
-                    <span className="font-mono font-bold">-{formatCurrency(calc.discountAmount)}</span>
+              {pricingModel === "SLAB" && (
+                <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-white">CTC slabs</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Final slab is always open-ended.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addFiniteSlab}
+                      className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold"
+                    >
+                      Add finite slab
+                    </button>
                   </div>
-                )}
-                <div className="flex justify-between py-2 border-b border-white/5">
-                  <span className="text-slate-400">Subtotal</span>
-                  <span className="font-mono font-bold text-white">{formatCurrency(calc.subtotal)}</span>
+
+                  {slabs.map((slab, index) => {
+                    const final = index === slabs.length - 1;
+                    return (
+                      <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                        <label className="text-xs text-slate-400">
+                          {final ? "Upper bound" : "Up to annual CTC"}
+                          <input
+                            value={final ? "" : slab.upperBound}
+                            onChange={(event) => updateSlab(index, { upperBound: event.target.value })}
+                            disabled={final}
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            placeholder={final ? "Open-ended" : "Enter upper bound"}
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 py-2 text-sm text-white disabled:opacity-60"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-400">
+                          Fee rate (%)
+                          <input
+                            value={slab.feePct}
+                            onChange={(event) => updateSlab(index, { feePct: event.target.value })}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            required
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 py-2 text-sm text-white"
+                          />
+                        </label>
+                        {!final && (
+                          <button
+                            type="button"
+                            onClick={() => removeFiniteSlab(index)}
+                            className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex justify-between py-2 border-b border-white/5">
-                  <span className="text-slate-400">GST ({calc.taxRatePct}%)</span>
-                  <span className="font-mono font-bold text-slate-300">+{formatCurrency(calc.taxAmount)}</span>
-                </div>
-                <div className="flex justify-between py-3 border-t border-white/10 text-sm">
-                  <span className="font-bold text-white">Total Payable Commercial</span>
-                  <span className="font-mono font-extrabold text-[#26A69A]">{formatCurrency(calc.totalAmount)}</span>
-                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="text-xs text-slate-400">
+                  Discount (%)
+                  <input
+                    value={discountPct}
+                    onChange={(event) => setDiscountPct(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="0 if none"
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 py-2 text-sm text-white"
+                  />
+                </label>
+                <label className="text-xs text-slate-400">
+                  Tax rate (%)
+                  <input
+                    value={taxRatePct}
+                    onChange={(event) => setTaxRatePct(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    required
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 py-2 text-sm text-white"
+                  />
+                </label>
+                <label className="text-xs text-slate-400">
+                  Replacement warranty (days)
+                  <input
+                    value={replacementDays}
+                    onChange={(event) => setReplacementDays(event.target.value)}
+                    type="number"
+                    min="0"
+                    max="3650"
+                    step="1"
+                    required
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 py-2 text-sm text-white"
+                  />
+                </label>
               </div>
 
-              <div className="bg-[#16161B] p-4 rounded-xl border border-white/5 text-xs space-y-1">
-                <div className="flex justify-between text-[#FFCA28] font-bold">
-                  <span>Effective Fee Percentage:</span>
-                  <span>{calc.effectivePct}% of CTC</span>
+              <button
+                type="submit"
+                disabled={calculating}
+                className="rounded-xl bg-[#29B6F6] px-5 py-3 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {calculating ? "Calculating…" : "Calculate scenario"}
+              </button>
+            </form>
+
+            <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6" aria-labelledby="pricing-result-heading">
+              <h2 id="pricing-result-heading" className="text-lg font-bold">Calculation result</h2>
+              {!calculation || !calculatedCurrency ? (
+                <div className="mt-5 rounded-xl border border-dashed border-white/10 p-6 text-sm text-slate-400">
+                  Enter the complete scenario and calculate. No result is inferred before server validation.
                 </div>
-                <div className="flex justify-between text-[#29B6F6] font-bold">
-                  <span>Replacement Warranty:</span>
-                  <span>{calc.replacementWarrantyDays} Days SLA</span>
+              ) : (
+                <div className="mt-5 space-y-3 text-sm">
+                  {[
+                    ["Gross fee", calculation.grossFee],
+                    ["Discount", -calculation.discountAmount],
+                    ["Subtotal", calculation.subtotal],
+                    ["Tax", calculation.taxAmount],
+                    ["Total", calculation.totalAmount],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="flex items-center justify-between gap-4 border-b border-white/5 py-2">
+                      <span className="text-slate-400">{label}</span>
+                      <strong>{money(Number(value), calculatedCurrency)}</strong>
+                    </div>
+                  ))}
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-xs text-slate-300">
+                    <p>Effective fee: <strong>{calculation.effectivePct}%</strong> of supplied CTC</p>
+                    <p className="mt-1">Replacement warranty: <strong>{calculation.replacementWarrantyDays} days</strong></p>
+                    <p className="mt-2 text-slate-500">Scenario only. Nothing on this page is persisted.</p>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+            </section>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
