@@ -61,12 +61,17 @@ export default function AdminCopilotCommercePage() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [catalogueWarnings, setCatalogueWarnings] = useState<string[]>([]);
   const [changeReason, setChangeReason] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<CapacityOffer | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setConfigLoaded(false);
     setMessage("");
+    setCatalogueWarnings([]);
     try {
       const [res, offersRes] = await Promise.all([
         fetch("/api/admin/copilot/commerce", { cache: "no-store" }),
@@ -79,9 +84,27 @@ export default function AdminCopilotCommercePage() {
       setPlans(data.plans || []);
       setRules(data.usageRules || []);
       setCapacityOffers(offersData.offers || []);
+      const warnings: string[] = [];
+      if (data.catalogue?.plansTruncated) {
+        warnings.push(`Showing ${data.catalogue.planLoaded} of ${data.catalogue.planTotal} Copilot plans.`);
+      }
+      if (data.catalogue?.usageRulesTruncated) {
+        warnings.push(`Showing ${data.catalogue.usageRuleLoaded} of ${data.catalogue.usageRuleTotal} usage rules.`);
+      }
+      if (Array.isArray(data.catalogue?.priceTruncatedPlanIds) && data.catalogue.priceTruncatedPlanIds.length) {
+        warnings.push(`Regional prices are truncated for ${data.catalogue.priceTruncatedPlanIds.length} plan(s).`);
+      }
+      if (offersData.catalogue?.offersTruncated) {
+        warnings.push(`Showing ${offersData.catalogue.offerLoaded} of ${offersData.catalogue.offerTotal} capacity offers.`);
+      }
+      if (Array.isArray(offersData.catalogue?.priceTruncatedOfferIds) && offersData.catalogue.priceTruncatedOfferIds.length) {
+        warnings.push(`Regional prices are truncated for ${offersData.catalogue.priceTruncatedOfferIds.length} capacity offer(s).`);
+      }
+      setCatalogueWarnings(warnings);
       setConfigLoaded(true);
     } catch (error) {
       setConfigLoaded(false);
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to load Copilot commerce.");
     } finally {
       setLoading(false);
@@ -93,6 +116,7 @@ export default function AdminCopilotCommercePage() {
   async function createCapacityOffer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!configLoaded) {
+      setMessageTone("error");
       setMessage("Authoritative Copilot commerce configuration must load before offers can be created.");
       return;
     }
@@ -130,9 +154,11 @@ export default function AdminCopilotCommercePage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Unable to create capacity offer.");
       event.currentTarget.reset();
+      setMessageTone("success");
       setMessage("Capacity offer created.");
       await load();
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to create capacity offer.");
     } finally {
       setSaving("");
@@ -141,10 +167,12 @@ export default function AdminCopilotCommercePage() {
 
   async function patch(payload: Record<string, unknown>, key: string, expectedUpdatedAt: string) {
     if (!configLoaded) {
+      setMessageTone("error");
       setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
       return;
     }
     if (changeReason.trim().length < 3) {
+      setMessageTone("error");
       setMessage("Enter a change reason before saving Copilot commerce configuration.");
       return;
     }
@@ -162,10 +190,12 @@ export default function AdminCopilotCommercePage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Update failed.");
+      setMessageTone("success");
       setMessage("Saved and audited.");
       setChangeReason("");
       await load();
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Update failed.");
     } finally {
       setSaving("");
@@ -178,10 +208,12 @@ export default function AdminCopilotCommercePage() {
     expectedUpdatedAt: string,
   ) {
     if (!configLoaded) {
+      setMessageTone("error");
       setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
       return;
     }
     if (changeReason.trim().length < 3) {
+      setMessageTone("error");
       setMessage("Enter a change reason before saving Copilot capacity configuration.");
       return;
     }
@@ -202,11 +234,46 @@ export default function AdminCopilotCommercePage() {
       if (!response.ok || !result.success) {
         throw new Error(result.error || "Capacity offer update failed.");
       }
+      setMessageTone("success");
       setMessage("Capacity configuration saved and audited.");
       setChangeReason("");
       await load();
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Capacity offer update failed.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function archiveCapacityOffer() {
+    if (!archiveTarget || saving || archiveReason.trim().length < 3) return;
+    setSaving(`offer-state-${archiveTarget.id}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/copilot/capacity-offers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "OFFER",
+          offerId: archiveTarget.id,
+          isArchived: true,
+          expectedUpdatedAt: archiveTarget.updatedAt,
+          reason: archiveReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to archive capacity offer.");
+      }
+      setArchiveTarget(null);
+      setArchiveReason("");
+      setMessageTone("success");
+      setMessage("Capacity offer archived and audited.");
+      await load();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Unable to archive capacity offer.");
     } finally {
       setSaving("");
     }
@@ -251,7 +318,25 @@ export default function AdminCopilotCommercePage() {
         </label>
       </section>
 
-      {message && <div role="status" aria-live="polite" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#D5DBE5]">{message}</div>}
+      {message && (
+        <div
+          role={messageTone === "error" ? "alert" : "status"}
+          aria-live={messageTone === "error" ? "assertive" : "polite"}
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            messageTone === "error"
+              ? "border-red-400/25 bg-red-500/10 text-red-200"
+              : "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+      {catalogueWarnings.length > 0 && (
+        <div role="status" className="space-y-1 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          <p className="font-bold">Catalogue display is bounded</p>
+          {catalogueWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+        </div>
+      )}
 
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-[#16161B] p-10 text-center text-sm text-[#94A3B8]">Loading configuration…</div>
@@ -359,6 +444,7 @@ export default function AdminCopilotCommercePage() {
                           </td>
                           <td className="py-3 pr-3">
                             <select id={`tax-${price.id}`} defaultValue={price.taxMode} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.taxMode === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
                               <option value="NO_TAX_COLLECTION">No tax collection</option>
                               <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
@@ -369,6 +455,7 @@ export default function AdminCopilotCommercePage() {
                           </td>
                           <td className="py-3 pr-3">
                             <select id={`route-${price.id}`} defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.paymentRoute === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
                               <option value="PAYU">PayU</option>
                               <option value="STRIPE">Stripe</option>
                             </select>
@@ -482,13 +569,18 @@ export default function AdminCopilotCommercePage() {
                         <button
                           type="button"
                           disabled={saving === `offer-state-${offer.id}`}
-                          onClick={() =>
-                            void patchCapacityOffer(
-                              { type: "OFFER", offerId: offer.id, isArchived: !offer.isArchived },
-                              `offer-state-${offer.id}`,
-                              offer.updatedAt,
-                            )
-                          }
+                          onClick={() => {
+                            if (offer.isArchived) {
+                              void patchCapacityOffer(
+                                { type: "OFFER", offerId: offer.id, isArchived: false },
+                                `offer-state-${offer.id}`,
+                                offer.updatedAt,
+                              );
+                              return;
+                            }
+                            setArchiveReason("");
+                            setArchiveTarget(offer);
+                          }}
                           className={`rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50 ${
                             offer.isArchived ? "border-emerald-500/30 text-emerald-300" : "border-red-500/30 text-red-300"
                           }`}
@@ -524,6 +616,7 @@ export default function AdminCopilotCommercePage() {
                           <label className="text-[#94A3B8]">
                             Route
                             <select id={`offer-route-${price.id}`} defaultValue={price.paymentRoute} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.paymentRoute === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
                               <option value="STRIPE">Stripe</option>
                               <option value="PAYU">PayU</option>
                             </select>
@@ -612,6 +705,51 @@ export default function AdminCopilotCommercePage() {
       )}
         </main>
       </div>
+
+      {archiveTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-capacity-offer-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161B] p-6 shadow-2xl">
+            <h2 id="archive-capacity-offer-title" className="text-lg font-extrabold text-white">
+              Archive {archiveTarget.name}?
+            </h2>
+            <p className="mt-2 text-sm text-[#94A3B8]">
+              The offer will stop being available for new capacity purchases. Existing purchase and entitlement history remains persisted.
+            </p>
+            <label className="mt-5 block text-xs text-[#94A3B8]">
+              Archive reason
+              <textarea
+                value={archiveReason}
+                onChange={(event) => setArchiveReason(event.target.value)}
+                maxLength={500}
+                rows={4}
+                placeholder="Why should this capacity offer stop being sold?"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={Boolean(saving)}
+                onClick={() => {
+                  setArchiveTarget(null);
+                  setArchiveReason("");
+                }}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(saving) || archiveReason.trim().length < 3}
+                onClick={() => void archiveCapacityOffer()}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {saving ? "Archiving…" : "Archive offer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
