@@ -347,7 +347,7 @@ export default function EmployerSubscriptionsStorePage() {
               <button disabled={submitting} onClick={() => void checkout()} className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_14px_30px_rgba(62,76,210,.25)] disabled:opacity-50">
                 {submitting ? "Starting secure checkout…" : "Continue to payment"}
               </button>
-            )
+            )}
             {!checkoutPlan.copilotIncluded && copilotConfig?.enabled && !addCopilot ? (
               <p className="mt-3 text-center text-[11px] text-slate-500">You can continue without Co-Pilot and activate it later from an eligible plan/add-on.</p>
             ) : null}
