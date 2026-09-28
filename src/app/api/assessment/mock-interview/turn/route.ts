@@ -8,6 +8,7 @@ import { runMockInterviewStructured } from '@/lib/mockInterviewAi';
 
 const mockInterviewTurnSchema = z.object({
   sessionId: z.string().uuid(),
+  questionIndex: z.number().int().min(0).max(50),
   answer: z.string().trim().min(5, 'Answer must be at least 5 characters').max(10_000),
   durationMs: z.number().int().min(0).max(3_600_000).optional(),
 }).strict();
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     const body = await readValidatedJson(request, mockInterviewTurnSchema);
-    const { sessionId, answer, durationMs } = body;
+    const { sessionId, questionIndex, answer, durationMs } = body;
 
     const interviewSession = await prisma.mockInterviewSession.findUnique({
       where: { id: sessionId },
@@ -83,9 +84,29 @@ export async function POST(request: Request) {
       throw new ApiError('Interview is not in progress', 400);
     }
 
-    const currentTurn = interviewSession.turns.find(t => t.questionIndex === interviewSession.currentQuestionIndex);
+    const currentTurn = interviewSession.turns.find(t => t.questionIndex === questionIndex);
     if (!currentTurn) {
-      throw new ApiError('Turn not found', 500);
+      throw new ApiError('Turn not found', 404);
+    }
+
+    if (currentTurn.candidateAnswerTranscript !== null) {
+      if (currentTurn.candidateAnswerTranscript !== answer) {
+        throw new ApiError('This interview turn was already submitted.', 409);
+      }
+      const isComplete = questionIndex >= interviewSession.totalQuestions - 1;
+      const nextTurn = interviewSession.turns.find(t => t.questionIndex === questionIndex + 1);
+      return NextResponse.json({
+        success: true,
+        reused: true,
+        turnScore: currentTurn.score,
+        feedback: currentTurn.feedback,
+        nextQuestion: nextTurn ? { text: nextTurn.questionText, questionIndex: nextTurn.questionIndex } : undefined,
+        isComplete,
+      });
+    }
+
+    if (questionIndex !== interviewSession.currentQuestionIndex) {
+      throw new ApiError('The interview state changed. Please reload.', 409);
     }
 
     const { score: turnScore, feedback } = await evaluateTurn({
@@ -95,12 +116,12 @@ export async function POST(request: Request) {
       durationMs,
     });
 
-    const isComplete = interviewSession.currentQuestionIndex >= interviewSession.totalQuestions - 1;
+    const isComplete = questionIndex >= interviewSession.totalQuestions - 1;
 
     let nextQuestionData = undefined;
 
     if (!isComplete) {
-      const nextIndex = interviewSession.currentQuestionIndex + 1;
+      const nextIndex = questionIndex + 1;
       let nextQuestionText = '';
 
       const promptStr = [
@@ -148,7 +169,7 @@ export async function POST(request: Request) {
           },
         });
         const advancedSession = await tx.mockInterviewSession.updateMany({
-          where: { id: interviewSession.id, currentQuestionIndex: interviewSession.currentQuestionIndex },
+          where: { id: interviewSession.id, currentQuestionIndex: questionIndex },
           data: { currentQuestionIndex: nextQuestionData.questionIndex },
         });
         if (advancedSession.count !== 1) {
