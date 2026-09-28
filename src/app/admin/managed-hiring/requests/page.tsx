@@ -1,139 +1,316 @@
 "use client";
-import React, { useState, useEffect } from "react";
+
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import Link from "next/link";
+import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
-import { useRouter } from "next/navigation";
+
+type RequirementStatus =
+  | "SUBMITTED"
+  | "IN_DISCUSSION"
+  | "AGREEMENT_DRAFTED"
+  | "AGREEMENT_SENT"
+  | "ACTIVE"
+  | "CLOSED";
+
+type Requirement = {
+  id: string;
+  referenceCode: string;
+  companyId: string | null;
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  industry: string;
+  numberOfPositions: number;
+  jobTitles: string[];
+  experienceYears: string;
+  location: string;
+  joiningTimeline: string;
+  hiringPriority: string;
+  replacementExpectation: string;
+  salaryRangeMin: number;
+  salaryRangeMax: number;
+  currency: string;
+  status: RequirementStatus;
+  assignedSalesLead: string | null;
+  activeAgreementId: string | null;
+  activeAgreementStatus: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const PAGE_SIZE = 25;
+const statuses: RequirementStatus[] = [
+  "SUBMITTED",
+  "IN_DISCUSSION",
+  "AGREEMENT_DRAFTED",
+  "AGREEMENT_SENT",
+  "ACTIVE",
+  "CLOSED",
+];
 
 export default function AdminManagedHiringRequestsPage() {
-  const router = useRouter();
-  const [requests, setRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<Requirement[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+      });
+      if (deferredSearch.trim()) params.set("search", deferredSearch.trim());
+      if (status) params.set("status", status);
+
+      const response = await fetch(
+        `/api/admin/managed-hiring/requirements?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !Array.isArray(payload.requirements)) {
+        throw new Error(payload.error || "Unable to load managed-hiring requirements.");
+      }
+
+      setRequests(payload.requirements);
+      setTotal(typeof payload.total === "number" ? payload.total : 0);
+    } catch (cause) {
+      setRequests([]);
+      setTotal(0);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to load managed-hiring requirements.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [deferredSearch, page, status]);
 
   useEffect(() => {
-    async function fetchRequests() {
-      try {
-        const res = await fetch("/api/agreements/requirements");
-        const data = await res.json();
-        if (data.success) {
-          setRequests(data.requirements);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchRequests();
-  }, []);
+    setPage(1);
+  }, [deferredSearch, status]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "SUBMITTED": return "bg-blue-500/10 text-blue-400 border-blue-500/20";
-      case "REVIEWING": return "bg-yellow/10 text-yellow border-yellow/20";
-      case "DRAFTING_AGREEMENT": return "bg-purple-500/10 text-purple-400 border-purple-500/20";
-      case "AGREEMENT_SENT": return "bg-green/10 text-green border-green/20";
-      case "CLOSED": return "bg-white/5 text-white/40 border-white/10";
-      default: return "bg-white/10 text-white border-white/20";
-    }
-  };
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
+    <div className="min-h-screen bg-[#0E0E0E] text-text-primary">
       <AdminSidebar />
-      <div className="flex-1 p-6 md:p-8 ml-0 md:ml-64 transition-all duration-300">
-        
-        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="font-display-md text-3xl font-bold text-white mb-2">Hiring Mandates Pipeline</h1>
-            <p className="text-sm text-text-secondary">Review employer requirements and initiate commercial agreements.</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => router.push("/admin/managed-hiring/templates")}
-              className="px-4 py-2 bg-surface-container border border-white/10 hover:bg-white/5 transition-colors rounded-lg text-sm text-white flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">library_books</span>
-              Templates Library
-            </button>
-            <button
-              onClick={() => router.push("/admin/managed-hiring/agreements/builder")}
-              className="px-4 py-2 bg-primary hover:bg-primary/90 transition-colors rounded-lg text-sm text-white font-bold flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Draft Agreement
-            </button>
-          </div>
-        </header>
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Managed Hiring Requests"
+          subtitle="Authoritative employer mandates and agreement readiness"
+        />
 
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
-          </div>
-        ) : (
-          <div className="glass-card rounded-2xl overflow-hidden border border-white/10">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-surface-container-high border-b border-white/10">
-                  <tr>
-                    <th className="p-4 font-semibold text-text-secondary uppercase tracking-wider text-xs">Reference / Company</th>
-                    <th className="p-4 font-semibold text-text-secondary uppercase tracking-wider text-xs">Roles & Volume</th>
-                    <th className="p-4 font-semibold text-text-secondary uppercase tracking-wider text-xs">Timeline & Priority</th>
-                    <th className="p-4 font-semibold text-text-secondary uppercase tracking-wider text-xs">Status</th>
-                    <th className="p-4 font-semibold text-text-secondary uppercase tracking-wider text-xs text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {requests.length > 0 ? requests.map((req) => (
-                    <tr key={req.id} className="hover:bg-white/5 transition-colors group">
-                      <td className="p-4">
-                        <p className="font-mono text-xs text-primary mb-1">{req.referenceCode}</p>
-                        <p className="font-bold text-white text-base">{req.companyName}</p>
-                        <p className="text-xs text-text-secondary">{req.contactPerson} | {req.email}</p>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {req.jobTitles.map((t: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-white/5 rounded text-xs text-white/80">{t}</span>
-                          ))}
-                        </div>
-                        <p className="text-xs text-text-secondary">{req.numberOfPositions} Position(s) • {req.experienceYears}</p>
-                        <p className="text-xs text-text-secondary">{req.currency === "INR" ? "₹" : "$"}{req.salaryRangeMax} Max CTC</p>
-                      </td>
-                      <td className="p-4">
-                        <p className="text-sm text-white mb-1">{req.joiningTimeline}</p>
-                        <p className="text-xs text-text-secondary mb-1">Warranty: {req.replacementExpectation}</p>
-                        {req.hiringPriority.includes("Urgent") && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red/20 text-red uppercase">
-                            <span className="material-symbols-outlined text-[10px]">local_fire_department</span>
-                            Urgent
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusColor(req.status)}`}>
-                          {req.status.replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => router.push(`/admin/managed-hiring/agreements/builder?reqId=${req.id}`)}
-                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-xs font-semibold transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          Draft Agreement
-                        </button>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-text-secondary">
-                        No hiring mandates found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        <main className="mx-auto w-full max-w-[1600px] space-y-6 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white sm:text-3xl">
+                Hiring mandates
+              </h1>
+              <p className="mt-2 text-sm text-text-secondary">
+                Review persisted requirements and initiate commercial agreement work only from company-bound records.
+              </p>
             </div>
-          </div>
-        )}
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/agreements/templates"
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white"
+              >
+                Agreement templates
+              </Link>
+              <Link
+                href="/admin/agreements/builder"
+                className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white"
+              >
+                Draft agreement
+              </Link>
+            </div>
+          </header>
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+            >
+              {error}
+            </div>
+          )}
+
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#141418]">
+            <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="font-bold text-white">Requirement queue</h2>
+                <p className="mt-1 text-xs text-text-muted">
+                  {total} matching requirement{total === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <label className="text-xs text-text-muted">
+                  Search
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    maxLength={120}
+                    placeholder="Reference, company, contact or email"
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white sm:w-72"
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  Status
+                  <select
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#17171b] px-3 py-2 text-sm text-white sm:w-52"
+                  >
+                    <option value="">All statuses</option>
+                    {statuses.map((item) => (
+                      <option key={item} value={item}>
+                        {item.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            {loading ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-12 text-center text-sm text-text-muted"
+              >
+                Loading persisted requirements…
+              </div>
+            ) : requests.length === 0 && !error ? (
+              <div className="p-12 text-center text-sm text-text-muted">
+                No managed-hiring requirements match the current filters.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-[1120px] w-full text-left text-xs">
+                  <thead className="bg-white/[0.03] text-text-muted">
+                    <tr>
+                      <th className="px-5 py-4">Reference / company</th>
+                      <th className="px-5 py-4">Roles & volume</th>
+                      <th className="px-5 py-4">Timeline / location</th>
+                      <th className="px-5 py-4">Commercial evidence</th>
+                      <th className="px-5 py-4">Status</th>
+                      <th className="px-5 py-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {requests.map((request) => (
+                      <tr key={request.id}>
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-mono text-[10px] text-primary">
+                            {request.referenceCode}
+                          </p>
+                          <p className="mt-1 font-bold text-white">{request.companyName}</p>
+                          <p className="mt-1 text-text-muted">
+                            {request.contactPerson} · {request.email}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex max-w-xs flex-wrap gap-1">
+                            {request.jobTitles.map((title) => (
+                              <span
+                                key={title}
+                                className="rounded bg-white/5 px-2 py-1 text-[10px] text-text-secondary"
+                              >
+                                {title}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-text-muted">
+                            {request.numberOfPositions} position{request.numberOfPositions === 1 ? "" : "s"} · {request.experienceYears}
+                          </p>
+                          <p className="mt-1 text-text-muted">
+                            {request.currency} {request.salaryRangeMin.toLocaleString()}–{request.salaryRangeMax.toLocaleString()}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4 align-top text-text-secondary">
+                          <p>{request.location}</p>
+                          <p className="mt-1">{request.joiningTimeline}</p>
+                          <p className="mt-1">Priority: {request.hiringPriority}</p>
+                          <p className="mt-1">Replacement: {request.replacementExpectation}</p>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          {request.companyId ? (
+                            <p className="text-emerald-300">Company bound</p>
+                          ) : (
+                            <p className="text-red-300">Missing company binding</p>
+                          )}
+                          <p className="mt-1 text-text-muted">
+                            Agreement: {request.activeAgreementStatus?.replaceAll("_", " ") || "None active"}
+                          </p>
+                          {request.assignedSalesLead && (
+                            <p className="mt-1 text-text-muted">
+                              Sales lead: {request.assignedSalesLead}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <span className="rounded-full border border-white/10 px-2.5 py-1 font-bold">
+                            {request.status.replaceAll("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right align-top">
+                          <Link
+                            href={`/admin/agreements/builder?reqId=${encodeURIComponent(request.id)}`}
+                            aria-disabled={!request.companyId}
+                            className={`rounded-lg px-3 py-2 font-bold ${
+                              request.companyId
+                                ? "bg-primary text-white"
+                                : "pointer-events-none border border-white/10 text-text-muted opacity-50"
+                            }`}
+                          >
+                            Draft agreement
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {total > PAGE_SIZE && (
+              <div className="flex items-center justify-between border-t border-white/10 p-4">
+                <button
+                  type="button"
+                  disabled={loading || page <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-text-muted">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={loading || page >= totalPages}
+                  onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </section>
+        </main>
       </div>
     </div>
   );
