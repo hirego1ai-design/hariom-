@@ -10,9 +10,6 @@ type Job = {
   title: string;
   location: string;
   type: string;
-  workMode: string;
-  experienceLevel: string;
-  numberOfOpenings: number;
   salaryRange: string | null;
   description: string;
   requirements: string[];
@@ -265,12 +262,7 @@ export default function JobsPage() {
               <article key={job.id} className="rounded-xl border border-outline bg-bg-card p-6">
                 <p className="text-sm text-primary">{job.company.name}</p>
                 <h2 className="mt-1 text-xl font-semibold">{job.title}</h2>
-                <p className="mt-2 text-sm text-text-muted">
-                  {job.location} · {job.type} · {job.workMode} · {job.experienceLevel}
-                </p>
-                <p className="mt-1 text-xs text-text-muted">
-                  {job.numberOfOpenings} opening{job.numberOfOpenings === 1 ? "" : "s"}
-                </p>
+                <p className="mt-2 text-sm text-text-muted">{job.location} · {job.type}</p>
                 {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>
 
                 {recommendation?.matchScore !== null && recommendation?.matchScore !== undefined ? (
