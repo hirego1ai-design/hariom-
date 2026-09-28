@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 
 type RegionalPrice = {
   id: string;
@@ -12,6 +14,7 @@ type RegionalPrice = {
   taxMode: "NO_TAX_COLLECTION" | "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
   paymentRoute: "PAYU" | "STRIPE" | "MERCHANT_OF_RECORD";
   isActive: boolean;
+  updatedAt: string;
 };
 
 type Plan = {
@@ -23,6 +26,7 @@ type Plan = {
   softWarningPct: number;
   hardWarningPct: number;
   isArchived: boolean;
+  updatedAt: string;
   regionalPrices: RegionalPrice[];
 };
 
@@ -33,6 +37,7 @@ type CapacityOffer = {
   description: string;
   capacityUnits: number;
   isArchived: boolean;
+  updatedAt: string;
   regionalPrices: RegionalPrice[];
 };
 
@@ -45,6 +50,7 @@ type UsageRule = {
   estimatedCostCurrency: string;
   expensive: boolean;
   active: boolean;
+  updatedAt: string;
 };
 
 export default function AdminCopilotCommercePage() {
@@ -55,6 +61,7 @@ export default function AdminCopilotCommercePage() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
+  const [changeReason, setChangeReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +106,7 @@ export default function AdminCopilotCommercePage() {
       name: String(form.get("name") || "").trim(),
       description: String(form.get("description") || "").trim(),
       capacityUnits: Number(form.get("capacityUnits")),
+      reason: String(form.get("reason") || "").trim(),
       prices: [{
         regionCode: String(form.get("regionCode") || "").trim().toUpperCase(),
         countries,
@@ -117,7 +125,11 @@ export default function AdminCopilotCommercePage() {
       const res = await fetch("/api/admin/copilot/capacity-offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt,
+          reason: changeReason.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Unable to create capacity offer.");
@@ -131,9 +143,13 @@ export default function AdminCopilotCommercePage() {
     }
   }
 
-  async function patch(payload: Record<string, unknown>, key: string) {
+  async function patch(payload: Record<string, unknown>, key: string, expectedUpdatedAt: string) {
     if (!configLoaded) {
       setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
+      return;
+    }
+    if (changeReason.trim().length < 3) {
+      setMessage("Enter a change reason before saving Copilot commerce configuration.");
       return;
     }
     setSaving(key);
@@ -146,7 +162,8 @@ export default function AdminCopilotCommercePage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Update failed.");
-      setMessage("Saved.");
+      setMessage("Saved and audited.");
+      setChangeReason("");
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Update failed.");
@@ -156,7 +173,14 @@ export default function AdminCopilotCommercePage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="min-h-screen bg-[#0E0E0E] text-white">
+      <AdminSidebar />
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Copilot Commerce"
+          subtitle="Standalone Copilot plans, regional pricing, capacity offers and internal usage economics."
+        />
+        <main className="mx-auto max-w-7xl space-y-8 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
       <header className="rounded-[28px] border border-white/10 bg-[#141418] p-6 md:p-8">
         <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-[#7FB0FF]">Admin · Global Commerce</p>
         <h1 className="mt-2 text-3xl font-extrabold text-white">HireGo Copilot Commerce Control</h1>
@@ -166,7 +190,21 @@ export default function AdminCopilotCommercePage() {
         </p>
       </header>
 
-      {message && <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#D5DBE5]">{message}</div>}
+      <section className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
+        <label className="block text-xs font-bold uppercase tracking-wider text-amber-200">
+          Change reason for existing commerce configuration
+          <textarea
+            value={changeReason}
+            onChange={(event) => setChangeReason(event.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="Required before saving an existing plan, price or usage rule."
+            className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm font-normal normal-case tracking-normal text-white"
+          />
+        </label>
+      </section>
+
+      {message && <div role="status" aria-live="polite" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#D5DBE5]">{message}</div>}
 
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-[#16161B] p-10 text-center text-sm text-[#94A3B8]">Loading configuration…</div>
@@ -178,6 +216,11 @@ export default function AdminCopilotCommercePage() {
         <>
           <section className="space-y-5">
             <h2 className="text-xl font-extrabold text-white">Plans & regional prices</h2>
+            {plans.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-sm text-[#94A3B8]">
+                No Copilot plans are configured.
+              </div>
+            )}
             {plans.map((plan) => (
               <article key={plan.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-6">
                 <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
@@ -212,7 +255,7 @@ export default function AdminCopilotCommercePage() {
                     onClick={() => {
                       const cap = Number((document.getElementById(`cap-${plan.id}`) as HTMLInputElement)?.value);
                       const soft = Number((document.getElementById(`soft-${plan.id}`) as HTMLInputElement)?.value);
-                      void patch({ type: "PLAN", planId: plan.id, monthlyCapacityUnits: cap, softWarningPct: soft }, plan.id);
+                      void patch({ type: "PLAN", planId: plan.id, monthlyCapacityUnits: cap, softWarningPct: soft }, plan.id, plan.updatedAt);
                     }}
                     className="rounded-xl bg-[#448AFF] px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
                   >
@@ -272,7 +315,7 @@ export default function AdminCopilotCommercePage() {
                                 const taxMode = (document.getElementById(`tax-${price.id}`) as HTMLSelectElement)?.value;
                                 const taxRateBps = Math.round(Number((document.getElementById(`tax-rate-${price.id}`) as HTMLInputElement)?.value) * 100);
                                 const paymentRoute = (document.getElementById(`route-${price.id}`) as HTMLSelectElement)?.value;
-                                void patch({ type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, taxRateBps, paymentRoute }, price.id);
+                                void patch({ type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, taxRateBps, paymentRoute }, price.id, price.updatedAt);
                               }}
                               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-bold text-white hover:bg-white/10 disabled:opacity-50"
                             >
@@ -301,6 +344,7 @@ export default function AdminCopilotCommercePage() {
               <input name="name" required placeholder="Customer name, e.g. Small Boost" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
               <input name="description" required placeholder="Customer-facing description" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white lg:col-span-2" />
               <input name="capacityUnits" required type="number" min={1} placeholder="Internal capacity units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <input name="reason" required minLength={3} maxLength={500} placeholder="Creation reason (required)" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white lg:col-span-2" />
               <input name="regionCode" required placeholder="Region, e.g. IN" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="countries" required placeholder="Countries, e.g. IN or DE,FR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="currency" required maxLength={3} placeholder="INR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
@@ -377,6 +421,9 @@ export default function AdminCopilotCommercePage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {rules.length === 0 && (
+                    <tr><td colSpan={7} className="p-8 text-center text-[#94A3B8]">No Copilot usage rules are configured.</td></tr>
+                  )}
                   {rules.map((rule) => (
                     <tr key={rule.actionKey} className="border-b border-white/5 text-[#D5DBE5]">
                       <td className="py-3 pr-3">
@@ -394,7 +441,7 @@ export default function AdminCopilotCommercePage() {
                           onClick={() => {
                             const unitsPerQuantity = Number((document.getElementById(`rule-units-${rule.actionKey}`) as HTMLInputElement)?.value);
                             const estimatedCostMinor = Number((document.getElementById(`rule-cost-${rule.actionKey}`) as HTMLInputElement)?.value);
-                            void patch({ type: "USAGE_RULE", actionKey: rule.actionKey, unitsPerQuantity, estimatedCostMinor }, rule.actionKey);
+                            void patch({ type: "USAGE_RULE", actionKey: rule.actionKey, unitsPerQuantity, estimatedCostMinor }, rule.actionKey, rule.updatedAt);
                           }}
                           className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-bold text-white hover:bg-white/10 disabled:opacity-50"
                         >
@@ -409,6 +456,8 @@ export default function AdminCopilotCommercePage() {
           </section>
         </>
       )}
+        </main>
+      </div>
     </div>
   );
 }
