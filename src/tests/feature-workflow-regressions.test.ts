@@ -1601,3 +1601,64 @@ test("admin candidate service and credit APIs use centralized bounded authorizat
   assert(offers.includes("take: 100"));
   assert(offers.includes("take: 250"));
 });
+
+
+test("admin referral governance persists fraud state and keeps payout ledger balances authoritative", () => {
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const migration = fs.readFileSync(new URL("../../prisma/migrations/20260928082500_referral_fraud_persistence/migration.sql", import.meta.url), "utf8");
+  const db = fs.readFileSync(new URL("../lib/referral-db.ts", import.meta.url), "utf8");
+  const fraudRoute = fs.readFileSync(new URL("../app/api/admin/referrals/fraud/route.ts", import.meta.url), "utf8");
+  const payoutsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/payouts/route.ts", import.meta.url), "utf8");
+  const configRoute = fs.readFileSync(new URL("../app/api/admin/referrals/config/route.ts", import.meta.url), "utf8");
+  const analyticsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/analytics/route.ts", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/admin/referrals/page.tsx", import.meta.url), "utf8");
+
+  assert(schema.includes("model ReferralFraudProfile"));
+  assert(schema.includes("model ReferralFraudAudit"));
+  assert(schema.includes("enum ReferralFraudStatus"));
+  assert(migration.includes('CREATE TABLE "ReferralFraudProfile"'));
+  assert(migration.includes('CREATE TABLE "ReferralFraudAudit"'));
+
+  assert(db.includes("prisma.referralFraudProfile"));
+  assert(db.includes("prisma.referralFraudAudit.create"));
+  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
+  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
+  assert(db.includes("getAdminFraudQueuePage"));
+  assert(db.includes('orderBy: [{ riskScore: "desc" }, { updatedAt: "desc" }, { userId: "asc" }]'));
+
+  assert(fraudRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(fraudRoute.includes('admin_referral_fraud_read:${admin.id}'));
+  assert(fraudRoute.includes('admin_referral_fraud_update:${admin.id}'));
+  assert(fraudRoute.includes("getAdminFraudQueuePage"));
+
+  assert(payoutsRoute.includes("Approval rationale is required."));
+  assert(payoutsRoute.includes("Settlement transaction reference is required."));
+  assert(payoutsRoute.includes("Rejection reason is required."));
+  assert(payoutsRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(payoutsRoute.includes('admin_referral_payouts_read:${admin.id}'));
+  assert(payoutsRoute.includes('admin_referral_payouts_update:${admin.id}'));
+
+  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(configRoute.includes('admin_referral_config_write:${admin.id}'));
+
+  assert(analyticsRoute.includes('by: ["currency", "status"]'));
+  assert(analyticsRoute.includes("currencyMode"));
+  assert(analyticsRoute.includes('status: "NOT_MEASURED"'));
+
+  assert(db.includes("remainingAvailable._sum.rewardAmount ?? 0"));
+  assert(db.includes("availableAfterRelease._sum.rewardAmount ?? 0"));
+  assert(db.includes("availableAfterReservation"));
+  assert(db.includes("availableAfterSettlement"));
+  assert(db.includes("availableAfterRejection"));
+  assert(!db.includes("entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,\n      amount: payout.amount,\n      balanceAfter: 0"));
+  assert(!db.includes("entryType: ReferralLedgerEntryType.PAYOUT_REFUNDED,\n      amount: payout.amount,\n      balanceAfter: payout.amount"));
+
+  assert(page.includes("expectedUpdatedAt: new Date(config.updatedAt).toISOString()"));
+  assert(page.includes("expectedUpdatedAt: new Date(payout.updatedAt).toISOString()"));
+  assert(page.includes("expectedUpdatedAt: new Date(fraudTarget.profile.updatedAt"));
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("Page {payoutPage} of {payoutPages}"));
+  assert(page.includes("Page {fraudPage} of {fraudPages}"));
+  assert(page.includes("analytics.summary.currencyMode"));
+});
