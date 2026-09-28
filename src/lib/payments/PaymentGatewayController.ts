@@ -164,9 +164,11 @@ export class PaymentGatewayController {
       }
     }
     const active = providerNames.filter((gw) => updated.gatewaysStatus[gw] !== "DISABLED");
-    if (active.length === 0) throw new Error("At least one payment gateway must remain enabled.");
-    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED") updated.primaryGateway = active[0];
-    if (updated.mode === "AUTO" && !updated.priorities.some((gw) => updated.gatewaysStatus[gw] !== "DISABLED")) throw new Error("AUTO mode requires an enabled gateway in the priority list.");
+    // An all-disabled configuration is a valid emergency/maintenance state.
+    // Order creation below fails closed when there is no enabled provider.
+    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED" && active.length > 0) {
+      updated.primaryGateway = active[0];
+    }
     
     try {
       await prisma.paymentGatewayConfig.upsert({
@@ -259,7 +261,7 @@ export class PaymentGatewayController {
     }
 
     if (candidateSequence.length === 0) {
-      throw new Error("No active or healthy payment gateways available.");
+      throw new Error("No enabled payment gateways are available.");
     }
 
     let lastError: Error | null = null;
