@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { assertCandidateRecordedAssessmentApplicationEligible } from "@/lib/recordedAssessment";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       include: { questions: { select: { id: true, response: { select: { id: true } } } } },
     });
     if (!attempt) throw new ApiError("Assessment attempt not found.", 404);
+    await assertCandidateRecordedAssessmentApplicationEligible(session.id, attempt.jobListingId);
     if (attempt.status === "COMPLETED") return NextResponse.json({ success: true, status: "COMPLETED", idempotent: true });
     if (attempt.status !== "IN_PROGRESS") throw new ApiError("Only an active assessment can be completed.", 409);
     if (attempt.questions.length === 0 || attempt.questions.some((q) => !q.response)) throw new ApiError("Every assessment question must have a saved response before completion.", 409);
