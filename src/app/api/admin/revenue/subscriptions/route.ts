@@ -9,12 +9,13 @@ export async function GET(req: NextRequest) {
     const admin = await requireAdminSession(req);
     await enforceRateLimit(req, `admin_revenue_subscriptions:${admin.id}`, 60, 60_000);
 
-    const [plans, payments] = await Promise.all([
+    const [plans, subscriptionCounts, payments] = await Promise.all([
       prisma.subscriptionPlan.findMany({
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: {
           subscriptions: {
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 50,
             include: {
               company: {
                 select: { id: true, name: true },
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
             },
           },
         },
+      }),
+      prisma.companySubscription.groupBy({
+        by: ["planId", "status"],
+        _count: { _all: true },
       }),
       prisma.paymentTransaction.findMany({
         where: {
@@ -59,9 +64,15 @@ export async function GET(req: NextRequest) {
           return [currency, { total, formatted: formatMoney(total, currency) }];
         }),
       );
-      const active = plan.subscriptions.filter((subscription) => subscription.status === "ACTIVE").length;
-      const expired = plan.subscriptions.filter((subscription) => subscription.status === "EXPIRED").length;
-      const cancelled = plan.subscriptions.filter((subscription) => subscription.status === "CANCELLED").length;
+      const statusCounts = subscriptionCounts.filter((row) => row.planId === plan.id);
+      const countFor = (status: string) =>
+        statusCounts
+          .filter((row) => row.status === status)
+          .reduce((sum, row) => sum + row._count._all, 0);
+      const active = countFor("ACTIVE");
+      const expired = countFor("EXPIRED");
+      const cancelled = countFor("CANCELLED");
+      const totalSubscribers = statusCounts.reduce((sum, row) => sum + row._count._all, 0);
 
       return {
         id: plan.id,
@@ -72,7 +83,8 @@ export async function GET(req: NextRequest) {
         currency: plan.currency,
         validityMonths: plan.validityMonths,
         isArchived: plan.isArchived,
-        totalSubscribers: plan.subscriptions.length,
+        totalSubscribers,
+        customerPreviewLimit: 50,
         active,
         expired,
         cancelled,
