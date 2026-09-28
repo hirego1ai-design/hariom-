@@ -21,10 +21,14 @@ export async function GET(req: NextRequest) {
 
     const [plans, rules] = await Promise.all([
       prisma.copilotPlan.findMany({
-        include: { regionalPrices: { orderBy: [{ regionCode: "asc" }] } },
+        include: { regionalPrices: { orderBy: [{ regionCode: "asc" }, { id: "asc" }], take: 250 } },
         orderBy: [{ monthlyCapacityUnits: "asc" }, { id: "asc" }],
+        take: 100,
       }),
-      prisma.copilotUsageRule.findMany({ orderBy: [{ actionKey: "asc" }, { id: "asc" }] }),
+      prisma.copilotUsageRule.findMany({
+        orderBy: [{ actionKey: "asc" }, { id: "asc" }],
+        take: 500,
+      }),
     ]);
 
     return NextResponse.json({
