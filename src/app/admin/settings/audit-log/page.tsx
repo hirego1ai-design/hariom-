@@ -75,7 +75,7 @@ export default function AdminAuditLogPage() {
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[11px] font-bold text-[#FFCA28]">{log.action || "SYSTEM_EVENT"}</span>
-                      <span className="text-[10px] text-slate-500">IP: {log.ipAddress || "127.0.0.1"}</span>
+                      <span className="text-[10px] text-slate-500">IP: {log.ipAddress || "Not recorded"}</span>
                     </div>
                     <p className="text-slate-300">{typeof log.details === "string" ? log.details : JSON.stringify(log.details || {})}</p>
                   </div>
