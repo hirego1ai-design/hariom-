@@ -11,12 +11,13 @@ const connectedItems = [
   ["LLM Usage", "llm-usage"],
   ["Audit Log", "audit-log"],
   ["Platform Analytics", "analytics"],
+  ["API & Integrations", "integrations"],
 ];
 
 const unavailableItems = [
   "Domain & SSL provider control",
-  "Third-party integrations registry",
-  "AI agent registry mutations",
+  "Third-party integrations registry connection state",
+  "Generic AI-agent registry creation/deletion",
   "Legal-document publishing",
 ];
 
@@ -26,7 +27,7 @@ export default function PlatformSettingsHubPage() {
   const prefix = isAdmin ? "/admin/settings" : "/settings";
 
   return (
-    <div className="min-h-screen bg-[#090A0F] text-white p-8">
+    <div className="min-h-screen bg-[#090A0F] p-4 text-white sm:p-6 lg:p-8">
       <div className="mx-auto max-w-6xl space-y-8">
         <div>
           <h1 className="text-3xl font-extrabold">Platform Settings Hub</h1>
@@ -44,6 +45,11 @@ export default function PlatformSettingsHubPage() {
           <Link href="/admin/subscriptions" className="rounded-2xl border border-white/10 bg-[#12131A] p-5 text-sm font-bold hover:border-primary/50">
             Subscription Plans
           </Link>
+          {isAdmin && (
+            <Link href="/admin/ai-command-centre-dashboard" className="rounded-2xl border border-white/10 bg-[#12131A] p-5 text-sm font-bold hover:border-primary/50">
+              AI Control Centre
+            </Link>
+          )}
         </section>
 
         <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6">
