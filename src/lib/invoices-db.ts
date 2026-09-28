@@ -69,7 +69,15 @@ class InvoicesDb {
       return presentInvoice(created);
     });
   }
-  async reviewReceipt(id: string, action: "approve" | "reject", actorId: string, paidDate?: string, expectedUpdatedAt?: string, ipAddress?: string): Promise<InvoiceRecord | null> {
+  async reviewReceipt(
+    id: string,
+    action: "approve" | "reject",
+    actorId: string,
+    paidDate?: string,
+    expectedUpdatedAt?: string,
+    ipAddress?: string,
+    reason?: string,
+  ): Promise<InvoiceRecord | null> {
     return prisma.$transaction(async tx => {
       const row = await tx.invoice.findUnique({ where: { id } });
       if (!row) return null;
@@ -81,7 +89,7 @@ class InvoicesDb {
       const changed = await tx.invoice.updateMany({
         where: { id, status: "PENDING_VERIFICATION", updatedAt: row.updatedAt },
         data: { status, paidDate: action === "approve" ? paidDate || new Date().toISOString().slice(0, 10) : null,
-          notes: JSON.stringify({ ...metadata, receiptReview: { action, actorId, reviewedAt } }) },
+          notes: JSON.stringify({ ...metadata, receiptReview: { action, actorId, reviewedAt, reason: reason?.trim() || null } }) },
       });
       if (changed.count !== 1) throw new ApiError("Invoice changed; refresh before reviewing", 409);
       const updated = await tx.invoice.findUniqueOrThrow({ where: { id } });
@@ -93,7 +101,7 @@ class InvoicesDb {
         action: action === "approve" ? "INVOICE_RECEIPT_APPROVED" : "INVOICE_RECEIPT_REJECTED",
         resource: `Invoice:${row.id}`,
         ipAddress: ipAddress || "unknown",
-        details: `Receipt ${action === "approve" ? "approved" : "rejected"} for invoice ${row.invoiceNumber} (StoredFile:${String(metadata.storedFileId)})`,
+        details: `Receipt ${action === "approve" ? "approved" : "rejected"} for invoice ${row.invoiceNumber} (StoredFile:${String(metadata.storedFileId)}); reviewer reason recorded=${Boolean(reason?.trim())}`,
       } });
       await enqueueSecurityAuditEvent(tx, auditLog, actorId);
       return presentInvoice(updated);
