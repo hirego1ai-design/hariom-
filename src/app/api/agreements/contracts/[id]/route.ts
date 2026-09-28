@@ -152,6 +152,25 @@ export async function PUT(
         ...(updates.validityEndDate ? { validityEndDate: new Date(updates.validityEndDate) } : {}),
       };
 
+      if (current.requirementId) {
+        const nextInvoiceRule = updates.invoiceRule ?? current.invoiceRule;
+        const nextAdvancePayment =
+          updates.advancePaymentAmount ?? current.advancePaymentAmount;
+
+        if (nextInvoiceRule !== "DAY_25") {
+          throw new ApiError(
+            "Managed hiring agreements must keep the DAY_25 invoice rule supported by the production placement billing workflow.",
+            422,
+          );
+        }
+        if (nextAdvancePayment !== 0) {
+          throw new ApiError(
+            "Managed hiring DAY_25 placement billing does not support advance payment.",
+            422,
+          );
+        }
+      }
+
       const startDate =
         data.validityStartDate instanceof Date ? data.validityStartDate : current.validityStartDate;
       const endDate =
