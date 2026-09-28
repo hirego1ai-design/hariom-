@@ -11,6 +11,7 @@ export default function EmployerCompanyProfileEditorPage() {
   const [website, setWebsite] = useState("");
   const [hqLocation, setHqLocation] = useState("");
   const [loading, setLoading] = useState(true);
+  const [canEditCompany, setCanEditCompany] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
@@ -32,6 +33,7 @@ export default function EmployerCompanyProfileEditorPage() {
         setCompanySize(data.company.size || "");
         setWebsite(data.company.website || "");
         setHqLocation(data.company.location || "");
+        setCanEditCompany(Boolean(data.permissions?.canEditCompany));
       })
       .catch((error) => {
         if (!cancelled) {
@@ -50,6 +52,11 @@ export default function EmployerCompanyProfileEditorPage() {
 
   async function handleSave() {
     if (saving) return;
+    if (!canEditCompany) {
+      setMessageType("error");
+      setMessage("Your recruiter role has read-only access to company profile settings.");
+      return;
+    }
     if (companyName.trim().length < 2) {
       setMessageType("error");
       setMessage("Company name must contain at least 2 characters.");
@@ -106,10 +113,10 @@ export default function EmployerCompanyProfileEditorPage() {
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={loading || saving}
+            disabled={loading || saving || !canEditCompany}
             className="btn-3d-red rounded-full px-6 py-2.5 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save Profile"}
+            {saving ? "Saving…" : canEditCompany ? "Save Profile" : "Read only"}
           </button>
         </header>
 
@@ -124,6 +131,12 @@ export default function EmployerCompanyProfileEditorPage() {
               }`}
             >
               {message}
+            </div>
+          )}
+
+          {!loading && !canEditCompany && (
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">
+              Recruiter access is read-only. A company administrator can update these company-wide fields.
             </div>
           )}
 
@@ -143,6 +156,7 @@ export default function EmployerCompanyProfileEditorPage() {
                       type="text"
                       value={companyName}
                       maxLength={160}
+                      disabled={!canEditCompany}
                       onChange={(event) => setCompanyName(event.target.value)}
                       className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
                       placeholder="Company legal or operating name"
@@ -155,6 +169,7 @@ export default function EmployerCompanyProfileEditorPage() {
                       type="text"
                       value={industry}
                       maxLength={120}
+                      disabled={!canEditCompany}
                       onChange={(event) => setIndustry(event.target.value)}
                       className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
                       placeholder="Industry (optional)"
@@ -168,6 +183,7 @@ export default function EmployerCompanyProfileEditorPage() {
                     rows={5}
                     value={about}
                     maxLength={5000}
+                    disabled={!canEditCompany}
                     onChange={(event) => setAbout(event.target.value)}
                     className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-4 text-xs font-normal normal-case tracking-normal text-white outline-none focus:border-primary"
                     placeholder="Mission, culture and company information (optional)"
@@ -181,6 +197,7 @@ export default function EmployerCompanyProfileEditorPage() {
                       type="text"
                       value={companySize}
                       maxLength={80}
+                      disabled={!canEditCompany}
                       onChange={(event) => setCompanySize(event.target.value)}
                       className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
                       placeholder="Company size (optional)"
@@ -193,6 +210,7 @@ export default function EmployerCompanyProfileEditorPage() {
                       type="url"
                       value={website}
                       maxLength={500}
+                      disabled={!canEditCompany}
                       onChange={(event) => setWebsite(event.target.value)}
                       className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
                       placeholder="https://company.example"
@@ -209,6 +227,7 @@ export default function EmployerCompanyProfileEditorPage() {
                     type="text"
                     value={hqLocation}
                     maxLength={200}
+                    disabled={!canEditCompany}
                     onChange={(event) => setHqLocation(event.target.value)}
                     className="input-pill h-11 w-full px-4 text-xs normal-case tracking-normal text-white"
                     placeholder="Headquarters location (optional)"
