@@ -23,8 +23,14 @@ export async function GET(req: NextRequest) {
     await enforceRateLimit(req, `admin_copilot_capacity_offers_read:${admin.id}`, 60, 60_000);
 
     const offers = await prisma.copilotCapacityOffer.findMany({
-      include: { regionalPrices: { orderBy: [{ regionCode: "asc" }, { id: "asc" }] } },
+      include: {
+        regionalPrices: {
+          orderBy: [{ regionCode: "asc" }, { id: "asc" }],
+          take: 250,
+        },
+      },
       orderBy: [{ capacityUnits: "asc" }, { id: "asc" }],
+      take: 100,
     });
     return NextResponse.json({ success: true, offers });
   } catch (error) {
