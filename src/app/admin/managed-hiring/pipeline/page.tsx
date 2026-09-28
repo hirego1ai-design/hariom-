@@ -23,6 +23,8 @@ type Requirement = {
   location: string;
   hiringPriority: string;
   status: RequirementStatus;
+  latestAgreementId: string | null;
+  latestAgreementStatus: string | null;
   activeAgreementStatus: string | null;
   updatedAt: string;
 };
@@ -225,23 +227,32 @@ export default function AdminManagedHiringPipeline() {
                         <span>{requirement.location}</span>
                         <span>Priority: {requirement.hiringPriority}</span>
                         <span>
-                          Agreement: {requirement.activeAgreementStatus?.replaceAll("_", " ") || "None active"}
+                          Latest agreement: {requirement.latestAgreementStatus?.replaceAll("_", " ") || "None"}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <Link
-                        href={`/admin/agreements/builder?reqId=${encodeURIComponent(requirement.id)}`}
-                        aria-disabled={!requirement.companyId || requirement.status === "CLOSED"}
-                        className={`rounded-xl px-4 py-2 text-xs font-bold ${
-                          requirement.companyId && requirement.status !== "CLOSED"
-                            ? "bg-sky-500 text-white"
-                            : "pointer-events-none border border-white/10 text-text-muted opacity-50"
-                        }`}
-                      >
-                        Draft agreement
-                      </Link>
+                      {requirement.latestAgreementId ? (
+                        <Link
+                          href={`/admin/agreements/${encodeURIComponent(requirement.latestAgreementId)}`}
+                          className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white"
+                        >
+                          Review agreement
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/admin/agreements/builder?reqId=${encodeURIComponent(requirement.id)}`}
+                          aria-disabled={!requirement.companyId || requirement.status === "CLOSED"}
+                          className={`rounded-xl px-4 py-2 text-xs font-bold ${
+                            requirement.companyId && requirement.status !== "CLOSED"
+                              ? "bg-sky-500 text-white"
+                              : "pointer-events-none border border-white/10 text-text-muted opacity-50"
+                          }`}
+                        >
+                          Draft agreement
+                        </Link>
+                      )}
                       <Link
                         href="/admin/managed-hiring/requests"
                         className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white"
