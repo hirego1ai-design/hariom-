@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const promptSchema = z.object({
   title: z.string().trim().min(1).max(160),
@@ -11,17 +11,15 @@ const promptSchema = z.object({
   durationSeconds: z.number().int().min(5).max(600),
 }).strict();
 
-async function requireAdmin(request: NextRequest) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required", 403);
-  return session;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin(request);
-    await enforceRateLimit(request, "admin_typing_prompts_read", 60, 60_000);
-    const prompts = await prisma.typingPracticePrompt.findMany({ orderBy: { updatedAt: "desc" } });
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_typing_prompts_read:${admin.id}`, 60, 60_000);
+
+    const prompts = await prisma.typingPracticePrompt.findMany({
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: 250,
+    });
     return NextResponse.json({ success: true, prompts });
   } catch (error) {
     return handleApiError(error);
@@ -30,11 +28,28 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireAdmin(request);
-    await enforceRateLimit(request, "admin_typing_prompts_write", 20, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_typing_prompts_write:${admin.id}`, 20, 60_000);
     const data = await readValidatedJson(request, promptSchema);
-    const prompt = await prisma.typingPracticePrompt.create({ data });
-    await logAuditEvent({ userId: session.id, action: "CREATE_TYPING_PRACTICE_PROMPT", resource: `TypingPracticePrompt:${prompt.id}` });
+
+    const prompt = await prisma.$transaction(async (tx) => {
+      const created = await tx.typingPracticePrompt.create({ data });
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: "CREATE_TYPING_PRACTICE_PROMPT",
+          resource: `TypingPracticePrompt:${created.id}`,
+          ipAddress: getClientIp(request) || "unknown",
+          details: JSON.stringify({
+            durationSeconds: created.durationSeconds,
+            initialActiveState: created.isActive,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+      return created;
+    });
+
     return NextResponse.json({ success: true, prompt }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
