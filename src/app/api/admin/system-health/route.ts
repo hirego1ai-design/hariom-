@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { getProviderStatusSummary } from "@/lib/ai/AiRoutingConfig";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_system_health", 30, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_system_health:${admin.id}`, 30, 60_000);
     const memoryUsage = process.memoryUsage();
     
     // DB health check
@@ -21,6 +22,15 @@ export async function GET(req: NextRequest) {
       dbLatencyMs = Date.now() - dbStartTime;
     }
 
+    const aiProviderStatus = getProviderStatusSummary();
+    const configuredAiProviders = aiProviderStatus.filter((provider) => provider.configured).map((provider) => provider.provider);
+    const storageConfigured = Boolean(
+      process.env.S3_BUCKET_NAME &&
+      process.env.S3_REGION &&
+      process.env.S3_ACCESS_KEY_ID &&
+      process.env.S3_SECRET_ACCESS_KEY
+    );
+
     const services = [
       {
         name: "PostgreSQL Database",
@@ -34,7 +44,7 @@ export async function GET(req: NextRequest) {
         name: "S3-Compatible Object Storage",
         type: "STORAGE",
         provider: "S3-compatible",
-        status: process.env.S3_BUCKET_NAME && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
+        status: storageConfigured ? "CONFIGURED" : "NOT_CONFIGURED",
         bucketName: process.env.S3_BUCKET_NAME || null,
         details: "Credentials are configured; a storage probe is not performed by this endpoint.",
       },
@@ -58,16 +68,19 @@ export async function GET(req: NextRequest) {
       {
         name: "AI Provider Gateway",
         type: "AI_GATEWAY",
-        provider: "OpenAI",
-        status: process.env.OPENAI_API_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
-        details: process.env.OPENAI_API_KEY ? "API key is configured; no model call is made by this endpoint." : "No AI provider is configured.",
+        provider: configuredAiProviders.length ? configuredAiProviders.join(", ") : "None configured",
+        status: configuredAiProviders.length ? "CONFIGURED" : "NOT_CONFIGURED",
+        details: configuredAiProviders.length
+          ? `${configuredAiProviders.length} AI provider configuration(s) are present; no live model call is made by this endpoint.`
+          : "No supported AI provider configuration is present.",
       },
     ];
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      overallStatus: dbStatus === "HEALTHY" ? "HEALTHY" : "DEGRADED",
+      overallStatus: dbStatus === "HEALTHY" ? "APPLICATION_AVAILABLE" : "DEGRADED",
+      observedScope: "APPLICATION_RUNTIME_AND_CONFIGURATION",
       services,
     });
   } catch (error) {
