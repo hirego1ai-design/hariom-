@@ -263,7 +263,7 @@ export default function AdminCopilotCommercePage() {
             )}
             {plans.map((plan) => (
               <article key={plan.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-6">
-                <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-end">
                   <div>
                     <p className="text-xs font-extrabold uppercase tracking-wider text-[#7FB0FF]">{plan.code}</p>
                     <h3 className="mt-1 text-2xl font-extrabold text-white">{plan.name}</h3>
@@ -290,12 +290,34 @@ export default function AdminCopilotCommercePage() {
                       className="mt-2 block w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
                     />
                   </label>
+                  <label className="text-xs text-[#94A3B8]">
+                    Hard warning %
+                    <input
+                      id={`hard-${plan.id}`}
+                      type="number"
+                      min={2}
+                      max={100}
+                      defaultValue={plan.hardWarningPct}
+                      className="mt-2 block w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
+                    />
+                  </label>
                   <button
                     disabled={saving === plan.id}
                     onClick={() => {
                       const cap = Number((document.getElementById(`cap-${plan.id}`) as HTMLInputElement)?.value);
                       const soft = Number((document.getElementById(`soft-${plan.id}`) as HTMLInputElement)?.value);
-                      void patch({ type: "PLAN", planId: plan.id, monthlyCapacityUnits: cap, softWarningPct: soft }, plan.id, plan.updatedAt);
+                      const hard = Number((document.getElementById(`hard-${plan.id}`) as HTMLInputElement)?.value);
+                      void patch(
+                        {
+                          type: "PLAN",
+                          planId: plan.id,
+                          monthlyCapacityUnits: cap,
+                          softWarningPct: soft,
+                          hardWarningPct: hard,
+                        },
+                        plan.id,
+                        plan.updatedAt,
+                      );
                     }}
                     className="rounded-xl bg-[#448AFF] px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
                   >
@@ -417,22 +439,111 @@ export default function AdminCopilotCommercePage() {
               <div className="grid gap-4 lg:grid-cols-2">
                 {capacityOffers.map((offer) => (
                   <article key={offer.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#7FB0FF]">{offer.code}</p>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#7FB0FF]">{offer.code}</p>
+                          {offer.isArchived && <span className="rounded-full border border-slate-500/30 px-2 py-0.5 text-[9px] text-slate-400">ARCHIVED</span>}
+                        </div>
                         <h3 className="mt-1 text-lg font-extrabold text-white">{offer.name}</h3>
                         <p className="mt-2 text-xs text-[#94A3B8]">{offer.description}</p>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right">
-                        <p className="text-[10px] uppercase text-[#64748B]">Internal units</p>
-                        <p className="font-mono text-lg font-bold text-white">{offer.capacityUnits}</p>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="text-[10px] uppercase text-[#64748B]">
+                          Internal units
+                          <input
+                            id={`offer-cap-${offer.id}`}
+                            type="number"
+                            min={1}
+                            defaultValue={offer.capacityUnits}
+                            className="mt-1 block w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          disabled={saving === `offer-${offer.id}`}
+                          onClick={() => {
+                            const capacityUnits = Number((document.getElementById(`offer-cap-${offer.id}`) as HTMLInputElement)?.value);
+                            void patchCapacityOffer(
+                              { type: "OFFER", offerId: offer.id, capacityUnits },
+                              `offer-${offer.id}`,
+                              offer.updatedAt,
+                            );
+                          }}
+                          className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold disabled:opacity-50"
+                        >
+                          Save units
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving === `offer-state-${offer.id}`}
+                          onClick={() =>
+                            void patchCapacityOffer(
+                              { type: "OFFER", offerId: offer.id, isArchived: !offer.isArchived },
+                              `offer-state-${offer.id}`,
+                              offer.updatedAt,
+                            )
+                          }
+                          className={`rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50 ${
+                            offer.isArchived ? "border-emerald-500/30 text-emerald-300" : "border-red-500/30 text-red-300"
+                          }`}
+                        >
+                          {offer.isArchived ? "Restore offer" : "Archive offer"}
+                        </button>
                       </div>
                     </div>
-                    <div className="mt-4 space-y-2">
+
+                    <div className="mt-4 space-y-3">
                       {offer.regionalPrices.map((price) => (
-                        <div key={price.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
-                          <span className="font-bold text-[#D5DBE5]">{price.regionCode} · {price.currency}</span>
-                          <span className="text-[#94A3B8]">{price.amountMinor} minor units · {price.taxMode} {price.taxRateBps ? `(${price.taxRateBps / 100}%)` : ""} · {price.paymentRoute}</span>
+                        <div key={price.id} className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs sm:grid-cols-2 lg:grid-cols-6 lg:items-end">
+                          <label className="text-[#94A3B8]">
+                            Currency
+                            <input id={`offer-cur-${price.id}`} defaultValue={price.currency} maxLength={3} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Amount minor
+                            <input id={`offer-amt-${price.id}`} type="number" min={1} defaultValue={price.amountMinor} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Tax mode
+                            <select id={`offer-tax-${price.id}`} defaultValue={price.taxMode} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              <option value="NO_TAX_COLLECTION">No tax</option>
+                              <option value="TAX_EXCLUSIVE">Tax exclusive</option>
+                              <option value="TAX_INCLUSIVE">Tax inclusive</option>
+                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
+                            </select>
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Tax %
+                            <input id={`offer-rate-${price.id}`} type="number" min={0} max={100} step={0.01} defaultValue={price.taxRateBps / 100} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Route
+                            <select id={`offer-route-${price.id}`} defaultValue={price.paymentRoute} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              <option value="STRIPE">Stripe</option>
+                              <option value="PAYU">PayU</option>
+                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={saving === `offer-price-${price.id}`}
+                            onClick={() => {
+                              const currency = (document.getElementById(`offer-cur-${price.id}`) as HTMLInputElement)?.value.toUpperCase();
+                              const amountMinor = Number((document.getElementById(`offer-amt-${price.id}`) as HTMLInputElement)?.value);
+                              const taxMode = (document.getElementById(`offer-tax-${price.id}`) as HTMLSelectElement)?.value;
+                              const taxRateBps = Math.round(Number((document.getElementById(`offer-rate-${price.id}`) as HTMLInputElement)?.value) * 100);
+                              const paymentRoute = (document.getElementById(`offer-route-${price.id}`) as HTMLSelectElement)?.value;
+                              void patchCapacityOffer(
+                                { type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, taxRateBps, paymentRoute },
+                                `offer-price-${price.id}`,
+                                price.updatedAt,
+                              );
+                            }}
+                            className="rounded-lg border border-white/10 px-3 py-2 font-bold text-white disabled:opacity-50"
+                          >
+                            Save price
+                          </button>
                         </div>
                       ))}
                     </div>
