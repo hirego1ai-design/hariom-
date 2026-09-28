@@ -52,6 +52,13 @@ export function revenueSourceForPayment(productType: string) {
       return "Copilot";
     case "COPILOT_ADDON":
       return "Copilot Add Capacity";
+    case "JOB_BOOST":
+      return "Job Boost";
+    case "MOCK_INTERVIEW":
+      return "Mock Interview";
+    case "MANAGED_HIRING":
+    case "PPH":
+      return "Managed Hiring";
     default:
       return "Other Payment";
   }
