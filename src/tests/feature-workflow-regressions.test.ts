@@ -598,3 +598,21 @@ test("admin employer directory excludes recruiter profiles and keeps search pagi
   assert(page.includes("Page {page} of {totalPages}"));
   assert(page.includes('role="alert"'));
 });
+
+
+test("admin job listings keep status filtering pagination and UI semantics truthful", () => {
+  const page = fs.readFileSync(new URL("../app/admin/jobs/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/jobs/route.ts", import.meta.url), "utf8");
+
+  assert(route.includes('status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "CLOSED"]).optional()'));
+  assert(route.includes('admin_jobs:${admin.id}'));
+  assert(route.includes('department: { contains: query.search'));
+  assert(route.includes('location: { contains: query.search'));
+  assert(route.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+
+  assert(page.includes('const statusClasses: Record<JobStatus, string>'));
+  assert(page.includes('value={status}'));
+  assert(page.includes('params.set("status", status)'));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(!page.includes('<p className="text-emerald-400">{job.status}</p>'));
+});
