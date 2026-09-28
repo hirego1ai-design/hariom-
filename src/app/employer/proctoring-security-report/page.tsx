@@ -25,11 +25,11 @@ function Report() {
 
   return <PageContainer><div className="max-w-3xl mx-auto py-8 px-4 space-y-5">
     <h1 className="text-2xl font-bold">Proctoring security report</h1>
-    <p className="text-sm text-text-secondary">This report summarizes client-reported browser telemetry only. It is not a cheating determination.</p>
+    <p className="text-sm text-text-secondary">This report summarizes client-reported browser telemetry only. The advisory score is a rule-based review priority, not a cheating probability or determination.</p>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {data && <div className="glass-card rounded-2xl p-6 space-y-4">
       <p><strong>Events:</strong> {data.totalViolations}</p>
-      <p><strong>Advisory score:</strong> {data.cheatingRiskScore}/100</p>
+      <p><strong>Advisory score:</strong> {data.advisoryReviewScore}/100</p>
       <p><strong>Human review:</strong> {data.requiresHumanReview ? "Required" : "Not currently triggered"}</p>
       <p><strong>Evidence source:</strong> {data.evidenceSource}</p>
       <div className="space-y-2">{data.events.map((event: any) => <div key={event.id} className="rounded-xl border border-white/10 p-3 text-sm"><p>{event.violationType} · {event.severity}</p><p className="text-xs text-text-secondary">{new Date(event.timestamp).toLocaleString()}</p></div>)}</div>
