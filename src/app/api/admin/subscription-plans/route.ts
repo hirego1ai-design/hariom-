@@ -44,11 +44,12 @@ export async function PUT(request: NextRequest) {
   try {
     const session = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_subscription_plans_write:${session.id}`, 20, 60_000);
-    const { id, ...updates } = await readValidatedJson(request, updatePlanSchema);
+    const { id, expectedUpdatedAt, ...updates } = await readValidatedJson(request, updatePlanSchema);
     const plan = await updateAdminSubscriptionPlan(
       id,
       updates,
       { actorId: session.id, ipAddress: getClientIp(request) },
+      expectedUpdatedAt,
     );
     if (!plan) {
       return NextResponse.json({ success: false, error: "Plan not found" }, { status: 404 });
@@ -67,9 +68,14 @@ export async function DELETE(request: NextRequest) {
     await enforceRateLimit(request, `admin_subscription_plans_write:${session.id}`, 20, 60_000);
     const { searchParams } = new URL(request.url);
     const id = planIdSchema.parse(searchParams.get("id"));
+    const expectedUpdatedAt = searchParams.get("expectedUpdatedAt") || undefined;
+    if (expectedUpdatedAt && Number.isNaN(Date.parse(expectedUpdatedAt))) {
+      throw new Error("Invalid expectedUpdatedAt timestamp.");
+    }
     const plan = await archiveAdminSubscriptionPlan(
       id,
       { actorId: session.id, ipAddress: getClientIp(request) },
+      expectedUpdatedAt,
     );
     if (!plan) {
       return NextResponse.json({ success: false, error: "Plan not found" }, { status: 404 });
