@@ -2112,6 +2112,12 @@ class ReferralDatabaseStore {
           throw new Error("Referral fraud profile changed; reload before saving.");
         }
         const previousStatus = current.status as FraudStatus;
+        if (
+          params.expectedLastEvaluatedAt &&
+          current.lastEvaluatedAt.toISOString() !== params.expectedLastEvaluatedAt
+        ) {
+          throw new Error("Referral fraud profile changed; refresh before reviewing.");
+        }
         if (!validTransitions[previousStatus].includes(params.newStatus)) {
           throw new Error(
             `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
@@ -2176,6 +2182,12 @@ class ReferralDatabaseStore {
 
     const currentProfile = await this.getUserFraudProfile(params.userId);
     const previousStatus = currentProfile.status;
+    if (
+      params.expectedLastEvaluatedAt &&
+      new Date(currentProfile.lastEvaluatedAt).toISOString() !== params.expectedLastEvaluatedAt
+    ) {
+      throw new Error("Referral fraud profile changed; refresh before reviewing.");
+    }
     if (!validTransitions[previousStatus].includes(params.newStatus)) {
       throw new Error(
         `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
@@ -2244,6 +2256,7 @@ class ReferralDatabaseStore {
         reason: `Automated Risk Engine Evaluation (Risk Score: ${riskScore})`,
         actorId: context?.actorId || "FRAUD_ENGINE",
         ipAddress: context?.ip,
+        expectedLastEvaluatedAt: profile.lastEvaluatedAt,
         riskScore,
         riskFactors,
       });
@@ -2321,6 +2334,55 @@ class ReferralDatabaseStore {
           : profile.status !== FraudStatus.NORMAL,
       )
       .sort((a, b) => b.riskScore - a.riskScore);
+    return {
+      total: rows.length,
+      queue: rows.slice((page - 1) * limit, page * limit),
+    };
+  }
+
+  public async getAdminFraudQueuePage(options?: {
+    page?: number;
+    limit?: number;
+    status?: FraudStatus;
+  }): Promise<{ queue: UserFraudProfile[]; total: number }> {
+    const page = Math.max(1, options?.page ?? 1);
+    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
+    const status = options?.status;
+
+    if (process.env.NODE_ENV === "production") {
+      const statuses = status
+        ? [status as unknown as DbReferralFraudStatus]
+        : [
+            DbReferralFraudStatus.FLAGGED,
+            DbReferralFraudStatus.FRAUD_HOLD,
+            DbReferralFraudStatus.ADMIN_REVIEW,
+          ];
+      const where = { status: { in: statuses } };
+      const [total, rows] = await prisma.$transaction([
+        prisma.referralFraudProfile.count({ where }),
+        prisma.referralFraudProfile.findMany({
+          where,
+          orderBy: [{ riskScore: "desc" }, { updatedAt: "desc" }, { userId: "asc" }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: {
+            history: {
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 20,
+            },
+          },
+        }),
+      ]);
+      return { total, queue: rows.map((row) => this.mapFraudProfile(row)) };
+    }
+
+    const rows = Array.from(this.fraudProfiles.values())
+      .filter((profile) =>
+        status
+          ? profile.status === status
+          : [FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW].includes(profile.status)
+      )
+      .sort((a, b) => b.riskScore - a.riskScore || a.userId.localeCompare(b.userId));
     return {
       total: rows.length,
       queue: rows.slice((page - 1) * limit, page * limit),
