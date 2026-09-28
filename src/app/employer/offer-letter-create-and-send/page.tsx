@@ -66,7 +66,9 @@ export default function OfferLetterCreatePage() {
         }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Unable to create offer.");
+      if (!response.ok || !body.success || !body.offer?.id) {
+        throw new Error(body.error || "Unable to create offer.");
+      }
       setCreatedId(body.offer.id);
       offerRequestKey.current = null;
       setStatusType("success");
