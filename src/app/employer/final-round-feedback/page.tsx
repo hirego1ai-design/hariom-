@@ -25,6 +25,7 @@ export default function InterviewFeedbackPage() {
   const [deciding, setDeciding] = useState(false);
   const [pendingDecisionApproval, setPendingDecisionApproval] = useState<{action:"PROCEED"|"REJECT";approvalId:string;workflowId:string}|null>(null);
   const [offerApplicationId, setOfferApplicationId] = useState("");
+  const [nextRoundSchedule, setNextRoundSchedule] = useState<{ applicationId: string; roundId: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!interviewId) return;
@@ -79,20 +80,28 @@ export default function InterviewFeedbackPage() {
       if(d.action==="PROCEED") {
         setPendingDecisionApproval(null);
         setOfferApplicationId("");
+        setNextRoundSchedule(
+          d.nextRound?.id && d.applicationId
+            ? { applicationId: d.applicationId, roundId: d.nextRound.id, name: d.nextRound.name }
+            : null,
+        );
         setSuccess(`Candidate transferred to ${d.nextRound.name}. Schedule that configured round when ready.`);
       }
       else if(d.action==="FINAL_ROUND_COMPLETE") {
         setPendingDecisionApproval(null);
         setOfferApplicationId(typeof d.applicationId === "string" ? d.applicationId : "");
+        setNextRoundSchedule(null);
         setSuccess("Final selection approved. Candidate is shortlisted and eligible for a persisted offer.");
       }
       else if(d.action==="REJECT") {
         setPendingDecisionApproval(null);
         setOfferApplicationId("");
+        setNextRoundSchedule(null);
         setSuccess("Candidate marked as not proceeding in this hiring process.");
       }
       else {
         setOfferApplicationId("");
+        setNextRoundSchedule(null);
         setSuccess("Candidate remains on hold.");
       }
       if(action!=="HOLD") setRoundComplete(false);
@@ -112,6 +121,14 @@ export default function InterviewFeedbackPage() {
           className="mt-3 inline-flex min-h-11 items-center rounded-full bg-primary px-5 font-bold text-white"
         >
           Create offer
+        </Link>
+      )}
+      {nextRoundSchedule && (
+        <Link
+          href={`/employer/interview-scheduler?applicationId=${encodeURIComponent(nextRoundSchedule.applicationId)}&roundId=${encodeURIComponent(nextRoundSchedule.roundId)}`}
+          className="mt-3 ml-2 inline-flex min-h-11 items-center rounded-full bg-primary px-5 font-bold text-white"
+        >
+          Schedule {nextRoundSchedule.name}
         </Link>
       )}
     </div>}
