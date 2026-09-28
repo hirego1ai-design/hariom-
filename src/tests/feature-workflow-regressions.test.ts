@@ -1575,3 +1575,29 @@ test("admin backup and recovery screen remains evidence-only without fabricated 
   assert(!page.includes("PITR healthy"));
   assert(!page.includes("Restore successful"));
 });
+
+
+test("admin candidate service and credit APIs use centralized bounded authorization controls", () => {
+  const grants = fs.readFileSync(new URL("../app/api/admin/candidate-credits/grants/route.ts", import.meta.url), "utf8");
+  const services = fs.readFileSync(new URL("../app/api/admin/candidate-services/route.ts", import.meta.url), "utf8");
+  const service = fs.readFileSync(new URL("../app/api/admin/candidate-services/[id]/route.ts", import.meta.url), "utf8");
+  const copilot = fs.readFileSync(new URL("../app/api/admin/copilot/commerce/route.ts", import.meta.url), "utf8");
+  const offers = fs.readFileSync(new URL("../app/api/admin/copilot/capacity-offers/route.ts", import.meta.url), "utf8");
+
+  for (const source of [grants, services, service]) {
+    assert(source.includes("requireAdminSession(request)"));
+    assert(!source.includes("getCurrentSession(request.headers)"));
+  }
+
+  assert(grants.includes('admin_candidate_credit_grants:${session.id}'));
+  assert(services.includes('admin_candidate_services_read:${admin.id}'));
+  assert(services.includes('admin_candidate_services_write:${session.id}'));
+  assert(services.includes("candidateServiceCatalog.count()"));
+  assert(services.includes("take: 250"));
+  assert(service.includes('admin_candidate_services_write:${session.id}'));
+
+  assert(copilot.includes("take: 100"));
+  assert(copilot.includes("take: 500"));
+  assert(offers.includes("take: 100"));
+  assert(offers.includes("take: 250"));
+});
