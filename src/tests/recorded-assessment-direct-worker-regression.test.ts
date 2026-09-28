@@ -56,8 +56,10 @@ test("HTTP fallback uses the existing Railway scheduler secrets and bounded app 
   assert.match(scheduler, /redirect: "error"/);
 });
 
-test("cron API route and direct Railway mode share recorded-assessment recovery implementation", () => {
+test("fallback cron tick drains outbox and recorded-assessment recovery together", () => {
+  assert.match(route, /runEventsOutboxRecovery/);
   assert.match(route, /runRecordedAssessmentRecovery/);
+  assert.match(route, /outbox:/);
   assert.doesNotMatch(route, /dispatchRecordedAssessmentAnalysis/);
 });
 
