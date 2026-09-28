@@ -27,6 +27,8 @@ type Offer = {
 export default function CandidateOffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
 
   const refresh = useCallback(async () => {
@@ -36,7 +38,14 @@ export default function CandidateOffersPage() {
     setOffers(body.offers);
   }, []);
 
-  useEffect(() => { refresh().catch((error) => setMessage(error.message)); }, [refresh]);
+  useEffect(() => {
+    refresh()
+      .catch((error) => {
+        setMessageType("error");
+        setMessage(error instanceof Error ? error.message : "Unable to load offers.");
+      })
+      .finally(() => setLoading(false));
+  }, [refresh]);
 
   async function respond(offer: Offer, action: "ACCEPT" | "DECLINE") {
     const confirmed = window.confirm(action === "ACCEPT"
@@ -44,7 +53,9 @@ export default function CandidateOffersPage() {
       : "Decline this offer?");
     if (!confirmed) return;
     const note = action === "DECLINE" ? window.prompt("Optional note to the employer:") || undefined : undefined;
-    setBusy(offer.id); setMessage("");
+    setBusy(offer.id);
+    setMessage("");
+    setMessageType("success");
     try {
       const response = await fetch(`/api/candidate/offers/${offer.id}`, {
         method: "PATCH",
@@ -54,8 +65,10 @@ export default function CandidateOffersPage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Unable to save offer response.");
       await refresh();
+      setMessageType("success");
       setMessage(action === "ACCEPT" ? "Offer accepted. The employer can now proceed to joining confirmation." : "Offer declined.");
     } catch (error) {
+      setMessageType("error");
       setMessage(error instanceof Error ? error.message : "Unable to save offer response.");
     } finally {
       setBusy("");
@@ -68,8 +81,21 @@ export default function CandidateOffersPage() {
       <main className="flex-1 md:ml-[116px] p-4 md:p-8">
         <div className="mx-auto max-w-4xl space-y-6">
           <div><h1 className="text-3xl font-bold">Offers</h1><p className="mt-2 text-sm text-text-secondary">Review persisted offer terms and respond directly. Expired or withdrawn offers cannot be accepted.</p></div>
-          {message && <p role="status" className="rounded-xl border border-outline bg-bg-card p-3 text-sm">{message}</p>}
-          {offers.length === 0 ? <div className="rounded-2xl border border-outline bg-bg-card p-6 text-sm text-text-secondary">No offers are available.</div> : offers.map((offer) => (
+          {message && (
+            <p
+              role={messageType === "error" ? "alert" : "status"}
+              className={`rounded-xl border p-3 text-sm ${
+                messageType === "error"
+                  ? "border-red-500/30 bg-red-500/10 text-red-300"
+                  : "border-outline bg-bg-card"
+              }`}
+            >
+              {message}
+            </p>
+          )}
+          {loading ? (
+            <div className="rounded-2xl border border-outline bg-bg-card p-6 text-sm text-text-secondary">Loading offers…</div>
+          ) : offers.length === 0 ? <div className="rounded-2xl border border-outline bg-bg-card p-6 text-sm text-text-secondary">No offers are available.</div> : offers.map((offer) => (
             <article key={offer.id} className="rounded-3xl border border-outline bg-bg-card p-6 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div><p className="text-xs uppercase tracking-wider text-primary">{offer.application.job.company.name}</p><h2 className="text-xl font-bold">{offer.application.job.title}</h2><p className="text-sm text-text-secondary">{offer.title}</p></div>
