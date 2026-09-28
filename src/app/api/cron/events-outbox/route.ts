@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { OutboxPoller } from "@/lib/events/Outbox";
-import { registerProductionConsumers } from "@/lib/events/ProductionConsumers";
+import { runEventsOutboxRecovery } from "@/lib/events/OutboxRecovery";
 import { handleApiError, ApiError } from "@/lib/apiSecurity";
 
 export const dynamic = "force-dynamic";
@@ -36,37 +35,12 @@ function verifyCronSecret(request: NextRequest) {
 async function processOutbox(request: NextRequest) {
   try {
     verifyCronSecret(request);
-    registerProductionConsumers();
+    const result = await runEventsOutboxRecovery(45_000);
 
-    const stopAt = Date.now() + 45_000;
-    const reports = [];
-    let totalDispatched = 0;
-    let totalFailed = 0;
-    let totalUnhandled = 0;
-
-    for (let pass = 0; pass < 10 && Date.now() < stopAt; pass++) {
-      const report = await OutboxPoller.pollAndProcess(50, 60_000, stopAt);
-      reports.push(report);
-      totalDispatched += report.dispatched;
-      totalFailed += report.failed;
-      totalUnhandled += report.unhandled;
-      if (report.claimed === 0) break;
-    }
-
-    return NextResponse.json(
-      {
-        success: totalFailed === 0 && totalUnhandled === 0,
-        totalDispatched,
-        totalFailed,
-        totalUnhandled,
-        passes: reports.length,
-        reports,
-      },
-      {
-        status: totalFailed > 0 || totalUnhandled > 0 ? 503 : 200,
-        headers: { "Cache-Control": "no-store" },
-      },
-    );
+    return NextResponse.json(result, {
+      status: result.success ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     return handleApiError(error);
   }
