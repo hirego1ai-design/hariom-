@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       action: "ADMIN_CONFIG_UPDATED",
       resource: "Platform Configuration",
       userId: session.id,
-      ipAddress: req.headers.get("x-forwarded-for") || "127.0.0.1",
+      ipAddress: req.headers.get("x-forwarded-for") || undefined,
       details: "Platform configuration updated by Super Admin",
     });
 
