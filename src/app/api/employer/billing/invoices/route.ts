@@ -32,9 +32,15 @@ export async function GET(req: NextRequest) {
     // Resolve company invoices by mapping agreements first (since Invoice doesn't have companyId)
     const agreements = await prisma.commercialAgreement.findMany({
       where: { companyId },
-      select: { id: true },
+      select: {
+        id: true,
+        taxRatePct: true,
+        creditDays: true,
+        invoiceRule: true,
+      },
     });
-    const agreementIds = agreements.map((a) => a.id);
+    const agreementIds = agreements.map((agreement) => agreement.id);
+    const agreementTerms = new Map(agreements.map((agreement) => [agreement.id, agreement]));
 
     const invoices = await prisma.invoice.findMany({
       where: {
@@ -45,6 +51,7 @@ export async function GET(req: NextRequest) {
 
     // Parse bank transfer notes if present
     const parsedInvoices = invoices.map((r) => {
+      const agreement = agreementTerms.get(r.agreementId);
       let notesText = r.notes || undefined;
       let bankTransferRef = undefined;
       let bankTransferReceiptUrl = undefined;
@@ -69,6 +76,9 @@ export async function GET(req: NextRequest) {
         taxAmount: r.taxAmount,
         totalAmount: r.totalAmount,
         currency: r.currency,
+        taxRatePct: agreement?.taxRatePct ?? null,
+        creditDays: agreement?.creditDays ?? null,
+        invoiceRule: agreement?.invoiceRule ?? null,
         status: r.status,
         dueDate: r.dueDate,
         paidDate: r.paidDate || undefined,
