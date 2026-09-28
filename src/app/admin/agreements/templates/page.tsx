@@ -389,7 +389,7 @@ export default function AdminAgreementTemplatesPage() {
                 : "This version will no longer be available for new agreements. Existing agreements keep their snapshotted terms."}
             </p>
             <p className="mt-3 text-xs text-slate-500">
-              {pendingAction.template.name} · version observed {new Date(pendingAction.template.updatedAt).toLocaleString()}
+              {pendingAction.template.name} · version observed {pendingAction.template.updatedAt ? new Date(pendingAction.template.updatedAt).toLocaleString() : "timestamp unavailable"}
             </p>
             <label className="mt-5 block text-xs text-slate-400">
               Action reason
