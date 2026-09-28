@@ -16,6 +16,7 @@ export default function AdminReferralsPage() {
   const [utrInputs, setUtrInputs] = useState<Record<string, string>>({});
   const [payoutActionLoading, setPayoutActionLoading] = useState<Record<string, boolean>>({});
   const [payoutActionMsg, setPayoutActionMsg] = useState<Record<string, string>>({});
+  const [pendingRejectPayoutId, setPendingRejectPayoutId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -106,7 +107,6 @@ export default function AdminReferralsPage() {
 
   // REJECT
   const handleReject = async (payoutId: string) => {
-    if (!confirm("Reject this payout request? This will release the reserved balance.")) return;
     setPayoutActionLoading((p) => ({ ...p, [payoutId]: true }));
     try {
       const res = await fetch("/api/admin/referrals/payouts", {
@@ -116,6 +116,7 @@ export default function AdminReferralsPage() {
       });
       const data = await res.json();
       setPayoutActionMsg((p) => ({ ...p, [payoutId]: data.success ? "Rejected." : (data.error ?? "Reject failed.") }));
+      setPendingRejectPayoutId(null);
       if (data.success) fetchData();
     } catch {
       setPayoutActionMsg((p) => ({ ...p, [payoutId]: "Network error." }));
@@ -320,7 +321,7 @@ export default function AdminReferralsPage() {
                                 <button onClick={() => handleApprove(p.id)} className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/20 text-[10px] font-bold hover:bg-blue-500/30 transition-all">
                                   Approve
                                 </button>
-                                <button onClick={() => handleReject(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold hover:bg-red-500/20 transition-all">
+                                <button onClick={() => setPendingRejectPayoutId(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold hover:bg-red-500/20 transition-all">
                                   Reject
                                 </button>
                               </>
@@ -330,7 +331,7 @@ export default function AdminReferralsPage() {
                                 <button onClick={() => handleMarkPaid(p.id)} className="btn-3d-gold px-3 py-1.5 rounded-lg text-[10px] font-bold text-black shadow-md">
                                   Mark Paid
                                 </button>
-                                <button onClick={() => handleReject(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold hover:bg-red-500/20 transition-all">
+                                <button onClick={() => setPendingRejectPayoutId(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold hover:bg-red-500/20 transition-all">
                                   Reject
                                 </button>
                               </>
@@ -376,6 +377,21 @@ export default function AdminReferralsPage() {
           </div>
         )}
       </main>
+
+      {pendingRejectPayoutId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="reject-payout-title" aria-describedby="reject-payout-description" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#141418] p-6 shadow-2xl">
+            <h2 id="reject-payout-title" className="text-lg font-bold text-white">Reject payout request?</h2>
+            <p id="reject-payout-description" className="mt-2 text-sm text-text-secondary">Rejecting this request releases the reserved payout balance. The action is recorded in the payout workflow.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setPendingRejectPayoutId(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={() => void handleReject(pendingRejectPayoutId)} disabled={payoutActionLoading[pendingRejectPayoutId]} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50">
+                {payoutActionLoading[pendingRejectPayoutId] ? "Rejecting…" : "Reject payout"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
