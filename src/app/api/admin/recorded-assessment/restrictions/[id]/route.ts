@@ -1,63 +1,110 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const schema = z.object({
   decision: z.enum(["APPROVE", "REJECT", "REVOKE"]),
   reviewNote: z.string().trim().min(3).max(1000),
+  expectedUpdatedAt: z.string().datetime(),
 }).strict();
 
 function addCalendarMonths(from: Date, months: number) {
-  // Clamp to the last valid day in the target month (Jan 31 + 1 month => Feb 28/29).
   const targetMonth = from.getUTCMonth() + months;
   const targetYear = from.getUTCFullYear() + Math.floor(targetMonth / 12);
   const normalizedMonth = ((targetMonth % 12) + 12) % 12;
   const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(targetYear, normalizedMonth, Math.min(from.getUTCDate(), lastDay), from.getUTCHours(), from.getUTCMinutes(), from.getUTCSeconds(), from.getUTCMilliseconds()));
+  return new Date(Date.UTC(
+    targetYear,
+    normalizedMonth,
+    Math.min(from.getUTCDate(), lastDay),
+    from.getUTCHours(),
+    from.getUTCMinutes(),
+    from.getUTCSeconds(),
+    from.getUTCMilliseconds(),
+  ));
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    await enforceRateLimit(request, "assessment_restriction_review", 30);
-    const session = await getCurrentSession(request.headers);
-    if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required.", 403);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_assessment_restriction_review:${admin.id}`, 30, 60_000);
     const { id } = await params;
     const body = await readValidatedJson(request, schema);
-    const restriction = await prisma.recordedAssessmentRestriction.findUnique({ where: { id } });
-    if (!restriction) throw new ApiError("Restriction review not found.", 404);
 
-    const now = new Date();
-    if (body.decision === "REVOKE") {
-      if (restriction.status !== "ACTIVE") throw new ApiError("Only an active restriction can be revoked.", 409);
-    } else if (restriction.status !== "PENDING_REVIEW") {
-      throw new ApiError("This restriction proposal has already been reviewed.", 409);
-    }
+    const updated = await prisma.$transaction(async (tx) => {
+      const restriction = await tx.recordedAssessmentRestriction.findUnique({ where: { id } });
+      if (!restriction) throw new ApiError("Restriction review not found.", 404);
+      if (restriction.updatedAt.toISOString() !== body.expectedUpdatedAt) {
+        throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
+      }
 
-    const status = body.decision === "APPROVE" ? "ACTIVE" : body.decision === "REJECT" ? "REJECTED" : "REVOKED";
-    const expectedStatus = body.decision === "REVOKE" ? "ACTIVE" : "PENDING_REVIEW";
-    const changed = await prisma.recordedAssessmentRestriction.updateMany({
-      where: { id, status: expectedStatus },
-      data: {
-        status,
-        reviewedById: session.id,
-        reviewedAt: now,
-        reviewNote: body.reviewNote,
-        suspendedUntil: status === "ACTIVE" ? addCalendarMonths(now, restriction.proposedMonths) : restriction.suspendedUntil,
-      },
+      if (body.decision === "REVOKE") {
+        if (restriction.status !== "ACTIVE") {
+          throw new ApiError("Only an active restriction can be revoked.", 409);
+        }
+      } else if (restriction.status !== "PENDING_REVIEW") {
+        throw new ApiError("This restriction proposal has already been reviewed.", 409);
+      }
+
+      const status =
+        body.decision === "APPROVE"
+          ? "ACTIVE"
+          : body.decision === "REJECT"
+            ? "REJECTED"
+            : "REVOKED";
+      const expectedStatus = body.decision === "REVOKE" ? "ACTIVE" : "PENDING_REVIEW";
+      const now = new Date();
+
+      const changed = await tx.recordedAssessmentRestriction.updateMany({
+        where: {
+          id,
+          status: expectedStatus,
+          updatedAt: restriction.updatedAt,
+        },
+        data: {
+          status,
+          reviewedById: admin.id,
+          reviewedAt: now,
+          reviewNote: body.reviewNote,
+          suspendedUntil:
+            status === "ACTIVE"
+              ? addCalendarMonths(now, restriction.proposedMonths)
+              : restriction.suspendedUntil,
+        },
+      });
+      if (changed.count !== 1) {
+        throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
+      }
+
+      const next = await tx.recordedAssessmentRestriction.findUniqueOrThrow({ where: { id } });
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: `ASSESSMENT_RESTRICTION_${status}`,
+          resource: `RecordedAssessmentRestriction:${id}`,
+          ipAddress: getClientIp(request) || "unknown",
+          details: JSON.stringify({
+            candidateUserId: restriction.userId,
+            attemptId: restriction.attemptId,
+            proposedMonths: restriction.proposedMonths,
+            decision: body.decision,
+            reviewNote: body.reviewNote,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+
+      return next;
     });
-    if (changed.count !== 1) throw new ApiError("This restriction changed while you were reviewing it. Reload the case.", 409);
-    const updated = await prisma.recordedAssessmentRestriction.findUnique({ where: { id } });
-    if (!updated) throw new ApiError("Restriction review not found.", 404);
-    await logAuditEvent({
-      userId: session.id,
-      action: `ASSESSMENT_RESTRICTION_${status}`,
-      resource: `RecordedAssessmentRestriction:${id}`,
-      details: `Candidate restriction review changed to ${status}; proposed duration ${restriction.proposedMonths} month(s).`,
-      ipAddress: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown",
-    });
+
     return NextResponse.json({ success: true, restriction: updated });
-  } catch (error) { return handleApiError(error); }
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
