@@ -18,6 +18,12 @@ export async function POST(request: Request) {
   try {
     await enforceRateLimit(request, "employer_create_assessment", 20, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessments are generated automatically from the job role and approved skills. Configure whether an assessment is required from the job workflow.",
+        403,
+      );
+    }
     const data = await readValidatedJson(request, createAssessmentSchema);
 
     let companyId: string | undefined;
