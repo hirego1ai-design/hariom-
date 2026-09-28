@@ -117,7 +117,8 @@ export async function POST(req: NextRequest) {
       if (
         !gate ||
         gate.assessmentId !== assessment.id ||
-        ![ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS].includes(gate.status)
+        (gate.status !== ApplicationGateStatus.REQUIRED &&
+          gate.status !== ApplicationGateStatus.IN_PROGRESS)
       ) {
         throw new ApiError("This assessment is not currently assigned to your application.", 403);
       }
