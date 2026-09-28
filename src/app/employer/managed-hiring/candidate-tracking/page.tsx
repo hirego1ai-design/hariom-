@@ -50,7 +50,7 @@ export default function ManagedHiringCandidateTrackingPage() {
   const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
-    fetchEmployerCandidates<any>()
+    fetchEmployerCandidates<any>(undefined, { scope: "managed" })
       .then(setCandidates)
       .catch((reason) =>
         setError(
@@ -173,9 +173,8 @@ export default function ManagedHiringCandidateTrackingPage() {
           </p>
           <h1 className="text-3xl font-bold text-white">Candidate tracking</h1>
           <p className="text-text-secondary text-sm mt-2">
-            Evidence-first screening never auto-rejects a candidate. Missing
-            evidence should go to assessment or human review; rejection requires
-            explicit human approval.
+            Only applications attached to signed managed-hiring requirements are shown here.
+            Evidence-first screening never auto-rejects a candidate; rejection requires explicit human approval.
           </p>
         </div>
 
