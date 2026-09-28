@@ -7,7 +7,8 @@ export default function CandidateVideoResumePage() {
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
       <CandidateSidebar />
-      <div className="max-w-4xl mx-auto py-8 px-4 space-y-6">
+      <main className="flex-1 ml-0 md:ml-[116px] pb-24 md:pb-8">
+        <div className="max-w-4xl mx-auto py-8 px-4 space-y-6">
       <div>
         <h1 className="font-display-xl text-headline-md text-text-primary mb-1">My Video Resume</h1>
         <p className="text-text-secondary text-xs">
@@ -15,8 +16,9 @@ export default function CandidateVideoResumePage() {
         </p>
       </div>
 
-      <VideoResumeModule />
+          <VideoResumeModule />
+        </div>
+      </main>
     </div>
-    </div>
-);
+  );
 }
