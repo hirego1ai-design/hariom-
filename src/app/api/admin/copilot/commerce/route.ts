@@ -19,23 +19,44 @@ export async function GET(req: NextRequest) {
     const admin = await requireAdminSession(req);
     await enforceRateLimit(req, `admin_copilot_commerce_read:${admin.id}`, 60, 60_000);
 
-    const [plans, rules] = await Promise.all([
+    const [planTotal, plans, usageRuleTotal, rules] = await prisma.$transaction([
+      prisma.copilotPlan.count(),
       prisma.copilotPlan.findMany({
-        include: { regionalPrices: { orderBy: [{ regionCode: "asc" }, { id: "asc" }], take: 250 } },
+        include: {
+          regionalPrices: {
+            orderBy: [{ regionCode: "asc" }, { id: "asc" }],
+            take: 250,
+          },
+          _count: { select: { regionalPrices: true } },
+        },
         orderBy: [{ monthlyCapacityUnits: "asc" }, { id: "asc" }],
         take: 100,
       }),
+      prisma.copilotUsageRule.count(),
       prisma.copilotUsageRule.findMany({
         orderBy: [{ actionKey: "asc" }, { id: "asc" }],
         take: 500,
       }),
     ]);
 
+    const priceTruncatedPlanIds = plans
+      .filter((plan) => plan._count.regionalPrices > plan.regionalPrices.length)
+      .map((plan) => plan.id);
+
     return NextResponse.json({
       success: true,
       product: "COPILOT",
       plans,
       usageRules: rules,
+      catalogue: {
+        planTotal,
+        planLoaded: plans.length,
+        plansTruncated: planTotal > plans.length,
+        usageRuleTotal,
+        usageRuleLoaded: rules.length,
+        usageRulesTruncated: usageRuleTotal > rules.length,
+        priceTruncatedPlanIds,
+      },
       warning: "Usage weights and internal cost estimates are administration-only and must never be exposed by employer APIs.",
     });
   } catch (error) {
