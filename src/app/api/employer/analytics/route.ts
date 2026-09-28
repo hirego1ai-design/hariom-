@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
           status: true,
           createdAt: true,
           updatedAt: true,
+          pphPlacement: { select: { joinedAt: true } },
           job: { select: { id: true, title: true, department: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -85,14 +86,26 @@ export async function GET(req: NextRequest) {
     ) as Record<(typeof STAGES)[number], number>;
 
     const hired = applications.filter((application) => application.status === "HIRED");
-    const averageTimeToHireDays = hired.length
+    const hiresWithConfirmedJoining = hired.filter(
+      (application) => application.pphPlacement?.joinedAt,
+    );
+    // Application.updatedAt is not a hire timestamp: notes or unrelated state
+    // changes can move it. Calculate time-to-hire only from a persisted,
+    // confirmed joining timestamp and expose the sample size explicitly.
+    const averageTimeToHireDays = hiresWithConfirmedJoining.length
       ? Number(
           (
-            hired.reduce(
-              (total, application) => total + Math.max(0, application.updatedAt.getTime() - application.createdAt.getTime()),
+            hiresWithConfirmedJoining.reduce(
+              (total, application) =>
+                total +
+                Math.max(
+                  0,
+                  application.pphPlacement!.joinedAt.getTime() -
+                    application.createdAt.getTime(),
+                ),
               0,
             ) /
-            hired.length /
+            hiresWithConfirmedJoining.length /
             86_400_000
           ).toFixed(1),
         )
@@ -123,8 +136,9 @@ export async function GET(req: NextRequest) {
           applicationGrowthPercent,
           activeJobs,
           completedInterviews,
-          hires: hired.length,
+          hiredApplications: hired.length,
           averageTimeToHireDays,
+          averageTimeToHireSampleCount: hiresWithConfirmedJoining.length,
         },
         funnel: stageCounts,
         departments: [...departmentMap.entries()]
@@ -149,7 +163,8 @@ export async function GET(req: NextRequest) {
         unavailableMetrics: [
           "Cost per hire is not shown because no authoritative hiring-cost ledger is attached to applications.",
           "Source attribution is not shown because application source is not currently persisted on the Application record.",
-          "Offer acceptance is not shown because the current application status model has no authoritative OFFER state.",
+          "Time-to-hire is calculated only for hires with a persisted confirmed joining timestamp; Application.updatedAt is never treated as a hire date.",
+          "Offer acceptance is not inferred from application status; offer records have their own authoritative response state.",
         ],
       },
     });
