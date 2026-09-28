@@ -67,14 +67,9 @@ export async function GET(request: NextRequest) {
           createdAt: true,
           updatedAt: true,
           agreements: {
-            where: {
-              status: {
-                in: ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"],
-              },
-            },
             select: { id: true, status: true, updatedAt: true },
             orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-            take: 1,
+            take: 10,
           },
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -118,8 +113,16 @@ export async function GET(request: NextRequest) {
         currency: requirement.currency,
         status: requirement.status,
         assignedSalesLead: requirement.assignedSalesLead,
-        activeAgreementId: requirement.agreements[0]?.id ?? null,
-        activeAgreementStatus: requirement.agreements[0]?.status ?? null,
+        latestAgreementId: requirement.agreements[0]?.id ?? null,
+        latestAgreementStatus: requirement.agreements[0]?.status ?? null,
+        activeAgreementId:
+          requirement.agreements.find((agreement) =>
+            ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(agreement.status),
+          )?.id ?? null,
+        activeAgreementStatus:
+          requirement.agreements.find((agreement) =>
+            ["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(agreement.status),
+          )?.status ?? null,
         createdAt: requirement.createdAt.toISOString(),
         updatedAt: requirement.updatedAt.toISOString(),
       })),
