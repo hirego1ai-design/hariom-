@@ -30,6 +30,7 @@ import {
   UserFraudProfile,
 } from "@/types/referral";
 import { prisma } from "./prisma";
+import { ApiError } from "./apiSecurity";
 import { ReferralFraudStatus as DbReferralFraudStatus } from "@prisma/client";
 import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 import { randomBytes } from "node:crypto";
@@ -1467,7 +1468,7 @@ class ReferralDatabaseStore {
               adminNotes: adminNotes || "Approved by Admin for processing.",
             },
           });
-          if (transitioned.count !== 1) return null;
+          if (transitioned.count !== 1) throw new ApiError("Payout changed or is no longer awaiting approval; reload before reviewing.", 409);
           const approved = await tx.referralPayout.findUnique({ where: { id: payoutId } });
           if (!approved) return null;
 
@@ -1487,7 +1488,7 @@ class ReferralDatabaseStore {
           await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
           return approved;
         });
-        if (!updated) throw new Error(`Payout ${payoutId} is not awaiting approval.`);
+        if (!updated) throw new ApiError("Payout not found.", 404);
         return {
           id: updated.id,
           referrerId: updated.referrerId,
@@ -1504,8 +1505,9 @@ class ReferralDatabaseStore {
           updatedAt: updated.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error approving payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to approve payout request: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to approve payout request.`);
       }
     }
 
@@ -1550,14 +1552,14 @@ class ReferralDatabaseStore {
             where: { id: payoutId },
           });
           if (!existing) {
-            throw new Error(`Payout with ID ${payoutId} not found.`);
+            throw new ApiError("Payout not found.", 404);
           }
 
           if (existing.status !== "APPROVED") {
-            throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
+            throw new ApiError("Payout must still be APPROVED before settlement; reload before reviewing.", 409);
           }
           if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
-            throw new Error(`Payout ${payoutId} changed; refresh before settlement.`);
+            throw new ApiError("Payout changed; reload before recording settlement.", 409);
           }
 
           // 2. Update payout to PAID only if it is still approved. This
@@ -1572,10 +1574,10 @@ class ReferralDatabaseStore {
             },
           });
           if (transitioned.count !== 1) {
-            throw new Error(`Payout ${payoutId} was already settled or changed state.`);
+            throw new ApiError("Payout was already settled or changed state; reload before reviewing.", 409);
           }
           const updated = await tx.referralPayout.findUnique({ where: { id: payoutId } });
-          if (!updated) throw new Error(`Payout with ID ${payoutId} not found.`);
+          if (!updated) throw new ApiError("Payout not found.", 404);
 
           // 3. Mark underlying eligible rewards as PAID
           const eligibleRewards = await tx.referralReward.findMany({
@@ -1600,7 +1602,7 @@ class ReferralDatabaseStore {
             remainingToMark -= rew.rewardAmount;
           }
           if (remainingToMark !== 0) {
-            throw new Error(`Payout ${payoutId} exceeds the eligible reward balance.`);
+            throw new ApiError("Payout no longer matches the reserved eligible reward balance; reload before settlement.", 409);
           }
 
           // 4. Create immutable ReferralLedgerEntry
@@ -1657,8 +1659,9 @@ class ReferralDatabaseStore {
           updatedAt: updatedPayout.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error settling payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to mark payout as settled: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to mark payout as settled.`);
       }
     }
 
@@ -1741,7 +1744,7 @@ class ReferralDatabaseStore {
             throw new Error(`Payout with ID ${payoutId} not found.`);
           }
           if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
-            throw new Error(`Payout ${payoutId} changed; refresh before rejecting.`);
+            throw new ApiError("Payout changed; reload before rejecting.", 409);
           }
 
           const updated = await tx.referralPayout.updateMany({
@@ -1757,10 +1760,10 @@ class ReferralDatabaseStore {
             },
           });
           if (updated.count !== 1) {
-            throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+            throw new ApiError("Payout is no longer reviewable; reload before rejecting.", 409);
           }
           const updatedRecord = await tx.referralPayout.findUnique({ where: { id: payoutId } });
-          if (!updatedRecord) throw new Error(`Payout with ID ${payoutId} not found.`);
+          if (!updatedRecord) throw new ApiError("Payout not found.", 404);
 
           // Re-open rewards reserved by this rejected payout.
           await tx.referralReward.updateMany({
@@ -1822,8 +1825,9 @@ class ReferralDatabaseStore {
           updatedAt: updatedPayout.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error rejecting payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to reject payout request: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to reject payout request.`);
       }
     }
 
@@ -2109,7 +2113,7 @@ class ReferralDatabaseStore {
           params.expectedUpdatedAt &&
           current.updatedAt.toISOString() !== params.expectedUpdatedAt
         ) {
-          throw new Error("Referral fraud profile changed; reload before saving.");
+          throw new ApiError("Referral fraud profile changed; reload before saving.", 409);
         }
         const previousStatus = current.status as FraudStatus;
         if (
