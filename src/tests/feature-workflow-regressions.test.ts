@@ -1109,3 +1109,64 @@ test("admin integration and email controls fail closed without simulated connect
   assert(smtp.includes("result.error || result.message"));
   assert(smtp.includes("Delivery/read confirmation is separate."));
 });
+
+
+test("admin referral governance uses durable versioned financial and fraud controls", () => {
+  const page = fs.readFileSync(new URL("../app/admin/referrals/page.tsx", import.meta.url), "utf8");
+  const configRoute = fs.readFileSync(new URL("../app/api/admin/referrals/config/route.ts", import.meta.url), "utf8");
+  const payoutRoute = fs.readFileSync(new URL("../app/api/admin/referrals/payouts/route.ts", import.meta.url), "utf8");
+  const fraudRoute = fs.readFileSync(new URL("../app/api/admin/referrals/fraud/route.ts", import.meta.url), "utf8");
+  const analyticsRoute = fs.readFileSync(new URL("../app/api/admin/referrals/analytics/route.ts", import.meta.url), "utf8");
+  const rules = fs.readFileSync(new URL("../lib/referral-rules.ts", import.meta.url), "utf8");
+  const db = fs.readFileSync(new URL("../lib/referral-db.ts", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const migration = fs.readFileSync(new URL("../../prisma/migrations/20260928082500_referral_fraud_persistence/migration.sql", import.meta.url), "utf8");
+
+  assert(schema.includes("model ReferralFraudProfile"));
+  assert(schema.includes("model ReferralFraudAudit"));
+  assert(schema.includes("enum ReferralFraudStatus"));
+  assert(migration.includes('ALTER TABLE public."ReferralFraudProfile" ENABLE ROW LEVEL SECURITY'));
+  assert(migration.includes('ALTER TABLE public."ReferralFraudAudit" ENABLE ROW LEVEL SECURITY'));
+  assert(migration.includes('REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM PUBLIC'));
+
+  assert(configRoute.includes("requireAdminSession(request)"));
+  assert(configRoute.includes('admin_referral_config_write:${admin.id}'));
+  assert(configRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(configRoute.includes("reason: z.string().trim().min(3).max(500)"));
+  assert(rules.includes("REFERRAL_CONFIG_UPDATED"));
+  assert(rules.includes("reason: auditContext.reason || null"));
+  assert(rules.includes("enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId)"));
+
+  assert(payoutRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(payoutRoute.includes("Approval rationale is required."));
+  assert(payoutRoute.includes("getAdminPayoutQueuePage"));
+  assert(db.includes("REFERRAL_PAYOUT_APPROVED"));
+  assert(db.includes("REFERRAL_PAYOUT_MARKED_PAID"));
+  assert(db.includes("REFERRAL_PAYOUT_REJECTED"));
+  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, adminUserId)"));
+  assert(db.includes("Payout changed; reload before recording settlement."));
+  assert(db.includes("Payout changed; reload before rejecting."));
+
+  assert(fraudRoute.includes("getAdminFraudQueuePage"));
+  assert(fraudRoute.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(db.includes("prisma.referralFraudProfile.upsert"));
+  assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
+  assert(db.includes("Referral fraud profile changed; reload before saving."));
+  assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
+
+  assert(analyticsRoute.includes('status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] }'));
+
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(page.includes('expectedUpdatedAt: iso(payout.updatedAt)'));
+  assert(page.includes("adminNotes = payoutActionInput.trim()"));
+  assert(page.includes("transactionRef = payoutActionInput.trim()"));
+  assert(page.includes("rejectionReason = payoutActionInput.trim()"));
+  assert(page.includes('fetch("/api/admin/referrals/fraud"'));
+  assert(page.includes("expectedUpdatedAt: fraudTarget.updatedAt"));
+  assert(page.includes("Page {payoutPage} of {payoutTotalPages}"));
+  assert(page.includes("Page {fraudPage} of {fraudTotalPages}"));
+  assert(page.includes('role="dialog"'));
+  assert(page.includes("Approval authorizes processing but does not initiate any bank or UPI transfer."));
+});
