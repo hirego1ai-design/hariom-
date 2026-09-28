@@ -1364,13 +1364,22 @@ class ReferralDatabaseStore {
       throw new Error("Requested payout must match an exact combination of eligible rewards.");
     }
     for (const reward of rewardsToReserve) reward.payoutId = id;
+    const availableAfterReservation = Array.from(this.rewards.values())
+      .filter(
+        (reward) =>
+          reward.referrerId === input.referrerId &&
+          reward.status === ReferralStatus.ELIGIBLE &&
+          !reward.payoutId &&
+          reward.currency === "INR",
+      )
+      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
       referrerId: input.referrerId,
       payoutId: id,
       entryType: ReferralLedgerEntryType.PAYOUT_RESERVED,
       amount: input.amount,
-      balanceAfter: unreservedAvailable - input.amount,
+      balanceAfter: availableAfterReservation,
       currency: "INR",
       correlationId,
       metadata: { payoutMethod: input.payoutMethod },
@@ -1727,6 +1736,16 @@ class ReferralDatabaseStore {
       }
     }
 
+    const availableAfterSettlement = Array.from(this.rewards.values())
+      .filter(
+        (reward) =>
+          reward.referrerId === payout.referrerId &&
+          reward.status === ReferralStatus.ELIGIBLE &&
+          !reward.payoutId &&
+          reward.currency === payout.currency,
+      )
+      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
+
     const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
@@ -1734,7 +1753,7 @@ class ReferralDatabaseStore {
       payoutId: payout.id,
       entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,
       amount: payout.amount,
-      balanceAfter: 0,
+      balanceAfter: availableAfterSettlement,
       currency: payout.currency,
       correlationId,
       metadata: { transactionRef: payout.transactionRef },
@@ -1886,6 +1905,16 @@ class ReferralDatabaseStore {
       }
     }
 
+    const availableAfterRejection = Array.from(this.rewards.values())
+      .filter(
+        (reward) =>
+          reward.referrerId === payout.referrerId &&
+          reward.status === ReferralStatus.ELIGIBLE &&
+          !reward.payoutId &&
+          reward.currency === payout.currency,
+      )
+      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
+
     const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
@@ -1893,7 +1922,7 @@ class ReferralDatabaseStore {
       payoutId: payout.id,
       entryType: ReferralLedgerEntryType.PAYOUT_REFUNDED,
       amount: payout.amount,
-      balanceAfter: payout.amount,
+      balanceAfter: availableAfterRejection,
       currency: payout.currency,
       correlationId,
       metadata: { reason },
