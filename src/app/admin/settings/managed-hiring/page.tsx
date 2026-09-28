@@ -1,66 +1,104 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
-type PlatformConfig = Record<string, unknown> & {
+type PlatformConfig = {
   managedHiringEnabled?: boolean;
   aiCopilotEnabled?: boolean;
   proctoringEnabled?: boolean;
   autoInvoicingEnabled?: boolean;
   replacementWarrantyEnabled?: boolean;
   slabPricingEnabled?: boolean;
-  defaultPlacementFeePct?: number;
-  defaultReplacementDays?: number;
-  defaultCreditDays?: number;
-  taxRatePct?: number;
   slaResponseHours?: number;
   maxActiveRequirementsPerCompany?: number;
+  lastUpdated: string | null;
 };
 
 const FEATURE_FLAGS = [
-  { key: "managedHiringEnabled", label: "HireGo Managed Hiring™ Engine", desc: "Enable 6-step requirement wizard & sales pipeline" },
-  { key: "aiCopilotEnabled", label: "AI Screening & Copilot", desc: "Enable automated candidate scoring & ranking" },
-  { key: "proctoringEnabled", label: "Proctoring & Security Engine", desc: "Enable live proctoring monitoring & risk alerts" },
-  { key: "autoInvoicingEnabled", label: "Automated Commercial Invoicing", desc: "Trigger automatic placement fee invoices on joining" },
-  { key: "replacementWarrantyEnabled", label: "Replacement Warranty Engine", desc: "Track candidate replacement claims & credit notes" },
-  { key: "slabPricingEnabled", label: "Tiered Slab Pricing Engine", desc: "Enable automated CTC slab pricing rules" },
+  {
+    key: "managedHiringEnabled",
+    label: "Managed Hiring module",
+    desc: "Persisted platform control for Managed Hiring surfaces.",
+  },
+  {
+    key: "aiCopilotEnabled",
+    label: "AI screening & Copilot",
+    desc: "Persisted platform control for AI-assisted workflow features.",
+  },
+  {
+    key: "proctoringEnabled",
+    label: "Proctoring",
+    desc: "Persisted platform control for proctoring-enabled workflow surfaces.",
+  },
+  {
+    key: "autoInvoicingEnabled",
+    label: "Automated invoicing",
+    desc: "Persisted platform control for automated invoice workflow availability.",
+  },
+  {
+    key: "replacementWarrantyEnabled",
+    label: "Replacement warranty workflow",
+    desc: "Persisted platform control for replacement-warranty workflow availability.",
+  },
+  {
+    key: "slabPricingEnabled",
+    label: "Slab-pricing workflow",
+    desc: "Persisted platform control for slab-pricing workflow availability.",
+  },
 ] as const;
 
-const NUMERIC_FIELDS = [
-  { name: "defaultPlacementFeePct", label: "Default Placement Fee (%)", step: "0.01", min: 0, max: 100 },
-  { name: "defaultReplacementDays", label: "Default Replacement SLA (Days)", step: "1", min: 0, max: 3650 },
-  { name: "defaultCreditDays", label: "Default Net Credit Terms (Days)", step: "1", min: 0, max: 3650 },
-  { name: "taxRatePct", label: "GST Rate (%)", step: "0.01", min: 0, max: 100 },
-  { name: "slaResponseHours", label: "Sales SLA Response (Hours)", step: "1", min: 1, max: 8760 },
-  { name: "maxActiveRequirementsPerCompany", label: "Max Reqs Per Employer", step: "1", min: 1, max: 100000 },
+const NUMERIC_CONTROLS = [
+  {
+    key: "slaResponseHours",
+    label: "Sales response SLA (hours)",
+    min: 1,
+    max: 8760,
+  },
+  {
+    key: "maxActiveRequirementsPerCompany",
+    label: "Maximum active requirements per company",
+    min: 1,
+    max: 100000,
+  },
 ] as const;
+
+type EditableKey =
+  | (typeof FEATURE_FLAGS)[number]["key"]
+  | (typeof NUMERIC_CONTROLS)[number]["key"];
 
 export default function AdminManagedHiringSettingsPage() {
-  const [config, setConfig] = useState<PlatformConfig>({});
+  const [config, setConfig] = useState<PlatformConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [reason, setReason] = useState("");
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  const fetchConfig = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setSaveMessage(null);
+    setMessage(null);
     try {
       const response = await fetch("/api/admin/config", { cache: "no-store" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success || !data.config || typeof data.config !== "object") {
-        throw new Error(data.error || "Unable to load authoritative platform configuration.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !payload.config) {
+        throw new Error(
+          payload.error || "Unable to load authoritative platform controls.",
+        );
       }
-      setConfig(data.config);
-      setConfigLoaded(true);
-    } catch (error) {
-      setConfig({});
-      setConfigLoaded(false);
-      setSaveMessage({
+      setConfig(payload.config);
+    } catch (cause) {
+      setConfig(null);
+      setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Unable to load authoritative platform configuration.",
+        text:
+          cause instanceof Error
+            ? cause.message
+            : "Unable to load authoritative platform controls.",
       });
     } finally {
       setLoading(false);
@@ -68,159 +106,296 @@ export default function AdminManagedHiringSettingsPage() {
   }, []);
 
   useEffect(() => {
-    void fetchConfig();
-  }, [fetchConfig]);
+    void load();
+  }, [load]);
 
-  const handleToggle = (key: (typeof FEATURE_FLAGS)[number]["key"]) => {
-    if (!configLoaded) return;
-    setConfig((previous) => ({ ...previous, [key]: !Boolean(previous[key]) }));
-  };
+  function toggle(
+    key: (typeof FEATURE_FLAGS)[number]["key"],
+  ) {
+    if (!config) return;
+    setConfig({
+      ...config,
+      [key]: !Boolean(config[key]),
+    });
+  }
 
-  const handleNumberChange = (name: (typeof NUMERIC_FIELDS)[number]["name"], rawValue: string) => {
-    if (!configLoaded || rawValue.trim() === "") return;
-    const value = Number(rawValue);
+  function setNumber(
+    key: (typeof NUMERIC_CONTROLS)[number]["key"],
+    raw: string,
+  ) {
+    if (!config) return;
+    if (!raw.trim()) {
+      const next = { ...config };
+      delete next[key];
+      setConfig(next);
+      return;
+    }
+    const value = Number(raw);
     if (!Number.isFinite(value)) return;
-    setConfig((previous) => ({ ...previous, [name]: value }));
-  };
+    setConfig({ ...config, [key]: value });
+  }
 
-  const handleSave = async () => {
-    if (!configLoaded) {
-      setSaveMessage({ type: "error", text: "Load the authoritative server configuration before making changes." });
+  async function save() {
+    if (!config || saving || reason.trim().length < 3) return;
+
+    const editable: Partial<Record<EditableKey, boolean | number>> = {};
+    for (const flag of FEATURE_FLAGS) {
+      if (typeof config[flag.key] === "boolean") {
+        editable[flag.key] = config[flag.key];
+      }
+    }
+    for (const control of NUMERIC_CONTROLS) {
+      if (typeof config[control.key] === "number") {
+        editable[control.key] = config[control.key];
+      }
+    }
+
+    if (Object.keys(editable).length === 0) {
+      setMessage({
+        type: "error",
+        text: "Configure at least one platform control before saving.",
+      });
       return;
     }
 
-    setSaveMessage(null);
     setSaving(true);
+    setMessage(null);
     try {
       const response = await fetch("/api/admin/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify({
+          config: editable,
+          expectedUpdatedAt: config.lastUpdated,
+          reason: reason.trim(),
+        }),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success || !data.config) {
-        throw new Error(data.error || "Unable to update platform configuration.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !payload.config) {
+        throw new Error(payload.error || "Unable to update platform controls.");
       }
-      setConfig(data.config);
-      setConfigLoaded(true);
-      setSaveMessage({ type: "success", text: "Platform configuration updated successfully." });
-    } catch (error) {
-      setSaveMessage({
+
+      setConfig(payload.config);
+      setReason("");
+      setMessage({
+        type: "success",
+        text: "Platform controls updated and audited.",
+      });
+    } catch (cause) {
+      setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Unable to update platform configuration. Please try again.",
+        text:
+          cause instanceof Error
+            ? cause.message
+            : "Unable to update platform controls.",
       });
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   return (
-    <div className="bg-[#0A0A0C] text-white min-h-screen relative">
+    <div className="min-h-screen bg-[#0A0A0C] text-white">
       <AdminSidebar />
-      <AdminHeader />
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Managed Hiring Settings"
+          subtitle="Platform controls only; commercial terms live in Agreement Templates"
+        />
 
-      <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-5xl mx-auto">
-        {saveMessage && (
-          <div
-            role={saveMessage.type === "error" ? "alert" : "status"}
-            aria-live={saveMessage.type === "error" ? "assertive" : "polite"}
-            className={`rounded-xl border px-4 py-3 text-sm ${saveMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}
-          >
-            {saveMessage.text}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-4 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#FFCA28]/10 text-[#FFCA28] border border-[#FFCA28]/20 mb-1">
-              SYSTEM CONTROL PANEL
+        <main className="mx-auto w-full max-w-5xl space-y-6 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
+          <header className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+                Platform controls
+              </p>
+              <h1 className="mt-2 text-2xl font-bold">
+                Managed Hiring feature controls
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                This page does not define placement fees, GST, credit terms or
+                replacement days. Those commercial terms are configured per
+                Agreement Template and snapshotted into each signed agreement.
+              </p>
             </div>
-            <h1 className="text-2xl font-bold text-white">Feature Flags & Platform Defaults</h1>
-            <p className="text-xs text-slate-400">Edit only configuration loaded from the authoritative server record.</p>
-          </div>
-
-          <button
-            type="button"
-            disabled={saving || loading || !configLoaded}
-            onClick={() => void handleSave()}
-            className="px-6 py-2.5 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90 shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Settings"}
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-xs text-slate-400">Loading authoritative system settings...</div>
-        ) : !configLoaded ? (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
-            <p className="font-bold">Authoritative platform configuration is unavailable.</p>
-            <p className="mt-2 text-red-200/80">No local fallback can be edited or saved while the server configuration is unavailable.</p>
-            <button
-              type="button"
-              onClick={() => void fetchConfig()}
-              className="mt-4 rounded-xl border border-red-300/30 px-4 py-2 text-xs font-bold hover:bg-red-500/10"
+            <Link
+              href="/admin/agreements/templates"
+              className="rounded-xl bg-indigo-600 px-5 py-3 text-xs font-bold text-white"
             >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-4 shadow-xl">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#29B6F6]">toggle_on</span> Module Feature Flags
-              </h3>
+              Manage commercial templates
+            </Link>
+          </header>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {FEATURE_FLAGS.map((flag) => (
-                  <div key={flag.key} className="p-4 bg-[#16161B] border border-white/5 rounded-xl flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="text-xs font-bold text-white">{flag.label}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{flag.desc}</p>
-                    </div>
-                    <button
-                      type="button"
-                      aria-pressed={Boolean(config[flag.key])}
-                      aria-label={`${flag.label}: ${config[flag.key] ? "enabled" : "disabled"}`}
-                      onClick={() => handleToggle(flag.key)}
-                      className={`w-12 h-6 rounded-full transition-all relative ${config[flag.key] ? "bg-[#26A69A]" : "bg-slate-700"}`}
+          {message && (
+            <div
+              role={message.type === "error" ? "alert" : "status"}
+              aria-live="polite"
+              className={`rounded-xl border p-4 text-sm ${
+                message.type === "error"
+                  ? "border-red-500/30 bg-red-500/10 text-red-200"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          {loading ? (
+            <div role="status" className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-slate-400">
+              Loading authoritative platform controls…
+            </div>
+          ) : !config ? (
+            <section className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+              <h2 className="font-bold">Platform controls are unavailable.</h2>
+              <p className="mt-2 text-red-200/80">
+                No local fallback is shown or editable.
+              </p>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="mt-4 rounded-xl border border-red-300/30 px-4 py-2 text-xs font-bold"
+              >
+                Retry
+              </button>
+            </section>
+          ) : (
+            <>
+              <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+                <div className="mb-5">
+                  <h2 className="font-bold">Feature controls</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    “Not configured” is shown explicitly instead of assuming a disabled state.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {FEATURE_FLAGS.map((flag) => {
+                    const value = config[flag.key];
+                    return (
+                      <div
+                        key={flag.key}
+                        className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-[#16161B] p-4"
+                      >
+                        <div>
+                          <h3 className="text-xs font-bold">{flag.label}</h3>
+                          <p className="mt-1 text-[10px] text-slate-400">
+                            {flag.desc}
+                          </p>
+                          <p className="mt-2 text-[10px] font-bold text-slate-300">
+                            {typeof value === "boolean"
+                              ? value
+                                ? "Configured: enabled"
+                                : "Configured: disabled"
+                              : "Not configured"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={Boolean(value)}
+                          onClick={() => toggle(flag.key)}
+                          className={`relative h-7 w-12 shrink-0 rounded-full ${
+                            value ? "bg-emerald-500" : "bg-white/15"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
+                              value ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                          <span className="sr-only">
+                            Toggle {flag.label}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/10 bg-[#121215] p-5 sm:p-6">
+                <div className="mb-5">
+                  <h2 className="font-bold">Operational caps</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    These are platform controls, not commercial agreement terms.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {NUMERIC_CONTROLS.map((control) => (
+                    <label
+                      key={control.key}
+                      className="text-xs text-slate-400"
                     >
-                      <span className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${config[flag.key] ? "left-6" : "left-0.5"}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+                      {control.label}
+                      <input
+                        type="number"
+                        min={control.min}
+                        max={control.max}
+                        step={1}
+                        value={
+                          typeof config[control.key] === "number"
+                            ? String(config[control.key])
+                            : ""
+                        }
+                        onChange={(event) =>
+                          setNumber(control.key, event.target.value)
+                        }
+                        placeholder="Not configured"
+                        className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#16161B] px-3 text-sm text-white"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </section>
 
-            <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 space-y-4 shadow-xl">
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#FFCA28]">settings_suggest</span> Commercial Configuration
-                </h3>
-                <p className="mt-1 text-[11px] text-slate-400">Blank values mean no value is currently configured; this page does not invent a commercial default.</p>
-              </div>
+              <section className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+                <h2 className="font-bold text-amber-200">
+                  Commercial terms source of truth
+                </h2>
+                <p className="mt-2 text-sm text-slate-300">
+                  Placement fee, invoice rule, replacement period, credit days,
+                  tax rate, discounts and clauses are maintained in Agreement
+                  Templates. Contract creation snapshots those approved terms
+                  into the Commercial Agreement.
+                </p>
+                <Link
+                  href="/admin/agreements/templates"
+                  className="mt-4 inline-flex rounded-xl border border-amber-400/30 px-4 py-2 text-xs font-bold text-amber-200"
+                >
+                  Open Agreement Templates
+                </Link>
+              </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {NUMERIC_FIELDS.map((field) => (
-                  <div key={field.name}>
-                    <label className="text-xs text-slate-400 mb-1 block" htmlFor={field.name}>{field.label}</label>
-                    <input
-                      id={field.name}
-                      type="number"
-                      step={field.step}
-                      min={field.min}
-                      max={field.max}
-                      name={field.name}
-                      value={typeof config[field.name] === "number" ? String(config[field.name]) : ""}
-                      onChange={(event) => handleNumberChange(field.name, event.target.value)}
-                      className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+              <section className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <label className="block text-xs text-slate-400">
+                  Change reason
+                  <textarea
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Why are these platform controls changing?"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+                  />
+                </label>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[10px] text-slate-500">
+                    Version: {config.lastUpdated || "not yet persisted"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={saving || reason.trim().length < 3}
+                    className="rounded-xl bg-emerald-600 px-5 py-3 text-xs font-bold text-white disabled:opacity-40"
+                  >
+                    {saving ? "Saving…" : "Save audited platform controls"}
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
