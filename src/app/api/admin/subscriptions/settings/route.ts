@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 import { subscriptionsDb } from "@/lib/subscriptions-db";
 import { ApiError, enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import {
@@ -27,16 +27,10 @@ const serviceCostSchema = z.object({
   billingType: z.enum(["CREDIT_BASED", "INCLUDED", "PAID_ADDON"]),
 }).strict();
 
-async function requireAdmin(request: NextRequest) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required", 403);
-  return session;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin(request);
-    await enforceRateLimit(request, "admin_subscription_settings_read", 60, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_subscription_settings_read:${admin.id}`, 60, 60_000);
     const [promos, services] = await Promise.all([
       subscriptionsDb.getPromoCodes(),
       subscriptionsDb.getAiServices(),
@@ -53,8 +47,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin(request);
-    await enforceRateLimit(request, "admin_subscription_settings_write", 20, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_subscription_settings_write:${admin.id}`, 20, 60_000);
     const body = await readValidatedJson(request, promoSchema);
     const promo = await createAdminPromoCode(body, {
       actorId: admin.id,
@@ -66,8 +60,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin(request);
-    await enforceRateLimit(request, "admin_subscription_settings_write", 20, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_subscription_settings_write:${admin.id}`, 20, 60_000);
     const raw = await readValidatedJson(request, z.record(z.unknown()), 64 * 1024);
     if (raw.kind === "COPILOT_CONFIG") {
       throw new ApiError("Legacy per-job Co-Pilot configuration is disabled. Use the standalone Copilot Commerce console.", 409);
@@ -84,8 +78,8 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const admin = await requireAdmin(request);
-    await enforceRateLimit(request, "admin_subscription_settings_write", 20, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_subscription_settings_write:${admin.id}`, 20, 60_000);
     const code = request.nextUrl.searchParams.get("code")?.trim().toUpperCase();
     if (!code || !/^[A-Z0-9_-]{3,64}$/.test(code)) throw new ApiError("A valid coupon code is required", 400);
     const archived = await archiveAdminPromoCode(code, {
