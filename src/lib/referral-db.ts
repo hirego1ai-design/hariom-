@@ -2046,6 +2046,8 @@ class ReferralDatabaseStore {
 
   public async getUserFraudProfile(userId: string): Promise<UserFraudProfile> {
     if (process.env.NODE_ENV === "production") {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) throw new Error("Referral fraud profile user does not exist.");
       const row = await prisma.referralFraudProfile.upsert({
         where: { userId },
         create: {
@@ -2094,6 +2096,8 @@ class ReferralDatabaseStore {
 
     if (process.env.NODE_ENV === "production") {
       return prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({ where: { id: params.userId }, select: { id: true } });
+        if (!user) throw new Error("Referral fraud profile user does not exist.");
         await tx.referralFraudProfile.upsert({
           where: { userId: params.userId },
           create: {
