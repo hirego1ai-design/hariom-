@@ -109,7 +109,7 @@ export default function NotificationsCenterPage() {
             <h1 className="text-xl lg:text-2xl text-white font-bold tracking-tight">
               Notifications & Alerts
             </h1>
-            <p className="text-text-muted text-xs">Real-time alerts for applications, matches, and interviews.</p>
+            <p className="text-text-muted text-xs">Latest alerts for applications, matches, and interviews.</p>
           </div>
 
           <div className="flex items-center gap-3">
