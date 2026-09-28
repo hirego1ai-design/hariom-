@@ -10,7 +10,7 @@ type StageId =
   | "Screening"
   | "Video Resume Review"
   | "Assessment"
-  | "AI Interview"
+  | "Interview"
   | "Technical Interview"
   | "HR Interview"
   | "Client Interview"
@@ -32,7 +32,7 @@ const STAGES: StageConfig[] = [
   { id: "Applied", label: "Applied", color: "text-[#90CAF9]", bgColor: "bg-[#90CAF9]/10", borderColor: "border-[#90CAF9]/30" },
   { id: "Screening" as StageId, label: "Screening", color: "text-[#7C4DFF]", bgColor: "bg-[#7C4DFF]/10", borderColor: "border-[#7C4DFF]/30" },
   { id: "Assessment", label: "Assessment", color: "text-[#FF9800]", bgColor: "bg-[#FF9800]/10", borderColor: "border-[#FF9800]/30" },
-  { id: "AI Interview", label: "AI Interview", color: "text-[#E040FB]", bgColor: "bg-[#E040FB]/10", borderColor: "border-[#E040FB]/30" },
+  { id: "Interview", label: "Interview", color: "text-[#E040FB]", bgColor: "bg-[#E040FB]/10", borderColor: "border-[#E040FB]/30" },
   { id: "Shortlisted", label: "Shortlisted", color: "text-[#66BB6A]", bgColor: "bg-[#66BB6A]/10", borderColor: "border-[#66BB6A]/30" },
   { id: "Joined", label: "Joined", color: "text-[#2E7D32]", bgColor: "bg-[#2E7D32]/10", borderColor: "border-[#2E7D32]/30" },
   { id: "Rejected", label: "Rejected", color: "text-[#EF5350]", bgColor: "bg-[#EF5350]/10", borderColor: "border-[#EF5350]/30" },
