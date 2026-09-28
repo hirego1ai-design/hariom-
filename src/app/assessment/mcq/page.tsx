@@ -33,7 +33,7 @@ export default function CandidateMcqAssessmentsPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex">
       <CandidateSidebar />
-      <main className="w-full max-w-4xl mx-auto p-6 md:p-10">
+      <main className="w-full max-w-4xl mx-auto p-6 pb-24 md:pb-10 md:ml-[116px] md:p-10">
         <h1 className="text-3xl font-bold">Assigned assessments</h1>
         <p className="mt-2 text-gray-400">Only assessments assigned through your active job applications appear here.</p>
 
