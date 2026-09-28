@@ -8,7 +8,13 @@ import { dispatchAdminDirectCommunication, dispatchCommunication } from "@/lib/c
 import { buildPublicAppUrl } from "@/lib/env";
 
 const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
-const createSchema = z.object({ action: z.literal("create").optional(), agreementId: z.string().min(1), companyName: z.string().trim().min(1).max(200).optional(), candidateName: z.string().trim().min(1).max(200).optional(), jobTitle: z.string().trim().min(1).max(200).optional(), amount: z.number().finite().positive().max(1000000000), taxAmount: z.number().finite().nonnegative().max(1000000000).optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), dueDate: z.string().date().optional(), status: z.literal("UNPAID").optional() }).strict();
+const createSchema = z.object({
+  action: z.literal("create").optional(),
+  agreementId: z.string().min(1).max(150),
+  candidateName: z.string().trim().min(1).max(200).optional(),
+  jobTitle: z.string().trim().min(1).max(200).optional(),
+  amount: z.number().finite().positive().max(1_000_000_000),
+}).strict();
 
 export async function GET(req: NextRequest) {
   try {
@@ -55,23 +61,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Bank transfer receipt rejected", invoice: updated });
     }
 
-
     if ("invoiceId" in body) throw new ApiError("Invalid action", 400);
     const amount = Number(body.amount);
-    const taxAmount = body.taxAmount ?? Math.round(amount * 0.18 * 100) / 100;
+    const commercialTerms = await prisma.commercialAgreement.findUnique({
+      where: { id: body.agreementId },
+      select: {
+        taxRatePct: true,
+        creditDays: true,
+        requirement: { select: { currency: true } },
+      },
+    });
+    if (!commercialTerms) throw new ApiError("A valid commercial agreement is required", 400);
+    const currency = commercialTerms.requirement?.currency?.trim().toUpperCase();
+    if (!currency || !/^[A-Z]{3}$/.test(currency)) {
+      throw new ApiError("The agreement must be linked to a hiring requirement with an authoritative billing currency.", 409);
+    }
+    if (!Number.isFinite(commercialTerms.taxRatePct) || commercialTerms.taxRatePct < 0 || commercialTerms.taxRatePct > 100) {
+      throw new ApiError("The agreement has invalid tax terms and cannot be invoiced.", 409);
+    }
+    if (!Number.isInteger(commercialTerms.creditDays) || commercialTerms.creditDays < 0 || commercialTerms.creditDays > 3650) {
+      throw new ApiError("The agreement has invalid credit terms and cannot be invoiced.", 409);
+    }
+
+    const taxAmount = Math.round(amount * (commercialTerms.taxRatePct / 100) * 100) / 100;
     const totalAmount = amount + taxAmount;
+    const due = new Date();
+    due.setUTCDate(due.getUTCDate() + commercialTerms.creditDays);
+    const dueDate = due.toISOString().slice(0, 10);
 
     const created = await invoicesDb.createInvoice({
       agreementId: body.agreementId,
-      companyName: body.companyName,
       candidateName: body.candidateName,
       jobTitle: body.jobTitle,
       amount,
       taxAmount,
       totalAmount,
-      currency: body.currency || "INR",
-      status: body.status || "UNPAID",
-      dueDate: body.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      currency,
+      status: "UNPAID",
+      dueDate,
+    }, {
+      actorId: session.id,
+      ipAddress: getClientIp(req),
     });
 
     const agreement = await prisma.commercialAgreement.findUnique({ where: { id: created.agreementId }, select: { clientEmail: true, clientPhone: true, companyName: true } });

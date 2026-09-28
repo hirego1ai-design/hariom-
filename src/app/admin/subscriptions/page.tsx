@@ -34,12 +34,15 @@ export default function AdminSubscriptionsPage() {
   const [tab, setTab] = useState<"plans" | "promos" | "internal-ai">("plans");
   const [plan, setPlan] = useState<any>(emptyPlan);
   const [loading, setLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const [promo, setPromo] = useState({ code: "", discountType: "PERCENTAGE", discountValue: "", maxUsage: "100", validUntil: "" });
+  const [promo, setPromo] = useState({ code: "", discountType: "PERCENTAGE", discountValue: "", maxUsage: "", validUntil: "" });
 
   async function load() {
+    setLoading(true);
+    setConfigLoaded(false);
     try {
       setMessage(null);
       const [plansRes, settingsRes] = await Promise.all([
@@ -53,7 +56,9 @@ export default function AdminSubscriptionsPage() {
       setPlans(plansBody.plans || []);
       setPromos(settingsBody.promos || []);
       setServices(settingsBody.services || []);
+      setConfigLoaded(true);
     } catch (cause) {
+      setConfigLoaded(false);
       setMessage(cause instanceof Error ? cause.message : "Unable to load subscription settings.");
     } finally {
       setLoading(false);
@@ -86,6 +91,10 @@ export default function AdminSubscriptionsPage() {
 
   async function savePlan(event: React.FormEvent) {
     event.preventDefault();
+    if (!configLoaded) {
+      setMessage("Authoritative subscription configuration must load before plans can be changed.");
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -130,6 +139,10 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function archivePlan(id: string) {
+    if (!configLoaded) {
+      setMessage("Authoritative subscription configuration must load before plans can be changed.");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch(`/api/admin/subscription-plans?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -143,6 +156,10 @@ export default function AdminSubscriptionsPage() {
 
   async function savePromo(event: React.FormEvent) {
     event.preventDefault();
+    if (!configLoaded) {
+      setMessage("Authoritative subscription configuration must load before promotions can be changed.");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/admin/subscriptions/settings", {
@@ -158,7 +175,7 @@ export default function AdminSubscriptionsPage() {
       });
       const body = await response.json();
       if (!response.ok || !body.success) throw new Error(body.error || "Unable to create promo.");
-      setPromo({ code: "", discountType: "PERCENTAGE", discountValue: "", maxUsage: "100", validUntil: "" });
+      setPromo({ code: "", discountType: "PERCENTAGE", discountValue: "", maxUsage: "", validUntil: "" });
       await load();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Unable to create promo.");
@@ -166,6 +183,10 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function archivePromo(code: string) {
+    if (!configLoaded) {
+      setMessage("Authoritative subscription configuration must load before promotions can be changed.");
+      return;
+    }
     const response = await fetch(`/api/admin/subscriptions/settings?code=${encodeURIComponent(code)}`, { method: "DELETE" });
     const body = await response.json();
     if (!response.ok || !body.success) setMessage(body.error || "Unable to archive promo.");
@@ -173,6 +194,10 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function saveService(service: any, creditCost: number, billingType: string) {
+    if (!configLoaded) {
+      setMessage("Authoritative subscription configuration must load before internal cost settings can be changed.");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/admin/subscriptions/settings", {
@@ -215,8 +240,13 @@ export default function AdminSubscriptionsPage() {
           </nav>
 
           {loading ? <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-12 text-center text-slate-400">Loading live configuration…</div> : null}
+          {!loading && !configLoaded ? (
+            <div role="alert" className="mt-8 rounded-3xl border border-red-400/25 bg-red-500/10 p-6 text-sm text-red-100">
+              Authoritative subscription configuration is unavailable. Local defaults are not editable or savable.
+            </div>
+          ) : null}
 
-          {!loading && tab === "plans" ? (
+          {!loading && configLoaded && tab === "plans" ? (
             <div className="mt-6 grid gap-6 xl:grid-cols-[430px_1fr]">
               <form onSubmit={savePlan} className="h-fit rounded-[28px] border border-white/10 bg-[#0e1428] p-5 shadow-[0_20px_50px_rgba(0,0,0,.3)]">
                 <div className="flex items-center justify-between">
@@ -291,7 +321,7 @@ export default function AdminSubscriptionsPage() {
             </div>
           ) : null}
 
-          {!loading && tab === "promos" ? (
+          {!loading && configLoaded && tab === "promos" ? (
             <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr]">
               <form onSubmit={savePromo} className="rounded-[24px] border border-white/10 bg-white/[.04] p-5">
                 <h2 className="font-black">Create promo</h2>
@@ -310,7 +340,7 @@ export default function AdminSubscriptionsPage() {
             </div>
           ) : null}
 
-          {!loading && tab === "internal-ai" ? (
+          {!loading && configLoaded && tab === "internal-ai" ? (
             <section className="mt-6 rounded-[28px] border border-white/10 bg-white/[.04] p-5">
               <h2 className="text-lg font-black">Internal AI cost controls</h2>
               <p className="mt-1 text-xs text-slate-400">Operational cost metadata only. Normal subscription AI assistance is not customer-metered by these values.</p>

@@ -11,14 +11,15 @@ export default function AdminInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedReceiptInvoice, setSelectedReceiptInvoice] = useState<any>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [companyName, setCompanyName] = useState("");
   const [agreementId, setAgreementId] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
-  const [amount, setAmount] = useState(150000);
+  const [amount, setAmount] = useState("");
 
   const handleRejectReceipt = async (invoiceId: string) => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
@@ -26,13 +27,16 @@ export default function AdminInvoicesPage() {
         body: JSON.stringify({ action: "reject_receipt", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
-      if (data.success) {
-        alert("Receipt rejected. Invoice remains outstanding.");
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Receipt rejected. Invoice remains outstanding." });
         setSelectedReceiptInvoice(null);
         loadData();
-      } else { alert(data.error || "Review failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Receipt review failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Receipt review failed. Please try again." });
     }
   };
 
@@ -54,6 +58,7 @@ export default function AdminInvoicesPage() {
   }, []);
 
   const handleMarkPaid = async (invoiceId: string) => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
@@ -61,29 +66,38 @@ export default function AdminInvoicesPage() {
         body: JSON.stringify({ action: "mark_paid", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Payment confirmed and invoice status updated." });
         setSelectedReceiptInvoice(null);
         loadData();
-      } else { alert(data.error || "Payment confirmation failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Payment confirmation failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Payment confirmation failed. Please try again." });
     }
   };
 
   const handleCreateInvoice = async () => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agreementId, companyName, candidateName, jobTitle, amount }),
+        body: JSON.stringify({ agreementId: agreementId.trim(), candidateName: candidateName.trim() || undefined, jobTitle: jobTitle.trim() || undefined, amount: Number(amount) }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Invoice created successfully." });
         setShowCreateModal(false);
         loadData();
-      } else { alert(data.error || "Invoice creation failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Invoice creation failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Invoice creation failed. Please try again." });
     }
   };
 
@@ -93,6 +107,7 @@ export default function AdminInvoicesPage() {
       <AdminHeader />
 
       <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-6xl mx-auto">
+        {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Invoice & Revenue Operations</h1>
@@ -185,14 +200,9 @@ export default function AdminInvoicesPage() {
               <label className="text-xs text-slate-400 block">Commercial Agreement ID
                 <input value={agreementId} onChange={e => setAgreementId(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" />
               </label>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Company Name</label>
-                <input
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
-                />
-              </div>
+              <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-400">
+                Company identity, tax rate, currency and payment due date are derived from the selected signed commercial agreement and its linked hiring requirement.
+              </p>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Placed Candidate Name</label>
                 <input
@@ -214,7 +224,10 @@ export default function AdminInvoicesPage() {
                 <input
                   type="number"
                   value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Enter approved base placement fee"
+                  onChange={(e) => setAmount(e.target.value)}
                   className="w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
                 />
               </div>

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { logAuditEvent } from "@/lib/auditLogger";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const CONFIG_ID = "global-admin-config";
 
@@ -58,21 +58,30 @@ export async function POST(req: NextRequest) {
     await enforceRateLimit(req, `admin_platform_config:${session.id}`, 10, 60_000);
     const body = await readValidatedJson(req, configSchema);
 
-    const current = await readPlatformConfig();
-    const nextConfig = { ...current, ...body, lastUpdated: new Date().toISOString() };
+    const nextConfig = await prisma.$transaction(async (tx) => {
+      const stored = await tx.adminConfiguration.findUnique({ where: { id: CONFIG_ID } });
+      const current = stored && isRecord(stored.platformConfig)
+        ? { ...stored.platformConfig, lastUpdated: stored.updatedAt.toISOString() }
+        : {};
+      const updatedConfig = { ...current, ...body, lastUpdated: new Date().toISOString() };
 
-    await prisma.adminConfiguration.upsert({
-      where: { id: CONFIG_ID },
-      create: { id: CONFIG_ID, platformConfig: nextConfig },
-      update: { platformConfig: nextConfig },
-    });
+      await tx.adminConfiguration.upsert({
+        where: { id: CONFIG_ID },
+        create: { id: CONFIG_ID, platformConfig: updatedConfig },
+        update: { platformConfig: updatedConfig },
+      });
 
-    await logAuditEvent({
-      action: "ADMIN_CONFIG_UPDATED",
-      resource: "Platform Configuration",
-      userId: session.id,
-      ipAddress: req.headers.get("x-forwarded-for") || "127.0.0.1",
-      details: "Platform configuration updated by Super Admin",
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          action: "ADMIN_CONFIG_UPDATED",
+          resource: "Platform Configuration",
+          details: `changedKeys:${Object.keys(body).sort().join(",")}`,
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+
+      return updatedConfig;
     });
 
     return NextResponse.json({

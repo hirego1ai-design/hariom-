@@ -27,9 +27,16 @@ export async function runAllTests(): Promise<{
 async function runIsolatedTests() {
   const results: TestResult[] = [];
 
-  // 1. Commercial Pricing Engine Tests
+  // 1. Commercial Pricing Engine Tests. Business terms are always explicit;
+  // production code must never invent fee, tax, warranty, retainer, or slab values.
   try {
-    const feePct = calculateCommercialFee({ pricingModel: "PERCENTAGE", feeValue: 8.33, ctcAnnual: 1500000 });
+    const feePct = calculateCommercialFee({
+      pricingModel: "PERCENTAGE",
+      feeValue: 8.33,
+      ctcAnnual: 1500000,
+      taxRatePct: 18,
+      replacementDays: 60,
+    });
     const pass1 = feePct.baseFee === 124950 && feePct.totalAmount === 147441;
     results.push({ name: "Commercial Pricing - Percentage Model", category: "Pricing", passed: pass1 });
   } catch (e: any) {
@@ -37,11 +44,43 @@ async function runIsolatedTests() {
   }
 
   try {
-    const feeSlab = calculateCommercialFee({ pricingModel: "SLAB", feeValue: 0, ctcAnnual: 3000000 });
-    const pass2 = feeSlab.baseFee === 375000; // 12.5% rate for >25L
-    results.push({ name: "Commercial Pricing - Slab Model (>25L @ 12.5%)", category: "Pricing", passed: pass2 });
+    const feeSlab = calculateCommercialFee({
+      pricingModel: "SLAB",
+      ctcAnnual: 3000000,
+      taxRatePct: 18,
+      replacementDays: 60,
+      slabs: [
+        { upToCtcAnnual: 1000000, feePct: 8.33 },
+        { upToCtcAnnual: 2500000, feePct: 10 },
+        { upToCtcAnnual: null, feePct: 12.5 },
+      ],
+    });
+    const pass2 = feeSlab.baseFee === 375000;
+    results.push({ name: "Commercial Pricing - Explicit Slab Model", category: "Pricing", passed: pass2 });
   } catch (e: any) {
-    results.push({ name: "Commercial Pricing - Slab Model (>25L @ 12.5%)", category: "Pricing", passed: false, message: e.message });
+    results.push({ name: "Commercial Pricing - Explicit Slab Model", category: "Pricing", passed: false, message: e.message });
+  }
+
+  try {
+    let failedClosed = false;
+    try {
+      calculateCommercialFee({
+        pricingModel: "PERCENTAGE",
+        feeValue: 8.33,
+        ctcAnnual: 1500000,
+        taxRatePct: undefined as unknown as number,
+        replacementDays: 60,
+      });
+    } catch {
+      failedClosed = true;
+    }
+    results.push({
+      name: "Commercial Pricing - Missing commercial terms fail closed",
+      category: "Pricing",
+      passed: failedClosed,
+    });
+  } catch (e: any) {
+    results.push({ name: "Commercial Pricing - Fail-closed contract", category: "Pricing", passed: false, message: e.message });
   }
 
   // 2. Agreements Engine Tests
@@ -221,7 +260,6 @@ async function runIsolatedTests() {
     results.push({ name: "OTP Engine - secure delivery contract", category: "OTP", passed: false, message: e.message });
   }
 
-
   try {
     const fs = await import("node:fs");
     const criticalAuthUi = [
@@ -244,7 +282,6 @@ async function runIsolatedTests() {
       message: e.message,
     });
   }
-
 
   try {
     const fs = await import("node:fs");
@@ -478,5 +515,4 @@ if (process.argv[1]?.includes("suite.test")) {
       process.exit(1);
     });
 }
-
 

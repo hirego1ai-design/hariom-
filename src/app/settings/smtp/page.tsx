@@ -45,6 +45,7 @@ const providerInfo: Record<Provider, { name: string; apiKeyName: string }> = {
 export default function SmtpConfigurationPage({ embedded = false }: { embedded?: boolean }) {
   const [config, setConfig] = useState<FormConfig>(initialConfig);
   const [isLoading, setIsLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [testingProvider, setTestingProvider] = useState<Provider | null>(null);
@@ -58,9 +59,14 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
         const response = await fetch("/api/admin/email-delivery/config");
         if (!response.ok) throw new Error("Could not load email delivery settings.");
         const result = (await response.json()) as { config?: EmailDeliveryConfig };
-        if (isMounted && result.config) setConfig({ ...initialConfig, ...result.config });
+        if (!result.config) throw new Error("Email delivery configuration response did not include an authoritative config.");
+        if (isMounted) {
+          setConfig({ ...initialConfig, ...result.config });
+          setConfigLoaded(true);
+        }
       } catch (error) {
         if (isMounted) {
+          setConfigLoaded(false);
           setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not load email delivery settings." });
         }
       } finally {
@@ -88,6 +94,10 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
   };
 
   const saveConfiguration = async () => {
+    if (!configLoaded) {
+      setNotice({ tone: "error", message: "Authoritative email delivery configuration must load before it can be changed." });
+      return;
+    }
     setIsSaving(true);
     setNotice(null);
     try {
@@ -125,6 +135,10 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
   };
 
   const sendTestEmail = async (provider: Provider) => {
+    if (!configLoaded) {
+      setNotice({ tone: "error", message: "Authoritative email delivery configuration must load before testing a provider." });
+      return;
+    }
     if (!testEmail.trim()) {
       setNotice({ tone: "error", message: "Enter a recipient email address before sending a test." });
       return;
@@ -168,13 +182,20 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
         </header>
 
         {notice && (
-          <div className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${notice.tone === "success" ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-100" : "border-red-400/25 bg-red-500/10 text-red-100"}`} role="status">
+          <div className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${notice.tone === "success" ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-100" : "border-red-400/25 bg-red-500/10 text-red-100"}`} role={notice.tone === "error" ? "alert" : "status"}>
             <span className="material-symbols-outlined text-[18px]">{notice.tone === "success" ? "check_circle" : "error"}</span>
             <span>{notice.message}</span>
           </div>
         )}
 
-        <section className="glass-card rounded-2xl border border-white/10 p-5 sm:p-6" aria-labelledby="routing-heading">
+        {!isLoading && !configLoaded && (
+          <section className="rounded-2xl border border-red-400/25 bg-red-500/10 p-6 text-sm text-red-100">
+            <h2 className="font-bold">Authoritative email configuration is unavailable.</h2>
+            <p className="mt-2 text-red-100/80">Local defaults are not shown or editable. Reload this page after the server configuration is available.</p>
+          </section>
+        )}
+
+        <section hidden={!configLoaded} className="glass-card rounded-2xl border border-white/10 p-5 sm:p-6" aria-labelledby="routing-heading">
           <div className="mb-5 flex items-start gap-3">
             <div className="rounded-xl bg-primary/15 p-2 text-primary"><span className="material-symbols-outlined">alt_route</span></div>
             <div>
@@ -202,7 +223,7 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-2" aria-label="Email providers">
+        <section hidden={!configLoaded} className="grid gap-6 xl:grid-cols-2" aria-label="Email providers">
           {(["SENDGRID", "ZEPTOMAIL"] as Provider[]).map((provider) => {
             const isSendGrid = provider === "SENDGRID";
             const enabledKey = isSendGrid ? "sendgridEnabled" : "zeptoMailEnabled";
@@ -246,7 +267,7 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
           })}
         </section>
 
-        <section className="glass-card rounded-2xl border border-white/10 p-5 sm:p-6" aria-labelledby="test-heading">
+        <section hidden={!configLoaded} className="glass-card rounded-2xl border border-white/10 p-5 sm:p-6" aria-labelledby="test-heading">
           <div className="mb-5"><h2 id="test-heading" className="text-base font-bold text-white">Test email delivery</h2><p className="mt-1 text-xs text-text-muted">Send a live test to confirm each provider&apos;s current configuration.</p></div>
           <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
             <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="admin@yourdomain.com" autoComplete="email" disabled={isLoading} className="h-11 min-w-0 rounded-xl border border-white/10 bg-[#1E1E1E] px-3 text-sm text-white outline-none placeholder:text-text-muted focus:border-primary disabled:opacity-50" />
@@ -259,9 +280,9 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
           </div>
         </section>
 
-        <footer className="flex flex-col-reverse gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <footer hidden={!configLoaded} className="flex flex-col-reverse gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-text-muted">API keys are write-only and should be rotated through this screen when needed.</p>
-          <button type="button" onClick={saveConfiguration} disabled={isLoading || isSaving} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-xs font-bold text-white shadow-lg transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-60">
+          <button type="button" onClick={saveConfiguration} disabled={isLoading || isSaving || !configLoaded} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-xs font-bold text-white shadow-lg transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-60">
             <span className={`material-symbols-outlined text-[17px] ${isSaving ? "animate-spin" : ""}`}>{isSaving ? "progress_activity" : "save"}</span>
             {isSaving ? "Saving…" : "Save email configuration"}
           </button>

@@ -479,3 +479,35 @@ test("previously yellow production endpoints are backed by real sources or expli
   assert(whatsappTombstone.includes("/api/whatsapp/webhook"));
 });
 
+
+
+test("admin invoice creation derives commercial terms from authoritative agreement data", () => {
+  const route = fs.readFileSync(new URL("../app/api/admin/invoices/route.ts", import.meta.url), "utf8");
+  const ui = fs.readFileSync(new URL("../app/admin/invoices/page.tsx", import.meta.url), "utf8");
+
+  assert(route.includes("commercialTerms.taxRatePct"));
+  assert(route.includes("commercialTerms.creditDays"));
+  assert(route.includes("commercialTerms.requirement?.currency"));
+  assert(route.includes("status: \"UNPAID\""));
+  assert(!route.includes("Math.round(amount * 0.18"));
+  assert(!route.includes('currency: body.currency || "INR"'));
+  assert(!route.includes("15 * 24 * 60 * 60 * 1000"));
+
+  assert(!ui.includes("useState(150000)"));
+  assert(!ui.includes("setCompanyName"));
+  assert(ui.includes("tax rate, currency and payment due date are derived"));
+});
+
+test("recorded assessment question-bank publication and retirement are atomically audited", () => {
+  const create = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/questions/route.ts", import.meta.url), "utf8");
+  const retire = fs.readFileSync(new URL("../app/api/admin/recorded-assessment/questions/[id]/route.ts", import.meta.url), "utf8");
+
+  assert(create.includes("prisma.$transaction"));
+  assert(create.includes("RECORDED_ASSESSMENT_QUESTION_PUBLISHED"));
+  assert(create.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+
+  assert(retire.includes("prisma.$transaction"));
+  assert(retire.includes("RECORDED_ASSESSMENT_QUESTION_RETIRED"));
+  assert(retire.includes("updateMany"));
+  assert(retire.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+});

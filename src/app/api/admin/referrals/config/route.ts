@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import {
   getReferralProgramConfig,
   updateReferralProgramConfig,
@@ -18,7 +18,7 @@ const configUpdateSchema = z.object({
   managedHiringDefaultLockDays: z.union([z.literal(45), z.literal(60), z.literal(90)]).optional(),
   minPayoutAmount: z.number().min(100).max(100000).optional(),
   attributionWindowDays: z.number().int().min(1).max(365).optional(),
-});
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one referral configuration field is required.");
 
 export async function GET(request: Request) {
   try {
@@ -62,7 +62,10 @@ export async function PUT(request: Request) {
 
     await enforceRateLimit(request, "admin_referral_config_write", 20, 60_000);
     const body = await readValidatedJson(request, configUpdateSchema);
-    const updated = await updateReferralProgramConfig(body);
+    const updated = await updateReferralProgramConfig(body, {
+      actorId: session.id,
+      ipAddress: getClientIp(request),
+    });
     return NextResponse.json({
       success: true,
       message: "Referral program configuration updated successfully",

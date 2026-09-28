@@ -250,6 +250,23 @@ test("Stripe checkout completed without paid status remains nonterminal", async 
   assert.equal(result.status, "PENDING");
 });
 
+
+test("admin payment routing UI cannot persist fabricated healthy fallbacks", async () => {
+  const fs = await import("node:fs");
+  const page = fs.readFileSync(new URL("../app/admin/payment-gateways/page.tsx", import.meta.url), "utf8");
+  const controller = fs.readFileSync(new URL("../lib/payments/PaymentGatewayController.ts", import.meta.url), "utf8");
+
+  assert.match(page, /configLoaded/);
+  assert.match(page, /gatewaysStatus:\s*\{[\s\S]*STRIPE:\s*"DISABLED"[\s\S]*PAYU:\s*"DISABLED"/);
+  assert.doesNotMatch(page, /\|\|\s*"HEALTHY"/);
+  assert.match(page, /Status values are administrator routing states, not live provider-health measurements/);
+  assert.match(page, /disabled=\{saving \|\| loading \|\| !configLoaded\}/);
+
+  assert.doesNotMatch(controller, /At least one payment gateway must remain enabled/);
+  assert.match(controller, /An all-disabled configuration is a valid emergency\/maintenance state/);
+  assert.match(controller, /No enabled payment gateways are available/);
+});
+
 test("candidate credit and job boost purchase endpoints do not self-fulfill payment success", async () => {
   const fs = await import("node:fs");
   const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");

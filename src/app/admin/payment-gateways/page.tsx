@@ -11,16 +11,17 @@ export default function AdminPaymentGatewaysPage() {
   const [config, setConfig] = useState<GatewayConfig>({
     mode: "AUTO",
     primaryGateway: "STRIPE",
-    autoFailover: true,
-    allowEmployerSelection: true,
+    autoFailover: false,
+    allowEmployerSelection: false,
     gatewaysStatus: {
-      STRIPE: "HEALTHY",
-      PAYU: "HEALTHY",
+      STRIPE: "DISABLED",
+      PAYU: "DISABLED",
     },
     priorities: ["STRIPE", "PAYU"],
   });
 
   const [loading, setLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,9 @@ export default function AdminPaymentGatewaysPage() {
       const data = await res.json();
       if (!res.ok || !data.success || !data.config) throw new Error(data.error || "Unable to load gateway configuration.");
       setConfig(data.config);
+      setConfigLoaded(true);
     } catch (err) {
+      setConfigLoaded(false);
       setError(err instanceof Error ? err.message : "Unable to load gateway configuration.");
     } finally {
       setLoading(false);
@@ -44,6 +47,10 @@ export default function AdminPaymentGatewaysPage() {
   }, []);
 
   const handleSave = async () => {
+    if (!configLoaded) {
+      setError("Gateway configuration must be loaded from the server before it can be changed.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -53,8 +60,9 @@ export default function AdminPaymentGatewaysPage() {
         body: JSON.stringify(config),
       });
       const data = await res.json();
-      if (data.success) {
-        setToast("Multi-gateway payment configuration saved!");
+      if (res.ok && data.success && data.config) {
+        setConfig(data.config);
+        setToast("Payment routing configuration saved.");
         setTimeout(() => setToast(null), 3000);
       } else {
         setError(data.error || "Unable to save gateway configuration.");
@@ -67,13 +75,19 @@ export default function AdminPaymentGatewaysPage() {
   };
 
   const toggleGatewayStatus = (gw: GatewayName) => {
-    const current = config.gatewaysStatus[gw] || "HEALTHY";
+    if (!configLoaded) return;
+    const current = config.gatewaysStatus[gw] ?? "DISABLED";
     const next = current === "HEALTHY" ? "DEGRADED" : current === "DEGRADED" ? "DISABLED" : "HEALTHY";
     const gatewaysStatus = { ...config.gatewaysStatus, [gw]: next };
     const enabled = GATEWAYS.filter((name) => gatewaysStatus[name] !== "DISABLED");
-    if (enabled.length === 0) return setError("At least one payment gateway must remain enabled.");
     setError(null);
-    setConfig({ ...config, gatewaysStatus, primaryGateway: gatewaysStatus[config.primaryGateway] === "DISABLED" ? enabled[0] : config.primaryGateway });
+    setConfig({
+      ...config,
+      gatewaysStatus,
+      primaryGateway: gatewaysStatus[config.primaryGateway] === "DISABLED" && enabled.length > 0
+        ? enabled[0]
+        : config.primaryGateway,
+    });
   };
 
   return (
@@ -98,14 +112,14 @@ export default function AdminPaymentGatewaysPage() {
               </h1>
             </div>
             <p className="text-sm text-slate-400">
-              Admin Controller for Stripe and PayU with Safe Failover and Health Monitoring
+              Configure Stripe and PayU routing. Status values are administrator routing states, not live provider-health measurements.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || loading || !configLoaded}
               className="px-6 py-2.5 rounded-full bg-[#448AFF] text-white font-extrabold text-xs shadow-lg hover:bg-[#2979FF] transition-all disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Configuration"}
@@ -117,6 +131,12 @@ export default function AdminPaymentGatewaysPage() {
           <div className="py-20 text-center text-slate-400">
             <span className="material-symbols-outlined animate-spin text-3xl text-[#448AFF]">progress_activity</span>
             <p className="text-xs mt-2 font-mono">Loading Payment Gateway Configuration...</p>
+          </div>
+        ) : !configLoaded ? (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+            <p className="font-bold">Authoritative payment routing configuration is unavailable.</p>
+            <p className="mt-2 text-red-200/80">No local fallback can be edited or saved. Retry after the server configuration is available.</p>
+            <button type="button" onClick={() => { setLoading(true); void fetchConfig(); }} className="mt-4 rounded-xl border border-red-300/30 px-4 py-2 text-xs font-bold hover:bg-red-500/10">Retry</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
@@ -140,7 +160,7 @@ export default function AdminPaymentGatewaysPage() {
                       config.mode === "AUTO" ? "bg-[#448AFF] text-white shadow" : "text-slate-400 hover:text-white"
                     }`}
                   >
-                    AUTO (Health)
+                    AUTO (Priority)
                   </button>
                   <button
                     onClick={() => setConfig({ ...config, mode: "MANUAL" })}
@@ -201,15 +221,15 @@ export default function AdminPaymentGatewaysPage() {
               </div>
             </div>
 
-            {/* Provider Health & Metrics Cards */}
+            {/* Provider routing-state cards */}
             <div className="md:col-span-8 space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-emerald-400">ecg</span>
-                Provider Health &amp; Priority Stack
+                Provider Routing State &amp; Priority
               </h2>
 
               {GATEWAYS.map((gw) => {
-                const status = config.gatewaysStatus[gw] || "HEALTHY";
+                const status = config.gatewaysStatus[gw] ?? "DISABLED";
                 return (
                   <div
                     key={gw}
@@ -230,7 +250,7 @@ export default function AdminPaymentGatewaysPage() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                      {/* Health Status Toggle */}
+                      {/* Administrator routing-status toggle; not a live provider-health probe. */}
                       <button
                         onClick={() => toggleGatewayStatus(gw)}
                         className={`px-3 py-1 rounded-full text-xs font-extrabold border flex items-center gap-1.5 transition-all ${

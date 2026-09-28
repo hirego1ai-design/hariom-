@@ -52,11 +52,13 @@ export default function AdminCopilotCommercePage() {
   const [rules, setRules] = useState<UsageRule[]>([]);
   const [capacityOffers, setCapacityOffers] = useState<CapacityOffer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
+    setConfigLoaded(false);
     setMessage("");
     try {
       const [res, offersRes] = await Promise.all([
@@ -70,7 +72,9 @@ export default function AdminCopilotCommercePage() {
       setPlans(data.plans || []);
       setRules(data.usageRules || []);
       setCapacityOffers(offersData.offers || []);
+      setConfigLoaded(true);
     } catch (error) {
+      setConfigLoaded(false);
       setMessage(error instanceof Error ? error.message : "Unable to load Copilot commerce.");
     } finally {
       setLoading(false);
@@ -81,6 +85,10 @@ export default function AdminCopilotCommercePage() {
 
   async function createCapacityOffer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!configLoaded) {
+      setMessage("Authoritative Copilot commerce configuration must load before offers can be created.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const countries = String(form.get("countries") || "")
       .split(",")
@@ -96,9 +104,9 @@ export default function AdminCopilotCommercePage() {
         countries,
         currency: String(form.get("currency") || "").trim().toUpperCase(),
         amountMinor: Number(form.get("amountMinor")),
-        taxMode: String(form.get("taxMode") || "NO_TAX_COLLECTION"),
-        taxRateBps: Number(form.get("taxRateBps") || 0),
-        paymentRoute: String(form.get("paymentRoute") || "STRIPE"),
+        taxMode: String(form.get("taxMode") || ""),
+        taxRateBps: Number(form.get("taxRateBps")),
+        paymentRoute: String(form.get("paymentRoute") || ""),
         isActive: true,
       }],
     };
@@ -124,6 +132,10 @@ export default function AdminCopilotCommercePage() {
   }
 
   async function patch(payload: Record<string, unknown>, key: string) {
+    if (!configLoaded) {
+      setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
+      return;
+    }
     setSaving(key);
     setMessage("");
     try {
@@ -158,6 +170,10 @@ export default function AdminCopilotCommercePage() {
 
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-[#16161B] p-10 text-center text-sm text-[#94A3B8]">Loading configuration…</div>
+      ) : !configLoaded ? (
+        <div role="alert" className="rounded-2xl border border-red-400/25 bg-red-500/10 p-6 text-sm text-red-100">
+          Authoritative Copilot commerce configuration is unavailable. Local defaults are not editable or savable.
+        </div>
       ) : (
         <>
           <section className="space-y-5">
@@ -289,12 +305,15 @@ export default function AdminCopilotCommercePage() {
               <input name="countries" required placeholder="Countries, e.g. IN or DE,FR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="currency" required maxLength={3} placeholder="INR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="amountMinor" required type="number" min={1} placeholder="Amount in minor units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
-              <select name="taxMode" defaultValue="NO_TAX_COLLECTION" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+              <select name="taxMode" required defaultValue="" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+                <option value="" disabled>Select tax mode</option>
+                <option value="NO_TAX_COLLECTION">No tax collection</option>
                 <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                 <option value="TAX_INCLUSIVE">Tax inclusive</option>
               </select>
-              <input name="taxRateBps" type="number" min={0} max={10000} defaultValue={0} placeholder="Tax basis points (1800 = 18%)" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
-              <select name="paymentRoute" defaultValue="STRIPE" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+              <input name="taxRateBps" required type="number" min={0} max={10000} placeholder="Tax basis points (1800 = 18%)" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <select name="paymentRoute" required defaultValue="" className="rounded-xl border border-white/10 bg-[#1A1A20] px-3 py-2 text-sm text-white">
+                <option value="" disabled>Select payment route</option>
                 <option value="STRIPE">Stripe</option>
                 <option value="PAYU">PayU</option>
               </select>

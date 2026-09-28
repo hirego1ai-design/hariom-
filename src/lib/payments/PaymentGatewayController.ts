@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import {
   PaymentGateway,
   GatewayName,
@@ -21,6 +22,11 @@ export interface GatewayConfigState {
   priorities: GatewayName[];
 }
 
+type GatewayConfigAuditContext = {
+  actorId: string;
+  ipAddress?: string;
+};
+
 // Production safety invariant: Incomplete providers CANNOT be enabled in production
 // under any circumstances (even if DB config marks them as healthy) to prevent risk.
 const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>();
@@ -31,7 +37,6 @@ const PRODUCTION_BLOCKED_GATEWAYS = new Set<GatewayName>();
 
 export class PaymentGatewayController {
   private static providers: Record<GatewayName, PaymentGateway> = {
-    
     PAYU: new PayUGateway(),
     STRIPE: new StripeGateway(),
   };
@@ -124,7 +129,6 @@ export class PaymentGatewayController {
       autoFailover: true,
       allowEmployerSelection: true,
       gatewaysStatus: {
-        
         PAYU: isProduction ? "DISABLED" : "HEALTHY",
         STRIPE: isProduction ? "DISABLED" : "HEALTHY",
       },
@@ -136,7 +140,7 @@ export class PaymentGatewayController {
         defaultConfig.gatewaysStatus[gw] = "DISABLED";
       }
     }
-    
+
     if (!isProduction) {
       this.cachedConfig = { value: defaultConfig, expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS };
     }
@@ -144,9 +148,13 @@ export class PaymentGatewayController {
   }
 
   /**
-   * Update admin gateway configuration
+   * Update admin gateway configuration. When an admin audit context is supplied,
+   * the routing policy and its immutable audit/outbox evidence commit atomically.
    */
-  static async updateConfig(newConfig: Partial<GatewayConfigState>): Promise<GatewayConfigState> {
+  static async updateConfig(
+    newConfig: Partial<GatewayConfigState>,
+    auditContext?: GatewayConfigAuditContext,
+  ): Promise<GatewayConfigState> {
     const current = await this.getConfig();
     const updated: GatewayConfigState = {
       ...current,
@@ -164,35 +172,54 @@ export class PaymentGatewayController {
       }
     }
     const active = providerNames.filter((gw) => updated.gatewaysStatus[gw] !== "DISABLED");
-    if (active.length === 0) throw new Error("At least one payment gateway must remain enabled.");
-    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED") updated.primaryGateway = active[0];
-    if (updated.mode === "AUTO" && !updated.priorities.some((gw) => updated.gatewaysStatus[gw] !== "DISABLED")) throw new Error("AUTO mode requires an enabled gateway in the priority list.");
-    
+    // An all-disabled configuration is a valid emergency/maintenance state.
+    // Order creation below fails closed when there is no enabled provider.
+    if (updated.gatewaysStatus[updated.primaryGateway] === "DISABLED" && active.length > 0) {
+      updated.primaryGateway = active[0];
+    }
+
     try {
-      await prisma.paymentGatewayConfig.upsert({
-        where: { id: "global-gateway-config" },
-        update: {
-          mode: updated.mode,
-          primaryGateway: updated.primaryGateway,
-          autoFailover: updated.autoFailover,
-          allowEmployerSelection: updated.allowEmployerSelection,
-          gatewaysStatus: updated.gatewaysStatus as any,
-          priorities: updated.priorities as any,
-        },
-        create: {
-          id: "global-gateway-config",
-          mode: updated.mode,
-          primaryGateway: updated.primaryGateway,
-          autoFailover: updated.autoFailover,
-          allowEmployerSelection: updated.allowEmployerSelection,
-          gatewaysStatus: updated.gatewaysStatus as any,
-          priorities: updated.priorities as any,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.paymentGatewayConfig.upsert({
+          where: { id: "global-gateway-config" },
+          update: {
+            mode: updated.mode,
+            primaryGateway: updated.primaryGateway,
+            autoFailover: updated.autoFailover,
+            allowEmployerSelection: updated.allowEmployerSelection,
+            gatewaysStatus: updated.gatewaysStatus as any,
+            priorities: updated.priorities as any,
+          },
+          create: {
+            id: "global-gateway-config",
+            mode: updated.mode,
+            primaryGateway: updated.primaryGateway,
+            autoFailover: updated.autoFailover,
+            allowEmployerSelection: updated.allowEmployerSelection,
+            gatewaysStatus: updated.gatewaysStatus as any,
+            priorities: updated.priorities as any,
+          },
+        });
+
+        if (auditContext) {
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: auditContext.actorId,
+              action: "PAYMENT_GATEWAY_CONFIG_UPDATED",
+              resource: "Payment gateway configuration",
+              ...(auditContext.ipAddress ? { ipAddress: auditContext.ipAddress } : {}),
+              details: `changedKeys:${Object.keys(newConfig).sort().join(",")}; credentials:not-accepted`,
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId);
+        }
       });
     } catch (error) {
       if (process.env.NODE_ENV === "production") {
         throw error;
       }
+      // Offline/local test environments may not have a backing payment config table.
+      if (auditContext) throw error;
     }
 
     // Persist first, then update only this instance's cache. Other instances
@@ -259,7 +286,7 @@ export class PaymentGatewayController {
     }
 
     if (candidateSequence.length === 0) {
-      throw new Error("No active or healthy payment gateways available.");
+      throw new Error("No enabled payment gateways are available.");
     }
 
     let lastError: Error | null = null;

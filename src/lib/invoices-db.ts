@@ -12,6 +12,10 @@ export interface InvoiceRecord extends Invoice {
 type CreateInvoiceInput = Omit<InvoiceRecord, "id" | "invoiceNumber" | "createdAt" | "companyName"> & {
   companyName?: string;
 };
+type InvoiceAuditContext = {
+  actorId: string;
+  ipAddress?: string;
+};
 export function presentInvoice(r: DatabaseInvoice): InvoiceRecord {
   const metadata = receiptNotes(r.notes);
   return { ...r, candidateName: r.candidateName || undefined, jobTitle: r.jobTitle || undefined,
@@ -30,23 +34,40 @@ class InvoicesDb {
     const row = await prisma.invoice.findFirst({ where: { OR: [{ id }, { invoiceNumber: id }] } });
     return row ? presentInvoice(row) : null;
   }
-  async createInvoice(data: CreateInvoiceInput): Promise<InvoiceRecord> {
-    const agreement = await prisma.commercialAgreement.findUnique({
-      where: { id: data.agreementId },
-      select: { companyId: true, companyName: true, status: true, signedAt: true },
+  async createInvoice(data: CreateInvoiceInput, auditContext?: InvoiceAuditContext): Promise<InvoiceRecord> {
+    return prisma.$transaction(async tx => {
+      const agreement = await tx.commercialAgreement.findUnique({
+        where: { id: data.agreementId },
+        select: { companyId: true, companyName: true, status: true, signedAt: true },
+      });
+      if (!agreement) throw new ApiError("A valid commercial agreement is required", 400);
+      if (!agreement.companyId || agreement.status !== "ACTIVE" || !agreement.signedAt) {
+        throw new ApiError("Invoices require a signed active agreement bound to a company", 409);
+      }
+      if (data.status !== "UNPAID") throw new ApiError("New invoices must be unpaid", 400);
+
+      const created = await tx.invoice.create({ data: {
+        id: randomUUID(), invoiceNumber: `INV-${new Date().getUTCFullYear()}-${randomUUID()}`,
+        agreementId: data.agreementId, companyName: agreement.companyName,
+        candidateName: data.candidateName, jobTitle: data.jobTitle,
+        amount: data.amount, taxAmount: data.taxAmount, totalAmount: data.totalAmount,
+        currency: data.currency, status: "UNPAID", dueDate: data.dueDate, notes: data.notes,
+      } });
+
+      if (auditContext) {
+        const auditLog = await tx.auditLog.create({ data: {
+          userId: auditContext.actorId,
+          companyId: agreement.companyId,
+          action: "INVOICE_CREATED",
+          resource: `Invoice:${created.id}`,
+          ipAddress: auditContext.ipAddress || "unknown",
+          details: `Invoice ${created.invoiceNumber} created for Agreement:${data.agreementId}; total:${created.totalAmount}; currency:${created.currency}`,
+        } });
+        await enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId);
+      }
+
+      return presentInvoice(created);
     });
-    if (!agreement) throw new ApiError("A valid commercial agreement is required", 400);
-    if (!agreement.companyId || agreement.status !== "ACTIVE" || !agreement.signedAt) {
-      throw new ApiError("Invoices require a signed active agreement bound to a company", 409);
-    }
-    if (data.status !== "UNPAID") throw new ApiError("New invoices must be unpaid", 400);
-    return presentInvoice(await prisma.invoice.create({ data: {
-      id: randomUUID(), invoiceNumber: `INV-${new Date().getUTCFullYear()}-${randomUUID()}`,
-      agreementId: data.agreementId, companyName: agreement.companyName,
-      candidateName: data.candidateName, jobTitle: data.jobTitle,
-      amount: data.amount, taxAmount: data.taxAmount, totalAmount: data.totalAmount,
-      currency: data.currency, status: "UNPAID", dueDate: data.dueDate, notes: data.notes,
-    } }));
   }
   async reviewReceipt(id: string, action: "approve" | "reject", actorId: string, paidDate?: string, expectedUpdatedAt?: string, ipAddress?: string): Promise<InvoiceRecord | null> {
     return prisma.$transaction(async tx => {
