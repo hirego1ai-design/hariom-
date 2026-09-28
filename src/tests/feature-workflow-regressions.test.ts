@@ -579,3 +579,22 @@ test("admin candidate users search and pagination stay wired end to end", () => 
   assert(route.includes("skip: (query.page - 1) * query.limit"));
   assert(route.includes("take: query.limit"));
 });
+
+
+test("admin employer directory excludes recruiter profiles and keeps search pagination authoritative", () => {
+  const page = fs.readFileSync(new URL("../app/admin/employers/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/employers/route.ts", import.meta.url), "utf8");
+
+  assert(route.includes('user: { is: { role: "EMPLOYER" } }'));
+  assert(route.includes('company: { name: { contains: query.search'));
+  assert(route.includes('user: { is: { name: { contains: query.search'));
+  assert(route.includes('user: { is: { email: { contains: query.search'));
+  assert(route.includes('admin_employers:${admin.id}'));
+  assert(route.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+
+  assert(page.includes("useDeferredValue(search)"));
+  assert(page.includes("setTotal(typeof payload.total === \"number\" ? payload.total : 0)"));
+  assert(page.includes("Employer-owner profiles"));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(page.includes('role="alert"'));
+});
