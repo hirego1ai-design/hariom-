@@ -1662,3 +1662,58 @@ test("admin referral governance persists fraud state and keeps payout ledger bal
   assert(page.includes("Page {fraudPage} of {fraudPages}"));
   assert(page.includes("analytics.summary.currencyMode"));
 });
+
+
+test("admin managed-hiring operations wire persisted placements and versioned commercial lifecycle", () => {
+  const operations = fs.readFileSync(new URL("../app/admin/managed-hiring/operations/page.tsx", import.meta.url), "utf8");
+  const requests = fs.readFileSync(new URL("../app/api/admin/managed-hiring/requirements/route.ts", import.meta.url), "utf8");
+  const placements = fs.readFileSync(new URL("../app/api/admin/managed-hiring/placements/route.ts", import.meta.url), "utf8");
+  const agreementDetail = fs.readFileSync(new URL("../app/admin/agreements/[id]/page.tsx", import.meta.url), "utf8");
+  const agreementBuilder = fs.readFileSync(new URL("../app/admin/agreements/builder/page.tsx", import.meta.url), "utf8");
+  const agreementTemplates = fs.readFileSync(new URL("../app/admin/agreements/templates/page.tsx", import.meta.url), "utf8");
+  const contractRoute = fs.readFileSync(new URL("../app/api/agreements/contracts/[id]/route.ts", import.meta.url), "utf8");
+  const reqDetailRoute = fs.readFileSync(new URL("../app/api/agreements/requirements/[id]/route.ts", import.meta.url), "utf8");
+  const legacyBuilder = fs.readFileSync(new URL("../app/admin/managed-hiring/agreements/builder/page.tsx", import.meta.url), "utf8");
+  const legacyTemplates = fs.readFileSync(new URL("../app/admin/managed-hiring/templates/page.tsx", import.meta.url), "utf8");
+
+  assert(placements.includes('status: z.enum(placementStatuses).optional()'));
+  assert(placements.includes('action: z.enum(["HOLD", "RESUME", "CANCEL"])'));
+  assert(placements.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(placements.includes("admin_managed_hiring_placements_read:"));
+  assert(placements.includes("admin_managed_hiring_placements_write:"));
+  assert(placements.includes("Placement changed; reload before saving."));
+  assert(placements.includes("PPH_PLACEMENT_"));
+  assert(placements.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+
+  assert(operations.includes("/api/admin/managed-hiring/placements?"));
+  assert(operations.includes('method: "PATCH"'));
+  assert(operations.includes("expectedUpdatedAt: placementActionTarget.placement.updatedAt"));
+  assert(operations.includes("HOLD pauses invoice scheduling"));
+  assert(operations.includes("does not automatically change the candidate application's HIRED status"));
+  assert(operations.includes("Page {placementPage} of {placementPages}"));
+  assert(operations.includes('role="dialog"'));
+
+  assert(requests.includes('agreement.status === "ACTIVE"'));
+  assert(!requests.includes('["ACTIVE", "SENT_TO_EMPLOYER", "AMENDMENT_REQUESTED"].includes(agreement.status)'));
+
+  assert(agreementBuilder.includes("expectedTemplateUpdatedAt"));
+  assert(agreementBuilder.includes("expectedRequirementUpdatedAt"));
+  assert(agreementBuilder.includes("reason: draftReason.trim()"));
+
+  assert(agreementDetail.includes("expectedUpdatedAt: new Date(agreement.updatedAt).toISOString()"));
+  assert(agreementDetail.includes('action: "send_to_employer"'));
+  assert(agreementDetail.includes('status: "ACTIVE"'));
+  assert(agreementDetail.includes("activeAgreementId: agreement.id"));
+
+  assert(agreementTemplates.includes("expectedUpdatedAt: editingTemplate.expectedUpdatedAt"));
+  assert(agreementTemplates.includes("reason: editingTemplate.changeReason.trim()"));
+
+  assert(contractRoute.includes("COMMERCIAL_AGREEMENT_SENT"));
+  assert(contractRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(contractRoute.includes("idempotencyKey:"));
+  assert(reqDetailRoute.includes("activateManagedHiringRequirement"));
+  assert(reqDetailRoute.includes("MANAGED_HIRING_REQUIREMENT_UPDATED"));
+
+  assert(legacyBuilder.includes("/admin/agreements/builder?reqId="));
+  assert(legacyTemplates.includes('redirect("/admin/agreements/templates")'));
+});
