@@ -22,7 +22,7 @@ const CONFIG_ID = "global-admin-config";
 
 const updateSchema = z.object({
   config: aiRoutingConfigSchema,
-  reason: z.string().trim().max(500).optional(),
+  reason: z.string().trim().min(3).max(500),
 }).strict();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,7 +46,11 @@ export async function GET(request: NextRequest) {
       telemetry: {
         totalRequests: usage.totalRequests,
         totalTokens: usage.totalTokens,
+        knownTokens: usage.knownTokens,
+        tokenCoverageRate: usage.tokenCoverageRate,
         totalCostUsd: usage.totalCostUsd,
+        knownCostUsd: usage.knownCostUsd,
+        costCoverageRate: usage.costCoverageRate,
         avgLatencyMs: usage.avgLatencyMs,
         providerCounts: usage.providerCounts,
         modelStats: usage.modelStats,
@@ -110,7 +114,7 @@ export async function PUT(request: NextRequest) {
             toVersion: nextConfig.version,
             modelRegistrySize: nextConfig.models.length,
             routeCount: nextConfig.routes.length,
-            reason: payload.reason || null,
+            reason: payload.reason,
           }),
         },
       });
