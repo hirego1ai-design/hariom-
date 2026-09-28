@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     const requestedLimit = searchParams.get("limit");
     const requestedCursor = searchParams.get("cursor");
     const searchQuery = searchParams.get("q")?.trim() || "";
+    const scope = searchParams.get("scope") || "all";
     const limit = requestedLimit === null ? DEFAULT_PAGE_SIZE : Number(requestedLimit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
       throw new ApiError(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`, 400);
@@ -32,6 +33,9 @@ export async function GET(req: NextRequest) {
     }
     if (searchQuery.length > 100) {
       throw new ApiError("Candidate search must be 100 characters or fewer.", 400);
+    }
+    if (!["all", "managed"].includes(scope)) {
+      throw new ApiError("Invalid candidate scope.", 400);
     }
 
     let candidates: any[] = [];
@@ -49,7 +53,15 @@ export async function GET(req: NextRequest) {
         // every application and nested profile into one request.
         const applications = await prisma.application.findMany({
           where: {
-            job: { companyId },
+            job: {
+              companyId,
+              ...(scope === "managed"
+                ? {
+                    managedRequirementId: { not: null },
+                    managedAgreementId: { not: null },
+                  }
+                : {}),
+            },
             NOT: {
               gates: {
                 some: {
