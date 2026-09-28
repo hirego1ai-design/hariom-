@@ -126,21 +126,19 @@ export default function EmployerTeamManagementPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.invitation) {
         throw new Error(data.error || "Failed to send invitation.");
       }
 
-      if (data.success && data.invitation) {
-        setInvitations((prev) => [data.invitation, ...prev]);
-        setShowInviteModal(false);
-        setInviteName("");
-        setInviteEmail("");
-        setInviteDesignation("");
-        setInviteRole("RECRUITER");
-        setMessageType("success");
-        setMessage("Team invitation sent.");
-      }
+      setInvitations((prev) => [data.invitation, ...prev]);
+      setShowInviteModal(false);
+      setInviteName("");
+      setInviteEmail("");
+      setInviteDesignation("");
+      setInviteRole("RECRUITER");
+      setMessageType("success");
+      setMessage("Team invitation sent.");
     } catch (err) {
       setMessageType("error");
       setMessage(err instanceof Error ? err.message : "Failed to send invitation.");
