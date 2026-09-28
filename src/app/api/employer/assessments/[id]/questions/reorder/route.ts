@@ -35,12 +35,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    const [storedQuestions, attemptCount] = await Promise.all([
+    const [storedQuestions, attemptCount, assignmentCount] = await Promise.all([
       prisma.mcqQuestion.findMany({ where: { assessmentId }, select: { id: true } }),
       prisma.mcqAttempt.count({ where: { assessmentId } }),
+      prisma.applicationGate.count({ where: { assessmentId } }),
     ]);
-    if (attemptCount > 0) {
-      throw new ApiError("Cannot reorder questions after candidates have started this assessment.", 400);
+    if (attemptCount > 0 || assignmentCount > 0) {
+      throw new ApiError("Cannot reorder questions after this assessment has been assigned to a candidate.", 409);
     }
 
     const storedIds = new Set(storedQuestions.map((question) => question.id));
