@@ -74,6 +74,8 @@ const statusClass = (status: string) => {
       return "border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
     case "Pending":
       return "border-amber-400/20 bg-amber-500/10 text-amber-300";
+    case "Overdue":
+      return "border-orange-400/20 bg-orange-500/10 text-orange-300";
     case "Refunded":
       return "border-sky-400/20 bg-sky-500/10 text-sky-300";
     case "Failed":
@@ -313,6 +315,7 @@ export default function AdminRevenuePage() {
                     <option value="">All statuses</option>
                     <option value="Success">Success</option>
                     <option value="Pending">Pending</option>
+                    <option value="Overdue">Overdue</option>
                     <option value="Refunded">Refunded</option>
                     <option value="Failed">Failed</option>
                     <option value="Cancelled">Cancelled</option>
