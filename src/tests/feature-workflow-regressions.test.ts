@@ -616,3 +616,21 @@ test("admin job listings keep status filtering pagination and UI semantics truth
   assert(page.includes("Page {page} of {totalPages}"));
   assert(!page.includes('<p className="text-emerald-400">{job.status}</p>'));
 });
+
+
+test("admin new-signups view defines explicit time windows over authoritative candidate users", () => {
+  const page = fs.readFileSync(new URL("../app/admin/signups/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
+
+  assert(route.includes('windowDays: z.enum(["7", "30", "90"]).optional()'));
+  assert(route.includes("createdAfter"));
+  assert(route.includes('role: "CANDIDATE"'));
+
+  assert(page.includes('type SignupWindow = "" | "7" | "30" | "90"'));
+  assert(page.includes('params.set("windowDays", windowDays)'));
+  assert(page.includes("Last 7 days"));
+  assert(page.includes("Last 30 days"));
+  assert(page.includes("Last 90 days"));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(!page.includes("&limit=100"));
+});
