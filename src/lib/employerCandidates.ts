@@ -22,8 +22,14 @@ export async function fetchEmployerCandidates<T>(signal?: AbortSignal): Promise<
 }
 
 export const pipelineStageLabels: Record<string, string> = {
-  APPLIED: "AI Screening", SCREENING: "AI Screening", ASSESSMENT: "Assessment",
-  AI_INTERVIEW: "AI Interview", SHORTLISTED: "Shortlisted", HIRED: "Joined", REJECTED: "Rejected",
+  APPLIED: "Applied",
+  SCREENING: "Screening",
+  ASSESSMENT: "Assessment",
+  AI_INTERVIEW: "AI Interview",
+  SHORTLISTED: "Shortlisted",
+  HIRED: "Joined",
+  REJECTED: "Rejected",
+  WITHDRAWN: "Withdrawn",
 };
 
 export function pipelineStageStatus(label: string): string {
