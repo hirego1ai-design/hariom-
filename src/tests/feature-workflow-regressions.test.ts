@@ -1283,3 +1283,37 @@ test("managed-hiring agreements keep commercial terms versioned immutable and au
   assert(activation.includes("MANAGED_HIRING_REQUIREMENT_ACTIVATED"));
   assert(activation.includes("enqueueSecurityAuditEvent(tx, auditLog, params.activatedById)"));
 });
+
+
+test("admin security pages report only evidence-backed posture and use canonical routes", () => {
+  const page = fs.readFileSync(new URL("../app/admin/settings/security/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/security/status/route.ts", import.meta.url), "utf8");
+  const inspector = fs.readFileSync(new URL("../app/admin/security/vulnerability-inspector/page.tsx", import.meta.url), "utf8");
+  const legacyAudit = fs.readFileSync(new URL("../app/settings/audit-log/page.tsx", import.meta.url), "utf8");
+  const auditPage = fs.readFileSync(new URL("../app/admin/settings/audit-log/page.tsx", import.meta.url), "utf8");
+  const auditRoute = fs.readFileSync(new URL("../app/api/admin/audit-logs/route.ts", import.meta.url), "utf8");
+
+  assert(route.includes('"APPLICATION_CONFIGURATION_EVIDENCE_ONLY"'));
+  assert(route.includes("edgeProxyOrWaf"));
+  assert(route.includes('"NOT_MEASURED"'));
+  assert(route.includes("browserCrossOriginIsolation"));
+  assert(route.includes('headers["Cross-Origin-Embedder-Policy"]'));
+  assert(!route.includes("edgeProxy: true"));
+  assert(!route.includes("crossOriginIsolation: headers"));
+
+  assert(page.includes("No simulated security score"));
+  assert(page.includes("Measurements awaiting external evidence"));
+  assert(page.includes("COEP:"));
+  assert(page.includes("NOT CLAIMED"));
+  assert(page.includes('title="Security Posture"'));
+
+  assert(inspector.includes('redirect("/admin/settings/security")'));
+  assert(legacyAudit.includes('redirect("/admin/settings/audit-log")'));
+
+  assert(auditPage.includes("/api/admin/audit-logs?"));
+  assert(auditPage.includes("Page {page} of {totalPages}"));
+  assert(auditRoute.includes('admin_audit_logs:${admin.id}'));
+  assert(auditRoute.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+  assert(auditRoute.includes("skip: (query.page - 1) * query.limit"));
+  assert(auditRoute.includes("take: query.limit"));
+});
