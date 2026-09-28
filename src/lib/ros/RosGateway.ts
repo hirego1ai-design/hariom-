@@ -18,6 +18,9 @@ export interface DispatchJobCreationParams {
   salaryRange: string;
   location: string;
   type: string;
+  workMode?: "On-site" | "Remote" | "Hybrid";
+  experienceLevel?: "Entry-level" | "Mid-level" | "Senior" | "Lead" | "Director";
+  numberOfOpenings?: number;
   status: JobStatus;
   requiresJobSpecificAssessment?: boolean;
   department?: string;
@@ -77,6 +80,9 @@ export class RosGateway {
         companyId: params.companyId,
         location: params.location,
         type: params.type,
+        workMode: params.workMode ?? "On-site",
+        experienceLevel: params.experienceLevel ?? "Mid-level",
+        numberOfOpenings: params.numberOfOpenings ?? 1,
         salaryRange: params.salaryRange,
       },
       context: {
