@@ -110,10 +110,12 @@ function EmployerInterviewSchedulerContent() {
         .then((page) => {
           setOptions(page.options);
           setNextCursor(page.nextCursor);
-          if (exactApplicationId) setApplicationId(exactApplicationId);
-          else if (applicationId && !page.options.some((option) => option.applicationId === applicationId)) {
-            setApplicationId("");
-          }
+          setApplicationId((current) => {
+            if (exactApplicationId) return exactApplicationId;
+            return current && !page.options.some((option) => option.applicationId === current)
+              ? ""
+              : current;
+          });
         })
         .catch((reason) => {
           if (reason instanceof DOMException && reason.name === "AbortError") return;
@@ -130,7 +132,7 @@ function EmployerInterviewSchedulerContent() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [applicationId, loadOptions, optionQuery, requestedApplicationId]);
+  }, [loadOptions, optionQuery, requestedApplicationId]);
 
   useEffect(() => {
     let cancelled = false;
