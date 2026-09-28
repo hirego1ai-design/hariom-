@@ -5,11 +5,19 @@ import AdminHeader from "@/components/admin/AdminHeader";
 
 type QueueSnapshot = { name: string; counts: Record<string, number> };
 type WorkerLiveness = {
-  status: "NOT_STARTED" | "STALE" | "HEALTHY" | "ATTENTION" | "UNAVAILABLE";
+  status: "NOT_STARTED" | "STALE" | "RECENT_HEARTBEAT" | "ATTENTION" | "UNAVAILABLE";
   stale: boolean;
   state: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+};
+
+const workerStatusClass: Record<WorkerLiveness["status"], string> = {
+  RECENT_HEARTBEAT: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+  NOT_STARTED: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+  STALE: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  ATTENTION: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+  UNAVAILABLE: "border-red-500/30 bg-red-500/10 text-red-300",
 };
 
 export default function AdminQueueBrokerPage() {
@@ -57,7 +65,7 @@ export default function AdminQueueBrokerPage() {
                   <h2 id="recovery-worker-heading" className="font-bold text-white">Workflow recovery worker</h2>
                   <p className="mt-1 text-xs text-text-muted">Persisted heartbeat evidence; this does not infer liveness when the heartbeat is stale or unavailable.</p>
                 </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold text-text-secondary">{worker.status.replaceAll("_", " ")}</span>
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${workerStatusClass[worker.status]}`}>{worker.status.replaceAll("_", " ")}</span>
               </div>
               <div className="mt-4 grid gap-2 text-xs text-text-muted sm:grid-cols-3">
                 <p>State: <span className="text-white">{worker.state || "Not recorded"}</span></p>
