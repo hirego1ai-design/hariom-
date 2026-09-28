@@ -7,7 +7,7 @@ import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 const querySchema = z.object({
   search: z.string().trim().max(200).optional(),
   source: z.string().trim().max(80).optional(),
-  status: z.enum(["Success", "Pending", "Refunded", "Failed", "Cancelled"]).optional(),
+  status: z.enum(["Success", "Pending", "Overdue", "Refunded", "Failed", "Cancelled"]).optional(),
   gateway: z.string().trim().max(40).optional(),
   customerType: z.string().trim().max(40).optional(),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
