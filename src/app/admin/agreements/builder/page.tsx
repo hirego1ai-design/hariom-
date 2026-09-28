@@ -15,74 +15,148 @@ export default function SalesAgreementBuilderPage() {
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Customization fields
   const [companyName, setCompanyName] = useState("");
+  const [clientLegalName, setClientLegalName] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [email, setEmail] = useState("");
-  const [feeType, setFeeType] = useState("PERCENTAGE");
-  const [feeValue, setFeeValue] = useState(8.33);
-  const [replacementDays, setReplacementDays] = useState(90);
-  const [invoiceRule, setInvoiceRule] = useState("DAY_25");
-  const [creditDays, setCreditDays] = useState(15);
-  const [hiringQuantity, setHiringQuantity] = useState(1);
+  const [feeType, setFeeType] = useState("");
+  const [feeValue, setFeeValue] = useState("");
+  const [replacementDays, setReplacementDays] = useState("");
+  const [invoiceRule, setInvoiceRule] = useState("");
+  const [creditDays, setCreditDays] = useState("");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/agreements/requirements").then((r) => r.json()),
-      fetch("/api/agreements/templates").then((r) => r.json()),
-    ]).then(([reqData, tplData]) => {
-      if (reqData.success) setRequirements(reqData.requirements || []);
-      if (tplData.success) setTemplates(tplData.templates || []);
-    });
+      fetch("/api/agreements/requirements").then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "Unable to load hiring requirements.");
+        return data;
+      }),
+      fetch("/api/agreements/templates").then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "Unable to load agreement templates.");
+        return data;
+      }),
+    ])
+      .then(([reqData, tplData]) => {
+        setRequirements(reqData.requirements || []);
+        setTemplates(tplData.templates || []);
+      })
+      .catch((error) => {
+        setActionMessage({
+          type: "error",
+          text: error instanceof Error ? error.message : "Unable to load authoritative agreement data.",
+        });
+      });
   }, []);
 
   const handleSelectRequirement = (reqId: string) => {
     setSelectedReqId(reqId);
-    const req = requirements.find((r) => r.id === reqId);
-    if (req) {
-      setCompanyName(req.companyName);
-      setContactPerson(req.contactPerson);
-      setEmail(req.email);
-      setHiringQuantity(req.numberOfPositions);
+    setActionMessage(null);
+    const req = requirements.find((record) => record.id === reqId);
+    if (!req) {
+      setCompanyName("");
+      setClientLegalName("");
+      setContactPerson("");
+      setEmail("");
+      return;
     }
+
+    setCompanyName(req.companyName);
+    setClientLegalName("");
+    setContactPerson(req.contactPerson);
+    setEmail(req.email);
   };
 
   const handleSelectTemplate = (tplId: string) => {
     setSelectedTplId(tplId);
-    const tpl = templates.find((t) => t.id === tplId);
-    if (tpl) {
-      setFeeType(tpl.feeType);
-      setFeeValue(tpl.feeValue);
-      setReplacementDays(tpl.replacementDays);
-      setInvoiceRule(tpl.invoiceRule);
-      setCreditDays(tpl.creditDays ?? 15);
+    setActionMessage(null);
+    const tpl = templates.find((record) => record.id === tplId);
+    if (!tpl) {
+      setFeeType("");
+      setFeeValue("");
+      setReplacementDays("");
+      setInvoiceRule("");
+      setCreditDays("");
+      return;
     }
+
+    setFeeType(tpl.feeType);
+    setFeeValue(String(tpl.feeValue));
+    setReplacementDays(String(tpl.replacementDays));
+    setInvoiceRule(tpl.invoiceRule);
+    const configuredCreditDays = tpl.creditTermsDays ?? tpl.creditDays;
+    setCreditDays(configuredCreditDays === undefined ? "" : String(configuredCreditDays));
   };
 
   const handleGenerateAgreement = async () => {
     setActionMessage(null);
-    if (!companyName.trim() || !contactPerson.trim() || !email.trim()) {
-      setActionMessage({ type: "error", text: "Please fill in company name, contact person, and email." });
+
+    const requirement = requirements.find((record) => record.id === selectedReqId);
+    const template = templates.find((record) => record.id === selectedTplId);
+    if (!requirement || !requirement.companyId) {
+      setActionMessage({ type: "error", text: "Select a hiring requirement that is bound to an authoritative company." });
       return;
     }
-    setLoading(true);
+    if (!template) {
+      setActionMessage({ type: "error", text: "Select a current agreement template before generating a contract." });
+      return;
+    }
+    if (!clientLegalName.trim() || !contactPerson.trim() || !email.trim()) {
+      setActionMessage({ type: "error", text: "Client legal name, contact person, and email are required." });
+      return;
+    }
+    if (feeType !== "PERCENTAGE" && feeType !== "FIXED") {
+      setActionMessage({ type: "error", text: "The selected template must use a supported placement fee type." });
+      return;
+    }
 
+    const numericFeeValue = Number(feeValue);
+    const numericReplacementDays = Number(replacementDays);
+    const numericCreditDays = creditDays.trim() === "" ? undefined : Number(creditDays);
+    if (!Number.isFinite(numericFeeValue) || numericFeeValue <= 0 || (feeType === "PERCENTAGE" && numericFeeValue > 100)) {
+      setActionMessage({ type: "error", text: "Enter a valid approved placement fee." });
+      return;
+    }
+    if (!Number.isInteger(numericReplacementDays) || numericReplacementDays < 0 || numericReplacementDays > 3650) {
+      setActionMessage({ type: "error", text: "Enter a valid replacement warranty period." });
+      return;
+    }
+    if (numericCreditDays !== undefined && (!Number.isInteger(numericCreditDays) || numericCreditDays < 0 || numericCreditDays > 365)) {
+      setActionMessage({ type: "error", text: "Enter valid credit days or leave the field blank to use the template value." });
+      return;
+    }
+    if (invoiceRule !== "DAY_25") {
+      setActionMessage({
+        type: "error",
+        text: "The selected template does not use the DAY_25 invoice rule required by the current managed-hiring billing workflow.",
+      });
+      return;
+    }
+    if (template.advancePayment !== undefined && template.advancePayment !== 0) {
+      setActionMessage({
+        type: "error",
+        text: "The selected template includes an advance payment that the current managed-hiring billing workflow does not support.",
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
       const payload = {
-        requirementId: selectedReqId || undefined,
-        templateId: selectedTplId || undefined,
-        companyName,
-        contactPerson,
-        clientEmail: email,
-        email,
+        companyId: requirement.companyId,
+        requirementId: requirement.id,
+        templateId: template.id,
+        clientLegalName: clientLegalName.trim(),
+        contactPerson: contactPerson.trim(),
+        clientEmail: email.trim(),
         feeType,
-        feeValue: Number(feeValue),
-        replacementDays: Number(replacementDays),
+        feeValue: numericFeeValue,
+        replacementDays: numericReplacementDays,
         invoiceRule,
-        creditDays: Number(creditDays),
-        hiringQuantity: Number(hiringQuantity),
-        notes,
+        ...(numericCreditDays === undefined ? {} : { creditDays: numericCreditDays }),
+        ...(notes.trim() ? { commercialNotes: notes.trim() } : {}),
       };
 
       const res = await fetch("/api/agreements/contracts", {
@@ -117,128 +191,89 @@ export default function SalesAgreementBuilderPage() {
             SALES WORKSPACE
           </div>
           <h1 className="text-2xl font-bold text-white">Commercial Agreement Builder</h1>
-          <p className="text-xs text-slate-400">Customize terms and generate master commercial contract for employer review</p>
+          <p className="text-xs text-slate-400">Create a managed-hiring agreement from an authoritative requirement and approved template.</p>
         </div>
 
         <div className="bg-[#121215] border border-white/10 rounded-2xl p-6 lg:p-8 space-y-6 shadow-2xl">
-          {/* Step 1: Select Requirement */}
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">1. Select Hiring Requirement (Optional)</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">1. Select Hiring Requirement</label>
             <select
               value={selectedReqId}
               onChange={(e) => handleSelectRequirement(e.target.value)}
               className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#29B6F6]"
             >
-              <option value="">-- Manual Commercial Agreement (No Requirement) --</option>
-              {requirements.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.referenceCode} — {r.companyName} ({r.numberOfPositions} Pos)
+              <option value="">-- Select a company-bound hiring requirement --</option>
+              {requirements.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.referenceCode} — {record.companyName} ({record.numberOfPositions} Pos)
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Step 2: Select Template */}
           <div className="space-y-3">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">2. Select Internal Template Blueprint</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">2. Select Approved Template</label>
             <select
               value={selectedTplId}
               onChange={(e) => handleSelectTemplate(e.target.value)}
               className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#29B6F6]"
             >
-              <option value="">-- Custom Template Configuration --</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.feeType === "PERCENTAGE" ? `${t.feeValue}%` : `₹${t.feeValue}`}, {t.replacementDays}d warranty)
+              <option value="">-- Select an agreement template --</option>
+              {templates.map((templateRecord) => (
+                <option key={templateRecord.id} value={templateRecord.id}>
+                  {templateRecord.name} ({templateRecord.feeType === "PERCENTAGE" ? `${templateRecord.feeValue}%` : `₹${templateRecord.feeValue}`}, {templateRecord.replacementDays}d warranty)
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Step 3: Customization Controls */}
           <div className="space-y-4 pt-4 border-t border-white/10">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">3. Commercial Terms Customization</h3>
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">3. Commercial Terms</h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Company Name</label>
-                <input
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
+                <label className="text-xs text-slate-400 mb-1 block">Company</label>
+                <input value={companyName} readOnly className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-300" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Client Legal Name</label>
+                <input value={clientLegalName} onChange={(e) => setClientLegalName(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Contact Person</label>
-                <input
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
+                <input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Client Email</label>
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Fee Type</label>
-                <select
-                  value={feeType}
-                  onChange={(e) => setFeeType(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                >
+                <select value={feeType} onChange={(e) => setFeeType(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white">
+                  <option value="">Select fee type</option>
                   <option value="PERCENTAGE">Percentage of CTC (%)</option>
                   <option value="FIXED">Fixed Amount per Hire (INR)</option>
                 </select>
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Fee Value ({feeType === "PERCENTAGE" ? "%" : "₹"})</label>
-                <input
-                  type="number"
-                  value={feeValue}
-                  onChange={(e) => setFeeValue(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
+                <input type="number" min="0" value={feeValue} onChange={(e) => setFeeValue(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Replacement Warranty (Days)</label>
-                <select
-                  value={replacementDays}
-                  onChange={(e) => setReplacementDays(parseInt(e.target.value) || 60)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                >
-                  <option value={30}>30 Days Replacement</option>
-                  <option value={60}>60 Days Replacement</option>
-                  <option value={90}>90 Days Replacement</option>
-                  <option value={120}>120 Days Replacement</option>
-                </select>
+                <input type="number" min="0" max="3650" value={replacementDays} onChange={(e) => setReplacementDays(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Invoice Rule</label>
-                <select
-                  value={invoiceRule}
-                  onChange={(e) => setInvoiceRule(e.target.value)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                >
-                  <option value="DAY_25">25 Days Post Joining (Automatic PPH)</option>
-                  <option value="ON_OFFER">On Offer Acceptance</option>
-                  <option value="ON_JOINING">On Joining Date</option>
-                  <option value="DAY_30">30 Days Post Joining</option>
-                  <option value="SPLIT_50_50">50% On Offer / 50% On Joining</option>
-                </select>
+                <input value={invoiceRule} readOnly className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-300" />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Credit Days</label>
-                <input
-                  type="number"
-                  value={creditDays}
-                  onChange={(e) => setCreditDays(parseInt(e.target.value) || 15)}
-                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
-                />
+                <input type="number" min="0" max="365" value={creditDays} onChange={(e) => setCreditDays(e.target.value)} placeholder="Use template value" className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-400 mb-1 block">Commercial Notes</label>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
             </div>
           </div>
@@ -247,7 +282,7 @@ export default function SalesAgreementBuilderPage() {
             <button
               disabled={loading}
               onClick={handleGenerateAgreement}
-              className="px-8 py-3 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90 shadow-xl"
+              className="px-8 py-3 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90 shadow-xl disabled:opacity-50"
             >
               {loading ? "Generating Contract..." : "Generate Master Agreement"}
             </button>
