@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentSession, handleApiError, jsonError } from "@/lib";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
 import {
   ApiError,
@@ -52,12 +53,8 @@ export interface DocumentRecord {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getCurrentSession(req.headers);
-    if (!session) return jsonError("Authentication required", 401);
-    if (session.role !== "ADMIN") {
-      return jsonError("Administrator access required", 403);
-    }
-    await enforceRateLimit(req, "admin_document_verification_read", 60, 60_000);
+    const session = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_document_verification_read:${session.id}`, 60, 60_000);
 
     const { searchParams } = new URL(req.url);
     const rawStatus = searchParams.get("status");
@@ -91,7 +88,7 @@ export async function GET(req: NextRequest) {
             include: { company: true, user: true },
           },
         },
-        orderBy: { submittedAt: "desc" },
+        orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
         take: rawLimit,
         skip: rawOffset,
       }),
