@@ -1442,3 +1442,32 @@ test("admin proctoring control panel stays aligned with versioned policy governa
   assert(!page.includes('value={policy.policyVersion} onChange='));
   assert(page.includes("No persisted policy exists yet."));
 });
+
+
+test("admin Copilot commerce UI matches versioned audited backend contracts", () => {
+  const page = fs.readFileSync(new URL("../app/admin/copilot-commerce/page.tsx", import.meta.url), "utf8");
+  const commerce = fs.readFileSync(new URL("../app/api/admin/copilot/commerce/route.ts", import.meta.url), "utf8");
+  const offers = fs.readFileSync(new URL("../app/api/admin/copilot/capacity-offers/route.ts", import.meta.url), "utf8");
+
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(page.includes("expectedUpdatedAt"));
+  assert(page.includes("reason: changeReason.trim()"));
+  assert(page.includes("Hard warning %"));
+  assert(page.includes("patchCapacityOffer"));
+  assert(page.includes("Archive offer"));
+  assert(page.includes("Restore offer"));
+  assert(page.includes("Save price"));
+  assert(page.includes('name="reason"'));
+  assert(!page.includes("expectedUpdatedAt,\n          reason: changeReason.trim(),\n        }),\n      });\n      const data = await res.json();\n      if (!res.ok || !data.success) throw new Error(data.error || \"Unable to create capacity offer.\")"));
+
+  assert(commerce.includes("current.updatedAt.toISOString() !== body.expectedUpdatedAt"));
+  assert(commerce.includes("COPILOT_COMMERCE_CONFIGURATION_UPDATED"));
+  assert(commerce.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+
+  assert(offers.includes("current.updatedAt.toISOString() !== body.expectedUpdatedAt"));
+  assert(offers.includes("COPILOT_CAPACITY_OFFER_UPDATED"));
+  assert(offers.includes("COPILOT_CAPACITY_OFFER_CREATED"));
+  assert(offers.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+});
