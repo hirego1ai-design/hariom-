@@ -279,7 +279,7 @@ export default function JobsPage() {
                 <p className="text-sm text-primary">{job.company.name}</p>
                 <h2 className="mt-1 text-xl font-semibold">{job.title}</h2>
                 <p className="mt-2 text-sm text-text-muted">{job.location} · {job.type}</p>
-                {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>
+                {job.salaryRange && <p className="mt-1 text-sm text-text-muted">{job.salaryRange}</p>}
 
                 {recommendation?.matchScore !== null && recommendation?.matchScore !== undefined ? (
                   <div className="mt-3 rounded-xl border border-outline bg-surface-container-high p-3 text-xs">
