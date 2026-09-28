@@ -1317,3 +1317,73 @@ test("admin security pages report only evidence-backed posture and use canonical
   assert(auditRoute.includes("skip: (query.page - 1) * query.limit"));
   assert(auditRoute.includes("take: query.limit"));
 });
+
+
+test("managed hiring agreement lifecycle is versioned reviewed and activates jobs only through admin activation", () => {
+  const builder = fs.readFileSync(new URL("../app/admin/agreements/builder/page.tsx", import.meta.url), "utf8");
+  const review = fs.readFileSync(new URL("../app/admin/agreements/[id]/page.tsx", import.meta.url), "utf8");
+  const lifecycle = fs.readFileSync(new URL("../app/api/agreements/contracts/[id]/route.ts", import.meta.url), "utf8");
+  const activationRoute = fs.readFileSync(new URL("../app/api/agreements/requirements/[id]/route.ts", import.meta.url), "utf8");
+  const activationEngine = fs.readFileSync(new URL("../lib/managedHiring/RequirementActivation.ts", import.meta.url), "utf8");
+  const managedRequirements = fs.readFileSync(new URL("../app/api/admin/managed-hiring/requirements/route.ts", import.meta.url), "utf8");
+  const requestPage = fs.readFileSync(new URL("../app/admin/managed-hiring/requests/page.tsx", import.meta.url), "utf8");
+  const pipelinePage = fs.readFileSync(new URL("../app/admin/managed-hiring/pipeline/page.tsx", import.meta.url), "utf8");
+  const employerReview = fs.readFileSync(new URL("../app/employer/managed-hiring/agreements/[id]/page.tsx", import.meta.url), "utf8");
+
+  assert(builder.includes("useSearchParams"));
+  assert(builder.includes('searchParams.get("reqId")'));
+  assert(builder.includes("expectedTemplateUpdatedAt"));
+  assert(builder.includes("expectedRequirementUpdatedAt"));
+  assert(builder.includes("reason: draftReason.trim()"));
+  assert(builder.includes("draftReason.trim().length < 3"));
+  assert(!builder.includes('Fixed Amount per Hire (INR)'));
+
+  assert(lifecycle.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(lifecycle.includes('agreement_contract_update:${session.id}'));
+  assert(lifecycle.includes('agreement_contract_action:${session.id}'));
+  assert(lifecycle.includes("COMMERCIAL_AGREEMENT_UPDATED"));
+  assert(lifecycle.includes("COMMERCIAL_AGREEMENT_SENT"));
+  assert(lifecycle.includes("COMMERCIAL_AGREEMENT_ACCEPTED"));
+  assert(lifecycle.includes("COMMERCIAL_AGREEMENT_AMENDMENT_REQUESTED"));
+  assert(lifecycle.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(lifecycle.includes('getClientIp(req) || "unknown"'));
+  assert(!lifecycle.includes('|| "127.0.0.1"'));
+  assert(lifecycle.includes("Managed hiring agreements must keep the DAY_25 invoice rule"));
+  assert(lifecycle.includes("operational activation remains an administrator action"));
+  assert(!lifecycle.includes('data: { status: "ACTIVE" }'));
+
+  assert(employerReview.includes("expectedUpdatedAt: new Date(agreement.updatedAt).toISOString()"));
+  assert(employerReview.includes("Agreement unavailable"));
+  assert(employerReview.includes("res.ok && data.success"));
+
+  assert(review.includes("Commercial Agreement Review"));
+  assert(review.includes("Edit reviewed terms"));
+  assert(review.includes("Send to employer"));
+  assert(review.includes("Activate Managed Hiring"));
+  assert(review.includes('status: "ACTIVE"'));
+  assert(review.includes("activeAgreementId: agreement.id"));
+  assert(review.includes("expectedUpdatedAt: new Date(requirement.updatedAt).toISOString()"));
+  assert(review.includes("Provider acceptance is not delivery/read confirmation."));
+
+  assert(activationRoute.includes("activateManagedHiringRequirement"));
+  assert(activationRoute.includes("expectedUpdatedAt: body.expectedUpdatedAt"));
+  assert(activationRoute.includes("reason: body.reason"));
+  assert(activationEngine.includes("JOB_LISTING_CREATED"));
+  assert(activationEngine.includes("MANAGED_JOB_ACTIVATED"));
+  assert(activationEngine.includes("MANAGED_HIRING_REQUIREMENT_ACTIVATED"));
+
+  assert(managedRequirements.includes("latestAgreementId"));
+  assert(managedRequirements.includes("latestAgreementStatus"));
+  assert(requestPage.includes("Review agreement"));
+  assert(requestPage.includes("latestAgreementId"));
+  assert(pipelinePage.includes("Review agreement"));
+  assert(pipelinePage.includes("latestAgreementId"));
+});
+
+test("managed hiring duplicate admin routes remain canonical redirects", () => {
+  const builderRedirect = fs.readFileSync(new URL("../app/admin/managed-hiring/agreements/builder/page.tsx", import.meta.url), "utf8");
+  const templatesRedirect = fs.readFileSync(new URL("../app/admin/managed-hiring/templates/page.tsx", import.meta.url), "utf8");
+
+  assert(builderRedirect.includes('redirect(reqId ? `/admin/agreements/builder?reqId='));
+  assert(templatesRedirect.includes('redirect("/admin/agreements/templates")'));
+});
