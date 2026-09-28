@@ -31,7 +31,7 @@ const SUPPORTING_DOCUMENTS = [
 
 export default function DocumentUploadPage() {
   const router = useRouter();
-  const { state, updateState, markStepComplete } = useOnboarding();
+  const { markStepComplete } = useOnboarding();
   const [uploadedDocs, setUploadedDocs] = useState<{ [key: string]: boolean }>({});
   const [uploadError, setUploadError] = useState("");
 
