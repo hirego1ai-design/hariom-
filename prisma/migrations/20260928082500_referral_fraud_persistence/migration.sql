@@ -94,3 +94,26 @@ VALUES (
   CURRENT_TIMESTAMP
 )
 ON CONFLICT ("id") DO NOTHING;
+
+
+-- Referral fraud governance is server-only. No anon/authenticated Data API
+-- access is intentionally granted.
+ALTER TABLE public."ReferralFraudProfile" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."ReferralFraudAudit" ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudAudit" FROM PUBLIC;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM anon';
+    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudAudit" FROM anon';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudProfile" FROM authenticated';
+    EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE public."ReferralFraudAudit" FROM authenticated';
+  END IF;
+END
+$$;
