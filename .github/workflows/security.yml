@@ -11,17 +11,25 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
   security-events: write
 
 jobs:
-  dependency-review:
+  dependency-audit:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Reject vulnerable dependency changes
-        uses: actions/dependency-review-action@v4
+      - name: Checkout dependency manifests
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          fail-on-severity: high
+          node-version: 20
+          cache: "npm"
+      - name: Install locked production dependency graph
+        run: npm ci
+      - name: Reject high or critical production dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
 
   secrets:
     runs-on: ubuntu-latest
@@ -33,6 +41,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
   codeql:
     runs-on: ubuntu-latest
