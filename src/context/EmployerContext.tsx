@@ -28,6 +28,9 @@ interface EmployerContextType {
   updateCandidateStage: (applicationId: string, newStage: string) => Promise<boolean>;
   removeJob: (jobId: string) => void;
   isLoading: boolean;
+  loadError: string;
+  actionError: string;
+  clearActionError: () => void;
 }
 
 const EmployerContext = createContext<EmployerContextType | undefined>(undefined);
@@ -40,37 +43,32 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
   const [user] = useState<User>({ name: "", role: "" });
   const [draftJob, setDraftJob] = useState<DraftJob>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isJobsLoading, setIsJobsLoading] = useState(true);
   const [isCandidatesLoading, setIsCandidatesLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  const appendLoadError = (message: string) => {
+    setLoadError((current) => current ? `${current} ${message}` : message);
+  };
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/employer/dashboard");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.metrics) {
-            setDashboardStats({
-              activeJobs: data.metrics.activeJobsCount || 0,
-              activeJobsGrowth: "+0",
-              totalApplications: data.metrics.totalApplicantsCount || 0,
-              totalApplicationsGrowth: "+0",
-              shortlisted: 0,
-              hired: 0,
-              hiredPeriod: "This month",
-              funnel: {
-                sourcing: data.metrics.totalApplicantsCount || 0,
-                screening: 0,
-                interview: 0,
-                offer: 0,
-              },
-              interviews: data.metrics.upcomingInterviewsCount || 0,
-              credits: data.metrics.credits,
-              companyCredits: data.metrics.credits,
-            });
-          }
+        const res = await fetch("/api/employer/dashboard", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.metrics) {
+          throw new Error(data.error || "Employer dashboard metrics could not be loaded.");
         }
+        setDashboardStats({
+          activeJobs: data.metrics.activeJobsCount,
+          totalApplications: data.metrics.totalApplicantsCount,
+          interviews: data.metrics.upcomingInterviewsCount,
+          credits: data.metrics.credits ?? null,
+          companyCredits: data.metrics.credits ?? null,
+        });
       } catch (err) {
-        console.error("Failed to fetch employer dashboard stats:", err);
+        appendLoadError(err instanceof Error ? err.message : "Employer dashboard metrics could not be loaded.");
       } finally {
         setIsLoading(false);
       }
@@ -82,13 +80,16 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function fetchJobs() {
+      setIsJobsLoading(true);
       try {
         const res = await fetch("/api/employer/jobs", { cache: "no-store" });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || "Failed to load jobs");
         if (!cancelled) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
       } catch (err) {
-        console.error("Failed to fetch employer jobs:", err);
+        if (!cancelled) appendLoadError(err instanceof Error ? err.message : "Employer jobs could not be loaded.");
+      } finally {
+        if (!cancelled) setIsJobsLoading(false);
       }
     }
     fetchJobs();
@@ -102,7 +103,7 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
         const data = await fetchEmployerCandidates<Candidate>();
         setCandidates(data.map(candidate => ({ ...candidate, stage: pipelineStageLabels[candidate.stage] || candidate.stage })));
       } catch (err) {
-        console.error("Failed to fetch employer candidates:", err);
+        appendLoadError(err instanceof Error ? err.message : "Employer candidates could not be loaded.");
       } finally {
         setIsCandidatesLoading(false);
       }
@@ -131,6 +132,7 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
   };
 
   const updateCandidateStage = async (applicationId: string, newStage: string): Promise<boolean> => {
+    setActionError("");
     const candidate = candidates.find(c => c.applicationId === applicationId);
     if (!candidate?.applicationId) return false;
 
@@ -147,8 +149,7 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
       setCandidates(prev => prev.map(c => c.applicationId === applicationId ? { ...c, stage: pipelineStageLabels[data.stage] || newStage } : c));
       return true;
     } catch (err: any) {
-      console.error(err);
-      alert(err.message || "Failed to update candidate stage.");
+      setActionError(err?.message || "Failed to update candidate stage.");
       return false;
     }
   };
@@ -165,7 +166,10 @@ export function EmployerProvider({ children }: { children: ReactNode }) {
       updateDraftJob,
       updateCandidateStage,
       removeJob,
-      isLoading: isLoading || isCandidatesLoading
+      isLoading: isLoading || isJobsLoading || isCandidatesLoading,
+      loadError,
+      actionError,
+      clearActionError: () => setActionError("")
     }}>
       {children}
     </EmployerContext.Provider>
