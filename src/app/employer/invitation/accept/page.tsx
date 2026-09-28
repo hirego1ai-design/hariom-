@@ -53,13 +53,13 @@ function InvitationAcceptContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password, name }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       
-      if (!res.ok) {
+      if (!res.ok || !data.success || !data.companyName) {
         throw new Error(data.error || "Unable to accept invitation.");
       }
 
-      setSuccess(data.message || "Invitation accepted successfully!");
+      setSuccess(data.message || "Invitation accepted successfully.");
       setCompanyName(data.companyName);
     } catch (err: any) {
       setError(err.message || "An error occurred while accepting the invitation.");
