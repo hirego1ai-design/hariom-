@@ -173,7 +173,7 @@ export default function ManagedHiringCandidateTrackingPage() {
           </p>
           <h1 className="text-3xl font-bold text-white">Candidate tracking</h1>
           <p className="text-text-secondary text-sm mt-2">
-            Only applications attached to signed managed-hiring requirements are shown here.
+            Only applications linked to managed-hiring requirements and agreements are shown here.
             Evidence-first screening never auto-rejects a candidate; rejection requires explicit human approval.
           </p>
         </div>
