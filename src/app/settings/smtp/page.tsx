@@ -16,6 +16,7 @@ type EmailDeliveryConfig = {
   zeptoMailFromEmail: string;
   sendgridKeyConfigured: boolean;
   zeptoMailKeyConfigured: boolean;
+  updatedAt: string | null;
 };
 
 type FormConfig = EmailDeliveryConfig & {
@@ -33,6 +34,7 @@ const initialConfig: FormConfig = {
   zeptoMailFromEmail: "",
   sendgridKeyConfigured: false,
   zeptoMailKeyConfigured: false,
+  updatedAt: null,
   sendgridApiKey: "",
   zeptoMailApiKey: "",
 };
@@ -114,18 +116,18 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
           zeptoMailFromEmail: config.zeptoMailFromEmail,
           ...(config.sendgridApiKey ? { sendgridApiKey: config.sendgridApiKey } : {}),
           ...(config.zeptoMailApiKey ? { zeptoMailApiKey: config.zeptoMailApiKey } : {}),
+          expectedUpdatedAt: config.updatedAt,
         }),
       });
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(result.message || "Could not save email delivery settings.");
+      const result = (await response.json().catch(() => ({}))) as { message?: string; error?: string; config?: EmailDeliveryConfig };
+      if (!response.ok || !result.config) throw new Error(result.error || result.message || "Could not save email delivery settings.");
 
-      setConfig((current) => ({
-        ...current,
+      setConfig({
+        ...initialConfig,
+        ...result.config,
         sendgridApiKey: "",
         zeptoMailApiKey: "",
-        sendgridKeyConfigured: current.sendgridKeyConfigured || Boolean(current.sendgridApiKey),
-        zeptoMailKeyConfigured: current.zeptoMailKeyConfigured || Boolean(current.zeptoMailApiKey),
-      }));
+      });
       setNotice({ tone: "success", message: result.message || "Email delivery configuration saved." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not save email delivery settings." });
