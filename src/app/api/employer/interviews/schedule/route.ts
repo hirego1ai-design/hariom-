@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { logAuditEvent } from "@/lib/auditLogger";
 import {
   reconcileCopilotReservation,
   releaseCopilotReservation,
@@ -343,6 +344,17 @@ export async function POST(request: NextRequest) {
               },
             } : undefined,
           }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "WhatsApp dispatch failed." }));
+
+    if (!idempotentExistingInterview) {
+      await logAuditEvent({
+        userId: session.id,
+        companyId: application.job.companyId,
+        action: "INTERVIEW_SCHEDULED",
+        resource: `Interview:${interview.id}`,
+        ipAddress: request.headers.get("x-forwarded-for") || undefined,
+        details: `Scheduled ${round.name} at ${interview.scheduledAt.toISOString()} in ${mode} mode.`,
+      });
+    }
 
     return NextResponse.json({
       success: true,
