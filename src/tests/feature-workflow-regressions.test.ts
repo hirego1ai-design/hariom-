@@ -914,3 +914,36 @@ test("admin model registry and LLM usage preserve telemetry coverage and canonic
   assert(benchmark.includes('admin_model_benchmark:${admin.id}'));
   assert(benchmark.includes("bypassCache: true"));
 });
+
+
+test("admin model registry separates benchmarks and preserves incomplete telemetry", () => {
+  const registry = fs.readFileSync(new URL("../app/admin/models/registry/page.tsx", import.meta.url), "utf8");
+  const usage = fs.readFileSync(new URL("../app/admin/settings/llm-usage/page.tsx", import.meta.url), "utf8");
+  const routing = fs.readFileSync(new URL("../app/api/admin/ai-routing/route.ts", import.meta.url), "utf8");
+  const benchmark = fs.readFileSync(new URL("../app/api/admin/model-benchmark/route.ts", import.meta.url), "utf8");
+  const router = fs.readFileSync(new URL("../utils/aiRouter.ts", import.meta.url), "utf8");
+
+  assert(router.includes('task: { not: "admin-synthetic-benchmark" }'));
+  assert(router.includes('log.task !== "admin-synthetic-benchmark"'));
+
+  assert(routing.includes("knownTokens: usage.knownTokens"));
+  assert(routing.includes("tokenCoverageRate: usage.tokenCoverageRate"));
+  assert(routing.includes("knownCostUsd: usage.knownCostUsd"));
+  assert(routing.includes("costCoverageRate: usage.costCoverageRate"));
+  assert(routing.includes('reason: z.string().trim().min(3).max(500)'));
+
+  assert(benchmark.includes("Benchmark model keys must be unique."));
+  assert(benchmark.includes("excludedFromOperationalUsageTelemetry: true"));
+
+  assert(registry.includes("totalTokens: number | null"));
+  assert(registry.includes("totalCostUsd: number | null"));
+  assert(registry.includes("Not fully measured"));
+  assert(registry.includes("Change reason (required)"));
+  assert(registry.includes("disabled={saving || reason.trim().length < 3}"));
+  assert(!registry.includes("money(telemetry?.totalCostUsd ?? 0)"));
+
+  assert(usage.includes("totalTokens: number | null"));
+  assert(usage.includes("totalCostUsd: number | null"));
+  assert(usage.includes("Not fully measured"));
+  assert(usage.includes("Benchmark runs are excluded from operational request, token and spend totals."));
+});
