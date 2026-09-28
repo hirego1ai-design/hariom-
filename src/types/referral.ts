@@ -81,6 +81,7 @@ export interface UserFraudProfile {
   riskScore: number;
   riskFactors: string[];
   lastEvaluatedAt: string;
+  updatedAt?: string;
   history: FraudAuditRecord[];
 }
 
