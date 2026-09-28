@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentSession } from "@/lib/auth";
-import { enforceRateLimit } from "@/lib/apiSecurity";
+import {
+  ApiError,
+  enforceRateLimit,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
+import {
+  getSessionCompany,
+  requireEmployerOrAdminSession,
+} from "@/lib/routeAuthorization";
+import { logAuditEvent } from "@/lib/auditLogger";
 
 const schema = z.object({
   stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED"]),
@@ -12,18 +21,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getCurrentSession(req.headers);
-  if (
-    !session ||
-    !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)
-  ) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 401 },
-    );
-  }
-
   try {
+    const session = await requireEmployerOrAdminSession(req);
     await enforceRateLimit(
       req,
       `employer_candidate_stage:${session.id}`,
@@ -32,31 +31,28 @@ export async function PATCH(
     );
 
     const { id } = await params;
-    const { stage } = schema.parse(await req.json());
+    const { stage } = await readValidatedJson(req, schema, 4 * 1024);
+
     const application = await prisma.application.findUnique({
       where: { id },
-      include: { job: true },
+      include: { job: { select: { id: true, companyId: true } } },
     });
     if (!application) {
-      return NextResponse.json(
-        { success: false, error: "Candidate application not found." },
-        { status: 404 },
-      );
+      throw new ApiError("Candidate application not found.", 404);
     }
 
     if (session.role !== "ADMIN") {
-      const profile = await prisma.employerProfile.findUnique({
-        where: { userId: session.id },
-      });
-      if (!profile || profile.companyId !== application.job.companyId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Candidate is not in your company pipeline.",
-          },
-          { status: 403 },
-        );
+      const company = await getSessionCompany(session);
+      if (company.id !== application.job.companyId) {
+        throw new ApiError("Candidate is not in your company pipeline.", 403);
       }
+    }
+
+    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
+      throw new ApiError(
+        "This application is in a terminal state and cannot be changed through the generic pipeline workflow.",
+        409,
+      );
     }
 
     if (stage === "SHORTLISTED") {
@@ -64,12 +60,14 @@ export async function PATCH(
         where: { jobId: application.jobId },
         select: { id: true, isActive: true },
       });
+
       if (process?.isActive) {
         const finalRound = await prisma.interviewRound.findFirst({
           where: { processId: process.id },
           orderBy: { sequence: "desc" },
           select: { id: true },
         });
+
         if (finalRound) {
           const finalProgress = await prisma.interviewRoundProgress.findUnique({
             where: {
@@ -80,32 +78,18 @@ export async function PATCH(
             },
             select: { status: true },
           });
+
           if (
             !finalProgress ||
             !["ROUND_COMPLETE", "TRANSFERRED"].includes(finalProgress.status)
           ) {
-            return NextResponse.json(
-              {
-                success: false,
-                error:
-                  "Complete the configured final interview round before selecting this candidate.",
-              },
-              { status: 409 },
+            throw new ApiError(
+              "Complete the configured final interview round before shortlisting this candidate.",
+              409,
             );
           }
         }
       }
-    }
-
-    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "This application is in a terminal state and cannot be changed through the generic pipeline workflow.",
-        },
-        { status: 409 },
-      );
     }
 
     const updated = await prisma.application.updateMany({
@@ -113,17 +97,26 @@ export async function PATCH(
       data: { status: stage },
     });
     if (updated.count !== 1) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Application state changed while this request was being processed. Refresh and try again.",
-        },
-        { status: 409 },
+      throw new ApiError(
+        "Application state changed while this request was being processed. Refresh and try again.",
+        409,
       );
     }
 
-    return NextResponse.json({ success: true, applicationId: id, stage });
+    await logAuditEvent({
+      userId: session.id,
+      companyId: application.job.companyId,
+      action: "APPLICATION_STAGE_UPDATED",
+      resource: `Application:${id}`,
+      ipAddress: req.headers.get("x-forwarded-for") || undefined,
+      details: `${application.status} -> ${stage}`,
+    });
+
+    return NextResponse.json({
+      success: true,
+      applicationId: id,
+      stage,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -135,9 +128,6 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    return NextResponse.json(
-      { success: false, error: "Unable to update candidate stage." },
-      { status: 500 },
-    );
+    return handleApiError(error);
   }
 }
