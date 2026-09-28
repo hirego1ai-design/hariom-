@@ -5,43 +5,58 @@ import { formatMoney, loadRevenueTransactions, revenueUnavailable } from "../_sh
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_revenue_job_boost", 60, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_revenue_job_boost:${admin.id}`, 60, 60_000);
 
     const allTransactions = await loadRevenueTransactions();
     const transactions = allTransactions.filter((transaction) => transaction.revenueSource === "Job Boost");
-    const successful = transactions.filter((transaction) => transaction.status === "Success");
-    const pending = transactions.filter((transaction) => transaction.status === "Pending");
-    const refunded = transactions.filter((transaction) => transaction.status === "Refunded");
-    const failed = transactions.filter((transaction) => transaction.status === "Failed");
+    const currencies = [...new Set(transactions.map((transaction) => transaction.currency))].sort();
 
-    const totalRevenue = successful.reduce((sum, transaction) => sum + transaction.amount, 0);
-    const byPackage = new Map<string, { sold: number; revenue: number }>();
-    for (const transaction of successful) {
-      const name = transaction.planPurchased || "Job Boost";
-      const current = byPackage.get(name) || { sold: 0, revenue: 0 };
-      current.sold += 1;
-      current.revenue += transaction.amount;
-      byPackage.set(name, current);
-    }
+    const byCurrency = Object.fromEntries(
+      currencies.map((currency) => {
+        const inCurrency = transactions.filter((transaction) => transaction.currency === currency);
+        const successful = inCurrency.filter((transaction) => transaction.status === "Success");
+        const categories = new Map<string, { sold: number; revenue: number }>();
+
+        for (const transaction of successful) {
+          const name = transaction.planPurchased || "Unspecified Job Boost";
+          const current = categories.get(name) || { sold: 0, revenue: 0 };
+          current.sold += 1;
+          current.revenue += transaction.amount;
+          categories.set(name, current);
+        }
+
+        const totalRevenue = successful.reduce((sum, transaction) => sum + transaction.amount, 0);
+        return [
+          currency,
+          {
+            currency,
+            totalRevenue,
+            totalRevenueFormatted: formatMoney(totalRevenue, currency),
+            totalTransactions: inCurrency.length,
+            successfulTransactions: successful.length,
+            pendingTransactions: inCurrency.filter((transaction) => transaction.status === "Pending").length,
+            refundedTransactions: inCurrency.filter((transaction) => transaction.status === "Refunded").length,
+            failedTransactions: inCurrency.filter((transaction) => transaction.status === "Failed").length,
+            categories: [...categories.entries()].map(([name, value]) => ({
+              name,
+              sold: value.sold,
+              revenue: value.revenue,
+              revenueFormatted: formatMoney(value.revenue, currency),
+            })),
+          },
+        ];
+      }),
+    );
 
     return NextResponse.json({
       success: true,
       source: "database",
       summary: {
-        totalRevenue,
-        totalRevenueFormatted: formatMoney(totalRevenue),
+        currencyMode: currencies.length <= 1 ? "single" : "multiple",
+        currencies,
         totalTransactions: transactions.length,
-        successfulTransactions: successful.length,
-        pendingTransactions: pending.length,
-        refundedTransactions: refunded.length,
-        failedTransactions: failed.length,
-        categories: [...byPackage.entries()].map(([name, value]) => ({
-          name,
-          sold: value.sold,
-          revenue: value.revenue,
-          revenueFormatted: formatMoney(value.revenue),
-        })),
+        byCurrency,
       },
       data: transactions,
     });
