@@ -1446,6 +1446,7 @@ class ReferralDatabaseStore {
     adminUserId: string,
     adminNotes?: string,
     ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-approve-payout");
@@ -1455,7 +1456,11 @@ class ReferralDatabaseStore {
         const client = prisma as any;
         const updated = await client.$transaction(async (tx: any) => {
           const transitioned = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: "PENDING_ADMIN_APPROVAL" },
+            where: {
+              id: payoutId,
+              status: "PENDING_ADMIN_APPROVAL",
+              ...(expectedUpdatedAt ? { updatedAt: new Date(expectedUpdatedAt) } : {}),
+            },
             data: {
               status: "APPROVED",
               approvedBy: adminUserId,
@@ -1509,6 +1514,9 @@ class ReferralDatabaseStore {
     if (payout.status !== "PENDING_ADMIN_APPROVAL") {
       throw new Error(`Payout ${payoutId} is not awaiting approval.`);
     }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before approving.`);
+    }
 
     payout.status = "APPROVED";
     payout.approvedBy = adminUserId;
@@ -1524,6 +1532,7 @@ class ReferralDatabaseStore {
     adminUserId: string,
     transactionRef: string,
     ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-mark-paid");
@@ -1547,11 +1556,14 @@ class ReferralDatabaseStore {
           if (existing.status !== "APPROVED") {
             throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
           }
+          if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new Error(`Payout ${payoutId} changed; refresh before settlement.`);
+          }
 
           // 2. Update payout to PAID only if it is still approved. This
           // prevents duplicate settlement/ledger entries under concurrent calls.
           const transitioned = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: "APPROVED" },
+            where: { id: payoutId, status: "APPROVED", updatedAt: existing.updatedAt },
             data: {
               status: "PAID",
               approvedBy: adminUserId,
@@ -1656,6 +1668,9 @@ class ReferralDatabaseStore {
     if (payout.status !== "APPROVED") {
       throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
     }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before settlement.`);
+    }
 
     const eligibleRewards = Array.from(this.rewards.values()).filter(
       (rew) => rew.referrerId === payout.referrerId && rew.status === ReferralStatus.ELIGIBLE && rew.payoutId === payout.id,
@@ -1710,6 +1725,7 @@ class ReferralDatabaseStore {
     adminUserId: string,
     reason: string,
     ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-reject-payout");
@@ -1724,9 +1740,16 @@ class ReferralDatabaseStore {
           if (!existing) {
             throw new Error(`Payout with ID ${payoutId} not found.`);
           }
+          if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new Error(`Payout ${payoutId} changed; refresh before rejecting.`);
+          }
 
           const updated = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] } },
+            where: {
+              id: payoutId,
+              status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] },
+              updatedAt: existing.updatedAt,
+            },
             data: {
               status: "REJECTED",
               approvedBy: adminUserId,
@@ -1809,6 +1832,9 @@ class ReferralDatabaseStore {
     if (!payout) return null;
     if (payout.status !== "PENDING_ADMIN_APPROVAL" && payout.status !== "APPROVED") {
       throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+    }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before rejecting.`);
     }
 
     payout.status = "REJECTED";
