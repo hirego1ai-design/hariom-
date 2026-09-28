@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
@@ -6,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 
 const querySchema = z.object({
   search: z.string().trim().max(120).optional(),
+  windowDays: z.enum(["7", "30", "90"]).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
@@ -15,23 +17,49 @@ export async function GET(req: NextRequest) {
     const admin = await requireAdminSession(req);
     await enforceRateLimit(req, `admin_users:${admin.id}`, 60, 60_000);
     const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()));
-    const where = {
-      role: "CANDIDATE" as const,
+
+    const createdAfter = query.windowDays
+      ? new Date(Date.now() - Number(query.windowDays) * 24 * 60 * 60 * 1000)
+      : null;
+
+    const where: Prisma.UserWhereInput = {
+      role: "CANDIDATE",
+      ...(createdAfter ? { createdAt: { gte: createdAfter } } : {}),
       ...(query.search
-        ? { OR: [{ name: { contains: query.search, mode: "insensitive" as const } }, { email: { contains: query.search, mode: "insensitive" as const } }] }
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
         : {}),
     };
+
     const [total, users] = await prisma.$transaction([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
-        select: { id: true, name: true, email: true, emailVerified: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          createdAt: true,
+          updatedAt: true,
+        },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
     ]);
-    return NextResponse.json({ success: true, page: query.page, limit: query.limit, total, data: users });
+
+    return NextResponse.json({
+      success: true,
+      page: query.page,
+      limit: query.limit,
+      total,
+      data: users,
+    });
   } catch (error) {
     return handleApiError(error);
   }
