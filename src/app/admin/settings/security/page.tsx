@@ -111,7 +111,7 @@ export default function AdminSecurityPage() {
                     <div key={label} className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-[#16161B] p-4">
                       <span className="text-xs font-bold">{label}</span>
                       <span className={`text-[10px] font-bold ${enabled ? "text-emerald-300" : "text-amber-300"}`}>
-                        {enabled ? "CONFIGURED" : "NOT CLAIMED"}
+                        {enabled ? "CONFIGURED IN APP" : "NOT CLAIMED"}
                       </span>
                     </div>
                   ))}
