@@ -45,15 +45,30 @@ export default function EmployerSourceTrackingPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`/api/employer/source-tracking?days=${period}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success) setData(json.data);
-        else setError(json.error ?? "Failed to load source data.");
+    setError("");
+    setData(null);
+
+    fetch(`/api/employer/source-tracking?days=${period}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || !json.success || !json.data) {
+          throw new Error(json.error || "Failed to load source data.");
+        }
+        setData(json.data);
       })
-      .catch(() => setError("Network error. Please try again."))
+      .catch((reason) => {
+        if (reason?.name !== "AbortError") {
+          setError(reason instanceof Error ? reason.message : "Network error. Please try again.");
+        }
+      })
       .finally(() => setLoading(false));
+
+    return () => controller.abort();
   }, [period]);
 
   return (
