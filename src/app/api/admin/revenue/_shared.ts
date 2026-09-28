@@ -136,7 +136,7 @@ export async function loadRevenueTransactions() {
     company: invoice.companyName,
     email: "",
     mobile: "",
-    revenueSource: invoice.candidateName ? "Managed Hiring" : "Manual",
+    revenueSource: invoice.placement ? "Managed Hiring" : "Manual Invoice",
     planPurchased: invoice.jobTitle || "",
     amount: invoice.totalAmount,
     amountFormatted: formatMoney(invoice.totalAmount, invoice.currency),
@@ -166,7 +166,7 @@ export async function loadRevenueTransactions() {
 
 export async function loadManagedHiringRevenue() {
   const invoices = await prisma.invoice.findMany({
-    where: { candidateName: { not: null } },
+    where: { placement: { isNot: null } },
     include: { placement: true },
     orderBy: { createdAt: "desc" },
   });
