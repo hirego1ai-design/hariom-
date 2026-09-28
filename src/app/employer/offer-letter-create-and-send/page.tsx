@@ -23,6 +23,7 @@ export default function OfferLetterCreatePage() {
     documentFileId: "",
   });
   const [status, setStatus] = useState("");
+  const [statusType, setStatusType] = useState<"success" | "error">("success");
   const [createdId, setCreatedId] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -35,6 +36,7 @@ export default function OfferLetterCreatePage() {
     event.preventDefault();
     setSaving(true);
     setStatus("");
+    setStatusType("success");
     try {
       const response = await fetch("/api/employer/offers", {
         method: "POST",
@@ -61,8 +63,10 @@ export default function OfferLetterCreatePage() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Unable to create offer.");
       setCreatedId(body.offer.id);
+      setStatusType("success");
       setStatus("Offer draft saved. Review it in Offer Management, then explicitly approve and send it.");
     } catch (error) {
+      setStatusType("error");
       setStatus(error instanceof Error ? error.message : "Unable to create offer.");
     } finally {
       setSaving(false);
@@ -91,7 +95,14 @@ export default function OfferLetterCreatePage() {
       <label className="block text-sm">Optional clean private file ID<input className={input} value={form.documentFileId} onChange={(e) => setForm({ ...form, documentFileId: e.target.value })} /><span className="mt-1 block text-xs text-text-secondary">Only an existing private file that passed malware scanning can be attached.</span></label>
       <button disabled={saving} className="w-full rounded-xl bg-primary py-3 font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Save offer draft"}</button>
     </form>
-    {status && <p role="status" className="text-sm text-text-secondary">{status}</p>}
+    {status && (
+      <p
+        role={statusType === "error" ? "alert" : "status"}
+        className={statusType === "error" ? "text-sm text-red-300" : "text-sm text-text-secondary"}
+      >
+        {status}
+      </p>
+    )}
     {createdId && <a href="/employer/offer-management-dashboard" className="inline-flex rounded-full border border-white/10 px-5 py-2 text-sm font-bold">Open Offer Management</a>}
   </div></PageContainer>;
 }
