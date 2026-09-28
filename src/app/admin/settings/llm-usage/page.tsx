@@ -47,9 +47,13 @@ type RoutingPayload = {
   providers: ProviderStatus[];
   telemetry: {
     totalRequests: number;
-    totalTokens: number;
-    totalCostUsd: number;
-    avgLatencyMs: number;
+    totalTokens: number | null;
+    knownTokens: number;
+    tokenCoverageRate: number | null;
+    totalCostUsd: number | null;
+    knownCostUsd: number;
+    costCoverageRate: number | null;
+    avgLatencyMs: number | null;
     providerCounts: Record<string, number>;
     modelStats: ModelStat[];
   };
@@ -90,7 +94,7 @@ export default function AdminLlmUsagePage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/ai-routing", { cache: "no-store" });
+      const response = await fetch("/api/admin/llm-usage", { cache: "no-store" });
       const body = await response.json();
       if (!response.ok || !body.success) throw new Error(body.error || "Unable to load AI telemetry.");
       setData(body);
@@ -164,9 +168,24 @@ export default function AdminLlmUsagePage() {
           <>
             <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Requests</p><p className="mt-2 text-2xl font-bold">{data.telemetry.totalRequests}</p></div>
-              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Tokens</p><p className="mt-2 text-2xl font-bold">{data.telemetry.totalTokens}</p></div>
-              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Observed spend</p><p className="mt-2 text-2xl font-bold">{money(data.telemetry.totalCostUsd)}</p></div>
-              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5"><p className="text-[10px] font-bold uppercase text-text-muted">Average latency</p><p className="mt-2 text-2xl font-bold">{data.telemetry.avgLatencyMs} ms</p></div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <p className="text-[10px] font-bold uppercase text-text-muted">Tokens</p>
+                <p className="mt-2 text-2xl font-bold">{data.telemetry.totalTokens === null ? "Not fully measured" : data.telemetry.totalTokens.toLocaleString()}</p>
+                {data.telemetry.totalTokens === null && data.telemetry.totalRequests > 0 && (
+                  <p className="mt-1 text-[10px] text-text-muted">Known tokens: {data.telemetry.knownTokens.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <p className="text-[10px] font-bold uppercase text-text-muted">Observed spend</p>
+                <p className="mt-2 text-2xl font-bold">{money(data.telemetry.totalCostUsd)}</p>
+                {data.telemetry.totalCostUsd === null && data.telemetry.totalRequests > 0 && (
+                  <p className="mt-1 text-[10px] text-text-muted">Known priced spend: {money(data.telemetry.knownCostUsd)}</p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
+                <p className="text-[10px] font-bold uppercase text-text-muted">Average latency</p>
+                <p className="mt-2 text-2xl font-bold">{data.telemetry.avgLatencyMs === null ? "No data" : `${data.telemetry.avgLatencyMs} ms`}</p>
+              </div>
             </section>
 
             <section className="space-y-4">
