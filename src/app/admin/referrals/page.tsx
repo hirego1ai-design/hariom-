@@ -531,12 +531,47 @@ export default function AdminReferralsPage() {
               {coreError ? (
                 <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{coreError}</div>
               ) : analytics ? (
-                <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Referral analytics">
-                  <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Attributions</p><p className="mt-2 text-2xl font-bold">{analytics.summary.totalAttributions}</p></div>
-                  <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Reward value</p><p className="mt-2 text-2xl font-bold">{money(analytics.summary.totalRewardsValue)}</p></div>
-                  <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Locked liability</p><p className="mt-2 text-2xl font-bold">{money(analytics.summary.totalLockedValue)}</p></div>
-                  <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Pending payout liability</p><p className="mt-2 text-2xl font-bold">{money(analytics.summary.pendingPayoutLiability)}</p></div>
-                </section>
+                <div className="space-y-4">
+                  <section className="grid gap-4 sm:grid-cols-3" aria-label="Referral attribution analytics">
+                    <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Attributions</p><p className="mt-2 text-2xl font-bold">{analytics.summary.totalAttributions}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Candidate attributions</p><p className="mt-2 text-2xl font-bold">{analytics.summary.candidateAttributions}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-[#141418] p-5"><p className="text-[10px] uppercase text-slate-500">Employer attributions</p><p className="mt-2 text-2xl font-bold">{analytics.summary.employerAttributions}</p></div>
+                  </section>
+
+                  {analytics.summary.currencyMode === "multiple" && (
+                    <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+                      Multiple currencies are reported separately; referral rewards and payout liabilities are never combined into a synthetic total.
+                    </div>
+                  )}
+
+                  {analytics.summary.currencies.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-[#141418] p-6 text-sm text-slate-400">
+                      No persisted referral reward or payout monetary records are available yet.
+                    </div>
+                  ) : (
+                    <section className="grid gap-4 xl:grid-cols-2" aria-label="Referral monetary analytics by currency">
+                      {analytics.summary.currencies.map((currency: string) => {
+                        const item = analytics.summary.byCurrency[currency];
+                        return (
+                          <article key={currency} className="rounded-2xl border border-white/10 bg-[#141418] p-5">
+                            <p className="text-xs font-bold uppercase tracking-wider text-primary">{currency}</p>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                              <div className="rounded-xl bg-white/[0.03] p-3"><p className="text-[10px] uppercase text-slate-500">Reward value</p><p className="mt-1 font-bold">{money(item.totalRewardsValue, currency)}</p></div>
+                              <div className="rounded-xl bg-white/[0.03] p-3"><p className="text-[10px] uppercase text-slate-500">Eligible</p><p className="mt-1 font-bold">{money(item.totalEligibleValue, currency)}</p></div>
+                              <div className="rounded-xl bg-amber-500/10 p-3"><p className="text-[10px] uppercase text-amber-300">Locked liability</p><p className="mt-1 font-bold">{money(item.totalLockedValue, currency)}</p></div>
+                              <div className="rounded-xl bg-sky-500/10 p-3"><p className="text-[10px] uppercase text-sky-300">Pending payout liability</p><p className="mt-1 font-bold">{money(item.pendingPayoutLiability, currency)}</p></div>
+                              <div className="rounded-xl bg-emerald-500/10 p-3 sm:col-span-2"><p className="text-[10px] uppercase text-emerald-300">Paid rewards</p><p className="mt-1 font-bold">{money(item.totalPaidValue, currency)}</p></div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </section>
+                  )}
+
+                  <p className="text-xs text-slate-500">
+                    Conversion funnel rates are not inferred from attribution totals; stage-event analytics are required before those rates can be reported.
+                  </p>
+                </div>
               ) : null}
 
               <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#141418]" aria-labelledby="fraud-heading">
