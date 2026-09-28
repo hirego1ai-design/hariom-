@@ -1369,18 +1369,34 @@ class ReferralDatabaseStore {
     return payout;
   }
 
-  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
+  public async getAdminPayoutQueuePage(options?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }): Promise<{ queue: ReferralPayout[]; total: number }> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-admin-queue");
+    const page = Math.max(1, options?.page ?? 1);
+    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
+    const status = options?.status;
 
     try {
       const client = prisma as any;
       if (client.referralPayout) {
-        const records = await client.referralPayout.findMany({
-          orderBy: { createdAt: "desc" },
-        });
-        if (records && records.length > 0) {
-          return records.map((r: any) => ({
+        const where = status ? { status } : {};
+        const [total, records] = await client.$transaction([
+          client.referralPayout.count({ where }),
+          client.referralPayout.findMany({
+            where,
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+        ]);
+
+        return {
+          total,
+          queue: records.map((r: any) => ({
             id: r.id,
             referrerId: r.referrerId,
             amount: r.amount,
@@ -1394,20 +1410,35 @@ class ReferralDatabaseStore {
             processedAt: r.processedAt ? r.processedAt.toISOString() : null,
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
-          }));
-        }
+          })),
+        };
       }
       if (isProduction) {
-        return [];
+        return { queue: [], total: 0 };
       }
     } catch (error: any) {
       if (isProduction) {
-        console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`, error);
-        throw new Error(`[${correlationId}] Database unavailable: failed to fetch payout queue.`);
+        console.error(
+          `[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`,
+          error,
+        );
+        throw new Error(
+          `[${correlationId}] Database unavailable: failed to fetch payout queue.`,
+        );
       }
     }
 
-    return Array.from(this.payouts.values());
+    const all = Array.from(this.payouts.values())
+      .filter((payout) => !status || payout.status === status)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return {
+      total: all.length,
+      queue: all.slice((page - 1) * limit, page * limit),
+    };
+  }
+
+  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
+    return (await this.getAdminPayoutQueuePage({ page: 1, limit: 100 })).queue;
   }
 
   public async adminApprovePayout(
@@ -2020,6 +2051,7 @@ class ReferralDatabaseStore {
     newStatus: FraudStatus;
     reason: string;
     actorId?: string;
+    ipAddress?: string;
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
@@ -2081,6 +2113,7 @@ class ReferralDatabaseStore {
             userId: actorId,
             action: "REFERRAL_FRAUD_STATUS_UPDATED",
             resource: `ReferralFraudProfile:${params.userId}`,
+            ...(params.ipAddress ? { ipAddress: params.ipAddress } : {}),
             details: JSON.stringify({
               previousStatus,
               newStatus: params.newStatus,
@@ -2173,6 +2206,7 @@ class ReferralDatabaseStore {
         newStatus: targetStatus,
         reason: `Automated Risk Engine Evaluation (Risk Score: ${riskScore})`,
         actorId: context?.actorId || "FRAUD_ENGINE",
+        ipAddress: context?.ip,
         riskScore,
         riskFactors,
       });
