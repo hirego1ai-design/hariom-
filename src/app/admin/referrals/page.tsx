@@ -93,9 +93,12 @@ export default function AdminReferralsPage() {
       return;
     }
 
-    const payload = Object.fromEntries(
-      MUTABLE_CONFIG_KEYS.map((key) => [key, config[key]]),
-    );
+    const payload = {
+      ...Object.fromEntries(
+        MUTABLE_CONFIG_KEYS.map((key) => [key, config[key]]),
+      ),
+      expectedUpdatedAt: new Date(config.updatedAt).toISOString(),
+    };
 
     setSavingConfig(true);
     setSaveMessage(null);
