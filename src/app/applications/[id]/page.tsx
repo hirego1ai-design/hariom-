@@ -30,7 +30,7 @@ type ApplicationDetail = {
     status: string;
     company: { name: string; logoUrl: string | null };
   };
-  interviews: Array<{ id: string; status: string; scheduledAt: string | null; roomId: string | null }>;
+  interviews: Array<{ id: string; status: string; scheduledAt: string | null; roomUrl: string | null }>;
   gates: Array<{ id: string; type: string; status: string; assessmentId: string | null; completedAt: string | null }>;
   offers: Array<{ id: string; status: string; expiresAt: string }>;
 };
@@ -177,8 +177,8 @@ export default function ApplicationDetailPage() {
                       <p className="mt-1 text-xs text-text-muted">
                         {interview.scheduledAt ? new Date(interview.scheduledAt).toLocaleString() : "Schedule not set"}
                       </p>
-                      {interview.roomId && (
-                        <Link href={`/interviews/room/${interview.roomId}`} className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-outline px-4 text-xs font-bold">
+                      {interview.roomUrl && (
+                        <Link href={interview.roomUrl} className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-outline px-4 text-xs font-bold">
                           Open interview room
                         </Link>
                       )}
