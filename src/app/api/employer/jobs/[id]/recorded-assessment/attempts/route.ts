@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
-import { ApiError, handleApiError } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { assertEmployerOwnsJob } from "@/lib/recordedAssessment";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await enforceRateLimit(request, "employer_recorded_assessment_attempts", 60, 60_000);
     const session = await getCurrentSession(request.headers);
     if (!session || !["EMPLOYER","RECRUITER","ADMIN"].includes(session.role)) throw new ApiError("Employer access required.", 403);
     const { id } = await params; await assertEmployerOwnsJob(session.id, session.role, id);
