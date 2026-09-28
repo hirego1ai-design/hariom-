@@ -15,7 +15,7 @@ export async function readRecoveryWorkerLiveness() {
     const workerStatus = status.stale
       ? "STALE"
       : status.heartbeat.state === "running" || status.heartbeat.state === "completed"
-        ? "HEALTHY"
+        ? "RECENT_HEARTBEAT"
         : "ATTENTION";
     return {
       status: workerStatus,
