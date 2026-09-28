@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
+import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
+import { getSessionCompany } from "@/lib/routeAuthorization";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/apiSecurity";
 
 function metadata(value: string | null) {
   if (!value) return {};
@@ -16,17 +17,13 @@ function metadata(value: string | null) {
 export async function GET(request: NextRequest) {
   await enforceRateLimit(request, "employer_interviews_list", 60, 60_000);
   const session = await getCurrentSession(request.headers);
-  if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  if (!session) throw new ApiError("Unauthorized", 401);
+  if (!["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
+    throw new ApiError("Employer access required.", 403);
   }
 
   try {
-    let companyId: string | undefined;
-    if (session.role !== "ADMIN") {
-      const employer = await prisma.employerProfile.findUnique({ where: { userId: session.id } });
-      if (!employer) return NextResponse.json({ success: false, error: "Employer profile not found." }, { status: 404 });
-      companyId = employer.companyId;
-    }
+    const companyId = session.role === "ADMIN" ? undefined : (await getSessionCompany(session)).id;
 
     const interviews = await prisma.interview.findMany({
       where: companyId ? { application: { job: { companyId } } } : undefined,
@@ -68,7 +65,6 @@ export async function GET(request: NextRequest) {
       }),
     });
   } catch (error) {
-    console.error("Employer interviews list error:", error);
-    return NextResponse.json({ success: false, error: "Unable to load interviews." }, { status: 500 });
+    return handleApiError(error);
   }
 }
