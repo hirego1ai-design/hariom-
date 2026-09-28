@@ -85,25 +85,29 @@ export async function logCriticalAuditEvent(entry: Omit<AuditLogEntry, "id" | "t
   return saved;
 }
 
+export async function getAuditLogsStrict(limit = 50): Promise<AuditLogEntry[]> {
+  const logs = await prisma.auditLog.findMany({
+    take: Math.min(Math.max(limit, 1), 500),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+
+  return logs.map((log) => ({
+    id: log.id,
+    userId: log.userId || undefined,
+    companyId: log.companyId || undefined,
+    action: log.action,
+    resource: log.resource,
+    ipAddress: log.ipAddress || undefined,
+    details: log.details || undefined,
+    timestamp: log.createdAt.toISOString(),
+  }));
+}
+
 export async function getAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
   try {
-    const logs = await prisma.auditLog.findMany({
-      take: Math.min(Math.max(limit, 1), 500),
-      orderBy: { createdAt: "desc" },
-    });
-
-    return logs.map((log) => ({
-      id: log.id,
-      userId: log.userId || undefined,
-      companyId: log.companyId || undefined,
-      action: log.action,
-      resource: log.resource,
-      ipAddress: log.ipAddress || undefined,
-      details: log.details || undefined,
-      timestamp: log.createdAt.toISOString(),
-    }));
+    return await getAuditLogsStrict(limit);
   } catch (error) {
     console.error("AUDIT_LOG_READ_FAILURE", { error });
+    return [];
   }
-  return [];
 }
