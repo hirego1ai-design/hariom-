@@ -2253,8 +2253,14 @@ class ReferralDatabaseStore {
       targetStatus = FraudStatus.FLAGGED;
     }
 
-    const riskFactors = Array.from(factors);
-    if (targetStatus !== profile.status) {
+    const riskFactors = Array.from(factors).sort();
+    const existingFactors = [...profile.riskFactors].sort();
+    const evidenceChanged =
+      riskScore !== profile.riskScore ||
+      riskFactors.length !== existingFactors.length ||
+      riskFactors.some((factor, index) => factor !== existingFactors[index]);
+
+    if (targetStatus !== profile.status || evidenceChanged) {
       return this.updateFraudStatus({
         userId,
         newStatus: targetStatus,
@@ -2267,30 +2273,6 @@ class ReferralDatabaseStore {
       });
     }
 
-    if (process.env.NODE_ENV === "production") {
-      const row = await prisma.referralFraudProfile.update({
-        where: { userId },
-        data: {
-          riskScore,
-          riskFactors,
-          lastEvaluatedAt: new Date(),
-        },
-        include: {
-          history: {
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 100,
-          },
-        },
-      });
-      return this.mapFraudProfile(row);
-    }
-
-    profile.riskScore = riskScore;
-    profile.riskFactors = riskFactors;
-    const evaluatedAt = new Date().toISOString();
-    profile.lastEvaluatedAt = evaluatedAt;
-    profile.updatedAt = evaluatedAt;
-    this.fraudProfiles.set(userId, profile);
     return profile;
   }
 
