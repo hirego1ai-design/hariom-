@@ -85,6 +85,17 @@ export async function PUT(
 
     const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
 
+    if (
+      body.requiresJobSpecificAssessment !== undefined &&
+      body.requiresJobSpecificAssessment !== oldJob.requiresJobSpecificAssessment &&
+      oldJob.status !== JobStatus.DRAFT
+    ) {
+      throw new ApiError(
+        "Assessment requirements cannot be changed after a job has been published. Create or update the requirement while the job is still a draft.",
+        409,
+      );
+    }
+
     const nextRequiresJobSpecificAssessment =
       body.requiresJobSpecificAssessment ?? oldJob.requiresJobSpecificAssessment;
 
