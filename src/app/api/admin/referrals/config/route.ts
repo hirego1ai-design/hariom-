@@ -18,9 +18,10 @@ const configUpdateSchema = z.object({
   managedHiringDefaultLockDays: z.union([z.literal(45), z.literal(60), z.literal(90)]).optional(),
   minPayoutAmount: z.number().min(100).max(100000).optional(),
   attributionWindowDays: z.number().int().min(1).max(365).optional(),
+  reason: z.string().trim().min(3).max(500),
   expectedUpdatedAt: z.string().datetime(),
 }).strict().refine(
-  (value) => Object.keys(value).some((key) => key !== "expectedUpdatedAt"),
+  (value) => Object.keys(value).some((key) => key !== "expectedUpdatedAt" && key !== "reason"),
   "At least one referral configuration field is required.",
 );
 
@@ -40,13 +41,14 @@ export async function PUT(request: Request) {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_referral_config_write:${admin.id}`, 20, 60_000);
     const body = await readValidatedJson(request, configUpdateSchema, 8 * 1024);
-    const { expectedUpdatedAt, ...updates } = body;
+    const { expectedUpdatedAt, reason, ...updates } = body;
 
     const updated = await updateReferralProgramConfig(
       updates,
       {
         actorId: admin.id,
         ipAddress: getClientIp(request),
+        reason,
       },
       expectedUpdatedAt,
     );
