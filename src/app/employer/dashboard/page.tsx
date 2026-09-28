@@ -9,7 +9,7 @@ export default function EmployerDashboardPage() {
 
   const activeJobs = jobs.filter((job: any) => String(job.status).toUpperCase() === "ACTIVE");
   const recentCandidates = candidates.slice(0, 5);
-  const credits = dashboardStats.companyCredits || dashboardStats.credits || {};
+  const credits = dashboardStats.companyCredits ?? dashboardStats.credits ?? null;
 
   const stats = [
     ["Active Jobs", dashboardStats.activeJobs ?? activeJobs.length, "Persisted active job listings"],
@@ -60,10 +60,10 @@ export default function EmployerDashboardPage() {
             <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
               <h2 className="text-lg font-extrabold text-white">Available Credits</h2>
               <div className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-text-muted">Job posts</span><strong className="text-white">{credits.jobPostsLeft ?? 0}</strong></div>
-                <div className="flex justify-between"><span className="text-text-muted">Resume unlocks</span><strong className="text-white">{credits.resumeUnlocksLeft ?? 0}</strong></div>
-                <div className="flex justify-between"><span className="text-text-muted">AI interviews</span><strong className="text-white">{credits.aiInterviewsLeft ?? 0}</strong></div>
-                <div className="flex justify-between"><span className="text-text-muted">AI agent credits</span><strong className="text-white">{credits.aiAgentCreditsLeft ?? 0}</strong></div>
+                <div className="flex justify-between"><span className="text-text-muted">Job posts</span><strong className="text-white">{credits ? credits.jobPostsLeft : "Not configured"}</strong></div>
+                <div className="flex justify-between"><span className="text-text-muted">Resume unlocks</span><strong className="text-white">{credits ? credits.resumeUnlocksLeft : "Not configured"}</strong></div>
+                <div className="flex justify-between"><span className="text-text-muted">AI interviews</span><strong className="text-white">{credits ? credits.aiInterviewsLeft : "Not configured"}</strong></div>
+                <div className="flex justify-between"><span className="text-text-muted">AI agent credits</span><strong className="text-white">{credits ? credits.aiAgentCreditsLeft : "Not configured"}</strong></div>
               </div>
               <Link href="/employer/subscriptions" className="mt-5 inline-flex text-xs font-bold text-secondary hover:underline">View subscription</Link>
             </div>
