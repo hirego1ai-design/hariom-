@@ -70,7 +70,7 @@ export default function InterviewRoundBuilderPage() {
           <h1 className="text-3xl font-bold text-text-primary">Interview process</h1>
           <p className="mt-2 text-sm text-text-secondary">{jobId ? (jobTitle ? `Configure rounds for ${jobTitle}.` : "Configure this job's interview rounds.") : "Open this builder from a job to configure its interview process."}</p>
         </div>
-        <button type="button" disabled={!jobId || rounds.length >= 12} onClick={() => setRounds((r) => [...r, blankRound()])} className="btn-3d-blue h-11 rounded-full px-6 font-bold text-white disabled:opacity-40">+ Add round</button>
+        <button type="button" disabled={!jobId || rounds.length >= 4} onClick={() => setRounds((r) => [...r, blankRound()])} className="btn-3d-blue h-11 rounded-full px-6 font-bold text-white disabled:opacity-40">+ Add round</button>
       </header>
 
       {!jobId && <div className="rounded-2xl border border-outline bg-bg-card p-8 text-center"><p className="font-semibold text-text-primary">No job selected</p><p className="mt-2 text-sm text-text-secondary">Choose a job first. Interview processes belong to a specific job and company.</p><Link href="/employer/jobs" className="mt-5 inline-flex h-11 items-center rounded-full border border-outline px-5 text-sm font-bold text-text-primary">View jobs</Link></div>}
