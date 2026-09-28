@@ -22,14 +22,21 @@ type SecurityStatus = {
 export default function AdminSecurityPage() {
   const [data, setData] = useState<SecurityStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/security/status")
-      .then((res) => res.json())
-      .then((result) => {
-        if (result.success) setData(result);
+    setError(null);
+    fetch("/api/admin/security/status", { cache: "no-store" })
+      .then(async (res) => {
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok || !result.success) throw new Error(result.error || "Unable to load security evidence.");
+        return result;
       })
-      .catch((err) => console.error(err))
+      .then(setData)
+      .catch((cause: unknown) => {
+        setData(null);
+        setError(cause instanceof Error ? cause.message : "Unable to load security evidence.");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -49,6 +56,8 @@ export default function AdminSecurityPage() {
 
         {loading ? (
           <div className="text-center py-12 text-xs text-slate-400">Loading observed controls...</div>
+        ) : error ? (
+          <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
         ) : data ? (
           <div className="space-y-6">
             <div className="bg-[#121215] border border-amber-400/20 rounded-2xl p-6 shadow-xl">
