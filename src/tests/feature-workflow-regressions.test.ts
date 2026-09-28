@@ -556,3 +556,26 @@ test("admin shell stays responsive and dashboard navigation targets canonical pa
     assert(dashboard.includes(href), `dashboard must link to ${href}`);
   }
 });
+
+
+test("admin candidate users search and pagination stay wired end to end", () => {
+  const header = fs.readFileSync(new URL("../components/admin/AdminHeader.tsx", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/admin/users/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
+
+  assert(header.includes("{onSearch && ("));
+  assert(!header.includes('placeholder="Search this admin view…"'));
+
+  assert(page.includes("useDeferredValue(search)"));
+  assert(page.includes("page: String(page)"));
+  assert(page.includes("limit: String(PAGE_SIZE)"));
+  assert(page.includes("setTotal(typeof payload.total === \"number\" ? payload.total : 0)"));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(page.includes('role="alert"'));
+
+  assert(route.includes("requireAdminSession(req)"));
+  assert(route.includes("querySchema.parse"));
+  assert(route.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'));
+  assert(route.includes("skip: (query.page - 1) * query.limit"));
+  assert(route.includes("take: query.limit"));
+});
