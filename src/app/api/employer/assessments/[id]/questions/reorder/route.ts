@@ -16,6 +16,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     await enforceRateLimit(request, "employer_reorder_assessment_questions", 30, 60_000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessment question order is controlled by the generated assessment policy.",
+        403,
+      );
+    }
     const { questionIds } = await readValidatedJson(request, reorderQuestionsSchema);
     const { id: assessmentId } = await params;
 
