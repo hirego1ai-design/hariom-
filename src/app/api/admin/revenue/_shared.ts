@@ -32,6 +32,20 @@ function textValue(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
 }
 
+export function revenueSourceForPayment(productType: string) {
+  switch (productType.trim().toUpperCase()) {
+    case "LEGACY_SUBSCRIPTION":
+    case "SUBSCRIPTION":
+      return "Subscription";
+    case "COPILOT":
+      return "Copilot";
+    case "COPILOT_ADDON":
+      return "Copilot Add Capacity";
+    default:
+      return "Other Payment";
+  }
+}
+
 export async function loadRevenueTransactions() {
   const [payments, invoices] = await Promise.all([
     prisma.paymentTransaction.findMany({ orderBy: { createdAt: "desc" } }),
@@ -71,8 +85,9 @@ export async function loadRevenueTransactions() {
       company: company?.name || payment.companyId,
       email: textValue(payload.email),
       mobile: textValue(payload.mobile),
-      revenueSource: textValue(payload.revenueSource, payment.planId ? "Subscription" : "Manual"),
-      planPurchased: textValue(payload.planName, payment.planId || ""),
+      revenueSource: revenueSourceForPayment(payment.productType),
+      productType: payment.productType,
+      planPurchased: payment.planId || "",
       amount: payment.amount,
       amountFormatted: formatMoney(payment.amount, payment.currency),
       tax: Number(payload.tax || 0),
