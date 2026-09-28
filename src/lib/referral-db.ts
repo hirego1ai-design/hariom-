@@ -2293,59 +2293,6 @@ class ReferralDatabaseStore {
   }): Promise<{ queue: UserFraudProfile[]; total: number }> {
     const page = Math.max(1, options?.page ?? 1);
     const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
-
-    if (process.env.NODE_ENV === "production") {
-      const statuses = options?.status
-        ? [options.status as DbReferralFraudStatus]
-        : [
-            DbReferralFraudStatus.FLAGGED,
-            DbReferralFraudStatus.FRAUD_HOLD,
-            DbReferralFraudStatus.ADMIN_REVIEW,
-          ];
-
-      const where = { status: { in: statuses } };
-      const [total, rows] = await prisma.$transaction([
-        prisma.referralFraudProfile.count({ where }),
-        prisma.referralFraudProfile.findMany({
-          where,
-          orderBy: [{ riskScore: "desc" }, { updatedAt: "desc" }, { userId: "asc" }],
-          skip: (page - 1) * limit,
-          take: limit,
-          include: {
-            history: {
-              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              take: 20,
-            },
-          },
-        }),
-      ]);
-
-      return {
-        total,
-        queue: rows.map((row) => this.mapFraudProfile(row)),
-      };
-    }
-
-    const rows = Array.from(this.fraudProfiles.values())
-      .filter((profile) =>
-        options?.status
-          ? profile.status === options.status
-          : profile.status !== FraudStatus.NORMAL,
-      )
-      .sort((a, b) => b.riskScore - a.riskScore);
-    return {
-      total: rows.length,
-      queue: rows.slice((page - 1) * limit, page * limit),
-    };
-  }
-
-  public async getAdminFraudQueuePage(options?: {
-    page?: number;
-    limit?: number;
-    status?: FraudStatus;
-  }): Promise<{ queue: UserFraudProfile[]; total: number }> {
-    const page = Math.max(1, options?.page ?? 1);
-    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
     const status = options?.status;
 
     if (process.env.NODE_ENV === "production") {
