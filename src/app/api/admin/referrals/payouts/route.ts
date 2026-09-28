@@ -9,13 +9,29 @@ import {
 } from "@/lib/apiSecurity";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 
+const payoutStatuses = ["PENDING_ADMIN_APPROVAL", "APPROVED", "PAID", "REJECTED"] as const;
+
+const querySchema = z.object({
+  status: z.enum(payoutStatuses).optional(),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
 const payoutActionSchema = z.object({
   payoutId: z.string().trim().min(1).max(191),
   action: z.enum(["APPROVE", "MARK_PAID", "REJECT"]),
+  expectedUpdatedAt: z.string().datetime(),
   transactionRef: z.string().trim().min(3).max(200).optional(),
-  adminNotes: z.string().trim().max(1000).optional(),
+  adminNotes: z.string().trim().min(3).max(1000).optional(),
   rejectionReason: z.string().trim().min(3).max(1000).optional(),
 }).strict().superRefine((value, ctx) => {
+  if (value.action === "APPROVE" && !value.adminNotes) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["adminNotes"],
+      message: "Approval rationale is required.",
+    });
+  }
   if (value.action === "MARK_PAID" && !value.transactionRef) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -32,19 +48,13 @@ const payoutActionSchema = z.object({
   }
 });
 
-const querySchema = z.object({
-  status: z.enum(["PENDING_ADMIN_APPROVAL", "APPROVED", "PROCESSING", "PAID", "REJECTED"]).optional(),
-  page: z.coerce.number().int().min(1).max(10_000).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-});
-
 export async function GET(request: Request) {
   try {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_referral_payouts_read:${admin.id}`, 60, 60_000);
-    const query = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
+    const url = new URL(request.url);
+    const query = querySchema.parse(Object.fromEntries(url.searchParams.entries()));
     const result = await referralDb.getAdminPayoutQueuePage(query);
-
     return NextResponse.json({
       success: true,
       queue: result.queue,
@@ -61,47 +71,67 @@ export async function POST(request: Request) {
   try {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_referral_payouts_update:${admin.id}`, 20, 60_000);
-    const { payoutId, action, transactionRef, adminNotes, rejectionReason } =
-      await readValidatedJson(request, payoutActionSchema, 8 * 1024);
+    const body = await readValidatedJson(request, payoutActionSchema, 8 * 1024);
     const ipAddress = getClientIp(request);
 
-    if (action === "APPROVE") {
+    if (body.action === "APPROVE") {
       const payout = await referralDb.adminApprovePayout(
-        payoutId,
+        body.payoutId,
         admin.id,
-        adminNotes,
+        body.adminNotes,
         ipAddress,
+        body.expectedUpdatedAt,
       );
+      if (!payout) {
+        return NextResponse.json(
+          { success: false, error: "Payout is not awaiting approval or changed; refresh before reviewing." },
+          { status: 409 },
+        );
+      }
       return NextResponse.json({
         success: true,
-        message: "Payout status updated to APPROVED for processing.",
+        message: "Payout approved for processing.",
         payout,
       });
     }
 
-    if (action === "MARK_PAID") {
+    if (body.action === "MARK_PAID") {
       const payout = await referralDb.adminMarkPayoutPaid(
-        payoutId,
+        body.payoutId,
         admin.id,
-        transactionRef!,
+        body.transactionRef!,
         ipAddress,
+        body.expectedUpdatedAt,
       );
+      if (!payout) {
+        return NextResponse.json(
+          { success: false, error: "Payout not found." },
+          { status: 404 },
+        );
+      }
       return NextResponse.json({
         success: true,
-        message: "Payout marked as PAID with settlement transaction reference.",
+        message: "Payout marked PAID with settlement transaction reference.",
         payout,
       });
     }
 
     const payout = await referralDb.adminRejectPayout(
-      payoutId,
+      body.payoutId,
       admin.id,
-      rejectionReason!,
+      body.rejectionReason!,
       ipAddress,
+      body.expectedUpdatedAt,
     );
+    if (!payout) {
+      return NextResponse.json(
+        { success: false, error: "Payout not found." },
+        { status: 404 },
+      );
+    }
     return NextResponse.json({
       success: true,
-      message: "Payout request rejected and unreserved liability released.",
+      message: "Payout rejected and reserved liability released.",
       payout,
     });
   } catch (error) {
