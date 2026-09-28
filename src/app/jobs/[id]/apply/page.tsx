@@ -83,7 +83,7 @@ export default function JobApplyPage() {
         return;
       }
 
-      if (response.status === 202 && data.assessmentRequired && data.noticeUrl) {
+      if (res.status === 202 && data.assessmentRequired && data.noticeUrl) {
         router.push(data.noticeUrl);
         return;
       }
