@@ -84,7 +84,10 @@ export async function GET(request: NextRequest) {
     ]);
 
     const statusCounts = Object.fromEntries(
-      statusRows.map((row) => [row.status, row._count.id]),
+      statusRows.map((row) => [
+        row.status,
+        (row._count as { id?: number } | undefined)?.id ?? 0,
+      ]),
     );
 
     return NextResponse.json({
