@@ -9,32 +9,50 @@ function EmployerInterviewRescheduleContent() {
   const [interviewId, setInterviewId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setInterviewId(searchParams.get("interviewId") || "");
   }, [searchParams]);
 
   async function update(status: "RESCHEDULE" | "CANCEL") {
+    if (saving) return;
     if (!interviewId || (status === "RESCHEDULE" && !scheduledAt)) {
+      setMessageType("error");
       setMessage("Enter the interview ID and a new time before continuing.");
       return;
     }
-    const response = await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: status,
-        scheduledAt: status === "RESCHEDULE" ? new Date(scheduledAt).toISOString() : undefined,
-      }),
-    });
-    const data = await response.json();
-    setMessage(
-      response.ok
-        ? status === "CANCEL"
-          ? "Interview cancelled and candidate notified."
-          : "Interview rescheduled and candidate notified."
-        : data.error || "Unable to update interview."
-    );
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/employer/interviews/${encodeURIComponent(interviewId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: status,
+          scheduledAt: status === "RESCHEDULE" ? new Date(scheduledAt).toISOString() : undefined,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Unable to update interview.");
+      }
+
+      const emailStatus = data.notifications?.email?.status;
+      setMessageType("success");
+      setMessage(
+        status === "CANCEL"
+          ? `Interview cancelled. Candidate email status: ${emailStatus || "not available"}.`
+          : `Interview rescheduled. Candidate email status: ${emailStatus || "not available"}.`,
+      );
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to update interview.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -43,7 +61,7 @@ function EmployerInterviewRescheduleContent() {
         <div>
           <p className="text-yellow text-xs font-bold uppercase tracking-[0.2em] mb-2">Interview operations</p>
           <h1 className="text-3xl font-bold">Reschedule or cancel</h1>
-          <p className="text-slate-400 text-sm mt-2">The candidate receives an in-app and email update after the change.</p>
+          <p className="text-slate-400 text-sm mt-2">The backend attempts a candidate email notification after a successful change. Provider acceptance is reported separately from the interview update itself.</p>
         </div>
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
           <label className="block text-xs text-slate-400">
@@ -65,10 +83,10 @@ function EmployerInterviewRescheduleContent() {
             />
           </label>
           <div className="flex gap-3">
-            <button onClick={() => update("RESCHEDULE")} className="flex-1 rounded-xl bg-indigo-500 py-3 font-bold">
-              Reschedule
+            <button disabled={saving} onClick={() => void update("RESCHEDULE")} className="flex-1 rounded-xl bg-indigo-500 py-3 font-bold disabled:opacity-50">
+              {saving ? "Saving…" : "Reschedule"}
             </button>
-            <button onClick={() => update("CANCEL")} className="flex-1 rounded-xl bg-red-500/20 text-red-300 py-3 font-bold">
+            <button disabled={saving} onClick={() => void update("CANCEL")} className="flex-1 rounded-xl bg-red-500/20 text-red-300 py-3 font-bold disabled:opacity-50">
               Cancel interview
             </button>
           </div>
@@ -80,7 +98,11 @@ function EmployerInterviewRescheduleContent() {
               Download calendar invite
             </Link>
           )}
-          {message && <p className="text-sm text-emerald-300">{message}</p>}
+          {message && (
+            <p role={messageType === "error" ? "alert" : "status"} className={messageType === "error" ? "text-sm text-red-300" : "text-sm text-emerald-300"}>
+              {message}
+            </p>
+          )}
         </section>
       </div>
     </main>
