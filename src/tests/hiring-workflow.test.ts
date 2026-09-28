@@ -110,6 +110,7 @@ export async function runHiringWorkflowTests(): Promise<{
     let candidateProfile: any = null;
     let jobListingA: any = null;
     let jobListingB: any = null;
+    let disposableDraftJob: any = null;
     let applicationA: any = null;
     let applicationB: any = null;
     let interviewA: any = null;
@@ -261,12 +262,29 @@ export async function runHiringWorkflowTests(): Promise<{
       );
 
       const resJobDelA = await callJobDelete(tokenA, jobListingA.id);
-      const dbJobAAfterDel = await prisma.jobListing.findUnique({ where: { id: jobListingA.id } });
-      const dbAppAAfterDel = await prisma.application.findUnique({ where: { id: applicationA.id } });
+      const dbJobAAfterProtectedDelete = await prisma.jobListing.findUnique({ where: { id: jobListingA.id } });
+      const dbAppAAfterProtectedDelete = await prisma.application.findUnique({ where: { id: applicationA.id } });
       assert(
-        "Job deletion removes listing and cascades cleanly",
-        resJobDelA.status === 200 && dbJobAAfterDel === null && dbAppAAfterDel === null,
-        "Listing and application removed from DB successfully"
+        "Job deletion preserves hiring records once applications exist",
+        resJobDelA.status === 409 && dbJobAAfterProtectedDelete !== null && dbAppAAfterProtectedDelete !== null,
+        "Published/used job deletion is blocked and existing hiring records are preserved"
+      );
+
+      disposableDraftJob = await prisma.jobListing.create({
+        data: {
+          companyId: companyA.id,
+          title: "Disposable Draft Role",
+          location: "Remote",
+          description: "CI-only unused draft for deletion contract verification",
+          status: "DRAFT",
+        },
+      });
+      const resDraftDelete = await callJobDelete(tokenA, disposableDraftJob.id);
+      const dbDraftAfterDelete = await prisma.jobListing.findUnique({ where: { id: disposableDraftJob.id } });
+      assert(
+        "Unused draft job can be deleted cleanly",
+        resDraftDelete.status === 200 && dbDraftAfterDelete === null,
+        "Unused draft deletion succeeds without touching historical hiring records"
       );
 
     } finally {
@@ -282,6 +300,9 @@ export async function runHiringWorkflowTests(): Promise<{
       }
       if (jobListingA) {
         await prisma.jobListing.delete({ where: { id: jobListingA.id } }).catch(() => undefined);
+      }
+      if (disposableDraftJob) {
+        await prisma.jobListing.delete({ where: { id: disposableDraftJob.id } }).catch(() => undefined);
       }
       if (jobListingB) {
         await prisma.jobListing.delete({ where: { id: jobListingB.id } }).catch(() => undefined);
