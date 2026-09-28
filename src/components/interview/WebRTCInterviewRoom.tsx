@@ -136,36 +136,50 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
           const signaling = latest.signaling;
           for (const offer of (signaling.offers || []) as Signal[]) {
             if (offer.targetId !== selfId.current || offer.senderId === selfId.current || seenSignals.current.has(offer.id) || !offer.sdp) continue;
-            seenSignals.current.add(offer.id);
             const connection = ensurePeer(offer.senderId);
             if (connection.signalingState !== "stable") continue;
-            await connection.setRemoteDescription(offer.sdp);
-            const queued = pendingIce.current.get(offer.senderId) || [];
-            for (const ice of queued) await connection.addIceCandidate(ice).catch(() => undefined);
-            pendingIce.current.delete(offer.senderId);
-            const answer = await connection.createAnswer();
-            await connection.setLocalDescription(answer);
-            await signal("ANSWER", offer.senderId, { sdp: answer });
+            try {
+              await connection.setRemoteDescription(offer.sdp);
+              const queued = pendingIce.current.get(offer.senderId) || [];
+              for (const ice of queued) await connection.addIceCandidate(ice);
+              pendingIce.current.delete(offer.senderId);
+              const answer = await connection.createAnswer();
+              await connection.setLocalDescription(answer);
+              await signal("ANSWER", offer.senderId, { sdp: answer });
+              seenSignals.current.add(offer.id);
+            } catch {
+              connection.close();
+              peers.current.delete(offer.senderId);
+              setStatus("Interview signaling interrupted — retrying…");
+            }
           }
           for (const answer of (signaling.answers || []) as Signal[]) {
             if (answer.targetId !== selfId.current || answer.senderId === selfId.current || seenSignals.current.has(answer.id) || !answer.sdp) continue;
-            seenSignals.current.add(answer.id);
             const connection = ensurePeer(answer.senderId);
-            if (connection.signalingState === "have-local-offer") {
+            if (connection.signalingState !== "have-local-offer") continue;
+            try {
               await connection.setRemoteDescription(answer.sdp);
               const queued = pendingIce.current.get(answer.senderId) || [];
-              for (const ice of queued) await connection.addIceCandidate(ice).catch(() => undefined);
+              for (const ice of queued) await connection.addIceCandidate(ice);
               pendingIce.current.delete(answer.senderId);
+              seenSignals.current.add(answer.id);
+            } catch {
+              setStatus("Interview signaling interrupted — retrying…");
             }
           }
           for (const candidate of (signaling.candidates || []) as Signal[]) {
             if (candidate.targetId !== selfId.current || candidate.senderId === selfId.current || seenSignals.current.has(candidate.id) || !candidate.candidate) continue;
-            seenSignals.current.add(candidate.id);
             const connection = ensurePeer(candidate.senderId);
             if (!connection.remoteDescription) {
               pendingIce.current.set(candidate.senderId, [...(pendingIce.current.get(candidate.senderId) || []), candidate.candidate]);
+              seenSignals.current.add(candidate.id);
             } else {
-              await connection.addIceCandidate(candidate.candidate).catch(() => undefined);
+              try {
+                await connection.addIceCandidate(candidate.candidate);
+                seenSignals.current.add(candidate.id);
+              } catch {
+                setStatus("Interview network candidate interrupted — retrying…");
+              }
             }
           }
         }, 1200);
