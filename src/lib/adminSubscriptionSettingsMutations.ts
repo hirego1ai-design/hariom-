@@ -90,12 +90,16 @@ export async function updateAdminAiServiceCost(
     serviceKey: string;
     creditCost: number;
     billingType: "CREDIT_BASED" | "INCLUDED" | "PAID_ADDON";
+    expectedUpdatedAt: string;
   },
   context: AdminMutationContext,
 ) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.aiServiceCost.findUnique({ where: { serviceKey: payload.serviceKey } });
     if (!existing) return null;
+    if (existing.updatedAt.toISOString() !== payload.expectedUpdatedAt) {
+      throw new ApiError("AI service cost changed; reload before saving.", 409);
+    }
 
     const changed = await tx.aiServiceCost.updateMany({
       where: { id: existing.id, updatedAt: existing.updatedAt },
