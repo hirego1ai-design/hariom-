@@ -33,6 +33,8 @@ type Requirement = {
   currency: string;
   status: RequirementStatus;
   assignedSalesLead: string | null;
+  latestAgreementId: string | null;
+  latestAgreementStatus: string | null;
   activeAgreementId: string | null;
   activeAgreementStatus: string | null;
   createdAt: string;
@@ -253,7 +255,7 @@ export default function AdminManagedHiringRequestsPage() {
                             <p className="text-red-300">Missing company binding</p>
                           )}
                           <p className="mt-1 text-text-muted">
-                            Agreement: {request.activeAgreementStatus?.replaceAll("_", " ") || "None active"}
+                            Latest agreement: {request.latestAgreementStatus?.replaceAll("_", " ") || "None"}
                           </p>
                           {request.assignedSalesLead && (
                             <p className="mt-1 text-text-muted">
@@ -267,17 +269,26 @@ export default function AdminManagedHiringRequestsPage() {
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right align-top">
-                          <Link
-                            href={`/admin/agreements/builder?reqId=${encodeURIComponent(request.id)}`}
-                            aria-disabled={!request.companyId}
-                            className={`rounded-lg px-3 py-2 font-bold ${
-                              request.companyId
-                                ? "bg-primary text-white"
-                                : "pointer-events-none border border-white/10 text-text-muted opacity-50"
-                            }`}
-                          >
-                            Draft agreement
-                          </Link>
+                          {request.latestAgreementId ? (
+                            <Link
+                              href={`/admin/agreements/${encodeURIComponent(request.latestAgreementId)}`}
+                              className="rounded-lg bg-indigo-600 px-3 py-2 font-bold text-white"
+                            >
+                              Review agreement
+                            </Link>
+                          ) : (
+                            <Link
+                              href={`/admin/agreements/builder?reqId=${encodeURIComponent(request.id)}`}
+                              aria-disabled={!request.companyId}
+                              className={`rounded-lg px-3 py-2 font-bold ${
+                                request.companyId
+                                  ? "bg-primary text-white"
+                                  : "pointer-events-none border border-white/10 text-text-muted opacity-50"
+                              }`}
+                            >
+                              Draft agreement
+                            </Link>
+                          )}
                         </td>
                       </tr>
                     ))}
