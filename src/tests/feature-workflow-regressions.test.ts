@@ -1560,3 +1560,18 @@ test("admin recorded-assessment governance is deliberate versioned and audited",
   assert(reviewRoute.includes("prisma.$transaction"));
   assert(reviewRoute.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
 });
+
+
+test("admin backup and recovery screen remains evidence-only without fabricated provider status", () => {
+  const page = fs.readFileSync(new URL("../app/admin/system/backup-recovery/page.tsx", import.meta.url), "utf8");
+
+  assert(page.includes("No live backup-provider integration is connected"));
+  assert(page.includes("does not start backups or restores"));
+  assert(page.includes("does not display fabricated"));
+  assert(page.includes('href="/admin/system-health"'));
+  assert(page.includes('href="/admin/settings/audit-log"'));
+  assert(page.includes("immutable operator evidence"));
+  assert(!page.includes("Last backup:"));
+  assert(!page.includes("PITR healthy"));
+  assert(!page.includes("Restore successful"));
+});
