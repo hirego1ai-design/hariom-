@@ -22,17 +22,34 @@ export async function GET(req: NextRequest) {
     const admin = await requireAdminSession(req);
     await enforceRateLimit(req, `admin_copilot_capacity_offers_read:${admin.id}`, 60, 60_000);
 
-    const offers = await prisma.copilotCapacityOffer.findMany({
-      include: {
-        regionalPrices: {
-          orderBy: [{ regionCode: "asc" }, { id: "asc" }],
-          take: 250,
+    const [offerTotal, offers] = await prisma.$transaction([
+      prisma.copilotCapacityOffer.count(),
+      prisma.copilotCapacityOffer.findMany({
+        include: {
+          regionalPrices: {
+            orderBy: [{ regionCode: "asc" }, { id: "asc" }],
+            take: 250,
+          },
+          _count: { select: { regionalPrices: true } },
         },
+        orderBy: [{ capacityUnits: "asc" }, { id: "asc" }],
+        take: 100,
+      }),
+    ]);
+    const priceTruncatedOfferIds = offers
+      .filter((offer) => offer._count.regionalPrices > offer.regionalPrices.length)
+      .map((offer) => offer.id);
+
+    return NextResponse.json({
+      success: true,
+      offers,
+      catalogue: {
+        offerTotal,
+        offerLoaded: offers.length,
+        offersTruncated: offerTotal > offers.length,
+        priceTruncatedOfferIds,
       },
-      orderBy: [{ capacityUnits: "asc" }, { id: "asc" }],
-      take: 100,
     });
-    return NextResponse.json({ success: true, offers });
   } catch (error) {
     return handleApiError(error);
   }
