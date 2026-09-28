@@ -57,10 +57,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    // Historical Integrity: Cannot add questions if candidate attempts exist
-    const attemptCount = await prisma.mcqAttempt.count({ where: { assessmentId } });
-    if (attemptCount > 0) {
-      throw new ApiError("Cannot add questions to an assessment that already has candidate attempts.", 400);
+    // Historical Integrity: freeze the question set once assigned or attempted.
+    const [attemptCount, assignmentCount] = await Promise.all([
+      prisma.mcqAttempt.count({ where: { assessmentId } }),
+      prisma.applicationGate.count({ where: { assessmentId } }),
+    ]);
+    if (attemptCount > 0 || assignmentCount > 0) {
+      throw new ApiError("Cannot add questions after this assessment has been assigned to a candidate.", 409);
     }
 
     // Get the current max orderIndex
