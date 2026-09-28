@@ -102,6 +102,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Serialize all role mutations so concurrent admin demotions cannot race
+      // the last-admin protection check.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('admin-role-governance'))`;
+
       const target = await tx.user.findUnique({
         where: { id: input.userId },
         select: {
