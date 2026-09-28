@@ -37,7 +37,8 @@ export default function EmployerManagedHiringDashboard() {
         return payload.requirements || [];
       }),
       fetch("/api/agreements/contracts", { cache: "no-store", signal: controller.signal }).then(async (response) => {
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
+        if (response.status === 403) return [];
         if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load managed-hiring agreements.");
         return payload.agreements || [];
       }),
@@ -104,7 +105,7 @@ export default function EmployerManagedHiringDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white">Agreements</h2>
-                <p className="mt-1 text-xs text-text-muted">Persisted commercial agreements for this company.</p>
+                <p className="mt-1 text-xs text-text-muted">Persisted commercial agreements. Financial terms are visible only to company administrators.</p>
               </div>
               <span className="text-sm font-bold text-white">{agreements.length}</span>
             </div>
