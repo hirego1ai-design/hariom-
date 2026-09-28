@@ -1387,3 +1387,39 @@ test("managed hiring duplicate admin routes remain canonical redirects", () => {
   assert(builderRedirect.includes('redirect(reqId ? `/admin/agreements/builder?reqId='));
   assert(templatesRedirect.includes('redirect("/admin/agreements/templates")'));
 });
+
+
+test("admin Copilot commerce keeps commercial changes versioned audited and fail closed", () => {
+  const page = fs.readFileSync(new URL("../app/admin/copilot-commerce/page.tsx", import.meta.url), "utf8");
+  const contracts = fs.readFileSync(new URL("../lib/copilot/contracts.ts", import.meta.url), "utf8");
+  const commerce = fs.readFileSync(new URL("../app/api/admin/copilot/commerce/route.ts", import.meta.url), "utf8");
+  const offers = fs.readFileSync(new URL("../app/api/admin/copilot/capacity-offers/route.ts", import.meta.url), "utf8");
+
+  assert(page.includes("<AdminSidebar"));
+  assert(page.includes("<AdminHeader"));
+  assert(page.includes("md:pl-[116px]"));
+  assert(page.includes("changeReason"));
+  assert(page.includes("expectedUpdatedAt"));
+  assert(page.includes("Creation reason (required)"));
+  assert(page.includes("No Copilot plans are configured."));
+  assert(page.includes("No Copilot usage rules are configured."));
+
+  assert(contracts.includes("expectedUpdatedAt: z.string().datetime()"));
+  assert(contracts.includes("reason: z.string().trim().min(3).max(500)"));
+
+  assert(commerce.includes('admin_copilot_commerce_read:${admin.id}'));
+  assert(commerce.includes('admin_copilot_commerce_write:${session.id}'));
+  assert(commerce.includes("Copilot plan changed; reload before saving."));
+  assert(commerce.includes("Copilot regional price changed; reload before saving."));
+  assert(commerce.includes("Copilot usage rule changed; reload before saving."));
+  assert(commerce.includes("updateMany"));
+  assert(commerce.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+
+  assert(offers.includes('admin_copilot_capacity_offers_read:${admin.id}'));
+  assert(offers.includes('admin_copilot_capacity_offers_write:${session.id}'));
+  assert(offers.includes("Copilot capacity offer changed; reload before saving."));
+  assert(offers.includes("Copilot capacity price changed; reload before saving."));
+  assert(offers.includes("COPILOT_CAPACITY_OFFER_CREATED"));
+  assert(offers.includes("COPILOT_CAPACITY_OFFER_UPDATED"));
+  assert(offers.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+});
