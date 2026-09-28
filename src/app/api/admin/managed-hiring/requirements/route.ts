@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         : {}),
     };
 
-    const [total, requirements] = await prisma.$transaction([
+    const [total, requirements, statusRows] = await prisma.$transaction([
       prisma.hiringRequirement.count({ where }),
       prisma.hiringRequirement.findMany({
         where,
@@ -81,11 +81,21 @@ export async function GET(request: NextRequest) {
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
+      prisma.hiringRequirement.groupBy({
+        by: ["status"],
+        _count: { id: true },
+        orderBy: { status: "asc" },
+      }),
     ]);
+
+    const statusCounts = Object.fromEntries(
+      statusRows.map((row) => [row.status, row._count.id]),
+    );
 
     return NextResponse.json({
       success: true,
       total,
+      statusCounts,
       page: query.page,
       limit: query.limit,
       requirements: requirements.map((requirement) => ({
