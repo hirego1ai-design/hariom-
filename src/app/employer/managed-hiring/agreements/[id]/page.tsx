@@ -14,6 +14,7 @@ export default function EmployerAgreementReviewPage() {
   const [agreement, setAgreement] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [signing, setSigning] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [signatureDesignation, setSignatureDesignation] = useState("");
@@ -24,14 +25,15 @@ export default function EmployerAgreementReviewPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/agreements/contracts/${agreementId}`);
-        const data = await res.json();
-        if (data.success) {
-          setAgreement(data.agreement);
-          setEvents(data.events || []);
+        const res = await fetch(`/api/agreements/contracts/${agreementId}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success || !data.agreement) {
+          throw new Error(data.error || "Unable to load this commercial agreement.");
         }
+        setAgreement(data.agreement);
+        setEvents(Array.isArray(data.events) ? data.events : []);
       } catch (err) {
-        console.error(err);
+        setLoadError(err instanceof Error ? err.message : "Unable to load this commercial agreement.");
       } finally {
         setLoading(false);
       }
@@ -56,8 +58,8 @@ export default function EmployerAgreementReviewPage() {
           signedByDesignation: signatureDesignation,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
@@ -86,8 +88,8 @@ export default function EmployerAgreementReviewPage() {
           amendmentNotes,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
         setAmendmentNotes("");
@@ -115,7 +117,8 @@ export default function EmployerAgreementReviewPage() {
       <div className="bg-[#0A0A0C] text-white min-h-screen relative flex flex-col items-center justify-center p-6">
         <EmployerSidebar />
         <span className="material-symbols-outlined text-4xl text-[#FF5252] mb-2">error</span>
-        <h2 className="text-lg font-bold">Agreement Document Not Found</h2>
+        <h2 className="text-lg font-bold">{loadError ? "Unable to Load Agreement" : "Agreement Document Not Found"}</h2>
+        {loadError && <p role="alert" className="mt-2 max-w-xl text-center text-sm text-red-200">{loadError}</p>}
         <button onClick={() => router.push("/employer/dashboard")} className="mt-4 px-4 py-2 bg-[#29B6F6] text-white text-xs font-bold rounded-xl">
           Back to Dashboard
         </button>
@@ -217,16 +220,28 @@ export default function EmployerAgreementReviewPage() {
             <h3 className="text-sm font-bold text-[#29B6F6] uppercase tracking-wider">3. Terms & Replacement Guarantee</h3>
             <div className="text-xs text-slate-300 space-y-2 leading-relaxed bg-[#16161B] p-4 rounded-xl border border-white/5">
               <p>
-                <strong>3.1 Replacement Warranty:</strong> If any candidate hired under this agreement leaves or is terminated within{" "}
-                <span className="text-white font-bold">{agreement.replacementDays} calendar days</span> of joining, HireGo AI will provide a single 100% free candidate replacement.
+                <strong>3.1 Replacement Window:</strong> The persisted commercial record specifies a{" "}
+                <span className="text-white font-bold">{agreement.replacementDays} calendar day</span> replacement window. Eligibility, scope, exclusions and any replacement obligation are governed only by the signed custom clauses and commercial notes for this agreement.
               </p>
               <p>
                 <strong>3.2 Invoicing & Payment:</strong> Invoices are generated upon the selected trigger rule (
                 <span className="text-white font-bold">{agreement.invoiceRule}</span>) with net <span className="text-white font-bold">{typeof agreement.creditDays === "number" ? `${agreement.creditDays} days` : "terms not specified"}</span>.
               </p>
-              <p>
-                <strong>3.3 Confidentiality & Non-Solicitation:</strong> Both parties agree to maintain strict confidentiality regarding candidate profiles, compensation details, and business intelligence.
-              </p>
+              {Array.isArray(agreement.customClauses) && agreement.customClauses.length > 0 ? (
+                <div>
+                  <strong>3.3 Signed Custom Clauses:</strong>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {agreement.customClauses.map((clause: string, index: number) => (
+                      <li key={index}>{clause}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p><strong>3.3 Custom Clauses:</strong> No additional custom clauses are recorded in this agreement.</p>
+              )}
+              {agreement.commercialNotes ? (
+                <p><strong>Commercial Notes:</strong> {agreement.commercialNotes}</p>
+              ) : null}
             </div>
           </div>
 
