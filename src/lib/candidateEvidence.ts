@@ -49,7 +49,7 @@ export function toEmployerCandidate(app: EmployerApplicationEvidence) {
     matchScore: app.aiSummary ? app.matchScore : null,
     experience: `${profile.experienceYears}y Exp`,
     avatar: null,
-    stage: app.status === "APPLIED" ? "SCREENING" : app.status,
+    stage: app.status,
     applicationGates: app.gates ?? [],
     universalSkillValidationGate: (app.gates ?? []).find((gate) => gate.type === "UNIVERSAL_SKILL_VALIDATION") ?? null,
     jobId: app.jobId,
