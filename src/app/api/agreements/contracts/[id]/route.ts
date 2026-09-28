@@ -41,6 +41,9 @@ export async function GET(
 ) {
   try {
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreements are available only to company administrators.", 403);
+    }
     const { id } = await params;
     const agreement = await agreementsDb.getAgreementById(id);
     if (!agreement) {
@@ -104,6 +107,9 @@ export async function POST(
 ) {
   try {
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreement actions require company administrator authority.", 403);
+    }
     const { id } = await params;
     const body = await readValidatedJson(req, agreementActionSchema);
     const action = body.action;
