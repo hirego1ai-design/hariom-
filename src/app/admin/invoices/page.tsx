@@ -11,6 +11,7 @@ export default function AdminInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedReceiptInvoice, setSelectedReceiptInvoice] = useState<any>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [companyName, setCompanyName] = useState("");
   const [agreementId, setAgreementId] = useState("");
@@ -19,6 +20,7 @@ export default function AdminInvoicesPage() {
   const [amount, setAmount] = useState(150000);
 
   const handleRejectReceipt = async (invoiceId: string) => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
@@ -26,13 +28,16 @@ export default function AdminInvoicesPage() {
         body: JSON.stringify({ action: "reject_receipt", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
-      if (data.success) {
-        alert("Receipt rejected. Invoice remains outstanding.");
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Receipt rejected. Invoice remains outstanding." });
         setSelectedReceiptInvoice(null);
         loadData();
-      } else { alert(data.error || "Review failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Receipt review failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Receipt review failed. Please try again." });
     }
   };
 
@@ -54,6 +59,7 @@ export default function AdminInvoicesPage() {
   }, []);
 
   const handleMarkPaid = async (invoiceId: string) => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
@@ -61,16 +67,21 @@ export default function AdminInvoicesPage() {
         body: JSON.stringify({ action: "mark_paid", invoiceId, expectedUpdatedAt: invoices.find(i => i.id === invoiceId)?.updatedAt }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Payment confirmed and invoice status updated." });
         setSelectedReceiptInvoice(null);
         loadData();
-      } else { alert(data.error || "Payment confirmation failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Payment confirmation failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Payment confirmation failed. Please try again." });
     }
   };
 
   const handleCreateInvoice = async () => {
+    setActionMessage(null);
     try {
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
@@ -78,12 +89,16 @@ export default function AdminInvoicesPage() {
         body: JSON.stringify({ agreementId, companyName, candidateName, jobTitle, amount }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setActionMessage({ type: "success", text: "Invoice created successfully." });
         setShowCreateModal(false);
         loadData();
-      } else { alert(data.error || "Invoice creation failed"); }
+      } else {
+        setActionMessage({ type: "error", text: data.error || "Invoice creation failed." });
+      }
     } catch (err) {
       console.error(err);
+      setActionMessage({ type: "error", text: "Invoice creation failed. Please try again." });
     }
   };
 
@@ -93,6 +108,7 @@ export default function AdminInvoicesPage() {
       <AdminHeader />
 
       <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-6xl mx-auto">
+        {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Invoice & Revenue Operations</h1>
