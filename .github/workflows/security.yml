@@ -58,5 +58,8 @@ jobs:
         with:
           languages: javascript-typescript
           build-mode: none
-      - name: Analyze source
+      - name: Analyze source locally
         uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          upload-database: false
