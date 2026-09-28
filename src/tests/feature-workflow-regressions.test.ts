@@ -741,3 +741,32 @@ test("admin revenue error handling preserves API authorization status", () => {
   assert(shared.includes("Number.isInteger"));
   assert(shared.includes("return NextResponse.json({ success: false, error: message }, { status });"));
 });
+
+
+test("admin invoice operations stay currency-safe paginated and deliberately reviewed", () => {
+  const page = fs.readFileSync(new URL("../app/admin/invoices/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/invoices/route.ts", import.meta.url), "utf8");
+  const db = fs.readFileSync(new URL("../lib/invoices-db.ts", import.meta.url), "utf8");
+
+  assert(route.includes('status: z.enum(["PAID", "UNPAID", "OVERDUE", "PENDING_VERIFICATION"]).optional()'));
+  assert(route.includes('admin_invoices_read:${session.id}'));
+  assert(route.includes('admin_invoice_review:${session.id}'));
+  assert(route.includes("prisma.invoice.groupBy"));
+  assert(route.includes('by: ["currency", "status"]'));
+  assert(route.includes("totalOutstanding"));
+  assert(route.includes("pendingVerification"));
+  assert(route.includes('if (!body.reason?.trim()) throw new ApiError("A rejection reason is required."'));
+
+  assert(db.includes("reason: reason?.trim() || null"));
+  assert(db.includes("reviewer reason recorded="));
+
+  assert(page.includes("Multiple currencies are reported separately"));
+  assert(page.includes("useDeferredValue(search)"));
+  assert(page.includes('params.set("status", status)'));
+  assert(page.includes("Page {page} of {totalPages}"));
+  assert(page.includes("Enter a rejection reason before rejecting the receipt."));
+  assert(page.includes("Receipt file is unavailable; do not approve this payment."));
+  assert(page.includes("Enter amount in the agreement currency"));
+  assert(!page.includes("Base Placement Fee (₹)"));
+  assert(!page.includes("formatCurrency(summary.totalBilled)"));
+});
