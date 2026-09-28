@@ -1977,6 +1977,7 @@ class ReferralDatabaseStore {
     riskScore: number;
     riskFactors: unknown;
     lastEvaluatedAt: Date;
+    updatedAt: Date;
     history?: Array<{
       id: string;
       userId: string;
@@ -1995,6 +1996,7 @@ class ReferralDatabaseStore {
       riskScore: row.riskScore,
       riskFactors: this.fraudFactors(row.riskFactors),
       lastEvaluatedAt: row.lastEvaluatedAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
       history: (row.history || []).map((audit) => ({
         id: audit.id,
         userId: audit.userId,
@@ -2066,6 +2068,7 @@ class ReferralDatabaseStore {
         riskScore: 0,
         riskFactors: [],
         lastEvaluatedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         history: [],
       });
     }
@@ -2078,6 +2081,7 @@ class ReferralDatabaseStore {
     reason: string;
     actorId?: string;
     ipAddress?: string;
+    expectedUpdatedAt?: string;
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
@@ -2101,6 +2105,12 @@ class ReferralDatabaseStore {
         const current = await tx.referralFraudProfile.findUniqueOrThrow({
           where: { userId: params.userId },
         });
+        if (
+          params.expectedUpdatedAt &&
+          current.updatedAt.toISOString() !== params.expectedUpdatedAt
+        ) {
+          throw new Error("Referral fraud profile changed; reload before saving.");
+        }
         const previousStatus = current.status as FraudStatus;
         if (!validTransitions[previousStatus].includes(params.newStatus)) {
           throw new Error(
@@ -2188,6 +2198,7 @@ class ReferralDatabaseStore {
     if (params.riskScore !== undefined) currentProfile.riskScore = params.riskScore;
     if (params.riskFactors) currentProfile.riskFactors = params.riskFactors;
     currentProfile.lastEvaluatedAt = new Date().toISOString();
+    currentProfile.updatedAt = currentProfile.lastEvaluatedAt;
     currentProfile.history.push(auditRecord);
     this.fraudProfiles.set(params.userId, currentProfile);
     return currentProfile;
