@@ -1491,3 +1491,26 @@ test("admin login stays role-bound audited and evidence-based", () => {
   assert(route.includes("httpOnly: true"));
   assert(route.includes('sameSite: "lax"'));
 });
+
+
+test("admin pricing engine uses explicit server-calculated non-persistent scenarios", () => {
+  const page = fs.readFileSync(new URL("../app/admin/pricing-engine/page.tsx", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../app/api/admin/pricing/calculate/route.ts", import.meta.url), "utf8");
+
+  assert(page.includes('fetch("/api/admin/pricing/calculate"'));
+  assert(page.includes("No production commercial defaults are prefilled."));
+  assert(page.includes("A calculation is not a quote, invoice, or signed agreement."));
+  assert(page.includes("Final slab is always open-ended."));
+  assert(page.includes("No result is inferred before server validation."));
+  assert(!page.includes("useState(2400000)"));
+  assert(!page.includes("useState(8.33)"));
+  assert(!page.includes("useState(18)"));
+  assert(!page.includes("useState(90)"));
+  assert(!page.includes("calculateCommercialFee({"));
+
+  assert(route.includes('admin_pricing_calculate:${admin.id}'));
+  assert(route.includes('currency: z.string().regex(/^[A-Z]{3}$/).optional()'));
+  assert(route.includes("pricingRequestSchema"));
+  assert(route.includes('pricingModel: z.literal("SLAB")'));
+  assert(route.includes("calculation"));
+});
