@@ -1048,3 +1048,34 @@ test("admin communications keep template state changes versioned audited and tes
   assert(smtpWrapper.includes("md:ml-[116px]"));
   assert(whatsappWrapper.includes("md:ml-[116px]"));
 });
+
+
+test("admin system health and queue pages scope status claims to observed evidence", () => {
+  const healthPage = fs.readFileSync(new URL("../app/admin/system-health/page.tsx", import.meta.url), "utf8");
+  const healthRoute = fs.readFileSync(new URL("../app/api/admin/system-health/route.ts", import.meta.url), "utf8");
+  const queuePage = fs.readFileSync(new URL("../app/admin/system/queue-broker/page.tsx", import.meta.url), "utf8");
+  const queueRoute = fs.readFileSync(new URL("../app/api/admin/system/queues/route.ts", import.meta.url), "utf8");
+  const infraRedirect = fs.readFileSync(new URL("../app/admin/system/infrastructure/page.tsx", import.meta.url), "utf8");
+  const dbRedirect = fs.readFileSync(new URL("../app/admin/system/db-pool/page.tsx", import.meta.url), "utf8");
+  const slaRedirect = fs.readFileSync(new URL("../app/admin/sla/monitor/page.tsx", import.meta.url), "utf8");
+
+  assert(healthRoute.includes('"CORE_RUNTIME_AVAILABLE"'));
+  assert(healthRoute.includes('"CORE_RUNTIME_DEGRADED"'));
+  assert(healthRoute.includes('"CURRENT_APP_INSTANCE_DATABASE_AND_CONFIGURATION"'));
+  assert(healthRoute.includes('"OBSERVED_ACTIVE"'));
+  assert(healthRoute.includes("configurationWarnings"));
+  assert(!healthRoute.includes('"APPLICATION_AVAILABLE"'));
+
+  assert(healthPage.includes("configurationWarnings"));
+  assert(healthPage.includes("Configuration warnings"));
+  assert(healthPage.includes('title="System Diagnostics"'));
+
+  assert(queueRoute.includes('"RECENT_HEARTBEAT"'));
+  assert(!queueRoute.includes('? "HEALTHY"'));
+  assert(queuePage.includes("workerStatusClass"));
+  assert(queuePage.includes("RECENT_HEARTBEAT"));
+
+  for (const source of [infraRedirect, dbRedirect, slaRedirect]) {
+    assert(source.includes('redirect("/admin/system-health")'));
+  }
+});
