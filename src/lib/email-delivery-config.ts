@@ -84,6 +84,7 @@ async function databaseConfig() {
     return await databaseConfigStrict();
   } catch (error) {
     console.error("[Email Dispatch] Unable to load admin delivery configuration.", error);
+    if (process.env.NODE_ENV === "production") throw error;
     return null;
   }
 }
