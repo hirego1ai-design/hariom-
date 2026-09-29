@@ -64,12 +64,15 @@ test("managed hiring requirement details are persisted rather than dropped after
   assert.doesNotMatch(repository, /workMode: payload\.workMode \|\| "Hybrid"/);
 });
 
-test("requirement state updates are bounded and cannot claim agreement states without matching agreement evidence", () => {
+test("requirement state updates are bounded and activation requires matching ACTIVE agreement evidence", () => {
   const route = read("src/app/api/agreements/requirements/[id]/route.ts");
+  const activation = read("src/lib/managedHiring/RequirementActivation.ts");
   assert.match(route, /requirementUpdateSchema/);
   assert.match(route, /SENT_TO_EMPLOYER/);
-  assert.match(route, /linked agreement is signed and active/);
+  assert.match(route, /activateManagedHiringRequirement/);
   assert.match(route, /activeAgreementId must reference an agreement linked to this requirement and company/);
+  assert.match(activation, /agreement\.status !== "ACTIVE"/);
+  assert.match(activation, /A signed ACTIVE commercial agreement linked to this requirement and company is required before activation/);
 });
 
 test("commercial agreement creation uses selected template and explicit terms instead of hidden backend defaults", () => {
@@ -84,7 +87,9 @@ test("commercial agreement creation uses selected template and explicit terms in
   assert.match(route, /body\.feeValue \?\? template\.feeValue/);
   assert.match(route, /body\.creditDays \?\? template\.creditTermsDays/);
   assert.match(route, /invoiceRule !== "DAY_25"/);
-  assert.match(route, /session\.name \|\| session\.email/);
+  assert.match(route, /performedBy: session\.id/);
+  assert.match(route, /COMMERCIAL_AGREEMENT_DRAFTED/);
+  assert.match(route, /enqueueSecurityAuditEvent\(tx, auditLog, session\.id\)/);
   assert.doesNotMatch(route, /Number\(body\.feeValue\) \|\| 8\.33/);
   assert.doesNotMatch(route, /body\.invoiceRule \|\| "DAY_25"/);
 
@@ -104,6 +109,6 @@ test("admin managed-hiring pipeline draft-agreement control navigates to the rea
   assert.match(pipeline, /import Link from "next\/link"/);
   assert.match(
     pipeline,
-    /\/admin\/managed-hiring\/agreements\/builder\?reqId=/,
+    /\/admin\/agreements\/builder\?reqId=/,
   );
 });
