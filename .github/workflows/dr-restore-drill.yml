@@ -1,0 +1,166 @@
+name: Disaster Recovery Restore Drill
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  logical-restore-drill:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[dr-restore-test]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirego_dr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hirego_dr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/hirego_dr?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/hirego_dr?schema=public
+      SOURCE_DATABASE_URL: ${{ secrets.DR_SOURCE_DATABASE_URL || secrets.DIRECT_URL || secrets.DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Verify protected source database secret is configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SOURCE_DATABASE_URL:-}" ]; then
+            echo "DR restore drill cannot run: configure DR_SOURCE_DATABASE_URL (preferred), DIRECT_URL, or DATABASE_URL as a repository Actions secret."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild disposable database schema from migrations
+        run: |
+          npx prisma validate
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Dump production data read-only and restore into disposable Postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dr-evidence
+
+          docker run --rm --network host \
+            -v "$PWD/dr-evidence:/evidence" \
+            -e RAW_SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" \
+            postgres:17-alpine sh -eu -c '
+              SRC="$(printf "%s" "$RAW_SOURCE_DATABASE_URL" | sed -E "s/([?&])schema=[^&]*&?/\\1/; s/\\?&/\\?/; s/[?&]$//")"
+              TARGET="postgresql://postgres:postgres@127.0.0.1:5432/hirego_dr"
+
+              src_tables="$(psql "$SRC" -v ON_ERROR_STOP=1 -Atqc "select count(*) from pg_tables where schemaname = '''public''';")"
+              dst_tables="$(psql "$TARGET" -v ON_ERROR_STOP=1 -Atqc "select count(*) from pg_tables where schemaname = '''public''';")"
+              test "$src_tables" = "$dst_tables"
+
+              schema_sql="select md5(coalesce(string_agg(table_name || ''':''' || column_name || ''':''' || udt_name || ''':''' || is_nullable, ''','' order by table_name, ordinal_position), '''''')) from information_schema.columns where table_schema = '''public''';"
+              src_schema="$(psql "$SRC" -v ON_ERROR_STOP=1 -Atqc "$schema_sql")"
+              dst_schema="$(psql "$TARGET" -v ON_ERROR_STOP=1 -Atqc "$schema_sql")"
+              test "$src_schema" = "$dst_schema"
+
+              pg_dump "$SRC" \
+                --schema=public \
+                --data-only \
+                --format=custom \
+                --no-owner \
+                --no-privileges \
+                --file=/evidence/hirego-public-data.dump
+
+              dump_bytes="$(wc -c < /evidence/hirego-public-data.dump | tr -d " ")"
+              test "$dump_bytes" -gt 0
+
+              truncate_list="$(psql "$TARGET" -v ON_ERROR_STOP=1 -Atqc "select string_agg(format('''%I.%I''', schemaname, tablename), ''', ''') from pg_tables where schemaname = '''public''';")"
+              test -n "$truncate_list"
+              psql "$TARGET" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE $truncate_list CASCADE;" >/dev/null
+
+              pg_restore \
+                --dbname="$TARGET" \
+                --data-only \
+                --disable-triggers \
+                --no-owner \
+                --no-privileges \
+                /evidence/hirego-public-data.dump
+
+              fingerprint() {
+                conn="$1"
+                psql "$conn" -v ON_ERROR_STOP=1 -Atqc "select quote_ident(tablename) from pg_tables where schemaname = '''public''' order by tablename;" |
+                  while IFS= read -r table_name; do
+                    row_count="$(psql "$conn" -v ON_ERROR_STOP=1 -Atqc "select count(*) from public.$table_name;")"
+                    printf "%s:%s\\n" "$table_name" "$row_count"
+                  done |
+                  sha256sum | awk "{print \\$1}"
+              }
+
+              src_rows="$(fingerprint "$SRC")"
+              dst_rows="$(fingerprint "$TARGET")"
+              test "$src_rows" = "$dst_rows"
+
+              src_migrations="$(psql "$SRC" -v ON_ERROR_STOP=1 -Atqc "select count(*) from public._prisma_migrations where finished_at is not null and rolled_back_at is null;")"
+              dst_migrations="$(psql "$TARGET" -v ON_ERROR_STOP=1 -Atqc "select count(*) from public._prisma_migrations where finished_at is not null and rolled_back_at is null;")"
+              test "$src_migrations" = "$dst_migrations"
+
+              generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              cat > /evidence/dr-restore-evidence.json <<EOF
+              {
+                "generatedAt": "$generated_at",
+                "source": "production-read-only",
+                "restoreTarget": "ephemeral-postgres-17",
+                "publicTableCount": $src_tables,
+                "migrationCount": $src_migrations,
+                "dumpBytes": $dump_bytes,
+                "schemaFingerprint": "$src_schema",
+                "rowCountFingerprint": "$src_rows",
+                "verified": true
+              }
+              EOF
+
+              rm -f /evidence/hirego-public-data.dump
+              echo "DR_RESTORE_VERIFIED=true"
+              echo "PUBLIC_TABLES=$src_tables"
+              echo "MIGRATIONS=$src_migrations"
+              echo "DUMP_BYTES=$dump_bytes"
+            '
+
+      - name: Publish DR evidence summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f dr-evidence/dr-restore-evidence.json ]; then
+            echo "## Disaster recovery restore drill" >> "$GITHUB_STEP_SUMMARY"
+            cat dr-evidence/dr-restore-evidence.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload non-sensitive DR evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: disaster-recovery-restore-evidence
+          path: dr-evidence/dr-restore-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
