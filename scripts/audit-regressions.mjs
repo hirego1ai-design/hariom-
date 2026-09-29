@@ -1,7 +1,8 @@
-// An explicit allowlist avoids the legacy database-mutating test suite.
-// Run each file in its own process so a leaked handle or stalled test is
-// attributable to one file instead of hanging the entire CI job indefinitely.
-import { spawn } from "node:child_process";
+// Run the offline production regression allowlist in isolated child processes.
+// Isolation prevents one test file's handles or database state from blocking the
+// entire release gate, while the per-file timeout fails closed instead of
+// allowing CI to hang indefinitely.
+import { spawnSync } from "node:child_process";
 
 const tests = [
   "admin-worker-liveness", "agent-evidence-regression", "ai-worker-safety", "async-worker-hardening", "candidate-evidence", "plan-contracts", "pph-billing",
@@ -15,54 +16,38 @@ const tests = [
   "production-truthfulness",
 ];
 
-const perFileTimeoutMs = 60_000;
+const timeoutMs = 30_000;
 
-function runOne(name) {
-  return new Promise((resolve, reject) => {
-    const file = `src/tests/${name}.test.ts`;
-    console.log(`\n[AUDIT] START ${file}`);
-    const child = spawn(
-      process.execPath,
-      ["--import", "tsx", "--test", "--test-concurrency=1", file],
-      { stdio: "inherit" },
+for (const name of tests) {
+  const file = `src/tests/${name}.test.ts`;
+  console.log(`[audit-regression] START ${file}`);
+
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "--test", file],
+    {
+      stdio: "inherit",
+      timeout: timeoutMs,
+      env: process.env,
+    },
+  );
+
+  if (result.error) {
+    const timedOut = result.error.code === "ETIMEDOUT";
+    console.error(
+      timedOut
+        ? `[audit-regression] TIMEOUT ${file} exceeded ${timeoutMs}ms`
+        : `[audit-regression] ERROR ${file}: ${result.error.message}`,
     );
-
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 2_000).unref();
-      reject(new Error(`Offline audit timed out after ${perFileTimeoutMs / 1000}s: ${file}`));
-    }, perFileTimeoutMs);
-
-    child.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      reject(new Error(`Could not launch offline regression ${file}: ${error.message}`));
-    });
-
-    child.on("exit", (code, signal) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (code === 0) {
-        console.log(`[AUDIT] PASS ${file}`);
-        resolve();
-        return;
-      }
-      reject(new Error(`Offline audit failed: ${file} (code=${code ?? "null"}, signal=${signal ?? "none"})`));
-    });
-  });
-}
-
-try {
-  for (const name of tests) {
-    await runOne(name);
+    process.exit(1);
   }
-  console.log(`\n[AUDIT] PASS all ${tests.length} offline regression files`);
-} catch (error) {
-  console.error(`\n[AUDIT] FAIL ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+
+  if (result.status !== 0) {
+    console.error(`[audit-regression] FAIL ${file} exited with ${result.status ?? "unknown status"}`);
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(`[audit-regression] PASS ${file}`);
 }
+
+console.log(`[audit-regression] PASS all ${tests.length} offline production regressions`);
