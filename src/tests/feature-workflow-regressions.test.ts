@@ -503,7 +503,7 @@ test("admin invoice creation derives commercial terms from authoritative agreeme
 
   assert(!ui.includes("useState(150000)"));
   assert(!ui.includes("setCompanyName"));
-  assert(ui.includes("tax rate, currency and payment due date are derived"));
+  assert(ui.includes("Company identity, billing currency, tax rate and due date are derived from the signed agreement and linked hiring requirement."));
 });
 
 test("recorded assessment question-bank publication and retirement are atomically audited", () => {
