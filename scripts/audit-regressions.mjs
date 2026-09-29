@@ -2,7 +2,8 @@
 // Isolation prevents one test file's handles or database state from blocking the
 // entire release gate. The large feature-wiring file is additionally executed
 // one named test at a time so a single unresolved test is attributable instead
-// of stalling the whole audit without evidence.
+// of stalling the whole audit without evidence. The split Admin workflow shards
+// use the same mode because each shard contains many source-wiring assertions.
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
@@ -58,7 +59,7 @@ function runNodeTest(file, label, extraArgs = [], timeout = fileTimeoutMs) {
 for (const name of tests) {
   const file = `src/tests/${name}.test.ts`;
 
-  if (name === "feature-workflow-regressions") {
+  if (name === "feature-workflow-regressions" || name.startsWith("admin-feature-workflow-")) {
     const source = fs.readFileSync(file, "utf8");
     const names = [...source.matchAll(/test\("([^"]+)"/g)].map((match) => match[1]);
     if (!names.length) {
