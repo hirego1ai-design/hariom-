@@ -149,7 +149,7 @@ test("admin referral governance persists fraud state and keeps payout ledger bal
   assert(migration.includes('CREATE TABLE "ReferralFraudAudit"'));
 
   assert(db.includes("prisma.referralFraudProfile"));
-  assert(db.includes("prisma.referralFraudAudit.create"));
+  assert(db.includes("tx.referralFraudAudit.create"));
   assert(db.includes("REFERRAL_FRAUD_STATUS_UPDATED"));
   assert(db.includes("enqueueSecurityAuditEvent(tx, auditLog, actorId)"));
   assert(db.includes("getAdminFraudQueuePage"));
@@ -177,7 +177,8 @@ test("admin referral governance persists fraud state and keeps payout ledger bal
 
   assert(db.includes("remainingAvailable._sum.rewardAmount ?? 0"));
   assert(db.includes("availableAfterRelease._sum.rewardAmount ?? 0"));
-  assert(db.includes("availableAfterReservation"));
+  assert(db.includes("balanceAfter: transactionalAvailable - input.amount"));
+  assert(db.includes("balanceAfter: unreservedAvailable - input.amount"));
   assert(db.includes("availableAfterSettlement"));
   assert(db.includes("availableAfterRejection"));
   assert(!db.includes("entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,\n      amount: payout.amount,\n      balanceAfter: 0"));
