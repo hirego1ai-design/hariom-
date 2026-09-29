@@ -77,18 +77,11 @@ test("admin configuration surfaces do not fabricate persisted commercial state",
   assert.doesNotMatch(platformRoute, /defaultPlacementFeePct:\s*8\.33/);
   assert.doesNotMatch(platformRoute, /defaultReplacementDays:\s*60/);
 
-  const managedRoute = read("src/app/api/admin/managed-hiring/config/route.ts");
-  for (const pattern of [
-    /process\.env\.MOCK_DB/,
-    /managedHiringGlobalConfig/,
-    /managedHiringAuditLogs/,
-    /LOG-MH-901/,
-    /superadmin@hirego\.ai/i,
-    /finance\.director@hirego\.ai/i,
-    /Fortune 500 campus hiring ramp/i,
-  ]) {
-    assert.doesNotMatch(managedRoute, pattern);
-  }
+  assert.equal(
+    existsSync("src/app/api/admin/managed-hiring/config/route.ts"),
+    false,
+    "retired duplicate managed-hiring config route must not exist",
+  );
 
   const settingsPage = read("src/app/admin/settings/managed-hiring/page.tsx");
   for (const pattern of [
