@@ -31,7 +31,7 @@ test("admin subscription controls use one canonical screen and reject stale comm
   assert(page.includes("md:pl-[116px]"));
   assert(page.includes("<AdminHeader"));
   assert(page.includes('role="dialog"'));
-  assert(page.includes("expectedUpdatedAt: plan.updatedAt"));
+  assert(page.includes("payload.expectedUpdatedAt = plan.updatedAt"));
   assert(page.includes("target.expectedUpdatedAt"));
   assert(page.includes('cost.trim() !== ""'));
   assert(page.includes("disabled={saving || !costValid}"));
