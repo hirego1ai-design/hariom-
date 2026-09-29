@@ -2,6 +2,13 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+function placementFeeLabel(agreement: any) {
+  if (typeof agreement?.feeValue !== "number") return "Placement fee: see agreement";
+  if (agreement.feeType === "PERCENTAGE") return `${agreement.feeValue}% placement fee`;
+  if (agreement.feeType === "FIXED") return `Fixed placement fee: ${agreement.feeValue}`;
+  return `Placement fee: ${agreement.feeValue} (see agreement type)`;
+}
+
 export default function EmployerCommercialPlansPage() {
   const router = useRouter();
   const [agreements, setAgreements] = useState<any[]>([]);
@@ -25,7 +32,8 @@ export default function EmployerCommercialPlansPage() {
   }, []);
 
   const activeAgreements = agreements.filter(a => a.status === "ACTIVE");
-  const pendingAgreements = agreements.filter(a => a.status === "SENT_TO_EMPLOYER" || a.status === "AMENDMENT_REQUESTED");
+  const pendingAgreements = agreements.filter(a => a.status === "SENT_TO_EMPLOYER");
+  const amendmentAgreements = agreements.filter(a => a.status === "AMENDMENT_REQUESTED");
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
@@ -85,7 +93,7 @@ export default function EmployerCommercialPlansPage() {
                             <span className="text-xs font-bold text-yellow uppercase tracking-wider">{agr.agreementNumber}</span>
                             <span className="px-2 py-0.5 rounded bg-yellow/10 text-yellow text-[10px] border border-yellow/20">Review Required</span>
                           </div>
-                          <p className="text-sm font-semibold text-white mb-1">Commercial Agreement: {agr.feeValue}% Placement Fee</p>
+                          <p className="text-sm font-semibold text-white mb-1">Commercial Agreement: {placementFeeLabel(agr)}</p>
                           <p className="text-xs text-text-secondary">Warranty: {agr.replacementDays} Days • Invoicing: {agr.invoiceRule.replace("_", " ")}</p>
                         </div>
                         <button
@@ -93,6 +101,32 @@ export default function EmployerCommercialPlansPage() {
                           className="px-5 py-2 rounded-lg bg-yellow text-[#1a1a1a] font-bold text-xs hover:bg-yellow/90 transition-colors"
                         >
                           Review & Sign
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {amendmentAgreements.length > 0 && (
+                <div>
+                  <h4 className="font-headline-md text-lg text-white mb-4 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-orange-300">edit_note</span>
+                    Amendment Requested
+                  </h4>
+                  <div className="space-y-4">
+                    {amendmentAgreements.map((agr) => (
+                      <div key={agr.id} className="glass-card rounded-xl p-5 border border-orange-300/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div>
+                          <p className="text-xs font-bold text-orange-200 uppercase tracking-wider">{agr.agreementNumber}</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{placementFeeLabel(agr)}</p>
+                          <p className="mt-1 text-xs text-text-secondary">Your requested changes are recorded; review the agreement for the current status and terms.</p>
+                        </div>
+                        <button
+                          onClick={() => router.push(`/employer/managed-hiring/agreements/${agr.id}`)}
+                          className="px-5 py-2 rounded-lg border border-orange-300/30 text-orange-100 font-bold text-xs hover:bg-orange-300/10 transition-colors"
+                        >
+                          View amendment
                         </button>
                       </div>
                     ))}
@@ -115,7 +149,7 @@ export default function EmployerCommercialPlansPage() {
                             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">{agr.agreementNumber}</span>
                             <span className="px-2 py-0.5 rounded bg-green/10 text-green text-[10px] border border-green/20">ACTIVE</span>
                           </div>
-                          <p className="text-sm font-semibold text-white mb-1">{agr.feeValue}% Placement Fee Structure</p>
+                          <p className="text-sm font-semibold text-white mb-1">{placementFeeLabel(agr)}</p>
                           <p className="text-xs text-text-secondary">Valid until {new Date(agr.validityEndDate).toLocaleDateString()}</p>
                         </div>
                         <button
@@ -149,7 +183,7 @@ export default function EmployerCommercialPlansPage() {
                       <div key={agreement.id} className="rounded-xl border border-white/5 bg-white/[0.03] p-3">
                         <p className="font-bold text-white">{agreement.agreementNumber}</p>
                         <p className="mt-1 text-xs text-text-secondary">
-                          {agreement.feeValue}% placement fee · {agreement.replacementDays} day replacement window · {String(agreement.invoiceRule || "Invoice rule not recorded").replaceAll("_", " ")}
+                          {placementFeeLabel(agreement)} · {agreement.replacementDays} day replacement window · {String(agreement.invoiceRule || "Invoice rule not recorded").replaceAll("_", " ")}
                         </p>
                       </div>
                     ))

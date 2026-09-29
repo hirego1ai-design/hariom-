@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import EmployerHeader from "@/components/employer/EmployerHeader";
 import EmployerSidebar from "@/components/employer/EmployerSidebar";
-import { formatCurrency, formatDate } from "@/utils";
+import { formatDate } from "@/utils";
 
 export default function EmployerAgreementReviewPage() {
   const router = useRouter();
@@ -13,30 +13,32 @@ export default function EmployerAgreementReviewPage() {
 
   const [agreement, setAgreement] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
+  const [permissions, setPermissions] = useState({ canExecute: false, canRequestAmendment: false });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [signing, setSigning] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [signatureDesignation, setSignatureDesignation] = useState("");
   const [amendmentNotes, setAmendmentNotes] = useState("");
   const [showAmendmentBox, setShowAmendmentBox] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     async function load() {
-      setLoadError("");
       try {
-        const res = await fetch(`/api/agreements/contracts/${agreementId}`, { cache: "no-store" });
+        const res = await fetch(`/api/agreements/contracts/${agreementId}`);
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success || !data.agreement) {
-          throw new Error(data.error || "Unable to load commercial agreement.");
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Unable to load this commercial agreement.");
         }
         setAgreement(data.agreement);
-        setEvents(Array.isArray(data.events) ? data.events : []);
+        setEvents(data.events || []);
+        setPermissions({
+          canExecute: Boolean(data.permissions?.canExecute),
+          canRequestAmendment: Boolean(data.permissions?.canRequestAmendment),
+        });
       } catch (err) {
-        setAgreement(null);
-        setEvents([]);
-        setLoadError(err instanceof Error ? err.message : "Unable to load commercial agreement.");
+        setLoadError(err instanceof Error ? err.message : "Unable to load this commercial agreement.");
       } finally {
         setLoading(false);
       }
@@ -62,8 +64,8 @@ export default function EmployerAgreementReviewPage() {
           signedByDesignation: signatureDesignation,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      const data = await res.json();
+      if (data.success) {
         setAgreement(data.agreement);
         setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
@@ -93,8 +95,8 @@ export default function EmployerAgreementReviewPage() {
           amendmentNotes,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
+      const data = await res.json();
+      if (data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
         setAmendmentNotes("");
@@ -122,10 +124,7 @@ export default function EmployerAgreementReviewPage() {
       <div className="bg-[#0A0A0C] text-white min-h-screen relative flex flex-col items-center justify-center p-6">
         <EmployerSidebar />
         <span className="material-symbols-outlined text-4xl text-[#FF5252] mb-2">error</span>
-        <h2 className="text-lg font-bold">Agreement unavailable</h2>
-        <p role="alert" className="mt-2 max-w-lg text-center text-sm text-slate-400">
-          {loadError || "The agreement could not be loaded."}
-        </p>
+        <h2 className="text-lg font-bold">{loadError || "Agreement document not found"}</h2>
         <button onClick={() => router.push("/employer/dashboard")} className="mt-4 px-4 py-2 bg-[#29B6F6] text-white text-xs font-bold rounded-xl">
           Back to Dashboard
         </button>
@@ -164,8 +163,10 @@ export default function EmployerAgreementReviewPage() {
                 {agreement.status}
               </span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Master Commercial Services Agreement</h1>
-            <p className="text-xs text-slate-400 mt-1">Legal contracting record for {agreement.companyName}</p>
+            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Commercial Agreement Record</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Persisted commercial terms for {agreement.companyName}. This screen does not add legal clauses that are absent from the stored agreement.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -185,9 +186,9 @@ export default function EmployerAgreementReviewPage() {
             <h3 className="text-sm font-bold text-[#29B6F6] uppercase tracking-wider">1. Contracting Parties</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs bg-[#16161B] p-4 rounded-xl border border-white/5">
               <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Service Provider</span>
-                <span className="font-bold text-white text-sm">HireGo AI Platform Services</span>
-                <p className="text-slate-400 mt-1">Enterprise Hiring Operating System</p>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Service</span>
+                <span className="font-bold text-white text-sm">HireGo AI Managed Hiring</span>
+                <p className="text-slate-400 mt-1">Provider legal identity and governing clauses must come from the executed agreement/template record.</p>
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">Employer Client</span>
@@ -204,7 +205,11 @@ export default function EmployerAgreementReviewPage() {
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase font-bold">Success Fee Rate</span>
                 <span className="text-base font-extrabold text-[#26A69A]">
-                  {agreement.feeType === "PERCENTAGE" ? `${agreement.feeValue}% of CTC` : formatCurrency(agreement.feeValue)}
+                  {agreement.feeType === "PERCENTAGE"
+                    ? `${agreement.feeValue}% of CTC`
+                    : agreement.feeType === "FIXED"
+                      ? `Fixed fee ${agreement.feeValue}`
+                      : `${agreement.feeValue} (${agreement.feeType || "fee type not recorded"})`}
                 </span>
               </div>
               <div>
@@ -222,21 +227,55 @@ export default function EmployerAgreementReviewPage() {
             </div>
           </div>
 
-          {/* Section 3: Warranties & Terms */}
+          {/* Section 3: Persisted terms only */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-[#29B6F6] uppercase tracking-wider">3. Terms & Replacement Guarantee</h3>
-            <div className="text-xs text-slate-300 space-y-2 leading-relaxed bg-[#16161B] p-4 rounded-xl border border-white/5">
+            <h3 className="text-sm font-bold text-[#29B6F6] uppercase tracking-wider">3. Persisted Terms & Clauses</h3>
+            <div className="text-xs text-slate-300 space-y-3 leading-relaxed bg-[#16161B] p-4 rounded-xl border border-white/5">
               <p>
-                <strong>3.1 Replacement Warranty:</strong> If any candidate hired under this agreement leaves or is terminated within{" "}
-                <span className="text-white font-bold">{agreement.replacementDays} calendar days</span> of joining, HireGo AI will provide a single 100% free candidate replacement.
+                <strong>Replacement window:</strong>{" "}
+                <span className="text-white font-bold">
+                  {typeof agreement.replacementDays === "number" ? `${agreement.replacementDays} calendar days` : "Not recorded"}
+                </span>.
+                No additional replacement scope or guarantee is inferred by this screen.
               </p>
               <p>
-                <strong>3.2 Invoicing & Payment:</strong> Invoices are generated upon the selected trigger rule (
-                <span className="text-white font-bold">{agreement.invoiceRule}</span>) with net <span className="text-white font-bold">{typeof agreement.creditDays === "number" ? `${agreement.creditDays} days` : "terms not specified"}</span>.
+                <strong>Invoice rule:</strong>{" "}
+                <span className="text-white font-bold">{agreement.invoiceRule || "Not recorded"}</span>
+                {" · "}
+                <strong>Credit terms:</strong>{" "}
+                <span className="text-white font-bold">
+                  {typeof agreement.creditDays === "number" ? `${agreement.creditDays} days` : "Not recorded"}
+                </span>.
               </p>
               <p>
-                <strong>3.3 Confidentiality & Non-Solicitation:</strong> Both parties agree to maintain strict confidentiality regarding candidate profiles, compensation details, and business intelligence.
+                <strong>Tax rate:</strong>{" "}
+                <span className="text-white font-bold">
+                  {typeof agreement.taxRatePct === "number" ? `${agreement.taxRatePct}%` : "Not recorded"}
+                </span>
+                {" · "}
+                <strong>Discount:</strong>{" "}
+                <span className="text-white font-bold">
+                  {typeof agreement.discountPercentage === "number" ? `${agreement.discountPercentage}%` : "Not recorded"}
+                </span>.
               </p>
+              {Array.isArray(agreement.customClauses) && agreement.customClauses.length > 0 ? (
+                <div>
+                  <strong className="text-white">Custom clauses recorded in this agreement:</strong>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5">
+                    {agreement.customClauses.map((clause: string, index: number) => (
+                      <li key={`${index}:${clause}`}>{clause}</li>
+                    ))}
+                  </ol>
+                </div>
+              ) : (
+                <p className="text-slate-400">No custom clauses are stored on this agreement record.</p>
+              )}
+              {agreement.commercialNotes ? (
+                <div>
+                  <strong className="text-white">Commercial notes:</strong>
+                  <p className="mt-1 whitespace-pre-wrap">{agreement.commercialNotes}</p>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -250,7 +289,7 @@ export default function EmployerAgreementReviewPage() {
               </p>
               <div className="text-[10px] font-mono text-slate-500">{agreement.signerIpAddress ? `Audit IP Stamp: ${agreement.signerIpAddress}` : "Audit IP stamp was not recorded for this execution."}</div>
             </div>
-          ) : (
+          ) : permissions.canExecute ? (
             <div className="p-6 rounded-2xl bg-[#16161B] border border-white/10 space-y-6">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#26A69A]">draw</span> Digital Contract Execution & Acceptance
@@ -281,7 +320,8 @@ export default function EmployerAgreementReviewPage() {
                 <button
                   type="button"
                   onClick={() => setShowAmendmentBox(!showAmendmentBox)}
-                  className="text-xs font-bold text-slate-400 hover:text-white"
+                  disabled={!permissions.canRequestAmendment}
+                  className="text-xs font-bold text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Request Terms Amendment
                 </button>
@@ -312,6 +352,11 @@ export default function EmployerAgreementReviewPage() {
                   </button>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-[#16161B] p-6 text-sm text-slate-300">
+              This agreement is currently <strong className="text-white">{String(agreement.status).replaceAll("_", " ")}</strong>.
+              Digital execution and amendment actions are available only to an authorized company administrator while the agreement is in <strong className="text-white">SENT TO EMPLOYER</strong> status.
             </div>
           )}
         </div>

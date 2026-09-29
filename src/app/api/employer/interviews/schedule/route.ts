@@ -26,6 +26,208 @@ const schema = z.object({
   copilotManaged: z.boolean().default(false),
 });
 
+const SCHEDULE_OPTIONS_DEFAULT_LIMIT = 50;
+const SCHEDULE_OPTIONS_MAX_LIMIT = 100;
+
+export async function GET(request: NextRequest) {
+  try {
+    await enforceRateLimit(request, "employer_interview_schedule_options", 60, 60_000);
+    const session = await getCurrentSession(request.headers);
+    if (!session || !["EMPLOYER", "RECRUITER", "ADMIN"].includes(session.role)) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const requestedLimit = searchParams.get("limit");
+    const requestedCursor = searchParams.get("cursor");
+    const requestedApplicationId = searchParams.get("applicationId");
+    const searchQuery = searchParams.get("q")?.trim() || "";
+    const limit = requestedLimit === null ? SCHEDULE_OPTIONS_DEFAULT_LIMIT : Number(requestedLimit);
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > SCHEDULE_OPTIONS_MAX_LIMIT) {
+      return NextResponse.json(
+        { success: false, error: `limit must be an integer between 1 and ${SCHEDULE_OPTIONS_MAX_LIMIT}.` },
+        { status: 400 },
+      );
+    }
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (requestedCursor && !uuidPattern.test(requestedCursor)) {
+      return NextResponse.json({ success: false, error: "Invalid schedule-options cursor." }, { status: 400 });
+    }
+    if (requestedApplicationId && !uuidPattern.test(requestedApplicationId)) {
+      return NextResponse.json({ success: false, error: "Invalid application identifier." }, { status: 400 });
+    }
+    if (searchQuery.length > 100) {
+      return NextResponse.json({ success: false, error: "Schedule search must be 100 characters or fewer." }, { status: 400 });
+    }
+
+    let companyId: string | undefined;
+    if (session.role !== "ADMIN") {
+      const employer = await prisma.employerProfile.findUnique({
+        where: { userId: session.id },
+        select: { companyId: true },
+      });
+      if (!employer?.companyId) {
+        return NextResponse.json({ success: false, error: "Employer profile not found." }, { status: 403 });
+      }
+      companyId = employer.companyId;
+    }
+
+    const applications = await prisma.application.findMany({
+      where: {
+        ...(requestedApplicationId ? { id: requestedApplicationId } : {}),
+        status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] },
+        gates: { none: { status: { in: ["REQUIRED", "IN_PROGRESS"] } } },
+        job: companyId ? { companyId } : undefined,
+        ...(searchQuery
+          ? {
+              OR: [
+                {
+                  candidateProfile: {
+                    user: {
+                      name: { contains: searchQuery, mode: "insensitive" },
+                    },
+                  },
+                },
+                {
+                  job: {
+                    title: { contains: searchQuery, mode: "insensitive" },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        candidateProfile: {
+          include: {
+            user: { select: { name: true } },
+          },
+        },
+        job: {
+          select: {
+            id: true,
+            title: true,
+            interviewProcess: {
+              include: {
+                rounds: {
+                  orderBy: { sequence: "asc" },
+                  include: {
+                    interviewers: {
+                      select: { userId: true, required: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        roundProgress: {
+          select: { roundId: true, status: true, interviewId: true },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      cursor: requestedCursor ? { id: requestedCursor } : undefined,
+      skip: requestedCursor ? 1 : 0,
+      take: requestedApplicationId ? 1 : limit + 1,
+    });
+
+    const page = requestedApplicationId ? applications : applications.slice(0, limit);
+    const nextCursor =
+      !requestedApplicationId && applications.length > limit
+        ? page[page.length - 1]?.id || null
+        : null;
+
+    const options = page.map((application) => {
+      const process = application.job.interviewProcess;
+      if (!process?.isActive || process.rounds.length === 0) {
+        return {
+          applicationId: application.id,
+          candidateName: application.candidateProfile.user?.name || "Candidate",
+          jobId: application.job.id,
+          jobTitle: application.job.title,
+          nextRound: null,
+          unavailableReason: "Configure and publish an interview process for this job first.",
+        };
+      }
+
+      const progressByRound = new Map(
+        application.roundProgress.map((progress) => [progress.roundId, progress]),
+      );
+
+      for (const round of process.rounds) {
+        const progress = progressByRound.get(round.id);
+        if (!progress || progress.status === "PENDING" || progress.status === "CANCELLED") {
+          const hasRequiredInterviewer = round.interviewers.some((interviewer) => interviewer.required);
+          return {
+            applicationId: application.id,
+            candidateName: application.candidateProfile.user?.name || "Candidate",
+            jobId: application.job.id,
+            jobTitle: application.job.title,
+            nextRound: {
+              id: round.id,
+              name: round.name,
+              sequence: round.sequence,
+              interviewType: round.interviewType,
+              durationMins: round.durationMins,
+              hasRequiredInterviewer,
+            },
+            unavailableReason: hasRequiredInterviewer
+              ? null
+              : "Assign at least one required interviewer to this round before scheduling.",
+          };
+        }
+
+        if (["SCHEDULED", "LIVE", "ENDED_PENDING_FEEDBACK", "ON_HOLD"].includes(progress.status)) {
+          return {
+            applicationId: application.id,
+            candidateName: application.candidateProfile.user?.name || "Candidate",
+            jobId: application.job.id,
+            jobTitle: application.job.title,
+            nextRound: null,
+            unavailableReason:
+              progress.status === "ON_HOLD"
+                ? "This candidate is on hold after the current round."
+                : "The current interview round is already scheduled or awaiting completion/feedback.",
+          };
+        }
+
+        if (progress.status === "FINAL_ROUND_COMPLETE") {
+          return {
+            applicationId: application.id,
+            candidateName: application.candidateProfile.user?.name || "Candidate",
+            jobId: application.job.id,
+            jobTitle: application.job.title,
+            nextRound: null,
+            unavailableReason: "All configured interview rounds are complete.",
+          };
+        }
+      }
+
+      return {
+        applicationId: application.id,
+        candidateName: application.candidateProfile.user?.name || "Candidate",
+        jobId: application.job.id,
+        jobTitle: application.job.title,
+        nextRound: null,
+        unavailableReason: "All configured interview rounds are complete.",
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      options,
+      pagination: {
+        limit,
+        nextCursor,
+        hasMore: nextCursor !== null,
+      },
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
 export async function POST(request: NextRequest) {
   let copilotSchedulingReservationId: string | null = null;
   try {

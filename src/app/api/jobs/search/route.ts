@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib";
+import { ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 export async function GET(req: NextRequest) {
   try {
+    await enforceRateLimit(req, "public_jobs_search", 120, 60_000);
     await reconcileExpiredJobs(prisma);
     const { searchParams } = new URL(req.url);
-    const query = searchParams.get("q") || "";
-    const location = searchParams.get("location") || "";
-    const department = searchParams.get("department") || "";
-    const type = searchParams.get("type") || "";
+    const query = (searchParams.get("q") || "").trim();
+    const location = (searchParams.get("location") || "").trim();
+    const department = (searchParams.get("department") || "").trim();
+    const type = (searchParams.get("type") || "").trim();
+    if ([query, location, department, type].some((value) => value.length > 160)) {
+      throw new ApiError("Job search filters are too long.", 400);
+    }
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit")) || 10));
     const skip = (page - 1) * limit;
@@ -26,6 +31,8 @@ export async function GET(req: NextRequest) {
           OR: [
             { title: { contains: query, mode: "insensitive" } },
             { description: { contains: query, mode: "insensitive" } },
+            { department: { contains: query, mode: "insensitive" } },
+            { company: { name: { contains: query, mode: "insensitive" } } },
           ],
         }];
       }

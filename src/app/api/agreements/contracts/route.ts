@@ -65,6 +65,9 @@ function addUtcMonths(value: Date, months: number): Date {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreements are available only to company administrators.", 403);
+    }
     await enforceRateLimit(req, `agreements_contracts_get:${session.id}`, 60, 60_000);
     const { searchParams } = new URL(req.url);
     const company = searchParams.get("company");

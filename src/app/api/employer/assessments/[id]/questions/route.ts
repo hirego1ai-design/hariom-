@@ -31,6 +31,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     await enforceRateLimit(request, "employer_add_question", 30, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessment questions are generated automatically from approved job skills and cannot be manually authored.",
+        403,
+      );
+    }
     const data = await readValidatedJson(request, createQuestionSchema);
     const { id: assessmentId } = await params;
 

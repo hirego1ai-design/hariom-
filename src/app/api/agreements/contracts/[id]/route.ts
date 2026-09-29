@@ -93,6 +93,9 @@ export async function GET(
 ) {
   try {
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreements are available only to company administrators.", 403);
+    }
     await enforceRateLimit(req, `agreement_contract_read:${session.id}`, 60, 60_000);
     const { id } = await params;
     const agreement = await agreementsDb.getAgreementById(id);
@@ -113,6 +116,10 @@ export async function GET(
       agreement,
       events,
       linkedRequirement,
+      permissions: {
+        canExecute: session.role === "EMPLOYER" && agreement.status === "SENT_TO_EMPLOYER",
+        canRequestAmendment: session.role === "EMPLOYER" && agreement.status === "SENT_TO_EMPLOYER",
+      },
     });
   } catch (error) {
     return handleApiError(error);
@@ -247,6 +254,9 @@ export async function POST(
 ) {
   try {
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreement actions require company administrator authority.", 403);
+    }
     await enforceRateLimit(req, `agreement_contract_action:${session.id}`, 20, 60_000);
     const { id } = await params;
     const body = await readValidatedJson(req, agreementActionSchema, 32 * 1024);

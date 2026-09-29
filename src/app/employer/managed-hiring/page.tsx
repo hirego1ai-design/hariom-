@@ -17,6 +17,7 @@ type Agreement = {
   id: string;
   agreementNumber?: string;
   status: string;
+  feeType?: "PERCENTAGE" | "FIXED";
   feeValue?: number;
   replacementDays?: number;
 };
@@ -36,7 +37,8 @@ export default function EmployerManagedHiringDashboard() {
         return payload.requirements || [];
       }),
       fetch("/api/agreements/contracts", { cache: "no-store", signal: controller.signal }).then(async (response) => {
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
+        if (response.status === 403) return [];
         if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load managed-hiring agreements.");
         return payload.agreements || [];
       }),
@@ -103,7 +105,7 @@ export default function EmployerManagedHiringDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white">Agreements</h2>
-                <p className="mt-1 text-xs text-text-muted">Persisted commercial agreements for this company.</p>
+                <p className="mt-1 text-xs text-text-muted">Persisted commercial agreements. Financial terms are visible only to company administrators.</p>
               </div>
               <span className="text-sm font-bold text-white">{agreements.length}</span>
             </div>
@@ -117,7 +119,13 @@ export default function EmployerManagedHiringDashboard() {
                     <div>
                       <p className="font-mono text-xs text-yellow">{agreement.agreementNumber || agreement.id}</p>
                       <p className="mt-2 text-xs text-text-muted">
-                        Placement fee: {typeof agreement.feeValue === "number" ? `${agreement.feeValue}% of CTC` : "See agreement"}
+                        Placement fee: {typeof agreement.feeValue === "number"
+                          ? agreement.feeType === "PERCENTAGE"
+                            ? `${agreement.feeValue}% of CTC`
+                            : agreement.feeType === "FIXED"
+                              ? `Fixed fee ${agreement.feeValue}`
+                              : `See signed agreement (${agreement.feeValue})`
+                          : "See agreement"}
                         {typeof agreement.replacementDays === "number" ? ` · Replacement: ${agreement.replacementDays} days` : ""}
                       </p>
                     </div>

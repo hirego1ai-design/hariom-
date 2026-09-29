@@ -7,10 +7,10 @@ import Link from "next/link";
 type StageId =
   | "Applied"
   | "Shortlisted"
-  | "AI Screening"
+  | "Screening"
   | "Video Resume Review"
   | "Assessment"
-  | "AI Interview"
+  | "Interview"
   | "Technical Interview"
   | "HR Interview"
   | "Client Interview"
@@ -28,10 +28,13 @@ interface StageConfig {
   borderColor: string;
 }
 
+const GENERIC_MOVE_TARGETS = new Set<StageId>(["Screening", "Assessment", "Interview", "Shortlisted"]);
+
 const STAGES: StageConfig[] = [
-  { id: "AI Screening", label: "AI Screening", color: "text-[#7C4DFF]", bgColor: "bg-[#7C4DFF]/10", borderColor: "border-[#7C4DFF]/30" },
+  { id: "Applied", label: "Applied", color: "text-[#90CAF9]", bgColor: "bg-[#90CAF9]/10", borderColor: "border-[#90CAF9]/30" },
+  { id: "Screening", label: "Screening", color: "text-[#7C4DFF]", bgColor: "bg-[#7C4DFF]/10", borderColor: "border-[#7C4DFF]/30" },
   { id: "Assessment", label: "Assessment", color: "text-[#FF9800]", bgColor: "bg-[#FF9800]/10", borderColor: "border-[#FF9800]/30" },
-  { id: "AI Interview", label: "AI Interview", color: "text-[#E040FB]", bgColor: "bg-[#E040FB]/10", borderColor: "border-[#E040FB]/30" },
+  { id: "Interview", label: "Interview", color: "text-[#E040FB]", bgColor: "bg-[#E040FB]/10", borderColor: "border-[#E040FB]/30" },
   { id: "Shortlisted", label: "Shortlisted", color: "text-[#66BB6A]", bgColor: "bg-[#66BB6A]/10", borderColor: "border-[#66BB6A]/30" },
   { id: "Joined", label: "Joined", color: "text-[#2E7D32]", bgColor: "bg-[#2E7D32]/10", borderColor: "border-[#2E7D32]/30" },
   { id: "Rejected", label: "Rejected", color: "text-[#EF5350]", bgColor: "bg-[#EF5350]/10", borderColor: "border-[#EF5350]/30" },
@@ -64,6 +67,10 @@ export default function HiringPipelinePage() {
     clearActionError();
     const candidate = candidates.find((c) => c.applicationId === applicationId);
     if (!candidate) return;
+    if (!GENERIC_MOVE_TARGETS.has(targetStage)) {
+      showToast("Joined and rejected decisions must use the controlled decision workflow.");
+      return;
+    }
     if (await updateCandidateStage(applicationId, targetStage)) showToast(`Moved ${candidate.name} to ${targetStage}`);
   };
 
@@ -172,7 +179,7 @@ export default function HiringPipelinePage() {
           <p className="font-display text-2xl text-white mt-1">{stats.total}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
-          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Avg AI Match</p>
+          <p className="text-text-muted text-[11px] font-bold uppercase tracking-wider">Avg Recorded Match</p>
           <p className="font-display text-2xl text-green mt-1">{stats.avgScore === null ? "N/A" : `${stats.avgScore}%`}</p>
         </div>
         <div className="glass-card p-4 rounded-2xl flex flex-col justify-between border border-white/5 shadow-md hover:scale-[1.02] transition-transform duration-200">
@@ -317,7 +324,7 @@ export default function HiringPipelinePage() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-text-muted uppercase font-bold">Min AI Match</label>
+            <label className="text-[10px] text-text-muted uppercase font-bold">Min Recorded Match</label>
             <select
               value={selectedMinScore}
               onChange={(e) => setSelectedMinScore(Number(e.target.value))}
@@ -455,7 +462,7 @@ export default function HiringPipelinePage() {
 
                 <div className="flex items-center gap-6 self-stretch md:self-auto border-t md:border-t-0 pt-4 md:pt-0 border-white/5 justify-between">
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-text-muted font-bold uppercase">AI Match</span>
+                    <span className="text-[10px] text-text-muted font-bold uppercase">Recorded Match</span>
                     <ScoreBadge score={c.matchScore} size="sm" />
                   </div>
                   
@@ -467,7 +474,7 @@ export default function HiringPipelinePage() {
                       className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none w-full"
                     >
                       {STAGES.map((s) => (
-                        <option key={s.id} value={s.id}>
+                        <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
                           {s.label}
                         </option>
                       ))}
@@ -623,7 +630,7 @@ function CandidateCard({
           className="bg-[#1C1C22] border border-white/10 hover:border-white/20 text-white rounded-lg px-2 py-1 text-[10px] outline-none flex-1 max-w-[140px] cursor-pointer"
         >
           {STAGES.map((s) => (
-            <option key={s.id} value={s.id}>
+            <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
               {s.label}
             </option>
           ))}

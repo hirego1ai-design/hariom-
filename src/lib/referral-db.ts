@@ -1225,16 +1225,18 @@ class ReferralDatabaseStore {
     }
 
     const stats = await this.getUserReferralStats(input.referrerId);
-    const unreservedAvailable = stats.availableBalance - stats.pendingPayoutBalance;
+    // availableBalance already excludes rewards reserved by an existing payoutId.
+    // Do not subtract pendingPayoutBalance a second time.
+    const unreservedAvailable = stats.availableBalance;
 
     if (input.amount > unreservedAvailable) {
       throw new Error(
-        `Requested amount (₹${input.amount}) exceeds unreserved available balance (₹${Math.max(0, unreservedAvailable)}). Existing pending requests: ₹${stats.pendingPayoutBalance}.`
+        `Requested amount (₹${input.amount}) exceeds available balance (₹${Math.max(0, unreservedAvailable)}).`
       );
     }
 
-    const id = `payout-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const id = `payout-${randomUUID()}`;
+    const ledgerEntryId = `led-${randomUUID()}`;
 
     const payout: ReferralPayout = {
       id,
@@ -1256,7 +1258,40 @@ class ReferralDatabaseStore {
       try {
         const client = prisma as any;
         const [dbPayout, _dbLedger] = await client.$transaction(async (tx: any) => {
-          // 1. Create ReferralPayout
+          // Serialize payout reservations per referrer so reward selection and
+          // the financial ledger balance are computed from the same snapshot.
+          await tx.$queryRaw`
+            SELECT "id"
+            FROM "User"
+            WHERE "id" = ${input.referrerId}
+            FOR UPDATE
+          `;
+
+          const availableRewards = await tx.referralReward.findMany({
+            where: { referrerId: input.referrerId, status: "ELIGIBLE", payoutId: null },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          });
+          const transactionalAvailable = availableRewards.reduce(
+            (sum: number, reward: any) => sum + Number(reward.rewardAmount),
+            0,
+          );
+          if (input.amount > transactionalAvailable) {
+            throw new Error(
+              `Requested amount (₹${input.amount}) exceeds available balance (₹${Math.max(0, transactionalAvailable)}).`,
+            );
+          }
+
+          let reservedAmount = 0;
+          const rewardsToReserve: any[] = [];
+          for (const reward of availableRewards) {
+            if (reservedAmount >= input.amount) break;
+            reservedAmount += Number(reward.rewardAmount);
+            rewardsToReserve.push(reward);
+          }
+          if (reservedAmount !== input.amount) {
+            throw new Error("Requested payout must match an exact combination of eligible rewards.");
+          }
+
           const createdPayout = await tx.referralPayout.create({
             data: {
               id,
@@ -1269,23 +1304,6 @@ class ReferralDatabaseStore {
             },
           });
 
-          // Reserve the exact underlying rewards while the payout is pending.
-          // The row predicate prevents concurrent requests from claiming the
-          // same eligible reward. Exact matching avoids silent overpayment.
-          const availableRewards = await tx.referralReward.findMany({
-            where: { referrerId: input.referrerId, status: "ELIGIBLE", payoutId: null },
-            orderBy: { createdAt: "asc" },
-          });
-          let reservedAmount = 0;
-          const rewardsToReserve: any[] = [];
-          for (const reward of availableRewards) {
-            if (reservedAmount >= input.amount) break;
-            reservedAmount += reward.rewardAmount;
-            rewardsToReserve.push(reward);
-          }
-          if (reservedAmount !== input.amount) {
-            throw new Error("Requested payout must match an exact combination of eligible rewards.");
-          }
           for (const reward of rewardsToReserve) {
             const reserved = await tx.referralReward.updateMany({
               where: { id: reward.id, status: "ELIGIBLE", payoutId: null },
@@ -1296,18 +1314,6 @@ class ReferralDatabaseStore {
             }
           }
 
-          const remainingAvailable = await tx.referralReward.aggregate({
-            where: {
-              referrerId: input.referrerId,
-              status: "ELIGIBLE",
-              payoutId: null,
-              currency: "INR",
-            },
-            _sum: { rewardAmount: true },
-          });
-
-          // 2. Create immutable ReferralLedgerEntry for reserved liability
-          // using the actual post-reservation available balance from this transaction.
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
               id: ledgerEntryId,
@@ -1315,7 +1321,7 @@ class ReferralDatabaseStore {
               payoutId: createdPayout.id,
               entryType: ReferralLedgerEntryType.PAYOUT_RESERVED,
               amount: input.amount,
-              balanceAfter: remainingAvailable._sum.rewardAmount ?? 0,
+              balanceAfter: transactionalAvailable - input.amount,
               currency: "INR",
               correlationId,
               metadata: {
@@ -1364,22 +1370,13 @@ class ReferralDatabaseStore {
       throw new Error("Requested payout must match an exact combination of eligible rewards.");
     }
     for (const reward of rewardsToReserve) reward.payoutId = id;
-    const availableAfterReservation = Array.from(this.rewards.values())
-      .filter(
-        (reward) =>
-          reward.referrerId === input.referrerId &&
-          reward.status === ReferralStatus.ELIGIBLE &&
-          !reward.payoutId &&
-          reward.currency === "INR",
-      )
-      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
       referrerId: input.referrerId,
       payoutId: id,
       entryType: ReferralLedgerEntryType.PAYOUT_RESERVED,
       amount: input.amount,
-      balanceAfter: availableAfterReservation,
+      balanceAfter: unreservedAvailable - input.amount,
       currency: "INR",
       correlationId,
       metadata: { payoutMethod: input.payoutMethod },
@@ -1390,34 +1387,18 @@ class ReferralDatabaseStore {
     return payout;
   }
 
-  public async getAdminPayoutQueuePage(options?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-  }): Promise<{ queue: ReferralPayout[]; total: number }> {
+  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-admin-queue");
-    const page = Math.max(1, options?.page ?? 1);
-    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
-    const status = options?.status;
 
     try {
       const client = prisma as any;
       if (client.referralPayout) {
-        const where = status ? { status } : {};
-        const [total, records] = await client.$transaction([
-          client.referralPayout.count({ where }),
-          client.referralPayout.findMany({
-            where,
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            skip: (page - 1) * limit,
-            take: limit,
-          }),
-        ]);
-
-        return {
-          total,
-          queue: records.map((r: any) => ({
+        const records = await client.referralPayout.findMany({
+          orderBy: { createdAt: "desc" },
+        });
+        if (records && records.length > 0) {
+          return records.map((r: any) => ({
             id: r.id,
             referrerId: r.referrerId,
             amount: r.amount,
@@ -1431,35 +1412,20 @@ class ReferralDatabaseStore {
             processedAt: r.processedAt ? r.processedAt.toISOString() : null,
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
-          })),
-        };
+          }));
+        }
       }
       if (isProduction) {
-        throw new Error("Referral payout persistence is unavailable from the generated Prisma client.");
+        return [];
       }
     } catch (error: any) {
       if (isProduction) {
-        console.error(
-          `[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`,
-          error,
-        );
-        throw new Error(
-          `[${correlationId}] Database unavailable: failed to fetch payout queue.`,
-        );
+        console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`, error);
+        throw new Error(`[${correlationId}] Database unavailable: failed to fetch payout queue.`);
       }
     }
 
-    const all = Array.from(this.payouts.values())
-      .filter((payout) => !status || payout.status === status)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return {
-      total: all.length,
-      queue: all.slice((page - 1) * limit, page * limit),
-    };
-  }
-
-  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
-    return (await this.getAdminPayoutQueuePage({ page: 1, limit: 100 })).queue;
+    return Array.from(this.payouts.values());
   }
 
   public async adminApprovePayout(

@@ -43,7 +43,14 @@ export async function POST(request: Request) {
       payout: { id: payout.id, amount: payout.amount, currency: payout.currency, status: payout.status, createdAt: payout.createdAt },
     });
   } catch (error) {
-    if (error instanceof Error && (error.message.includes("exceeds unreserved") || error.message.includes("Minimum payout"))) {
+    if (
+      error instanceof Error &&
+      (
+        error.message.includes("exceeds available balance") ||
+        error.message.includes("Minimum payout") ||
+        error.message.includes("exact combination of eligible rewards")
+      )
+    ) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
     return handleApiError(error);

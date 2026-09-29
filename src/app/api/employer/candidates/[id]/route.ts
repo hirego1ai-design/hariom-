@@ -41,6 +41,7 @@ export async function GET(
         },
         applications: {
           ...(scopedCompanyId ? { where: { job: { companyId: scopedCompanyId } } } : {}),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include: {
             job: {
               include: {
@@ -73,6 +74,27 @@ export async function GET(
               take: 10,
             },
           },
+        },
+        readinessRecords: {
+          where: { status: "JOB_READY" },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            roleTitle: true,
+            seniority: true,
+            score: true,
+            validUntil: true,
+          },
+        },
+        videoResumes: {
+          where: {
+            OR: [
+              { retentionExpiresAt: null },
+              { retentionExpiresAt: { gt: new Date() } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true },
         },
       },
     });
@@ -108,7 +130,9 @@ export async function GET(
     // never synthesize hiring signals or candidate attributes.
     const scopedApplications = profile.applications;
     const primaryApplication = scopedApplications[0];
-    const overallMatch = primaryApplication?.matchScore ?? null;
+    const overallMatch = primaryApplication?.aiSummary
+      ? primaryApplication.matchScore
+      : null;
 
     const ucpProfile = {
       id: profile.id,
@@ -120,7 +144,8 @@ export async function GET(
       preferredLocation: null,
       expectedSalary: null,
       noticePeriod: null,
-      availability: null,
+      availability: profile.availabilityStatus,
+      availabilityConfirmedAt: profile.lastAvailabilityConfirmedAt?.toISOString() ?? null,
       preferredJobType: null,
       email: profile.user?.email || "",
       phone: profile.user?.phoneNumber || null,
@@ -253,12 +278,26 @@ export async function GET(
     return NextResponse.json({
       success: true,
       profile: ucpProfile,
+      application: primaryApplication
+        ? {
+            id: primaryApplication.id,
+            status: primaryApplication.status,
+            createdAt: primaryApplication.createdAt.toISOString(),
+          }
+        : null,
       scores: ucpScores,
       skills: ucpSkills,
       experience: ucpExperience,
       education: ucpEducation,
       certifications: [],
       assessments: ucpAssessments,
+      jobReadyRecords: profile.readinessRecords.map((record) => ({
+        roleTitle: record.roleTitle,
+        seniority: record.seniority,
+        score: record.score,
+        validUntil: record.validUntil?.toISOString() ?? null,
+      })),
+      videoResume: profile.videoResumes[0] ? { id: profile.videoResumes[0].id } : null,
       videoAnalysis: ucpVideoAnalysis,
     });
   } catch (error) {

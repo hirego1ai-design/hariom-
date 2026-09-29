@@ -14,17 +14,43 @@ export default function OfferManagementDashboardPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [pendingSend, setPendingSend] = useState<{ offer: Offer; approvalId: string; workflowId: string } | null>(null);
   const [pendingWithdraw, setPendingWithdraw] = useState<Offer | null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
 
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/employer/offers", { cache: "no-store" });
+    const response = await fetch("/api/employer/offers?limit=50", { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || "Unable to load offers.");
-    setOffers(body.offers);
+    if (!response.ok || !body.success) throw new Error(body.error || "Unable to load offers.");
+    setOffers(Array.isArray(body.offers) ? body.offers : []);
+    setNextCursor(body.pagination?.nextCursor ?? null);
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setMessage("");
+    try {
+      const params = new URLSearchParams({ limit: "50", cursor: nextCursor });
+      const response = await fetch(`/api/employer/offers?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error(body.error || "Unable to load more offers.");
+      const more = Array.isArray(body.offers) ? body.offers as Offer[] : [];
+      setOffers((current) => {
+        const seen = new Set(current.map((offer) => offer.id));
+        return [...current, ...more.filter((offer) => !seen.has(offer.id))];
+      });
+      setNextCursor(body.pagination?.nextCursor ?? null);
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to load more offers.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, nextCursor]);
 
   useEffect(() => {
     refresh()
@@ -132,6 +158,19 @@ export default function OfferManagementDashboardPage() {
         </div>
       </article>)}
     </div>
+
+    {nextCursor && !loading && (
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+          className="min-h-11 rounded-xl border border-white/10 px-5 text-sm font-bold text-white disabled:opacity-50"
+        >
+          {loadingMore ? "Loading…" : "Load more offers"}
+        </button>
+      </div>
+    )}
 
     {pendingSend && (
       <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="send-offer-title">

@@ -16,6 +16,9 @@ const jobSchema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
   location: z.string().min(2, "Location required"),
   type: z.string().default("Full-time"),
+  workMode: z.enum(["On-site", "Remote", "Hybrid"]).default("On-site"),
+  experienceLevel: z.enum(["Entry-level", "Mid-level", "Senior", "Lead", "Director"]).default("Mid-level"),
+  numberOfOpenings: z.number().int().min(1).max(10_000).default(1),
   salary: z.string().min(2, "Salary range required"),
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED"]).default("ACTIVE"),
   department: z.string().trim().max(120).optional(),
@@ -89,7 +92,16 @@ export async function POST(request: Request) {
     const isPublishing = requestedStatus === "ACTIVE";
     const requiresGeneratedAssessment = isPublishing && body.requiresJobSpecificAssessment;
 
-    const idempotencyKey = request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key");
+    const idempotencyKey =
+      request.headers.get("idempotency-key")?.trim() ||
+      request.headers.get("x-idempotency-key")?.trim() ||
+      "";
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+      throw new ApiError(
+        "A valid Idempotency-Key header (16-128 safe characters) is required for job creation.",
+        400,
+      );
+    }
     let requestHash = "";
 
     if (idempotencyKey) {
@@ -225,6 +237,9 @@ export async function POST(request: Request) {
           salaryRange: body.salary,
           location: body.location,
           type: body.type ?? "Full-time",
+          workMode: body.workMode,
+          experienceLevel: body.experienceLevel,
+          numberOfOpenings: body.numberOfOpenings,
           status: initialStatus,
           requiresJobSpecificAssessment: body.requiresJobSpecificAssessment,
           matchingConfig: body.matchingConfig,

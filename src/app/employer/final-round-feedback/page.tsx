@@ -24,6 +24,8 @@ export default function InterviewFeedbackPage() {
   const [roundComplete, setRoundComplete] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [pendingDecisionApproval, setPendingDecisionApproval] = useState<{action:"PROCEED"|"REJECT";approvalId:string;workflowId:string}|null>(null);
+  const [offerApplicationId, setOfferApplicationId] = useState("");
+  const [nextRoundSchedule, setNextRoundSchedule] = useState<{ applicationId: string; roundId: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!interviewId) return;
@@ -75,10 +77,33 @@ export default function InterviewFeedbackPage() {
           : "Final selection approval recorded. Click Confirm final selection to shortlist the candidate.");
         return;
       }
-      if(d.action==="PROCEED") { setPendingDecisionApproval(null); setSuccess(`Candidate transferred to ${d.nextRound.name}. Schedule that configured round when ready.`); }
-      else if(d.action==="FINAL_ROUND_COMPLETE") { setPendingDecisionApproval(null); setSuccess("Final selection approved. Candidate is shortlisted and eligible for a persisted offer."); }
-      else if(d.action==="REJECT") { setPendingDecisionApproval(null); setSuccess("Candidate marked as not proceeding in this hiring process."); }
-      else setSuccess("Candidate remains on hold.");
+      if(d.action==="PROCEED") {
+        setPendingDecisionApproval(null);
+        setOfferApplicationId("");
+        setNextRoundSchedule(
+          d.nextRound?.id && d.applicationId
+            ? { applicationId: d.applicationId, roundId: d.nextRound.id, name: d.nextRound.name }
+            : null,
+        );
+        setSuccess(`Candidate transferred to ${d.nextRound.name}. Schedule that configured round when ready.`);
+      }
+      else if(d.action==="FINAL_ROUND_COMPLETE") {
+        setPendingDecisionApproval(null);
+        setOfferApplicationId(typeof d.applicationId === "string" ? d.applicationId : "");
+        setNextRoundSchedule(null);
+        setSuccess("Final selection approved. Candidate is shortlisted and eligible for a persisted offer.");
+      }
+      else if(d.action==="REJECT") {
+        setPendingDecisionApproval(null);
+        setOfferApplicationId("");
+        setNextRoundSchedule(null);
+        setSuccess("Candidate marked as not proceeding in this hiring process.");
+      }
+      else {
+        setOfferApplicationId("");
+        setNextRoundSchedule(null);
+        setSuccess("Candidate remains on hold.");
+      }
       if(action!=="HOLD") setRoundComplete(false);
     } catch(e){setError(e instanceof Error?e.message:"Unable to apply round decision.");} finally{setDeciding(false);}
   }
@@ -88,7 +113,25 @@ export default function InterviewFeedbackPage() {
     {!interviewId && <div className="rounded-2xl border border-outline bg-bg-card p-8 text-center"><p className="font-semibold text-text-primary">No interview selected</p><Link href="/employer/upcoming-interviews-list" className="mt-4 inline-flex h-11 items-center rounded-full border border-outline px-5 text-sm font-bold text-text-primary">Back to interviews</Link></div>}
     {loading && <p className="text-text-secondary">Loading feedback…</p>}
     {error && <p role="alert" className="mb-5 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">{error}</p>}
-    {success && <p role="status" className="mb-5 rounded-xl border border-success/30 bg-success/10 p-4 text-sm text-text-primary">{success}</p>}
+    {success && <div role="status" className="mb-5 rounded-xl border border-success/30 bg-success/10 p-4 text-sm text-text-primary">
+      <p>{success}</p>
+      {offerApplicationId && (
+        <Link
+          href={`/employer/offer-letter-create-and-send?applicationId=${encodeURIComponent(offerApplicationId)}`}
+          className="mt-3 inline-flex min-h-11 items-center rounded-full bg-primary px-5 font-bold text-white"
+        >
+          Create offer
+        </Link>
+      )}
+      {nextRoundSchedule && (
+        <Link
+          href={`/employer/interview-scheduler?applicationId=${encodeURIComponent(nextRoundSchedule.applicationId)}&roundId=${encodeURIComponent(nextRoundSchedule.roundId)}`}
+          className="mt-3 ml-2 inline-flex min-h-11 items-center rounded-full bg-primary px-5 font-bold text-white"
+        >
+          Schedule {nextRoundSchedule.name}
+        </Link>
+      )}
+    </div>}
     {interviewId && !loading && <form onSubmit={submit} className="space-y-5">
       {finalized && <div className="rounded-xl border border-outline bg-bg-subtle p-4 text-sm text-text-secondary">Your feedback is finalized and read-only. Corrections require an audited amendment workflow.</div>}
       <section className="rounded-2xl border border-outline bg-bg-card p-5"><h2 className="mb-3 font-bold text-text-primary">Recommendation</h2><div className="flex flex-wrap gap-2">{(["PROCEED","ON_HOLD","REJECT"] as const).map(v=><button disabled={finalized} type="button" key={v} onClick={()=>setRecommendation(v)} className={`min-h-11 rounded-full border px-5 text-sm font-bold ${recommendation===v?"border-primary bg-primary text-white":"border-outline text-text-secondary"} disabled:opacity-60`}>{v.replace("_"," ")}</button>)}</div></section>

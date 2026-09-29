@@ -22,8 +22,19 @@ export async function GET(request: Request) {
     }
 
     const company = await getSessionCompany(session);
+    const { searchParams } = new URL(request.url);
+    const days = searchParams.get("days") || "30";
+    if (!["30", "90", "365"].includes(days)) {
+      throw new ApiError("days must be one of 30, 90, or 365.", 400);
+    }
+    const periodDays = Number(days);
+    const periodStart = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
     const applications = await prisma.application.findMany({
-      where: { job: { companyId: company.id } },
+      where: {
+        job: { companyId: company.id },
+        createdAt: { gte: periodStart },
+      },
       select: {
         id: true,
         jobId: true,
@@ -114,6 +125,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       data: {
+        periodDays,
+        periodStart: periodStart.toISOString(),
         totalApplications,
         sourceBreakdown,
         sourceDefinitions: {

@@ -26,7 +26,12 @@ export async function GET(req: NextRequest) {
     if (!employerProfile) throw new ApiError("Employer profile not found.", 404);
     const record = await prisma.company.findUnique({ where: { id: company.id } });
     if (!record) throw new ApiError("Company not found.", 404);
-    return NextResponse.json({ success: true, company: record, employer: employerProfile });
+    return NextResponse.json({
+      success: true,
+      company: record,
+      employer: employerProfile,
+      permissions: { canEditCompany: session.role === "EMPLOYER" },
+    });
   } catch (error) { return handleApiError(error); }
 }
 

@@ -322,6 +322,9 @@ model JobListing {
   department         String?
   location           String
   type               String    @default("Full-time")
+  workMode           String    @default("On-site")
+  experienceLevel    String    @default("Mid-level")
+  numberOfOpenings   Int       @default(1)
   salaryRange        String?
   description        String
   requirements       String[]  @default([])
