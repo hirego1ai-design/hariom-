@@ -259,7 +259,7 @@ test("admin payment routing UI cannot persist fabricated healthy fallbacks", asy
   assert.match(page, /configLoaded/);
   assert.match(page, /gatewaysStatus:\s*\{[\s\S]*STRIPE:\s*"DISABLED"[\s\S]*PAYU:\s*"DISABLED"/);
   assert.doesNotMatch(page, /\|\|\s*"HEALTHY"/);
-  assert.match(page, /Status values are administrator routing states, not live provider-health measurements/);
+  assert.match(page, /Enabled\/Limited\/Disabled are administrator routing states\. They do not claim that a provider is currently reachable or healthy\./);
   assert.match(page, /disabled=\{saving \|\| loading \|\| !configLoaded\}/);
 
   assert.doesNotMatch(controller, /At least one payment gateway must remain enabled/);
