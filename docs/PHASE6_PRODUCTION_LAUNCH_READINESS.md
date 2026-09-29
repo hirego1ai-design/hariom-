@@ -75,3 +75,8 @@ A skipped load-test job is not a pass. Final release sign-off requires an actual
 - This dedicated release-gate change exists only to execute the repository's protected safe read-only production load-test workflow through the documented `[load-test]` merge trigger.
 - Final sign-off must use the resulting workflow artifact; a skipped run is not accepted as load-test evidence.
 - Requested evidence run date: 2026-09-29.
+
+
+## 2026-09-29 production evidence run
+
+This release-evidence change triggers the protected read-only production load-test gate. Final status must be taken from the GitHub Actions run and retained artifact; this note is not itself evidence of success.
