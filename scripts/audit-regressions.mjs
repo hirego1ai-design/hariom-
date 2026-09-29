@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 
 const tests = [
   "admin-worker-liveness", "agent-evidence-regression", "ai-worker-safety", "async-worker-hardening", "candidate-evidence", "plan-contracts", "pph-billing",
-  "checkout-csp", "feature-workflow-regressions", "invoice-receipt-state", "logout-regression",
+  "checkout-csp", "feature-workflow-regressions", "admin-feature-workflow-a", "admin-feature-workflow-b", "admin-feature-workflow-c", "invoice-receipt-state", "logout-regression",
   "outbox-regression", "payment-architecture-regression", "recovery-worker-regression",
   "referral-cron-auth",
   "subscription-checkout-route", "test-safety-regression",
