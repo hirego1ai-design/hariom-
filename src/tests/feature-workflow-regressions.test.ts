@@ -140,7 +140,7 @@ test("team removal rotates sessions and emits durable security audit", () => {
   const source = fs.readFileSync(new URL("../app/api/employer/team/route.ts", import.meta.url), "utf8");
   assert(source.includes("sessionVersion: { increment: 1 }"));
   assert(source.includes("revokeAllUserSessions(removal.userId, removal.sessionVersion)"));
-  assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+  assert(source.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
 });
 
 
@@ -363,7 +363,7 @@ test("candidate withdrawal uses the authoritative owned application transition",
   assert(route.includes('application.status === "HIRED" || application.pphPlacement'));
   assert(route.includes('data: { status: "WITHDRAWN" }'));
   assert(route.includes('action: "APPLICATION_WITHDRAWN"'));
-  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
+  assert(route.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
   assert(middleware.includes('"/applications"'));
 });
 
