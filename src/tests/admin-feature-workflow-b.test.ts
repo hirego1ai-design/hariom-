@@ -41,7 +41,7 @@ test("admin communications keep template state changes versioned audited and tes
 
   assert(testRoute.includes("COMMUNICATION_TEMPLATE_TEST_REQUESTED"));
   assert(testRoute.includes("Production test sends are restricted to the configured recipient allowlist."));
-  assert(testRoute.indexOf("COMMUNICATION_TEMPLATE_TEST_REQUESTED") < testRoute.indexOf("dispatchAdminTestCommunication"));
+  assert(testRoute.indexOf('action: "COMMUNICATION_TEMPLATE_TEST_REQUESTED"') < testRoute.indexOf("const delivery = await dispatchAdminTestCommunication"));
 
   assert(emailHelper.includes("getEmailDeliverySettingsStrict"));
   assert(emailConfig.includes("expectedUpdatedAt: z.string().datetime().nullable()"));
