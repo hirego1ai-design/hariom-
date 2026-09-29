@@ -47,6 +47,9 @@ export default function JobMatchingConfigPage() {
           department: store.department.trim() || undefined,
           location: store.location.trim(),
           type: store.jobType,
+          workMode: store.workMode,
+          experienceLevel: store.experienceLevel,
+          numberOfOpenings: Number(store.numberOfOpenings || "1"),
           salary,
           status: "ACTIVE",
           requirements: requirements.map((item) => item.name),
@@ -173,6 +176,8 @@ export default function JobMatchingConfigPage() {
               <div><dt className="text-xs text-text-muted">Department</dt><dd className="mt-1 text-text-secondary">{store.department || "Not specified"}</dd></div>
               <div><dt className="text-xs text-text-muted">Location</dt><dd className="mt-1 text-text-secondary">{store.location}</dd></div>
               <div><dt className="text-xs text-text-muted">Employment</dt><dd className="mt-1 text-text-secondary">{store.jobType} · {store.workMode}</dd></div>
+              <div><dt className="text-xs text-text-muted">Experience</dt><dd className="mt-1 text-text-secondary">{store.experienceLevel}</dd></div>
+              <div><dt className="text-xs text-text-muted">Openings</dt><dd className="mt-1 text-text-secondary">{store.numberOfOpenings || "1"}</dd></div>
               <div><dt className="text-xs text-text-muted">Salary</dt><dd className="mt-1 text-text-secondary">{salary}</dd></div>
               <div><dt className="text-xs text-text-muted">Selected skills</dt><dd className="mt-1 text-text-secondary">{requirements.length ? requirements.map((item) => item.name).join(", ") : "No skills selected"}</dd></div>
             </dl>

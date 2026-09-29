@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const requestedLimit = searchParams.get("limit");
     const requestedCursor = searchParams.get("cursor");
+    const searchQuery = searchParams.get("q")?.trim() || "";
+    const scope = searchParams.get("scope") || "all";
     const limit = requestedLimit === null ? DEFAULT_PAGE_SIZE : Number(requestedLimit);
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
       throw new ApiError(`limit must be an integer between 1 and ${MAX_PAGE_SIZE}.`, 400);
@@ -29,23 +31,37 @@ export async function GET(req: NextRequest) {
     if (requestedCursor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedCursor)) {
       throw new ApiError("Invalid candidate cursor.", 400);
     }
+    if (searchQuery.length > 100) {
+      throw new ApiError("Candidate search must be 100 characters or fewer.", 400);
+    }
+    if (!["all", "managed"].includes(scope)) {
+      throw new ApiError("Invalid candidate scope.", 400);
+    }
+
+    const companyId = session.role === "ADMIN"
+      ? searchParams.get("companyId")
+      : (await getSessionCompany(session)).id;
+    if (!companyId) {
+      throw new ApiError("companyId query parameter is required for administrators.", 400);
+    }
 
     let candidates: any[] = [];
     let nextCursor: string | null = null;
 
     try {
-      const companyId = session.role === "ADMIN"
-        ? searchParams.get("companyId")
-        : (await getSessionCompany(session)).id;
-      if (!companyId) throw new ApiError("companyId query parameter is required for administrators.", 400);
-
-      {
-
-        // Cursor pagination prevents a large tenant's pipeline from loading
+      // Cursor pagination prevents a large tenant's pipeline from loading
         // every application and nested profile into one request.
         const applications = await prisma.application.findMany({
           where: {
-            job: { companyId },
+            job: {
+              companyId,
+              ...(scope === "managed"
+                ? {
+                    managedRequirementId: { not: null },
+                    managedAgreementId: { not: null },
+                  }
+                : {}),
+            },
             NOT: {
               gates: {
                 some: {
@@ -54,6 +70,34 @@ export async function GET(req: NextRequest) {
                 },
               },
             },
+            ...(searchQuery
+              ? {
+                  OR: [
+                    {
+                      candidateProfile: {
+                        user: {
+                          name: { contains: searchQuery, mode: "insensitive" },
+                        },
+                      },
+                    },
+                    {
+                      candidateProfile: {
+                        headline: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                    {
+                      candidateProfile: {
+                        location: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                    {
+                      job: {
+                        title: { contains: searchQuery, mode: "insensitive" },
+                      },
+                    },
+                  ],
+                }
+              : {}),
           },
           include: {
             candidateProfile: { include: {
@@ -100,17 +144,14 @@ export async function GET(req: NextRequest) {
           take: limit + 1,
         });
 
-        const page = applications.slice(0, limit);
-        nextCursor = applications.length > limit ? page[page.length - 1]?.id || null : null;
+      const page = applications.slice(0, limit);
+      nextCursor = applications.length > limit ? page[page.length - 1]?.id || null : null;
 
-        // Transform applications to candidate format
-        candidates = page.map(toEmployerCandidate);
-      }
+      // Transform applications to candidate format
+      candidates = page.map(toEmployerCandidate);
     } catch (dbError) {
       console.error("Candidates DB error:", dbError);
-      if (process.env.NODE_ENV === "production") {
-        throw new Error("Candidate pipeline database is unavailable.");
-      }
+      throw new Error("Candidate pipeline database is unavailable.");
     }
 
     return NextResponse.json({

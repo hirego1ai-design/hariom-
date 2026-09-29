@@ -16,6 +16,9 @@ const updateJobSchema = z.object({
   company: z.string().min(2).optional(),
   location: z.string().min(2).optional(),
   type: z.string().optional(),
+  workMode: z.enum(["On-site", "Remote", "Hybrid"]).optional(),
+  experienceLevel: z.enum(["Entry-level", "Mid-level", "Senior", "Lead", "Director"]).optional(),
+  numberOfOpenings: z.number().int().min(1).max(10_000).optional(),
   salary: z.string().min(2).optional(),
   status: z.enum(["ACTIVE", "DRAFT", "CLOSED", "PAUSED"]).optional(),
   requiresJobSpecificAssessment: z.boolean().optional(),
@@ -85,6 +88,17 @@ export async function PUT(
 
     const isPublishingDraft = oldJob.status === "DRAFT" && body.status === "ACTIVE";
 
+    if (
+      body.requiresJobSpecificAssessment !== undefined &&
+      body.requiresJobSpecificAssessment !== oldJob.requiresJobSpecificAssessment &&
+      oldJob.status !== JobStatus.DRAFT
+    ) {
+      throw new ApiError(
+        "Assessment requirements cannot be changed after a job has been published. Create or update the requirement while the job is still a draft.",
+        409,
+      );
+    }
+
     const nextRequiresJobSpecificAssessment =
       body.requiresJobSpecificAssessment ?? oldJob.requiresJobSpecificAssessment;
 
@@ -96,6 +110,9 @@ export async function PUT(
       title: body.title !== undefined ? body.title : undefined,
       location: body.location !== undefined ? body.location : undefined,
       type: body.type !== undefined ? body.type : undefined,
+      workMode: body.workMode !== undefined ? body.workMode : undefined,
+      experienceLevel: body.experienceLevel !== undefined ? body.experienceLevel : undefined,
+      numberOfOpenings: body.numberOfOpenings !== undefined ? body.numberOfOpenings : undefined,
       salaryRange: body.salary !== undefined ? body.salary : undefined,
       requiresJobSpecificAssessment: body.requiresJobSpecificAssessment,
       status: body.status !== undefined ? (body.status as JobStatus) : undefined,

@@ -1,10 +1,14 @@
 /** Legacy pipeline views filter locally, so they must consume every API page. */
-export async function fetchEmployerCandidates<T>(signal?: AbortSignal): Promise<T[]> {
+export async function fetchEmployerCandidates<T>(
+  signal?: AbortSignal,
+  options?: { scope?: "managed" },
+): Promise<T[]> {
   const candidates: T[] = [];
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
   do {
     const query = new URLSearchParams({ limit: "100" });
+    if (options?.scope) query.set("scope", options.scope);
     if (cursor) query.set("cursor", cursor);
     const response = await fetch(`/api/employer/candidates?${query}`, { signal });
     const data = await response.json();

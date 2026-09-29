@@ -3,6 +3,9 @@ import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/apiSecurity";
 
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+
 function metadata(value: string | null) {
   if (!value) return {};
   try {
@@ -28,8 +31,44 @@ export async function GET(request: NextRequest) {
       companyId = employer.companyId;
     }
 
+    const { searchParams } = new URL(request.url);
+    const requestedLimit = searchParams.get("limit");
+    const requestedCursor = searchParams.get("cursor");
+    const scope = searchParams.get("scope") || "all";
+    const limit = requestedLimit === null ? DEFAULT_LIMIT : Number(requestedLimit);
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
+      return NextResponse.json(
+        { success: false, error: `limit must be an integer between 1 and ${MAX_LIMIT}.` },
+        { status: 400 },
+      );
+    }
+    if (!["all", "upcoming"].includes(scope)) {
+      return NextResponse.json({ success: false, error: "Invalid interview list scope." }, { status: 400 });
+    }
+    if (
+      requestedCursor &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedCursor)
+    ) {
+      return NextResponse.json({ success: false, error: "Invalid interview cursor." }, { status: 400 });
+    }
+
+    const now = new Date();
     const interviews = await prisma.interview.findMany({
-      where: companyId ? { application: { job: { companyId } } } : undefined,
+      where: {
+        ...(companyId ? { application: { job: { companyId } } } : {}),
+        ...(scope === "upcoming"
+          ? {
+              OR: [
+                { status: "LIVE" },
+                {
+                  status: { in: ["SCHEDULED", "RESCHEDULED"] },
+                  scheduledAt: { gte: now },
+                },
+              ],
+            }
+          : {}),
+      },
       include: {
         application: {
           include: {
@@ -38,13 +77,18 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: { scheduledAt: "asc" },
-      take: 100,
+      orderBy: [{ scheduledAt: "asc" }, { id: "asc" }],
+      cursor: requestedCursor ? { id: requestedCursor } : undefined,
+      skip: requestedCursor ? 1 : 0,
+      take: limit + 1,
     });
+
+    const page = interviews.slice(0, limit);
+    const nextCursor = interviews.length > limit ? page[page.length - 1]?.id || null : null;
 
     return NextResponse.json({
       success: true,
-      interviews: interviews.map((interview) => {
+      interviews: page.map((interview) => {
         const meta = metadata(interview.aiFeedback) as Record<string, unknown>;
         return {
           id: interview.id,
@@ -66,6 +110,11 @@ export async function GET(request: NextRequest) {
           companyName: interview.application.job.company.name,
         };
       }),
+      pagination: {
+        limit,
+        nextCursor,
+        hasMore: nextCursor !== null,
+      },
     });
   } catch (error) {
     console.error("Employer interviews list error:", error);

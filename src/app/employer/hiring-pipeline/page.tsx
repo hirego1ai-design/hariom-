@@ -28,6 +28,8 @@ interface StageConfig {
   borderColor: string;
 }
 
+const GENERIC_MOVE_TARGETS = new Set<StageId>(["Screening", "Assessment", "Interview", "Shortlisted"]);
+
 const STAGES: StageConfig[] = [
   { id: "Applied", label: "Applied", color: "text-[#90CAF9]", bgColor: "bg-[#90CAF9]/10", borderColor: "border-[#90CAF9]/30" },
   { id: "Screening", label: "Screening", color: "text-[#7C4DFF]", bgColor: "bg-[#7C4DFF]/10", borderColor: "border-[#7C4DFF]/30" },
@@ -65,6 +67,10 @@ export default function HiringPipelinePage() {
     clearActionError();
     const candidate = candidates.find((c) => c.applicationId === applicationId);
     if (!candidate) return;
+    if (!GENERIC_MOVE_TARGETS.has(targetStage)) {
+      showToast("Joined and rejected decisions must use the controlled decision workflow.");
+      return;
+    }
     if (await updateCandidateStage(applicationId, targetStage)) showToast(`Moved ${candidate.name} to ${targetStage}`);
   };
 
@@ -468,7 +474,7 @@ export default function HiringPipelinePage() {
                       className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none w-full"
                     >
                       {STAGES.map((s) => (
-                        <option key={s.id} value={s.id} disabled={s.id === "Applied" && c.stage !== "Applied"}>
+                        <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
                           {s.label}
                         </option>
                       ))}
@@ -624,7 +630,7 @@ function CandidateCard({
           className="bg-[#1C1C22] border border-white/10 hover:border-white/20 text-white rounded-lg px-2 py-1 text-[10px] outline-none flex-1 max-w-[140px] cursor-pointer"
         >
           {STAGES.map((s) => (
-            <option key={s.id} value={s.id} disabled={s.id === "Applied" && candidate.stage !== "Applied"}>
+            <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
               {s.label}
             </option>
           ))}

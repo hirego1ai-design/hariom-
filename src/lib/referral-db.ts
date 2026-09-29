@@ -30,7 +30,7 @@ import {
   UserFraudProfile,
 } from "@/types/referral";
 import { prisma } from "./prisma";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   evaluateTransactionQualification,
   getReferralProgramConfig,
@@ -1222,16 +1222,18 @@ class ReferralDatabaseStore {
     }
 
     const stats = await this.getUserReferralStats(input.referrerId);
-    const unreservedAvailable = stats.availableBalance - stats.pendingPayoutBalance;
+    // availableBalance already excludes rewards reserved by an existing payoutId.
+    // Do not subtract pendingPayoutBalance a second time.
+    const unreservedAvailable = stats.availableBalance;
 
     if (input.amount > unreservedAvailable) {
       throw new Error(
-        `Requested amount (₹${input.amount}) exceeds unreserved available balance (₹${Math.max(0, unreservedAvailable)}). Existing pending requests: ₹${stats.pendingPayoutBalance}.`
+        `Requested amount (₹${input.amount}) exceeds available balance (₹${Math.max(0, unreservedAvailable)}).`
       );
     }
 
-    const id = `payout-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const id = `payout-${randomUUID()}`;
+    const ledgerEntryId = `led-${randomUUID()}`;
 
     const payout: ReferralPayout = {
       id,
@@ -1253,7 +1255,40 @@ class ReferralDatabaseStore {
       try {
         const client = prisma as any;
         const [dbPayout, _dbLedger] = await client.$transaction(async (tx: any) => {
-          // 1. Create ReferralPayout
+          // Serialize payout reservations per referrer so reward selection and
+          // the financial ledger balance are computed from the same snapshot.
+          await tx.$queryRaw`
+            SELECT "id"
+            FROM "User"
+            WHERE "id" = ${input.referrerId}
+            FOR UPDATE
+          `;
+
+          const availableRewards = await tx.referralReward.findMany({
+            where: { referrerId: input.referrerId, status: "ELIGIBLE", payoutId: null },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          });
+          const transactionalAvailable = availableRewards.reduce(
+            (sum: number, reward: any) => sum + Number(reward.rewardAmount),
+            0,
+          );
+          if (input.amount > transactionalAvailable) {
+            throw new Error(
+              `Requested amount (₹${input.amount}) exceeds available balance (₹${Math.max(0, transactionalAvailable)}).`,
+            );
+          }
+
+          let reservedAmount = 0;
+          const rewardsToReserve: any[] = [];
+          for (const reward of availableRewards) {
+            if (reservedAmount >= input.amount) break;
+            reservedAmount += Number(reward.rewardAmount);
+            rewardsToReserve.push(reward);
+          }
+          if (reservedAmount !== input.amount) {
+            throw new Error("Requested payout must match an exact combination of eligible rewards.");
+          }
+
           const createdPayout = await tx.referralPayout.create({
             data: {
               id,
@@ -1266,23 +1301,6 @@ class ReferralDatabaseStore {
             },
           });
 
-          // Reserve the exact underlying rewards while the payout is pending.
-          // The row predicate prevents concurrent requests from claiming the
-          // same eligible reward. Exact matching avoids silent overpayment.
-          const availableRewards = await tx.referralReward.findMany({
-            where: { referrerId: input.referrerId, status: "ELIGIBLE", payoutId: null },
-            orderBy: { createdAt: "asc" },
-          });
-          let reservedAmount = 0;
-          const rewardsToReserve: any[] = [];
-          for (const reward of availableRewards) {
-            if (reservedAmount >= input.amount) break;
-            reservedAmount += reward.rewardAmount;
-            rewardsToReserve.push(reward);
-          }
-          if (reservedAmount !== input.amount) {
-            throw new Error("Requested payout must match an exact combination of eligible rewards.");
-          }
           for (const reward of rewardsToReserve) {
             const reserved = await tx.referralReward.updateMany({
               where: { id: reward.id, status: "ELIGIBLE", payoutId: null },
@@ -1293,7 +1311,6 @@ class ReferralDatabaseStore {
             }
           }
 
-          // 2. Create immutable ReferralLedgerEntry for reserved liability
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
               id: ledgerEntryId,
@@ -1301,7 +1318,7 @@ class ReferralDatabaseStore {
               payoutId: createdPayout.id,
               entryType: ReferralLedgerEntryType.PAYOUT_RESERVED,
               amount: input.amount,
-              balanceAfter: unreservedAvailable - input.amount,
+              balanceAfter: transactionalAvailable - input.amount,
               currency: "INR",
               correlationId,
               metadata: {

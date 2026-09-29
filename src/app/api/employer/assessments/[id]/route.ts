@@ -19,6 +19,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     await enforceRateLimit(request, "employer_update_assessment", 20, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessment policy is managed automatically. Manual assessment edits are not available to employer or recruiter accounts.",
+        403,
+      );
+    }
     const data = await readValidatedJson(request, updateAssessmentSchema);
     const { id } = await params;
 
@@ -96,6 +102,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   try {
     await enforceRateLimit(request, "employer_delete_assessment", 20, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessments are retained as generated hiring evidence and cannot be manually deleted.",
+        403,
+      );
+    }
     const { id } = await params;
 
     const assessment = await prisma.mcqAssessment.findUnique({

@@ -338,8 +338,8 @@ export default function EmployerPageE6() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!store.selectedRoles || store.selectedRoles.length === 0) {
-      newErrors.selectedRoles = "Please select at least one job role.";
+    if (!store.selectedRoles || store.selectedRoles.length !== 1) {
+      newErrors.selectedRoles = "Please select one job role.";
     }
 
     if (!store.location.trim()) {
@@ -401,6 +401,9 @@ export default function EmployerPageE6() {
           department: store.department.trim() || undefined,
           location: store.location.trim(),
           type: store.jobType,
+          workMode: store.workMode,
+          experienceLevel: store.experienceLevel,
+          numberOfOpenings: Number(store.numberOfOpenings || "1"),
           salary,
           status: "DRAFT",
           requirements: store.skillRequirements.map((item) => item.name),
@@ -425,31 +428,22 @@ export default function EmployerPageE6() {
     }
   };
 
-  const selectedRolesOptions = store.selectedRoles 
-    ? store.selectedRoles.map(role => ({ value: role, label: role }))
-    : [];
+  const selectedRoleOption = store.selectedRoles[0]
+    ? { value: store.selectedRoles[0], label: store.selectedRoles[0] }
+    : null;
 
   const handleRolesChange = (selected: any) => {
-    const rolesArray = selected ? selected.map((opt: any) => opt.value) : [];
-    store.updateField('selectedRoles', rolesArray);
-    
-    // Auto-populate jobTitle with the chosen roles joined by slashes
-    store.updateField('jobTitle', rolesArray.join(" / "));
-    
-    // Auto-update categories based on selection
-    const categoriesSet = new Set<string>();
-    rolesArray.forEach((r: string) => {
-      ROLE_MASTER.forEach(role => {
-        if (role.title === r || role.aliases?.includes(r)) {
-          categoriesSet.add(role.department);
-        }
-      });
-    });
-    store.updateField('categories', Array.from(categoriesSet));
-    
-    // Automatically clear errors on select
-    if (rolesArray.length > 0) {
-      setErrors(prev => ({ ...prev, selectedRoles: "" }));
+    const roleValue = typeof selected?.value === "string" ? selected.value : "";
+    store.updateField("selectedRoles", roleValue ? [roleValue] : []);
+    store.updateField("jobTitle", roleValue);
+
+    const mappedRole = ROLE_MASTER.find(
+      (role) => role.title === roleValue || role.aliases?.includes(roleValue),
+    );
+    store.updateField("categories", mappedRole?.department ? [mappedRole.department] : []);
+
+    if (roleValue) {
+      setErrors((prev) => ({ ...prev, selectedRoles: "" }));
     }
   };
 
@@ -528,14 +522,13 @@ export default function EmployerPageE6() {
               {/* Job Roles Selector */}
               <div className="space-y-2 md:col-span-2">
                 <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-                  Job Roles <span className="text-[#FF5252]">*</span>
+                  Job Role <span className="text-[#FF5252]">*</span>
                 </label>
                 <Select
-                  isMulti
                   options={groupedOptions}
-                  value={selectedRolesOptions}
+                  value={selectedRoleOption}
                   onChange={handleRolesChange}
-                  placeholder="Search and select job roles..."
+                  placeholder="Search and select one job role..."
                   styles={customSelectStyles(!!errors.selectedRoles)}
                   className="text-xs text-[#F8FAFC]"
                   classNamePrefix="select"

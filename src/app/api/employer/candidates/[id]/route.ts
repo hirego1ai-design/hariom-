@@ -75,6 +75,27 @@ export async function GET(
             },
           },
         },
+        readinessRecords: {
+          where: { status: "JOB_READY" },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            roleTitle: true,
+            seniority: true,
+            score: true,
+            validUntil: true,
+          },
+        },
+        videoResumes: {
+          where: {
+            OR: [
+              { retentionExpiresAt: null },
+              { retentionExpiresAt: { gt: new Date() } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true },
+        },
       },
     });
 
@@ -123,7 +144,8 @@ export async function GET(
       preferredLocation: null,
       expectedSalary: null,
       noticePeriod: null,
-      availability: null,
+      availability: profile.availabilityStatus,
+      availabilityConfirmedAt: profile.lastAvailabilityConfirmedAt?.toISOString() ?? null,
       preferredJobType: null,
       email: profile.user?.email || "",
       phone: profile.user?.phoneNumber || null,
@@ -256,12 +278,26 @@ export async function GET(
     return NextResponse.json({
       success: true,
       profile: ucpProfile,
+      application: primaryApplication
+        ? {
+            id: primaryApplication.id,
+            status: primaryApplication.status,
+            createdAt: primaryApplication.createdAt.toISOString(),
+          }
+        : null,
       scores: ucpScores,
       skills: ucpSkills,
       experience: ucpExperience,
       education: ucpEducation,
       certifications: [],
       assessments: ucpAssessments,
+      jobReadyRecords: profile.readinessRecords.map((record) => ({
+        roleTitle: record.roleTitle,
+        seniority: record.seniority,
+        score: record.score,
+        validUntil: record.validUntil?.toISOString() ?? null,
+      })),
+      videoResume: profile.videoResumes[0] ? { id: profile.videoResumes[0].id } : null,
       videoAnalysis: ucpVideoAnalysis,
     });
   } catch (error) {

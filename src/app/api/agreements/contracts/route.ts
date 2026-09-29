@@ -52,6 +52,9 @@ export async function GET(req: NextRequest) {
   try {
     await enforceRateLimit(req, "agreements_contracts_get", 60, 60_000);
     const session = await requireEmployerOrAdminSession(req);
+    if (session.role === "RECRUITER") {
+      throw new ApiError("Commercial agreements are available only to company administrators.", 403);
+    }
     const { searchParams } = new URL(req.url);
     const company = searchParams.get("company");
     const queryCompanyId = searchParams.get("companyId");

@@ -31,6 +31,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     await enforceRateLimit(request, "employer_update_question", 30, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessment questions are generated automatically and cannot be manually edited.",
+        403,
+      );
+    }
     const data = await readValidatedJson(request, updateQuestionSchema);
     const { id: assessmentId, questionId } = await params;
 
@@ -140,6 +146,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   try {
     await enforceRateLimit(request, "employer_delete_question", 30, 60000);
     const session = await requireEmployerOrAdminSession(request);
+    if (session.role !== "ADMIN") {
+      throw new ApiError(
+        "Employer job assessment questions are generated automatically and cannot be manually deleted.",
+        403,
+      );
+    }
     const { id: assessmentId, questionId } = await params;
 
     const assessment = await prisma.mcqAssessment.findUnique({

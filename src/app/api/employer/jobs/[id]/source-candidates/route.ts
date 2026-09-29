@@ -38,6 +38,7 @@ export async function GET(
       select: {
         id: true,
         companyId: true,
+        status: true,
         title: true,
         description: true,
         requirements: true,
@@ -48,7 +49,9 @@ export async function GET(
         jobReadySeniority: true,
       },
     });
-    if (!job) throw new ApiError("Job not found.", 404);
+    if (!job || job.status !== "ACTIVE") {
+      throw new ApiError("Active job not found.", 404);
+    }
 
     if (session.role !== "ADMIN") {
       const company = await getSessionCompany(session);
