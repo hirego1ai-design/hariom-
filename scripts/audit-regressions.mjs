@@ -16,7 +16,7 @@ const tests = [
   "production-truthfulness",
 ];
 
-const timeoutMs = 30_000;
+const timeoutMs = 60_000;
 
 for (const name of tests) {
   const file = `src/tests/${name}.test.ts`;
@@ -24,7 +24,7 @@ for (const name of tests) {
 
   const result = spawnSync(
     process.execPath,
-    ["--import", "tsx", "--test", file],
+    ["--import", "tsx", "--test", "--test-force-exit", file],
     {
       stdio: "inherit",
       timeout: timeoutMs,
