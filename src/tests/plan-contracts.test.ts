@@ -49,11 +49,18 @@ test("plan validation rejects invalid prices, quotas, validity and unknown mutab
   ]) assert.equal(createPlanSchema.safeParse({ ...plan, ...change }).success, false);
 });
 
-test("updates whitelist commercial fields without accepting model metadata", () => {
-  assert.deepEqual(updatePlanSchema.parse({ id: "plan-existing", applicationsQuota: 0 }),
-    { id: "plan-existing", applicationsQuota: 0 });
-  assert.equal(updatePlanSchema.safeParse({ id: "plan-existing" }).success, false);
-  assert.equal(updatePlanSchema.safeParse({ id: "plan-existing", createdAt: "2026-01-01" }).success, false);
+test("updates whitelist commercial fields, require a version token, and reject model metadata", () => {
+  const expectedUpdatedAt = "2026-09-29T00:00:00.000Z";
+  assert.deepEqual(
+    updatePlanSchema.parse({ id: "plan-existing", expectedUpdatedAt, applicationsQuota: 0 }),
+    { id: "plan-existing", expectedUpdatedAt, applicationsQuota: 0 },
+  );
+  assert.equal(updatePlanSchema.safeParse({ id: "plan-existing", applicationsQuota: 0 }).success, false);
+  assert.equal(updatePlanSchema.safeParse({ id: "plan-existing", expectedUpdatedAt }).success, false);
+  assert.equal(
+    updatePlanSchema.safeParse({ id: "plan-existing", expectedUpdatedAt, createdAt: "2026-01-01" }).success,
+    false,
+  );
 });
 
 test("admin-created plans persist zero quotas and produce checkout-compatible unique IDs without a database", async t => {
