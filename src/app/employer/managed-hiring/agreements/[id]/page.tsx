@@ -65,7 +65,7 @@ export default function EmployerAgreementReviewPage() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
@@ -96,7 +96,7 @@ export default function EmployerAgreementReviewPage() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
         setAmendmentNotes("");

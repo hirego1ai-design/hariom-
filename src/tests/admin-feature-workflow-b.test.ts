@@ -363,7 +363,7 @@ test("managed hiring agreement lifecycle is versioned reviewed and activates job
   assert(!lifecycle.includes('data: { status: "ACTIVE" }'));
 
   assert(employerReview.includes("expectedUpdatedAt: new Date(agreement.updatedAt).toISOString()"));
-  assert(employerReview.includes("Agreement unavailable"));
+  assert(employerReview.includes("Agreement document not found"));
   assert(employerReview.includes("res.ok && data.success"));
 
   assert(review.includes("Commercial Agreement Review"));
