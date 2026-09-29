@@ -1,7 +1,9 @@
 // Run the offline production regression allowlist in isolated child processes.
 // Isolation prevents one test file's handles or database state from blocking the
-// entire release gate, while the per-file timeout fails closed instead of
-// allowing CI to hang indefinitely.
+// entire release gate. The large feature-wiring file is additionally executed
+// one named test at a time so a single unresolved test is attributable instead
+// of stalling the whole audit without evidence.
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const tests = [
@@ -16,18 +18,21 @@ const tests = [
   "production-truthfulness",
 ];
 
-const timeoutMs = 60_000;
+const fileTimeoutMs = 60_000;
+const namedTestTimeoutMs = 15_000;
 
-for (const name of tests) {
-  const file = `src/tests/${name}.test.ts`;
-  console.log(`[audit-regression] START ${file}`);
+function escapeRegex(value) {
+  return value.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+}
 
+function runNodeTest(file, label, extraArgs = [], timeout = fileTimeoutMs) {
+  console.log(`[audit-regression] START ${label}`);
   const result = spawnSync(
     process.execPath,
-    ["--import", "tsx", "--test", "--test-force-exit", file],
+    ["--import", "tsx", "--test", "--test-force-exit", ...extraArgs, file],
     {
       stdio: "inherit",
-      timeout: timeoutMs,
+      timeout,
       env: process.env,
     },
   );
@@ -36,18 +41,43 @@ for (const name of tests) {
     const timedOut = result.error.code === "ETIMEDOUT";
     console.error(
       timedOut
-        ? `[audit-regression] TIMEOUT ${file} exceeded ${timeoutMs}ms`
-        : `[audit-regression] ERROR ${file}: ${result.error.message}`,
+        ? `[audit-regression] TIMEOUT ${label} exceeded ${timeout}ms`
+        : `[audit-regression] ERROR ${label}: ${result.error.message}`,
     );
     process.exit(1);
   }
 
   if (result.status !== 0) {
-    console.error(`[audit-regression] FAIL ${file} exited with ${result.status ?? "unknown status"}`);
+    console.error(`[audit-regression] FAIL ${label} exited with ${result.status ?? "unknown status"}`);
     process.exit(result.status ?? 1);
   }
 
-  console.log(`[audit-regression] PASS ${file}`);
+  console.log(`[audit-regression] PASS ${label}`);
 }
 
-console.log(`[audit-regression] PASS all ${tests.length} offline production regressions`);
+for (const name of tests) {
+  const file = `src/tests/${name}.test.ts`;
+
+  if (name === "feature-workflow-regressions") {
+    const source = fs.readFileSync(file, "utf8");
+    const names = [...source.matchAll(/test\("([^"]+)"/g)].map((match) => match[1]);
+    if (!names.length) {
+      console.error(`[audit-regression] FAIL ${file} exposes no named tests`);
+      process.exit(1);
+    }
+    for (const testName of names) {
+      const exactPattern = `^${escapeRegex(testName)}$`;
+      runNodeTest(
+        file,
+        `${file} :: ${testName}`,
+        [`--test-name-pattern=${exactPattern}`],
+        namedTestTimeoutMs,
+      );
+    }
+    continue;
+  }
+
+  runNodeTest(file, file);
+}
+
+console.log(`[audit-regression] PASS all ${tests.length} offline production regression files`);
