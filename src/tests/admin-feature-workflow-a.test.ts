@@ -421,8 +421,8 @@ test("admin operational evidence screens stay scoped persisted and non-simulated
 
   assert(healthRoute.includes("getProviderStatusSummary"));
   assert(healthRoute.includes("process.env.S3_REGION"));
-  assert(healthRoute.includes('overallStatus: dbStatus === "HEALTHY" ? "APPLICATION_AVAILABLE" : "DEGRADED"'));
-  assert(healthRoute.includes('observedScope: "APPLICATION_RUNTIME_AND_CONFIGURATION"'));
+  assert(healthRoute.includes('overallStatus: dbStatus === "HEALTHY" ? "CORE_RUNTIME_AVAILABLE" : "CORE_RUNTIME_DEGRADED"'));
+  assert(healthRoute.includes('observedScope: "CURRENT_APP_INSTANCE_DATABASE_AND_CONFIGURATION"'));
   assert(healthPage.includes("Credential presence is never presented as provider uptime."));
   assert(healthPage.includes("No service observations were returned."));
 
@@ -439,6 +439,6 @@ test("admin operational evidence screens stay scoped persisted and non-simulated
   assert(queuePage.includes("workerLiveness?.workflowRecovery"));
   assert(queuePage.includes("md:pl-[116px]"));
 
-  assert(vulnerability.includes("does not claim zero vulnerabilities"));
-  assert(backup.includes("EXTERNAL EVIDENCE REQUIRED"));
+  assert(vulnerability.includes('redirect("/admin/settings/security")'));
+  assert(backup.includes("External evidence required"));
 });
