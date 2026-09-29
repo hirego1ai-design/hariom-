@@ -68,12 +68,16 @@ export async function resolveCopilotPrice(planId: string, countryInput: string):
   const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
   if (!price) throw new ApiError("Copilot is not currently available for this billing country.", 409);
 
-  assertCurrentCopilotTaxPolicy({
-    regionCode: price.regionCode,
-    countries: price.countries,
-    taxMode: price.taxMode,
-    taxRateBps: price.taxRateBps,
-  });
+  try {
+    assertCurrentCopilotTaxPolicy({
+      regionCode: price.regionCode,
+      countries: price.countries,
+      taxMode: price.taxMode,
+      taxRateBps: price.taxRateBps,
+    });
+  } catch {
+    throw new ApiError("Copilot pricing configuration is unavailable for this billing country.", 409);
+  }
   const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
 
   return {
@@ -110,12 +114,16 @@ export async function listPublicCopilotPlans(countryInput: string) {
   return plans.flatMap((plan) => {
     const price = selectCopilotRegionalPrice(plan.regionalPrices, countryCode);
     if (!price) return [];
-    assertCurrentCopilotTaxPolicy({
-      regionCode: price.regionCode,
-      countries: price.countries,
-      taxMode: price.taxMode,
-      taxRateBps: price.taxRateBps,
-    });
+    try {
+      assertCurrentCopilotTaxPolicy({
+        regionCode: price.regionCode,
+        countries: price.countries,
+        taxMode: price.taxMode,
+        taxRateBps: price.taxRateBps,
+      });
+    } catch {
+      return [];
+    }
     const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
     return [{
       id: plan.id,

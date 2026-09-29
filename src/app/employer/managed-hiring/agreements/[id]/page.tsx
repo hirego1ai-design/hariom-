@@ -59,12 +59,13 @@ export default function EmployerAgreementReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "accept",
+          expectedUpdatedAt: new Date(agreement.updatedAt).toISOString(),
           signedByName: signatureName,
           signedByDesignation: signatureDesignation,
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setActionMessage({ type: "success", text: "Agreement signed successfully." });
       } else {
@@ -90,11 +91,12 @@ export default function EmployerAgreementReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "request_amendment",
+          expectedUpdatedAt: new Date(agreement.updatedAt).toISOString(),
           amendmentNotes,
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setAgreement(data.agreement);
         setShowAmendmentBox(false);
         setAmendmentNotes("");

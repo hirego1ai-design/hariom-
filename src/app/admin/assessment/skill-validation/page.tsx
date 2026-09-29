@@ -38,7 +38,8 @@ export default function AdminSkillValidationPage() {
   const [jobSpecificPolicy, setJobSpecificPolicy] = useState<JobSpecificPolicy | null>(null);
   const [jobSpecificConfigured, setJobSpecificConfigured] = useState(false);
   const [jobSpecificSaving, setJobSpecificSaving] = useState(false);
-  const [reason, setReason] = useState("");
+  const [universalReason, setUniversalReason] = useState("");
+  const [jobSpecificReason, setJobSpecificReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -123,7 +124,7 @@ export default function AdminSkillValidationPage() {
             feedbackEnabled: policy.feedbackEnabled,
             mockInterviewRecommendationEnabled: policy.mockInterviewRecommendationEnabled,
           },
-          reason: reason.trim() || undefined,
+          reason: universalReason.trim() || undefined,
         }),
       });
       const data = await response.json();
@@ -136,7 +137,7 @@ export default function AdminSkillValidationPage() {
         mockInterviewRecommendationEnabled: Boolean(data.policy.mockInterviewRecommendationEnabled),
       });
       setConfigured(true);
-      setReason("");
+      setUniversalReason("");
       setNotice("Skill Validation policy saved and audited.");
       await load();
     } catch (cause) {
@@ -165,7 +166,7 @@ export default function AdminSkillValidationPage() {
             validityDays: Number(jobSpecificPolicy.validityDays),
             retakeCooldownHours: Number(jobSpecificPolicy.retakeCooldownHours),
           },
-          reason: reason.trim() || undefined,
+          reason: jobSpecificReason.trim() || undefined,
         }),
       });
       const data = await response.json();
@@ -178,7 +179,7 @@ export default function AdminSkillValidationPage() {
         retakeCooldownHours: String(data.policy.retakeCooldownHours),
       });
       setJobSpecificConfigured(true);
-      setReason("");
+      setJobSpecificReason("");
       setNotice("Job-specific assessment policy saved and audited.");
       await load();
     } catch (cause) {
@@ -203,8 +204,8 @@ export default function AdminSkillValidationPage() {
           </header>
 
           {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>}
-          {notice && <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">{notice}</div>}
-          {loading && <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">Loading policy…</div>}
+          {notice && <div role="status" aria-live="polite" className="rounded-2xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-200">{notice}</div>}
+          {loading && <div role="status" aria-live="polite" className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">Loading policy…</div>}
 
           {!loading && policy && (
             <>
@@ -282,8 +283,8 @@ export default function AdminSkillValidationPage() {
                 <label className="block text-xs text-text-muted">
                   Change reason (optional)
                   <input
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
+                    value={universalReason}
+                    onChange={(event) => setUniversalReason(event.target.value)}
                     maxLength={500}
                     className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
                     placeholder="Why are you changing this policy?"
@@ -350,6 +351,17 @@ export default function AdminSkillValidationPage() {
                       />
                     </label>
                   </div>
+
+                  <label className="block text-xs text-text-muted">
+                    Change reason (optional)
+                    <input
+                      value={jobSpecificReason}
+                      onChange={(event) => setJobSpecificReason(event.target.value)}
+                      maxLength={500}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white"
+                      placeholder="Why are you changing the job-specific policy?"
+                    />
+                  </label>
 
                   <button
                     type="button"

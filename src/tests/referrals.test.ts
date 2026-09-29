@@ -471,6 +471,7 @@ export async function runReferralTestSuite(): Promise<{
         userId: fraudUser,
         newStatus: FraudStatus.FLAGGED,
         reason: "Manual re-evaluation",
+        expectedUpdatedAt: clearedProfile.updatedAt,
       }),
     });
     const adminFraudPostRes = await adminFraudPostHandler(adminFraudPostReq);

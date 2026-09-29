@@ -30,6 +30,9 @@ import {
   UserFraudProfile,
 } from "@/types/referral";
 import { prisma } from "./prisma";
+import { ApiError } from "./apiSecurity";
+import { ReferralFraudStatus as DbReferralFraudStatus } from "@prisma/client";
+import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   evaluateTransactionQualification,
@@ -1384,18 +1387,34 @@ class ReferralDatabaseStore {
     return payout;
   }
 
-  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
+  public async getAdminPayoutQueuePage(options?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }): Promise<{ queue: ReferralPayout[]; total: number }> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-admin-queue");
+    const page = Math.max(1, options?.page ?? 1);
+    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
+    const status = options?.status;
 
     try {
       const client = prisma as any;
       if (client.referralPayout) {
-        const records = await client.referralPayout.findMany({
-          orderBy: { createdAt: "desc" },
-        });
-        if (records && records.length > 0) {
-          return records.map((r: any) => ({
+        const where = status ? { status } : {};
+        const [total, records] = await client.$transaction([
+          client.referralPayout.count({ where }),
+          client.referralPayout.findMany({
+            where,
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+        ]);
+
+        return {
+          total,
+          queue: records.map((r: any) => ({
             id: r.id,
             referrerId: r.referrerId,
             amount: r.amount,
@@ -1409,26 +1428,43 @@ class ReferralDatabaseStore {
             processedAt: r.processedAt ? r.processedAt.toISOString() : null,
             createdAt: r.createdAt.toISOString(),
             updatedAt: r.updatedAt.toISOString(),
-          }));
-        }
+          })),
+        };
       }
       if (isProduction) {
-        return [];
+        throw new Error("Referral payout persistence is unavailable from the generated Prisma client.");
       }
     } catch (error: any) {
       if (isProduction) {
-        console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`, error);
-        throw new Error(`[${correlationId}] Database unavailable: failed to fetch payout queue.`);
+        console.error(
+          `[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error loading admin payout queue:`,
+          error,
+        );
+        throw new Error(
+          `[${correlationId}] Database unavailable: failed to fetch payout queue.`,
+        );
       }
     }
 
-    return Array.from(this.payouts.values());
+    const all = Array.from(this.payouts.values())
+      .filter((payout) => !status || payout.status === status)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return {
+      total: all.length,
+      queue: all.slice((page - 1) * limit, page * limit),
+    };
+  }
+
+  public async getAdminPayoutQueue(): Promise<ReferralPayout[]> {
+    return (await this.getAdminPayoutQueuePage({ page: 1, limit: 100 })).queue;
   }
 
   public async adminApprovePayout(
     payoutId: string,
     adminUserId: string,
-    adminNotes?: string
+    adminNotes?: string,
+    ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-approve-payout");
@@ -1438,17 +1474,38 @@ class ReferralDatabaseStore {
         const client = prisma as any;
         const updated = await client.$transaction(async (tx: any) => {
           const transitioned = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: "PENDING_ADMIN_APPROVAL" },
+            where: {
+              id: payoutId,
+              status: "PENDING_ADMIN_APPROVAL",
+              ...(expectedUpdatedAt ? { updatedAt: new Date(expectedUpdatedAt) } : {}),
+            },
             data: {
               status: "APPROVED",
               approvedBy: adminUserId,
               adminNotes: adminNotes || "Approved by Admin for processing.",
             },
           });
-          if (transitioned.count !== 1) return null;
-          return tx.referralPayout.findUnique({ where: { id: payoutId } });
+          if (transitioned.count !== 1) throw new ApiError("Payout changed or is no longer awaiting approval; reload before reviewing.", 409);
+          const approved = await tx.referralPayout.findUnique({ where: { id: payoutId } });
+          if (!approved) return null;
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_APPROVED",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: approved.amount,
+                currency: approved.currency,
+                adminNoteRecorded: Boolean(adminNotes?.trim()),
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
+          return approved;
         });
-        if (!updated) throw new Error(`Payout ${payoutId} is not awaiting approval.`);
+        if (!updated) throw new ApiError("Payout not found.", 404);
         return {
           id: updated.id,
           referrerId: updated.referrerId,
@@ -1465,8 +1522,9 @@ class ReferralDatabaseStore {
           updatedAt: updated.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error approving payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to approve payout request: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to approve payout request.`);
       }
     }
 
@@ -1474,6 +1532,9 @@ class ReferralDatabaseStore {
     if (!payout) return null;
     if (payout.status !== "PENDING_ADMIN_APPROVAL") {
       throw new Error(`Payout ${payoutId} is not awaiting approval.`);
+    }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before approving.`);
     }
 
     payout.status = "APPROVED";
@@ -1488,7 +1549,9 @@ class ReferralDatabaseStore {
   public async adminMarkPayoutPaid(
     payoutId: string,
     adminUserId: string,
-    transactionRef: string
+    transactionRef: string,
+    ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-mark-paid");
@@ -1506,17 +1569,20 @@ class ReferralDatabaseStore {
             where: { id: payoutId },
           });
           if (!existing) {
-            throw new Error(`Payout with ID ${payoutId} not found.`);
+            throw new ApiError("Payout not found.", 404);
           }
 
           if (existing.status !== "APPROVED") {
-            throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
+            throw new ApiError("Payout must still be APPROVED before settlement; reload before reviewing.", 409);
+          }
+          if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new ApiError("Payout changed; reload before recording settlement.", 409);
           }
 
           // 2. Update payout to PAID only if it is still approved. This
           // prevents duplicate settlement/ledger entries under concurrent calls.
           const transitioned = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: "APPROVED" },
+            where: { id: payoutId, status: "APPROVED", updatedAt: existing.updatedAt },
             data: {
               status: "PAID",
               approvedBy: adminUserId,
@@ -1525,10 +1591,10 @@ class ReferralDatabaseStore {
             },
           });
           if (transitioned.count !== 1) {
-            throw new Error(`Payout ${payoutId} was already settled or changed state.`);
+            throw new ApiError("Payout was already settled or changed state; reload before reviewing.", 409);
           }
           const updated = await tx.referralPayout.findUnique({ where: { id: payoutId } });
-          if (!updated) throw new Error(`Payout with ID ${payoutId} not found.`);
+          if (!updated) throw new ApiError("Payout not found.", 404);
 
           // 3. Mark underlying eligible rewards as PAID
           const eligibleRewards = await tx.referralReward.findMany({
@@ -1553,10 +1619,21 @@ class ReferralDatabaseStore {
             remainingToMark -= rew.rewardAmount;
           }
           if (remainingToMark !== 0) {
-            throw new Error(`Payout ${payoutId} exceeds the eligible reward balance.`);
+            throw new ApiError("Payout no longer matches the reserved eligible reward balance; reload before settlement.", 409);
           }
 
-          // 4. Create immutable ReferralLedgerEntry
+          const remainingAvailable = await tx.referralReward.aggregate({
+            where: {
+              referrerId: existing.referrerId,
+              status: "ELIGIBLE",
+              payoutId: null,
+              currency: existing.currency,
+            },
+            _sum: { rewardAmount: true },
+          });
+
+          // 4. Create immutable ReferralLedgerEntry using the actual remaining
+          // available balance after the settled rewards leave eligibility.
           const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
@@ -1565,7 +1642,7 @@ class ReferralDatabaseStore {
               payoutId: existing.id,
               entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,
               amount: existing.amount,
-              balanceAfter: 0, // balance settled
+              balanceAfter: remainingAvailable._sum.rewardAmount ?? 0,
               currency: existing.currency,
               correlationId,
               metadata: {
@@ -1574,6 +1651,22 @@ class ReferralDatabaseStore {
               },
             },
           });
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_MARKED_PAID",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: existing.amount,
+                currency: existing.currency,
+                transactionReferenceRecorded: true,
+                ledgerEntryId: createdLedger.id,
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
 
           return [updated, createdLedger];
         });
@@ -1594,8 +1687,9 @@ class ReferralDatabaseStore {
           updatedAt: updatedPayout.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error settling payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to mark payout as settled: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to mark payout as settled.`);
       }
     }
 
@@ -1604,6 +1698,9 @@ class ReferralDatabaseStore {
     if (!payout) return null;
     if (payout.status !== "APPROVED") {
       throw new Error(`Payout ${payoutId} must be APPROVED before settlement.`);
+    }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before settlement.`);
     }
 
     const eligibleRewards = Array.from(this.rewards.values()).filter(
@@ -1636,6 +1733,16 @@ class ReferralDatabaseStore {
       }
     }
 
+    const availableAfterSettlement = Array.from(this.rewards.values())
+      .filter(
+        (reward) =>
+          reward.referrerId === payout.referrerId &&
+          reward.status === ReferralStatus.ELIGIBLE &&
+          !reward.payoutId &&
+          reward.currency === payout.currency,
+      )
+      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
+
     const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
@@ -1643,7 +1750,7 @@ class ReferralDatabaseStore {
       payoutId: payout.id,
       entryType: ReferralLedgerEntryType.PAYOUT_SETTLED,
       amount: payout.amount,
-      balanceAfter: 0,
+      balanceAfter: availableAfterSettlement,
       currency: payout.currency,
       correlationId,
       metadata: { transactionRef: payout.transactionRef },
@@ -1657,7 +1764,9 @@ class ReferralDatabaseStore {
   public async adminRejectPayout(
     payoutId: string,
     adminUserId: string,
-    reason: string
+    reason: string,
+    ipAddress?: string,
+    expectedUpdatedAt?: string,
   ): Promise<ReferralPayout | null> {
     const isProduction = process.env.NODE_ENV === "production";
     const correlationId = generateCorrelationId("corr-reject-payout");
@@ -1670,11 +1779,18 @@ class ReferralDatabaseStore {
             where: { id: payoutId },
           });
           if (!existing) {
-            throw new Error(`Payout with ID ${payoutId} not found.`);
+            throw new ApiError("Payout not found.", 404);
+          }
+          if (expectedUpdatedAt && existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new ApiError("Payout changed; reload before rejecting.", 409);
           }
 
           const updated = await tx.referralPayout.updateMany({
-            where: { id: payoutId, status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] } },
+            where: {
+              id: payoutId,
+              status: { in: ["PENDING_ADMIN_APPROVAL", "APPROVED"] },
+              updatedAt: existing.updatedAt,
+            },
             data: {
               status: "REJECTED",
               approvedBy: adminUserId,
@@ -1682,10 +1798,10 @@ class ReferralDatabaseStore {
             },
           });
           if (updated.count !== 1) {
-            throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+            throw new ApiError("Payout is no longer reviewable; reload before rejecting.", 409);
           }
           const updatedRecord = await tx.referralPayout.findUnique({ where: { id: payoutId } });
-          if (!updatedRecord) throw new Error(`Payout with ID ${payoutId} not found.`);
+          if (!updatedRecord) throw new ApiError("Payout not found.", 404);
 
           // Re-open rewards reserved by this rejected payout.
           await tx.referralReward.updateMany({
@@ -1693,7 +1809,18 @@ class ReferralDatabaseStore {
             data: { payoutId: null },
           });
 
+          const availableAfterRelease = await tx.referralReward.aggregate({
+            where: {
+              referrerId: existing.referrerId,
+              status: "ELIGIBLE",
+              payoutId: null,
+              currency: existing.currency,
+            },
+            _sum: { rewardAmount: true },
+          });
+
           // Unreserve liability via financial ledger entry (PAYOUT_REFUNDED)
+          // with the actual post-release available balance.
           const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           const createdLedger = await tx.referralLedgerEntry.create({
             data: {
@@ -1702,7 +1829,7 @@ class ReferralDatabaseStore {
               payoutId: existing.id,
               entryType: ReferralLedgerEntryType.PAYOUT_REFUNDED,
               amount: existing.amount,
-              balanceAfter: existing.amount,
+              balanceAfter: availableAfterRelease._sum.rewardAmount ?? 0,
               currency: existing.currency,
               correlationId,
               metadata: {
@@ -1711,6 +1838,22 @@ class ReferralDatabaseStore {
               },
             },
           });
+
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: adminUserId,
+              action: "REFERRAL_PAYOUT_REJECTED",
+              resource: `ReferralPayout:${payoutId}`,
+              ...(ipAddress ? { ipAddress } : {}),
+              details: JSON.stringify({
+                amount: existing.amount,
+                currency: existing.currency,
+                reason,
+                ledgerEntryId: createdLedger.id,
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog, adminUserId);
 
           return [updatedRecord, createdLedger];
         });
@@ -1731,8 +1874,9 @@ class ReferralDatabaseStore {
           updatedAt: updatedPayout.updatedAt.toISOString(),
         };
       } catch (e: any) {
+        if (e instanceof ApiError) throw e;
         console.error(`[PROD-DATABASE-ERROR][CORRELATION: ${correlationId}] Database error rejecting payout ${payoutId}:`, e);
-        throw new Error(`[${correlationId}] Database error: failed to reject payout request: ${e?.message}`);
+        throw new Error(`[${correlationId}] Database error: failed to reject payout request.`);
       }
     }
 
@@ -1741,6 +1885,9 @@ class ReferralDatabaseStore {
     if (!payout) return null;
     if (payout.status !== "PENDING_ADMIN_APPROVAL" && payout.status !== "APPROVED") {
       throw new Error(`Payout ${payoutId} is not awaiting approval or already settled.`);
+    }
+    if (expectedUpdatedAt && new Date(payout.updatedAt).toISOString() !== expectedUpdatedAt) {
+      throw new Error(`Payout ${payoutId} changed; refresh before rejecting.`);
     }
 
     payout.status = "REJECTED";
@@ -1755,6 +1902,16 @@ class ReferralDatabaseStore {
       }
     }
 
+    const availableAfterRejection = Array.from(this.rewards.values())
+      .filter(
+        (reward) =>
+          reward.referrerId === payout.referrerId &&
+          reward.status === ReferralStatus.ELIGIBLE &&
+          !reward.payoutId &&
+          reward.currency === payout.currency,
+      )
+      .reduce((sum, reward) => sum + reward.rewardAmount, 0);
+
     const ledgerEntryId = `led-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const ledgerEntry: ReferralLedgerEntry = {
       id: ledgerEntryId,
@@ -1762,7 +1919,7 @@ class ReferralDatabaseStore {
       payoutId: payout.id,
       entryType: ReferralLedgerEntryType.PAYOUT_REFUNDED,
       amount: payout.amount,
-      balanceAfter: payout.amount,
+      balanceAfter: availableAfterRejection,
       currency: payout.currency,
       correlationId,
       metadata: { reason },
@@ -1872,7 +2029,103 @@ class ReferralDatabaseStore {
   // Transitions: NORMAL -> FLAGGED -> FRAUD_HOLD -> ADMIN_REVIEW
   // ================================================================
 
+  private fraudFactors(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  private mapFraudProfile(row: {
+    userId: string;
+    status: DbReferralFraudStatus;
+    riskScore: number;
+    riskFactors: unknown;
+    lastEvaluatedAt: Date;
+    updatedAt: Date;
+    history?: Array<{
+      id: string;
+      userId: string;
+      previousStatus: DbReferralFraudStatus;
+      newStatus: DbReferralFraudStatus;
+      reason: string;
+      actorId: string;
+      riskScore: number;
+      riskFactors: unknown;
+      createdAt: Date;
+    }>;
+  }): UserFraudProfile {
+    return {
+      userId: row.userId,
+      status: row.status as FraudStatus,
+      riskScore: row.riskScore,
+      riskFactors: this.fraudFactors(row.riskFactors),
+      lastEvaluatedAt: row.lastEvaluatedAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      history: (row.history || []).map((audit) => ({
+        id: audit.id,
+        userId: audit.userId,
+        previousStatus: audit.previousStatus as FraudStatus,
+        newStatus: audit.newStatus as FraudStatus,
+        reason: audit.reason,
+        actorId: audit.actorId,
+        riskScore: audit.riskScore,
+        riskFactors: this.fraudFactors(audit.riskFactors),
+        createdAt: audit.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  private validFraudTransitions(): Record<FraudStatus, FraudStatus[]> {
+    return {
+      [FraudStatus.NORMAL]: [
+        FraudStatus.FLAGGED,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.NORMAL,
+      ],
+      [FraudStatus.FLAGGED]: [
+        FraudStatus.NORMAL,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.FLAGGED,
+      ],
+      [FraudStatus.FRAUD_HOLD]: [
+        FraudStatus.ADMIN_REVIEW,
+        FraudStatus.NORMAL,
+        FraudStatus.FLAGGED,
+        FraudStatus.FRAUD_HOLD,
+      ],
+      [FraudStatus.ADMIN_REVIEW]: [
+        FraudStatus.NORMAL,
+        FraudStatus.FRAUD_HOLD,
+        FraudStatus.FLAGGED,
+        FraudStatus.ADMIN_REVIEW,
+      ],
+    };
+  }
+
   public async getUserFraudProfile(userId: string): Promise<UserFraudProfile> {
+    if (process.env.NODE_ENV === "production") {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) throw new ApiError("Referral fraud profile user does not exist.", 404);
+      const row = await prisma.referralFraudProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          status: DbReferralFraudStatus.NORMAL,
+          riskScore: 0,
+          riskFactors: [],
+        },
+        update: {},
+        include: {
+          history: {
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 100,
+          },
+        },
+      });
+      return this.mapFraudProfile(row);
+    }
+
     if (!this.fraudProfiles.has(userId)) {
       this.fraudProfiles.set(userId, {
         userId,
@@ -1880,6 +2133,7 @@ class ReferralDatabaseStore {
         riskScore: 0,
         riskFactors: [],
         lastEvaluatedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         history: [],
       });
     }
@@ -1891,22 +2145,116 @@ class ReferralDatabaseStore {
     newStatus: FraudStatus;
     reason: string;
     actorId?: string;
+    ipAddress?: string;
+    expectedUpdatedAt?: string;
     riskScore?: number;
     riskFactors?: string[];
   }): Promise<UserFraudProfile> {
+    const actorId = params.actorId || "SYSTEM";
+    const validTransitions = this.validFraudTransitions();
+
+    if (process.env.NODE_ENV === "production") {
+      return prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({ where: { id: params.userId }, select: { id: true } });
+        if (!user) throw new ApiError("Referral fraud profile user does not exist.", 404);
+        await tx.referralFraudProfile.upsert({
+          where: { userId: params.userId },
+          create: {
+            userId: params.userId,
+            status: DbReferralFraudStatus.NORMAL,
+            riskScore: 0,
+            riskFactors: [],
+          },
+          update: {},
+        });
+        await tx.$queryRaw`SELECT "userId" FROM "ReferralFraudProfile" WHERE "userId" = ${params.userId} FOR UPDATE`;
+
+        const current = await tx.referralFraudProfile.findUniqueOrThrow({
+          where: { userId: params.userId },
+        });
+        if (
+          params.expectedUpdatedAt &&
+          current.updatedAt.toISOString() !== params.expectedUpdatedAt
+        ) {
+          throw new ApiError("Referral fraud profile changed; reload before saving.", 409);
+        }
+        const previousStatus = current.status as FraudStatus;
+        if (!validTransitions[previousStatus].includes(params.newStatus)) {
+          throw new ApiError(
+            `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
+            409,
+          );
+        }
+
+        const nextRiskScore = params.riskScore ?? current.riskScore;
+        const nextRiskFactors = params.riskFactors ?? this.fraudFactors(current.riskFactors);
+        const now = new Date();
+
+        await tx.referralFraudProfile.update({
+          where: { userId: params.userId },
+          data: {
+            status: params.newStatus as DbReferralFraudStatus,
+            riskScore: nextRiskScore,
+            riskFactors: nextRiskFactors,
+            lastEvaluatedAt: now,
+          },
+        });
+
+        const fraudAudit = await tx.referralFraudAudit.create({
+          data: {
+            userId: params.userId,
+            previousStatus: current.status,
+            newStatus: params.newStatus as DbReferralFraudStatus,
+            reason: params.reason,
+            actorId,
+            riskScore: nextRiskScore,
+            riskFactors: nextRiskFactors,
+          },
+        });
+
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: actorId,
+            action: "REFERRAL_FRAUD_STATUS_UPDATED",
+            resource: `ReferralFraudProfile:${params.userId}`,
+            ...(params.ipAddress ? { ipAddress: params.ipAddress } : {}),
+            details: JSON.stringify({
+              previousStatus,
+              newStatus: params.newStatus,
+              reason: params.reason,
+              riskScore: nextRiskScore,
+              fraudAuditId: fraudAudit.id,
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, actorId);
+
+        const row = await tx.referralFraudProfile.findUniqueOrThrow({
+          where: { userId: params.userId },
+          include: {
+            history: {
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 100,
+            },
+          },
+        });
+        return this.mapFraudProfile(row);
+      });
+    }
+
     const currentProfile = await this.getUserFraudProfile(params.userId);
     const previousStatus = currentProfile.status;
-
-    // Validate state machine transitions
-    const validTransitions: Record<FraudStatus, FraudStatus[]> = {
-      [FraudStatus.NORMAL]: [FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW, FraudStatus.NORMAL],
-      [FraudStatus.FLAGGED]: [FraudStatus.NORMAL, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW, FraudStatus.FLAGGED],
-      [FraudStatus.FRAUD_HOLD]: [FraudStatus.ADMIN_REVIEW, FraudStatus.NORMAL, FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD],
-      [FraudStatus.ADMIN_REVIEW]: [FraudStatus.NORMAL, FraudStatus.FRAUD_HOLD, FraudStatus.FLAGGED, FraudStatus.ADMIN_REVIEW],
-    };
-
+    if (
+      params.expectedUpdatedAt &&
+      currentProfile.updatedAt &&
+      new Date(currentProfile.updatedAt).toISOString() !== params.expectedUpdatedAt
+    ) {
+      throw new Error("Referral fraud profile changed; refresh before reviewing.");
+    }
     if (!validTransitions[previousStatus].includes(params.newStatus)) {
-      throw new Error(`Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`);
+      throw new Error(
+        `Invalid fraud status transition from ${previousStatus} to ${params.newStatus}.`,
+      );
     }
 
     const auditRecord: FraudAuditRecord = {
@@ -1915,7 +2263,7 @@ class ReferralDatabaseStore {
       previousStatus,
       newStatus: params.newStatus,
       reason: params.reason,
-      actorId: params.actorId || "SYSTEM",
+      actorId,
       riskScore: params.riskScore !== undefined ? params.riskScore : currentProfile.riskScore,
       riskFactors: params.riskFactors || currentProfile.riskFactors,
       createdAt: new Date().toISOString(),
@@ -1924,9 +2272,10 @@ class ReferralDatabaseStore {
     currentProfile.status = params.newStatus;
     if (params.riskScore !== undefined) currentProfile.riskScore = params.riskScore;
     if (params.riskFactors) currentProfile.riskFactors = params.riskFactors;
-    currentProfile.lastEvaluatedAt = new Date().toISOString();
+    const reviewedAt = new Date().toISOString();
+    currentProfile.lastEvaluatedAt = reviewedAt;
+    currentProfile.updatedAt = reviewedAt;
     currentProfile.history.push(auditRecord);
-
     this.fraudProfiles.set(params.userId, currentProfile);
     return currentProfile;
   }
@@ -1946,13 +2295,13 @@ class ReferralDatabaseStore {
     const factors = new Set(profile.riskFactors);
 
     if (context?.triggers) {
-      for (const t of context.triggers) {
-        factors.add(t);
-        if (t === "SELF_REFERRAL_ATTEMPT") riskScore = Math.max(riskScore, 45);
-        if (t === "NORMALIZED_IDENTITY_COLLISION") riskScore = Math.max(riskScore, 65);
-        if (t === "ABNORMAL_VELOCITY") riskScore = Math.max(riskScore, 50);
-        if (t === "PAYOUT_IP_MISMATCH") riskScore = Math.max(riskScore, 35);
-        if (t === "CRITICAL_SUSPICIOUS_PATTERN") riskScore = Math.max(riskScore, 85);
+      for (const trigger of context.triggers) {
+        factors.add(trigger);
+        if (trigger === "SELF_REFERRAL_ATTEMPT") riskScore = Math.max(riskScore, 45);
+        if (trigger === "NORMALIZED_IDENTITY_COLLISION") riskScore = Math.max(riskScore, 65);
+        if (trigger === "ABNORMAL_VELOCITY") riskScore = Math.max(riskScore, 50);
+        if (trigger === "PAYOUT_IP_MISMATCH") riskScore = Math.max(riskScore, 35);
+        if (trigger === "CRITICAL_SUSPICIOUS_PATTERN") riskScore = Math.max(riskScore, 85);
       }
     }
 
@@ -1963,26 +2312,80 @@ class ReferralDatabaseStore {
       targetStatus = FraudStatus.FLAGGED;
     }
 
-    if (targetStatus !== profile.status) {
+    const riskFactors = Array.from(factors).sort();
+    const existingFactors = [...profile.riskFactors].sort();
+    const evidenceChanged =
+      riskScore !== profile.riskScore ||
+      riskFactors.length !== existingFactors.length ||
+      riskFactors.some((factor, index) => factor !== existingFactors[index]);
+
+    if (targetStatus !== profile.status || evidenceChanged) {
       return this.updateFraudStatus({
         userId,
         newStatus: targetStatus,
         reason: `Automated Risk Engine Evaluation (Risk Score: ${riskScore})`,
         actorId: context?.actorId || "FRAUD_ENGINE",
+        ipAddress: context?.ip,
+        expectedUpdatedAt: profile.updatedAt,
         riskScore,
-        riskFactors: Array.from(factors),
+        riskFactors,
       });
     }
 
-    profile.riskScore = riskScore;
-    profile.riskFactors = Array.from(factors);
-    profile.lastEvaluatedAt = new Date().toISOString();
-    this.fraudProfiles.set(userId, profile);
     return profile;
   }
 
+  public async getAdminFraudQueuePage(options?: {
+    page?: number;
+    limit?: number;
+    status?: FraudStatus;
+  }): Promise<{ queue: UserFraudProfile[]; total: number }> {
+    const page = Math.max(1, options?.page ?? 1);
+    const limit = Math.min(Math.max(options?.limit ?? 25, 1), 100);
+    const status = options?.status;
+
+    if (process.env.NODE_ENV === "production") {
+      const statuses = status
+        ? [status as unknown as DbReferralFraudStatus]
+        : [
+            DbReferralFraudStatus.FLAGGED,
+            DbReferralFraudStatus.FRAUD_HOLD,
+            DbReferralFraudStatus.ADMIN_REVIEW,
+          ];
+      const where = { status: { in: statuses } };
+      const [total, rows] = await prisma.$transaction([
+        prisma.referralFraudProfile.count({ where }),
+        prisma.referralFraudProfile.findMany({
+          where,
+          orderBy: [{ riskScore: "desc" }, { updatedAt: "desc" }, { userId: "asc" }],
+          skip: (page - 1) * limit,
+          take: limit,
+          include: {
+            history: {
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 20,
+            },
+          },
+        }),
+      ]);
+      return { total, queue: rows.map((row) => this.mapFraudProfile(row)) };
+    }
+
+    const rows = Array.from(this.fraudProfiles.values())
+      .filter((profile) =>
+        status
+          ? profile.status === status
+          : [FraudStatus.FLAGGED, FraudStatus.FRAUD_HOLD, FraudStatus.ADMIN_REVIEW].includes(profile.status)
+      )
+      .sort((a, b) => b.riskScore - a.riskScore || a.userId.localeCompare(b.userId));
+    return {
+      total: rows.length,
+      queue: rows.slice((page - 1) * limit, page * limit),
+    };
+  }
+
   public async getAdminFraudQueue(): Promise<UserFraudProfile[]> {
-    return Array.from(this.fraudProfiles.values());
+    return (await this.getAdminFraudQueuePage({ page: 1, limit: 100 })).queue;
   }
 }
 

@@ -62,9 +62,9 @@ type ModelStat = {
 
 type Telemetry = {
   totalRequests: number;
-  totalTokens: number;
-  totalCostUsd: number;
-  avgLatencyMs: number;
+  totalTokens: number | null;
+  totalCostUsd: number | null;
+  avgLatencyMs: number | null;
   providerCounts: Record<string, number>;
   modelStats: ModelStat[];
 };
@@ -294,7 +294,7 @@ export default function AdminModelRegistryPage() {
                           </span>
                         </div>
                         <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
-                          {configured ? "Server credential is present." : status?.reason || "Provider configuration unavailable."}
+                          {configured ? "Required server-side credential/endpoint is present." : status?.reason || "Provider configuration unavailable."}
                         </p>
                       </article>
                     );
@@ -309,15 +309,15 @@ export default function AdminModelRegistryPage() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed tokens</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.totalTokens ?? 0}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.totalTokens === null || telemetry?.totalTokens === undefined ? "Not fully measured" : telemetry.totalTokens.toLocaleString()}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Observed spend</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{money(telemetry?.totalCostUsd ?? 0)}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{money(telemetry?.totalCostUsd ?? null)}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#121215] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Average latency</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{telemetry ? `${telemetry.avgLatencyMs} ms` : "—"}</p>
+                  <p className="mt-2 text-2xl font-bold text-white">{telemetry?.avgLatencyMs === null || telemetry?.avgLatencyMs === undefined ? "No data" : `${telemetry.avgLatencyMs} ms`}</p>
                 </div>
               </section>
 
@@ -550,11 +550,11 @@ export default function AdminModelRegistryPage() {
                   <p className="mt-1 text-xs text-text-muted">Changes are audited. They affect future AI requests only and never alter deterministic auth, payments, MCQ scoring or application authorization.</p>
                 </div>
                 <label className="block text-xs text-text-muted">
-                  Change reason (optional)
-                  <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" placeholder="Why are you changing this routing policy?" />
+                  Change reason (required)
+                  <input required minLength={3} value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" placeholder="Why are you changing this routing policy?" />
                 </label>
                 <div className="flex flex-wrap gap-3">
-                  <button type="button" disabled={saving} onClick={() => void save()} className="rounded-xl bg-white px-5 py-2.5 text-xs font-extrabold text-black disabled:opacity-50">
+                  <button type="button" disabled={saving || reason.trim().length < 3} onClick={() => void save()} className="rounded-xl bg-white px-5 py-2.5 text-xs font-extrabold text-black disabled:opacity-50">
                     {saving ? "Saving…" : "Save & activate"}
                   </button>
                   <button type="button" disabled={saving} onClick={() => void load()} className="rounded-xl border border-white/15 px-5 py-2.5 text-xs font-bold text-white disabled:opacity-50">

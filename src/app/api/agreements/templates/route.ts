@@ -3,7 +3,7 @@ import { agreementsDb } from "@/lib/agreements-db";
 import { requireAdminSession, requireEmployerOrAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { createAdminAgreementTemplate } from "@/lib/adminAgreementTemplateMutations";
-import { agreementTemplateMutationSchema } from "@/lib/agreementTemplateContracts";
+import { agreementTemplateCreateSchema } from "@/lib/agreementTemplateContracts";
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,11 +22,13 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAdminSession(req);
     await enforceRateLimit(req, `agreement_templates_create:${session.id}`, 20, 60_000);
-    const body = await readValidatedJson(req, agreementTemplateMutationSchema, 128 * 1024);
+    const body = await readValidatedJson(req, agreementTemplateCreateSchema, 128 * 1024);
+    const { reason, ...templateInput } = body;
 
-    const template = await createAdminAgreementTemplate(body, {
+    const template = await createAdminAgreementTemplate(templateInput, {
       actorId: session.id,
       ipAddress: getClientIp(req),
+      reason,
     });
 
     return NextResponse.json({

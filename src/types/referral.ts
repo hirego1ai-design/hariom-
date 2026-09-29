@@ -41,7 +41,7 @@ export enum PayoutMethod {
 
 export enum PayoutStatus {
   PENDING_ADMIN_APPROVAL = "PENDING_ADMIN_APPROVAL",
-  PROCESSING = "PROCESSING",
+  APPROVED = "APPROVED",
   PAID = "PAID",
   REJECTED = "REJECTED",
 }
@@ -81,6 +81,7 @@ export interface UserFraudProfile {
   riskScore: number;
   riskFactors: string[];
   lastEvaluatedAt: string;
+  updatedAt?: string;
   history: FraudAuditRecord[];
 }
 
@@ -265,7 +266,8 @@ export interface PayoutResponseDTO {
 
 export interface AdminPayoutActionRequest {
   payoutId: string;
-  action: "APPROVE" | "REJECT" | "PROCESS";
+  action: "APPROVE" | "REJECT" | "MARK_PAID";
+  expectedUpdatedAt: string;
   transactionRef?: string;
   adminNotes?: string;
   rejectionReason?: string;

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readRecoveryWorkerLiveness } from "../app/api/admin/system/queues/route";
 import { RecoveryWorkerState } from "../lib/workflows/RecoveryWorkerState";
 
-test("admin worker liveness reports a fresh completed heartbeat as healthy", async (t) => {
+test("admin worker liveness reports a fresh completed run as recent heartbeat evidence", async (t) => {
   t.mock.method(RecoveryWorkerState, "read", async () => ({
     stale: false,
     heartbeat: {
@@ -14,7 +14,7 @@ test("admin worker liveness reports a fresh completed heartbeat as healthy", asy
     },
   }));
   assert.deepEqual(await readRecoveryWorkerLiveness(), {
-    status: "HEALTHY",
+    status: "RECENT_HEARTBEAT",
     stale: false,
     state: "completed",
     startedAt: "2026-09-18T00:00:00.000Z",

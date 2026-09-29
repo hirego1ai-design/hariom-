@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { AgreementTemplateRecord, HiringRequirementRecord } from "@/types";
 
 export default function SalesAgreementBuilderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRequirementId = searchParams.get("reqId") || "";
   const [requirements, setRequirements] = useState<HiringRequirementRecord[]>([]);
   const [templates, setTemplates] = useState<AgreementTemplateRecord[]>([]);
   const [selectedReqId, setSelectedReqId] = useState("");
@@ -25,6 +27,7 @@ export default function SalesAgreementBuilderPage() {
   const [invoiceRule, setInvoiceRule] = useState("");
   const [creditDays, setCreditDays] = useState("");
   const [notes, setNotes] = useState("");
+  const [draftReason, setDraftReason] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -40,8 +43,28 @@ export default function SalesAgreementBuilderPage() {
       }),
     ])
       .then(([reqData, tplData]) => {
-        setRequirements(reqData.requirements || []);
-        setTemplates(tplData.templates || []);
+        const loadedRequirements = Array.isArray(reqData.requirements) ? reqData.requirements : [];
+        const loadedTemplates = Array.isArray(tplData.templates) ? tplData.templates : [];
+        setRequirements(loadedRequirements);
+        setTemplates(loadedTemplates);
+
+        if (requestedRequirementId) {
+          const requested = loadedRequirements.find(
+            (record: HiringRequirementRecord) => record.id === requestedRequirementId,
+          );
+          if (requested) {
+            setSelectedReqId(requested.id);
+            setCompanyName(requested.companyName);
+            setClientLegalName("");
+            setContactPerson(requested.contactPerson);
+            setEmail(requested.email);
+          } else {
+            setActionMessage({
+              type: "error",
+              text: "The requested hiring requirement is unavailable or no longer accessible.",
+            });
+          }
+        }
       })
       .catch((error) => {
         setActionMessage({
@@ -49,7 +72,7 @@ export default function SalesAgreementBuilderPage() {
           text: error instanceof Error ? error.message : "Unable to load authoritative agreement data.",
         });
       });
-  }, []);
+  }, [requestedRequirementId]);
 
   const handleSelectRequirement = (reqId: string) => {
     setSelectedReqId(reqId);
@@ -103,6 +126,14 @@ export default function SalesAgreementBuilderPage() {
       setActionMessage({ type: "error", text: "Select a current agreement template before generating a contract." });
       return;
     }
+    if (!template.updatedAt || !requirement.updatedAt) {
+      setActionMessage({ type: "error", text: "Requirement or template version evidence is missing. Reload before drafting the agreement." });
+      return;
+    }
+    if (draftReason.trim().length < 3) {
+      setActionMessage({ type: "error", text: "Enter a specific reason for drafting this commercial agreement." });
+      return;
+    }
     if (!clientLegalName.trim() || !contactPerson.trim() || !email.trim()) {
       setActionMessage({ type: "error", text: "Client legal name, contact person, and email are required." });
       return;
@@ -148,6 +179,9 @@ export default function SalesAgreementBuilderPage() {
         companyId: requirement.companyId,
         requirementId: requirement.id,
         templateId: template.id,
+        expectedTemplateUpdatedAt: new Date(template.updatedAt).toISOString(),
+        expectedRequirementUpdatedAt: new Date(requirement.updatedAt).toISOString(),
+        reason: draftReason.trim(),
         clientLegalName: clientLegalName.trim(),
         contactPerson: contactPerson.trim(),
         clientEmail: email.trim(),
@@ -167,6 +201,7 @@ export default function SalesAgreementBuilderPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
+        setDraftReason("");
         router.push("/admin/managed-hiring/pipeline");
       } else {
         setActionMessage({ type: "error", text: data.error || "Agreement generation failed." });
@@ -182,9 +217,9 @@ export default function SalesAgreementBuilderPage() {
   return (
     <div className="bg-[#0A0A0C] text-white min-h-screen relative">
       <AdminSidebar />
-      <AdminHeader />
+      <AdminHeader title="Commercial Agreement Builder" subtitle="Draft from a versioned requirement and approved template" />
 
-      <main className="md:ml-[116px] p-6 lg:p-8 pt-24 space-y-6 max-w-5xl mx-auto">
+      <main className="mx-auto max-w-5xl space-y-6 p-4 pt-24 sm:p-6 sm:pt-24 md:ml-[116px] lg:p-8 lg:pt-24">
         {actionMessage && <div role={actionMessage.type === "error" ? "alert" : "status"} aria-live={actionMessage.type === "error" ? "assertive" : "polite"} className={`rounded-xl border px-4 py-3 text-sm ${actionMessage.type === "error" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{actionMessage.text}</div>}
         <div className="border-b border-white/10 pb-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold bg-[#29B6F6]/10 text-[#29B6F6] border border-[#29B6F6]/20 mb-1">
@@ -221,7 +256,7 @@ export default function SalesAgreementBuilderPage() {
               <option value="">-- Select an agreement template --</option>
               {templates.map((templateRecord) => (
                 <option key={templateRecord.id} value={templateRecord.id}>
-                  {templateRecord.name} ({templateRecord.feeType === "PERCENTAGE" ? `${templateRecord.feeValue}%` : `₹${templateRecord.feeValue}`}, {templateRecord.replacementDays}d warranty)
+                  {templateRecord.name} ({templateRecord.feeType === "PERCENTAGE" ? `${templateRecord.feeValue}%` : `${requirements.find((record) => record.id === selectedReqId)?.currency || "currency"} ${templateRecord.feeValue}`}, {templateRecord.replacementDays}d warranty)
                 </option>
               ))}
             </select>
@@ -252,11 +287,11 @@ export default function SalesAgreementBuilderPage() {
                 <select value={feeType} onChange={(e) => setFeeType(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white">
                   <option value="">Select fee type</option>
                   <option value="PERCENTAGE">Percentage of CTC (%)</option>
-                  <option value="FIXED">Fixed Amount per Hire (INR)</option>
+                  <option value="FIXED">Fixed Amount per Hire</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Fee Value ({feeType === "PERCENTAGE" ? "%" : "₹"})</label>
+                <label className="text-xs text-slate-400 mb-1 block">Fee Value ({feeType === "PERCENTAGE" ? "%" : (requirements.find((record) => record.id === selectedReqId)?.currency || "currency")})</label>
                 <input type="number" min="0" value={feeValue} onChange={(e) => setFeeValue(e.target.value)} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
               <div>
@@ -275,12 +310,23 @@ export default function SalesAgreementBuilderPage() {
                 <label className="text-xs text-slate-400 mb-1 block">Commercial Notes</label>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white" />
               </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-400 mb-1 block">Draft reason</label>
+                <textarea
+                  value={draftReason}
+                  onChange={(e) => setDraftReason(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                  placeholder="Why is this agreement being drafted from the reviewed requirement and template?"
+                  className="w-full bg-[#16161B] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white"
+                />
+              </div>
             </div>
           </div>
 
           <div className="pt-4 border-t border-white/10 flex justify-end">
             <button
-              disabled={loading}
+              disabled={loading || draftReason.trim().length < 3}
               onClick={handleGenerateAgreement}
               className="px-8 py-3 rounded-xl bg-[#26A69A] text-white text-xs font-bold hover:bg-[#26A69A]/90 shadow-xl disabled:opacity-50"
             >

@@ -355,13 +355,120 @@ export async function markAiExecutionValidationFailure(logId: string): Promise<v
 }
 
 export async function getAiUsageStats() {
-  let logs: AiExecutionLog[] = [];
   try {
-    const dbLogs = await prisma.aiExecutionLog.findMany({
-      orderBy: { timestamp: "desc" },
-      take: 5_000,
+    const operationalWhere = { task: { not: "admin-synthetic-benchmark" } } as const;
+    const [overall, providerRows, modelRows, recentRows] = await Promise.all([
+      prisma.aiExecutionLog.aggregate({
+        where: operationalWhere,
+        _count: {
+          _all: true,
+          costEstUsd: true,
+          totalTokens: true,
+        },
+        _sum: {
+          totalTokens: true,
+          costEstUsd: true,
+        },
+        _avg: {
+          latencyMs: true,
+        },
+      }),
+      prisma.aiExecutionLog.groupBy({
+        by: ["provider"],
+        where: operationalWhere,
+        _count: { _all: true },
+      }),
+      prisma.aiExecutionLog.groupBy({
+        by: ["provider", "model", "status"],
+        where: operationalWhere,
+        _count: {
+          _all: true,
+          costEstUsd: true,
+        },
+        _sum: {
+          latencyMs: true,
+          costEstUsd: true,
+        },
+      }),
+      prisma.aiExecutionLog.findMany({
+        where: operationalWhere,
+        orderBy: [{ timestamp: "desc" }, { id: "desc" }],
+        take: 50,
+      }),
+    ]);
+
+    const totalRequests = overall._count._all;
+    const pricedRequestCount = overall._count.costEstUsd;
+    const tokenMeasuredRequestCount = overall._count.totalTokens;
+    const knownCostUsd = Number((overall._sum.costEstUsd ?? 0).toFixed(6));
+    const knownTokens = overall._sum.totalTokens ?? 0;
+    const costCoverageRate = totalRequests ? pricedRequestCount / totalRequests : null;
+    const tokenCoverageRate = totalRequests ? tokenMeasuredRequestCount / totalRequests : null;
+
+    const providerCounts = Object.fromEntries(
+      providerRows.map((row) => [row.provider, row._count._all]),
+    ) as Record<string, number>;
+
+    const perModel = new Map<string, {
+      provider: string;
+      model: string;
+      requests: number;
+      successes: number;
+      fallbacks: number;
+      failures: number;
+      latencyTotal: number;
+      knownCostUsd: number;
+      costSamples: number;
+    }>();
+
+    for (const row of modelRows) {
+      const key = `${row.provider}:${row.model}`;
+      const stat = perModel.get(key) ?? {
+        provider: row.provider,
+        model: row.model,
+        requests: 0,
+        successes: 0,
+        fallbacks: 0,
+        failures: 0,
+        latencyTotal: 0,
+        knownCostUsd: 0,
+        costSamples: 0,
+      };
+      const count = row._count._all;
+      stat.requests += count;
+      if (row.status === "SUCCESS" || row.status === "FALLBACK") stat.successes += count;
+      if (row.status === "FALLBACK") stat.fallbacks += count;
+      if (row.status === "FAILED") stat.failures += count;
+      stat.latencyTotal += row._sum.latencyMs ?? 0;
+      stat.knownCostUsd += row._sum.costEstUsd ?? 0;
+      stat.costSamples += row._count.costEstUsd;
+      perModel.set(key, stat);
+    }
+
+    const modelStats = Array.from(perModel.values()).map((stat) => {
+      const successRate = stat.requests ? stat.successes / stat.requests : null;
+      const fullCostCoverage = stat.requests > 0 && stat.costSamples === stat.requests;
+      return {
+        provider: stat.provider,
+        model: stat.model,
+        requests: stat.requests,
+        successRate,
+        fallbackRate: stat.requests ? stat.fallbacks / stat.requests : null,
+        failureRate: stat.requests ? stat.failures / stat.requests : null,
+        avgLatencyMs: stat.requests ? Math.round(stat.latencyTotal / stat.requests) : null,
+        avgCostUsd: stat.costSamples
+          ? Number((stat.knownCostUsd / stat.costSamples).toFixed(6))
+          : null,
+        costPerSuccessfulTaskUsd:
+          stat.successes && fullCostCoverage
+            ? Number((stat.knownCostUsd / stat.successes).toFixed(6))
+            : null,
+        knownCostUsd: Number(stat.knownCostUsd.toFixed(6)),
+        costCoverageRate: stat.requests ? stat.costSamples / stat.requests : null,
+      };
     });
-    logs = dbLogs.map((log) => ({
+
+    const logs: AiExecutionLog[] = recentRows.map((log) => ({
       id: log.id,
       task: log.task,
       provider: log.provider as LlmProvider,
@@ -375,91 +482,78 @@ export async function getAiUsageStats() {
       status: log.status as AiExecutionLog["status"],
       timestamp: log.timestamp.toISOString(),
     }));
-  } catch {
+
+    return {
+      totalRequests,
+      totalTokens:
+        totalRequests === 0
+          ? null
+          : tokenMeasuredRequestCount === totalRequests
+            ? knownTokens
+            : null,
+      knownTokens,
+      tokenCoverageRate,
+      totalCostUsd:
+        totalRequests === 0
+          ? null
+          : pricedRequestCount === totalRequests
+            ? knownCostUsd
+            : null,
+      knownCostUsd,
+      costCoverageRate,
+      avgLatencyMs:
+        totalRequests > 0 && overall._avg.latencyMs !== null
+          ? Math.round(overall._avg.latencyMs)
+          : null,
+      providerCounts: {
+        openai: providerCounts.openai || 0,
+        gemini: providerCounts.gemini || 0,
+        deepseek: providerCounts.deepseek || 0,
+        kimi: providerCounts.kimi || 0,
+        qwen: providerCounts.qwen || 0,
+        self_hosted: providerCounts.self_hosted || 0,
+      },
+      modelStats,
+      logs,
+    };
+  } catch (error) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("Authoritative AI usage telemetry is unavailable.");
     }
-    logs = executionLogsStore;
-  }
 
-  const totalRequests = logs.length;
-  const totalTokens = logs.reduce((acc, log) => acc + (log.totalTokens ?? 0), 0);
-  const totalCost = logs.reduce((acc, log) => acc + (log.costEstUsd ?? 0), 0);
-  const avgLatency = totalRequests > 0
-    ? Math.round(logs.reduce((acc, log) => acc + log.latencyMs, 0) / totalRequests)
-    : 0;
+    const operationalLogs = executionLogsStore.filter((log) => log.task !== "admin-synthetic-benchmark");
+    const logs = operationalLogs.slice(0, 50);
+    const totalRequests = operationalLogs.length;
+    const measuredCost = operationalLogs.filter((log) => typeof log.costEstUsd === "number");
+    const measuredTokens = operationalLogs.filter((log) => typeof log.totalTokens === "number");
+    const knownCostUsd = measuredCost.reduce((sum, log) => sum + (log.costEstUsd ?? 0), 0);
+    const knownTokens = measuredTokens.reduce((sum, log) => sum + (log.totalTokens ?? 0), 0);
 
-  const providerCounts = logs.reduce((acc, log) => {
-    acc[log.provider] = (acc[log.provider] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const modelStats = new Map<string, {
-    provider: string;
-    model: string;
-    requests: number;
-    successes: number;
-    fallbacks: number;
-    failures: number;
-    latencyTotal: number;
-    costTotal: number;
-    costSamples: number;
-  }>();
-
-  for (const log of logs) {
-    if (log.model === "cache-hit") continue;
-    const key = `${log.provider}:${log.model}`;
-    const stat = modelStats.get(key) ?? {
-      provider: log.provider,
-      model: log.model,
-      requests: 0,
-      successes: 0,
-      fallbacks: 0,
-      failures: 0,
-      latencyTotal: 0,
-      costTotal: 0,
-      costSamples: 0,
+    return {
+      totalRequests,
+      totalTokens: totalRequests > 0 && measuredTokens.length === totalRequests ? knownTokens : null,
+      knownTokens,
+      tokenCoverageRate: totalRequests ? measuredTokens.length / totalRequests : null,
+      totalCostUsd:
+        totalRequests > 0 && measuredCost.length === totalRequests
+          ? Number(knownCostUsd.toFixed(6))
+          : null,
+      knownCostUsd: Number(knownCostUsd.toFixed(6)),
+      costCoverageRate: totalRequests ? measuredCost.length / totalRequests : null,
+      avgLatencyMs:
+        totalRequests
+          ? Math.round(operationalLogs.reduce((sum, log) => sum + log.latencyMs, 0) / totalRequests)
+          : null,
+      providerCounts: {
+        openai: operationalLogs.filter((log) => log.provider === "openai").length,
+        gemini: operationalLogs.filter((log) => log.provider === "gemini").length,
+        deepseek: operationalLogs.filter((log) => log.provider === "deepseek").length,
+        kimi: operationalLogs.filter((log) => log.provider === "kimi").length,
+        qwen: operationalLogs.filter((log) => log.provider === "qwen").length,
+        self_hosted: operationalLogs.filter((log) => log.provider === "self_hosted").length,
+      },
+      modelStats: [],
+      logs,
     };
-    stat.requests += 1;
-    if (log.status === "SUCCESS" || log.status === "FALLBACK") stat.successes += 1;
-    if (log.status === "FALLBACK") stat.fallbacks += 1;
-    if (log.status === "FAILED") stat.failures += 1;
-    stat.latencyTotal += log.latencyMs;
-    if (typeof log.costEstUsd === "number") {
-      stat.costTotal += log.costEstUsd;
-      stat.costSamples += 1;
-    }
-    modelStats.set(key, stat);
   }
-
-  return {
-    totalRequests,
-    totalTokens,
-    totalCostUsd: Number(totalCost.toFixed(6)),
-    avgLatencyMs: avgLatency,
-    providerCounts: {
-      openai: providerCounts.openai || 0,
-      gemini: providerCounts.gemini || 0,
-      deepseek: providerCounts.deepseek || 0,
-      kimi: providerCounts.kimi || 0,
-      qwen: providerCounts.qwen || 0,
-      self_hosted: providerCounts.self_hosted || 0,
-    },
-    modelStats: Array.from(modelStats.values()).map((stat) => {
-      const successRate = stat.requests > 0 ? stat.successes / stat.requests : 0;
-      const avgCost = stat.costSamples > 0 ? stat.costTotal / stat.costSamples : null;
-      return {
-        provider: stat.provider,
-        model: stat.model,
-        requests: stat.requests,
-        successRate,
-        fallbackRate: stat.requests > 0 ? stat.fallbacks / stat.requests : 0,
-        failureRate: stat.requests > 0 ? stat.failures / stat.requests : 0,
-        avgLatencyMs: stat.requests > 0 ? Math.round(stat.latencyTotal / stat.requests) : null,
-        avgCostUsd: avgCost,
-        costPerSuccessfulTaskUsd: avgCost === null || successRate <= 0 ? null : avgCost / successRate,
-      };
-    }),
-    logs: logs.slice(0, 50),
-  };
 }

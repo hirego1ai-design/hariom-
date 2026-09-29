@@ -13,6 +13,7 @@ type Agent = {
   taskType: string | null;
   status: "DETERMINISTIC_NO_LLM" | "PAUSED" | "UNCONFIGURED" | "BLOCKED_CONFIGURATION" | "READY";
   pausedReason: string | null;
+  controlUpdatedAt: string | null;
   routing: null | {
     mode: string;
     primary: null | {
@@ -44,7 +45,7 @@ type Agent = {
     fallbackRate: number | null;
     avgLatencyMs: number | null;
     totalTokens: number;
-    observedCostUsd: number;
+    observedCostUsd: number | null;
     costPerSuccessfulTaskUsd: number | null;
     lastSuccess: string | null;
     lastFailure: string | null;
@@ -85,6 +86,10 @@ export default function AdminCommandCentrePage() {
   const [routingConfigVersion, setRoutingConfigVersion] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [controlTarget, setControlTarget] = useState<{ agent: Agent; action: "PAUSE" | "RESUME" } | null>(null);
+  const [controlReason, setControlReason] = useState("");
+  const [controlSaving, setControlSaving] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -124,6 +129,36 @@ export default function AdminCommandCentrePage() {
     void load();
   }, []);
 
+  async function applyAgentControl() {
+    if (!controlTarget || controlSaving || controlReason.trim().length < 3) return;
+    setControlSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/admin/ai-agents/${encodeURIComponent(controlTarget.agent.agentId)}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: controlTarget.action,
+          reason: controlReason.trim(),
+          expectedUpdatedAt: controlTarget.agent.controlUpdatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to change AI agent control state.");
+      }
+      setNotice(`${controlTarget.agent.name} ${controlTarget.action === "PAUSE" ? "paused" : "resumed"}.`);
+      setControlTarget(null);
+      setControlReason("");
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to change AI agent control state.");
+    } finally {
+      setControlSaving(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <AdminSidebar />
@@ -154,8 +189,13 @@ export default function AdminCommandCentrePage() {
             </div>
           </header>
 
+          {notice && (
+            <div role="status" aria-live="polite" className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+              {notice}
+            </div>
+          )}
           {loading && (
-            <div className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">
+            <div role="status" aria-live="polite" className="rounded-2xl border border-white/10 bg-[#121215] p-8 text-sm text-text-muted">
               Loading authoritative agent and system state…
             </div>
           )}
@@ -189,9 +229,25 @@ export default function AdminCommandCentrePage() {
                             <h3 className="mt-1 text-lg font-bold text-white">{agent.name}</h3>
                             <p className="mt-2 text-xs leading-relaxed text-text-muted">{agent.description}</p>
                           </div>
-                          <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${statusClass(agent.status)}`}>
-                            {agent.status.replaceAll("_", " ")}
-                          </span>
+                          <div className="flex flex-col items-end gap-2">
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-bold ${statusClass(agent.status)}`}>
+                              {agent.status.replaceAll("_", " ")}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setControlReason("");
+                                setControlTarget({ agent, action: agent.status === "PAUSED" ? "RESUME" : "PAUSE" });
+                              }}
+                              className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${
+                                agent.status === "PAUSED"
+                                  ? "border-emerald-500/30 text-emerald-300"
+                                  : "border-red-500/30 text-red-300"
+                              }`}
+                            >
+                              {agent.status === "PAUSED" ? "Resume agent" : "Pause agent"}
+                            </button>
+                          </div>
                         </div>
 
                         {agent.pausedReason && (
@@ -270,6 +326,11 @@ export default function AdminCommandCentrePage() {
                     Overall status: {overallStatus || "UNKNOWN"}{timestamp ? ` · observed ${new Date(timestamp).toLocaleString()}` : ""}
                   </p>
                 </div>
+                {services.length === 0 ? (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-text-muted">
+                    No infrastructure health records were returned.
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {services.map((service) => (
                     <article key={`${service.type}-${service.name}`} className="rounded-2xl border border-white/10 bg-[#121215] p-5">
@@ -285,11 +346,59 @@ export default function AdminCommandCentrePage() {
                     </article>
                   ))}
                 </div>
+                )}
               </section>
             </>
           )}
         </main>
       </div>
+
+      {controlTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="agent-control-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#141418] p-6 shadow-2xl">
+            <h2 id="agent-control-title" className="text-lg font-bold text-white">
+              {controlTarget.action === "PAUSE" ? "Pause" : "Resume"} {controlTarget.agent.name}?
+            </h2>
+            <p className="mt-2 text-sm text-text-muted">
+              This changes the runtime agent kill-switch state. A reason is required and the action is written to the security audit trail.
+            </p>
+            <label className="mt-5 block text-xs text-text-secondary">
+              Reason
+              <textarea
+                value={controlReason}
+                onChange={(event) => setControlReason(event.target.value)}
+                maxLength={500}
+                rows={4}
+                placeholder={controlTarget.action === "PAUSE" ? "Why should this agent be paused?" : "Why is it safe to resume this agent?"}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white outline-none focus:border-primary/50"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setControlTarget(null);
+                  setControlReason("");
+                }}
+                disabled={controlSaving}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void applyAgentControl()}
+                disabled={controlSaving || controlReason.trim().length < 3}
+                className={`rounded-xl px-4 py-2 text-xs font-bold text-white disabled:opacity-40 ${
+                  controlTarget.action === "PAUSE" ? "bg-red-600" : "bg-emerald-600"
+                }`}
+              >
+                {controlSaving ? "Saving…" : controlTarget.action === "PAUSE" ? "Pause agent" : "Resume agent"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,7 +19,9 @@ export const copilotAdminPatchSchema = z.union([
     hardWarningPct: z.number().int().min(2).max(100).optional(),
     featuresAllowed: z.array(z.string().regex(/^[A-Z0-9_]+$/)).max(100).optional(),
     isArchived: z.boolean().optional(),
-  }).strict().refine((v) => Object.keys(v).length > 2, "No plan changes supplied.")
+    expectedUpdatedAt: z.string().datetime(),
+    reason: z.string().trim().min(3).max(500),
+  }).strict().refine((v) => Object.keys(v).some((key) => !["type", "planId", "expectedUpdatedAt", "reason"].includes(key)), "No plan changes supplied.")
     .refine((v) => v.softWarningPct === undefined || v.hardWarningPct === undefined || v.softWarningPct < v.hardWarningPct,
       "softWarningPct must be below hardWarningPct"),
   z.object({
@@ -27,12 +29,14 @@ export const copilotAdminPatchSchema = z.union([
     priceId: z.string().min(1).max(128),
     currency: z.string().regex(/^[A-Z]{3}$/).optional(),
     amountMinor: z.number().int().min(1).max(1_000_000_000).optional(),
-    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE", "MERCHANT_OF_RECORD"]).optional(),
+    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE"]).optional(),
     taxRateBps: z.number().int().min(0).max(10_000).optional(),
-    paymentRoute: z.enum(["PAYU", "STRIPE", "MERCHANT_OF_RECORD"]).optional(),
+    paymentRoute: z.enum(["PAYU", "STRIPE"]).optional(),
     countries: z.array(countryCodeSchema).max(250).optional(),
     isActive: z.boolean().optional(),
-  }).strict().refine((v) => Object.keys(v).length > 2, "No price changes supplied."),
+    expectedUpdatedAt: z.string().datetime(),
+    reason: z.string().trim().min(3).max(500),
+  }).strict().refine((v) => Object.keys(v).some((key) => !["type", "priceId", "expectedUpdatedAt", "reason"].includes(key)), "No price changes supplied."),
   z.object({
     type: z.literal("USAGE_RULE"),
     actionKey: z.string().regex(/^[A-Z0-9_]+$/),
@@ -41,7 +45,9 @@ export const copilotAdminPatchSchema = z.union([
     estimatedCostCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
     expensive: z.boolean().optional(),
     active: z.boolean().optional(),
-  }).strict().refine((v) => Object.keys(v).length > 2, "No usage rule changes supplied."),
+    expectedUpdatedAt: z.string().datetime(),
+    reason: z.string().trim().min(3).max(500),
+  }).strict().refine((v) => Object.keys(v).some((key) => !["type", "actionKey", "expectedUpdatedAt", "reason"].includes(key)), "No usage rule changes supplied."),
 ]);
 
 export type CopilotCheckoutInput = z.infer<typeof copilotCheckoutSchema>;
@@ -57,14 +63,15 @@ export const copilotCapacityOfferCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().min(1).max(1000),
   capacityUnits: z.number().int().min(1).max(10_000_000),
+  reason: z.string().trim().min(3).max(500),
   prices: z.array(z.object({
     regionCode: z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{2,32}$/),
     countries: z.array(countryCodeSchema).max(250),
     currency: z.string().regex(/^[A-Z]{3}$/),
     amountMinor: z.number().int().min(1).max(1_000_000_000),
-    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE", "MERCHANT_OF_RECORD"]),
+    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE"]),
     taxRateBps: z.number().int().min(0).max(10_000).default(0),
-    paymentRoute: z.enum(["PAYU", "STRIPE", "MERCHANT_OF_RECORD"]),
+    paymentRoute: z.enum(["PAYU", "STRIPE"]),
     isActive: z.boolean().default(true),
   }).strict()).min(1).max(100),
 }).strict();
@@ -77,16 +84,20 @@ export const copilotCapacityOfferPatchSchema = z.union([
     description: z.string().trim().min(1).max(1000).optional(),
     capacityUnits: z.number().int().min(1).max(10_000_000).optional(),
     isArchived: z.boolean().optional(),
-  }).strict().refine((value) => Object.keys(value).length > 2, "No offer changes supplied."),
+    expectedUpdatedAt: z.string().datetime(),
+    reason: z.string().trim().min(3).max(500),
+  }).strict().refine((value) => Object.keys(value).some((key) => !["type", "offerId", "expectedUpdatedAt", "reason"].includes(key)), "No offer changes supplied."),
   z.object({
     type: z.literal("PRICE"),
     priceId: z.string().min(1).max(128),
     currency: z.string().regex(/^[A-Z]{3}$/).optional(),
     amountMinor: z.number().int().min(1).max(1_000_000_000).optional(),
-    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE", "MERCHANT_OF_RECORD"]).optional(),
+    taxMode: z.enum(["NO_TAX_COLLECTION", "TAX_EXCLUSIVE", "TAX_INCLUSIVE"]).optional(),
     taxRateBps: z.number().int().min(0).max(10_000).optional(),
-    paymentRoute: z.enum(["PAYU", "STRIPE", "MERCHANT_OF_RECORD"]).optional(),
+    paymentRoute: z.enum(["PAYU", "STRIPE"]).optional(),
     countries: z.array(countryCodeSchema).max(250).optional(),
     isActive: z.boolean().optional(),
-  }).strict().refine((value) => Object.keys(value).length > 2, "No price changes supplied."),
+    expectedUpdatedAt: z.string().datetime(),
+    reason: z.string().trim().min(3).max(500),
+  }).strict().refine((value) => Object.keys(value).some((key) => !["type", "priceId", "expectedUpdatedAt", "reason"].includes(key)), "No price changes supplied."),
 ]);

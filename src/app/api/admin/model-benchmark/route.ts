@@ -6,7 +6,8 @@ import { getAiRoutingConfig, getProviderRuntime } from "@/lib/ai/AiRoutingConfig
 import { dispatchAiTask } from "@/utils/aiRouter";
 
 const requestSchema = z.object({
-  modelKeys: z.array(z.string().trim().min(3).max(160)).min(1).max(5),
+  modelKeys: z.array(z.string().trim().min(3).max(160)).min(1).max(5)
+    .refine((keys) => new Set(keys).size === keys.length, "Benchmark model keys must be unique."),
 }).strict();
 
 const outputSchema = z.object({
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
       success: true,
       benchmark: "SYNTHETIC_STRUCTURED_SUMMARY_V1",
       containsRealUserData: false,
+      excludedFromOperationalUsageTelemetry: true,
       results,
     });
   } catch (error) {

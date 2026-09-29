@@ -2318,6 +2318,13 @@ model ReferralPayout {
   @@index([status])
 }
 
+enum ReferralFraudStatus {
+  NORMAL
+  FLAGGED
+  FRAUD_HOLD
+  ADMIN_REVIEW
+}
+
 enum ReferralLedgerEntryType {
   REWARD_CREDIT
   REWARD_LOCK
@@ -2350,6 +2357,38 @@ model ReferralLedgerEntry {
   @@index([createdAt])
   @@index([payoutId])
   @@index([rewardId])
+}
+
+
+model ReferralFraudProfile {
+  userId          String              @id
+  status          ReferralFraudStatus @default(NORMAL)
+  riskScore       Float               @default(0)
+  riskFactors     Json                @default("[]")
+  lastEvaluatedAt DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  history         ReferralFraudAudit[]
+
+  @@index([status])
+  @@index([riskScore])
+  @@index([updatedAt])
+}
+
+model ReferralFraudAudit {
+  id             String               @id @default(uuid())
+  userId         String
+  profile        ReferralFraudProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  previousStatus ReferralFraudStatus
+  newStatus      ReferralFraudStatus
+  reason         String
+  actorId        String
+  riskScore      Float
+  riskFactors    Json                 @default("[]")
+  createdAt      DateTime             @default(now())
+
+  @@index([userId, createdAt])
+  @@index([newStatus, createdAt])
 }
 
 model ReferralProgramConfig {

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { getCurrentSession } from "@/lib/auth";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 import { dispatchAdminTestCommunication } from "@/lib/communications/dispatcher";
 import { COMMUNICATION_AUDIENCES, COMMUNICATION_CHANNELS, COMMUNICATION_EVENTS, communicationEventDefinition } from "@/lib/communications/catalog";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
@@ -18,8 +17,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const user = await getCurrentSession(request.headers);
-    if (!user || user.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
+    const user = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_communication_test:${user.id}`, 5, 10 * 60_000);
     const body = await readValidatedJson(request, schema);
     const definition = communicationEventDefinition(body.eventKey);
@@ -33,8 +31,34 @@ export async function POST(request: Request) {
       }
     }
     const idempotencyKey = `admin-test:${user.id}:${crypto.randomUUID()}`;
-    const delivery = await dispatchAdminTestCommunication({ ...body, idempotencyKey, correlationId: idempotencyKey, recipientRef: `admin-test:${user.id}` });
-    await logCriticalAuditEvent({ userId: user.id, action: "COMMUNICATION_TEMPLATE_TEST_SENT", resource: `CommunicationDelivery:${delivery.id}`, details: `event=${body.eventKey}; channel=${body.channel}; status=${delivery.status}` });
-    return NextResponse.json({ success: delivery.status === "ACCEPTED", delivery: { id: delivery.id, status: delivery.status, provider: delivery.provider, providerMessageId: delivery.providerMessageId } }, { status: delivery.status === "ACCEPTED" ? 200 : 502 });
+
+    // Persist authorization evidence before the external provider side effect.
+    // CommunicationDelivery is the durable outcome record after dispatch.
+    await logCriticalAuditEvent({
+      userId: user.id,
+      action: "COMMUNICATION_TEMPLATE_TEST_REQUESTED",
+      resource: `CommunicationTest:${idempotencyKey}`,
+      details: `event=${body.eventKey}; channel=${body.channel}; audience=${body.audience}`,
+    });
+
+    const delivery = await dispatchAdminTestCommunication({
+      ...body,
+      idempotencyKey,
+      correlationId: idempotencyKey,
+      recipientRef: `admin-test:${user.id}`,
+    });
+
+    return NextResponse.json(
+      {
+        success: delivery.status === "ACCEPTED",
+        delivery: {
+          id: delivery.id,
+          status: delivery.status,
+          provider: delivery.provider,
+          providerMessageId: delivery.providerMessageId,
+        },
+      },
+      { status: delivery.status === "ACCEPTED" ? 200 : 502 },
+    );
   } catch (error) { return handleApiError(error); }
 }

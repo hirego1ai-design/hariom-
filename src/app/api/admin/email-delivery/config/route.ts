@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth";
-import { logAuditEvent } from "@/lib/auditLogger";
 import {
   EMAIL_PROVIDERS,
-  getEmailDeliverySettings,
-  saveEmailDeliverySettings,
+  encryptEmailProviderSecret,
+  getEmailDeliverySettingsStrict,
 } from "@/lib/email-delivery-config";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const providerSchema = z.enum(EMAIL_PROVIDERS);
 const updateSchema = z.object({
@@ -20,29 +27,40 @@ const updateSchema = z.object({
   zeptoMailFromEmail: z.string().email().optional().or(z.literal("")),
   sendgridApiKey: z.string().trim().min(12).max(512).optional().or(z.literal("")),
   zeptoMailApiKey: z.string().trim().min(12).max(512).optional().or(z.literal("")),
+  expectedUpdatedAt: z.string().datetime().nullable(),
 }).strict().superRefine((value, context) => {
   if (value.primaryProvider === value.fallbackProvider && value.autoFailover) {
-    context.addIssue({ code: "custom", message: "Primary and fallback providers must be different when failover is enabled." });
+    context.addIssue({
+      code: "custom",
+      message: "Primary and fallback providers must be different when failover is enabled.",
+    });
   }
-  if (value.primaryProvider === "SENDGRID" && !value.sendgridEnabled) {
-    context.addIssue({ code: "custom", message: "Enable SendGrid or select ZeptoMail as the primary provider." });
+
+  const enabled = (provider: (typeof EMAIL_PROVIDERS)[number]) =>
+    provider === "SENDGRID" ? value.sendgridEnabled : value.zeptoMailEnabled;
+
+  if (!enabled(value.primaryProvider)) {
+    context.addIssue({
+      code: "custom",
+      message: `Enable ${value.primaryProvider === "SENDGRID" ? "SendGrid" : "ZeptoMail"} or select an enabled primary provider.`,
+    });
   }
-  if (value.primaryProvider === "ZEPTOMAIL" && !value.zeptoMailEnabled) {
-    context.addIssue({ code: "custom", message: "Enable ZeptoMail or select SendGrid as the primary provider." });
+  if (value.autoFailover && !enabled(value.fallbackProvider)) {
+    context.addIssue({
+      code: "custom",
+      message: "Automatic failover requires the fallback provider to be enabled.",
+    });
   }
 });
 
-async function requireAdmin(request: Request) {
-  const session = await getCurrentSession(request.headers);
-  if (!session || session.role !== "ADMIN") throw new ApiError("Unauthorized: Admin role required.", 401);
-  return session;
-}
-
 export async function GET(request: Request) {
   try {
-    const admin = await requireAdmin(request);
+    const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_email_delivery_config_get:${admin.id}`, 30, 60_000);
-    return NextResponse.json({ success: true, config: await getEmailDeliverySettings() });
+    return NextResponse.json({
+      success: true,
+      config: await getEmailDeliverySettingsStrict(),
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -50,18 +68,108 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdmin(request);
+    const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_email_delivery_config:${admin.id}`, 10, 60_000);
-    const body = await readValidatedJson(request, updateSchema);
-    const config = await saveEmailDeliverySettings(body);
-    await logAuditEvent({
-      userId: admin.id,
-      action: "EMAIL_DELIVERY_CONFIG_UPDATED",
-      resource: "Email delivery configuration",
-      ipAddress: request.headers.get("x-forwarded-for") || undefined,
-      details: `Updated primary=${config.primaryProvider}, fallback=${config.autoFailover ? config.fallbackProvider : "disabled"}; API keys were ${body.sendgridApiKey || body.zeptoMailApiKey ? "updated" : "unchanged"}.`,
+    const body = await readValidatedJson(request, updateSchema, 8 * 1024);
+
+    const encryptedSendgridKey = body.sendgridApiKey
+      ? encryptEmailProviderSecret(body.sendgridApiKey)
+      : undefined;
+    const encryptedZeptoMailKey = body.zeptoMailApiKey
+      ? encryptEmailProviderSecret(body.zeptoMailApiKey)
+      : undefined;
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.emailDeliveryConfig.findUnique({
+        where: { id: "global-email-delivery" },
+      });
+      const currentVersion = existing?.updatedAt.toISOString() ?? null;
+      if (currentVersion !== body.expectedUpdatedAt) {
+        throw new ApiError("Email delivery configuration changed; reload before saving.", 409);
+      }
+
+      const effectiveSendgridKey = Boolean(
+        encryptedSendgridKey ||
+        existing?.sendgridApiKeyEncrypted ||
+        process.env.SENDGRID_API_KEY
+      );
+      const effectiveZeptoMailKey = Boolean(
+        encryptedZeptoMailKey ||
+        existing?.zeptoMailApiKeyEncrypted ||
+        process.env.ZOHO_CPAAS_SEND_MAIL_TOKEN ||
+        process.env.ZEPTOMAIL_API_KEY
+      );
+      const effectiveSendgridSender = body.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL || "";
+      const effectiveZeptoMailSender =
+        body.zeptoMailFromEmail ||
+        process.env.ZOHO_CPAAS_FROM_EMAIL ||
+        process.env.ZEPTOMAIL_FROM_EMAIL ||
+        "";
+
+      if (body.sendgridEnabled && (!effectiveSendgridKey || !effectiveSendgridSender)) {
+        throw new ApiError(
+          "SendGrid cannot be enabled until a sender address and API key are configured.",
+          422,
+        );
+      }
+      if (body.zeptoMailEnabled && (!effectiveZeptoMailKey || !effectiveZeptoMailSender)) {
+        throw new ApiError(
+          "ZeptoMail cannot be enabled until a sender address and API key are configured.",
+          422,
+        );
+      }
+
+      const data = {
+        primaryProvider: body.primaryProvider,
+        fallbackProvider: body.fallbackProvider,
+        autoFailover: body.autoFailover,
+        sendgridEnabled: body.sendgridEnabled,
+        zeptoMailEnabled: body.zeptoMailEnabled,
+        sendgridFromEmail: body.sendgridFromEmail || null,
+        zeptoMailFromEmail: body.zeptoMailFromEmail || null,
+        ...(encryptedSendgridKey
+          ? { sendgridApiKeyEncrypted: encryptedSendgridKey }
+          : {}),
+        ...(encryptedZeptoMailKey
+          ? { zeptoMailApiKeyEncrypted: encryptedZeptoMailKey }
+          : {}),
+      };
+
+      const updated = existing
+        ? await tx.emailDeliveryConfig.update({
+            where: { id: existing.id },
+            data,
+          })
+        : await tx.emailDeliveryConfig.create({
+            data: { id: "global-email-delivery", ...data },
+          });
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: "EMAIL_DELIVERY_CONFIG_UPDATED",
+          resource: "EmailDeliveryConfig:global-email-delivery",
+          ipAddress: getClientIp(request) || "unknown",
+          details: JSON.stringify({
+            primaryProvider: updated.primaryProvider,
+            fallbackProvider: updated.autoFailover ? updated.fallbackProvider : null,
+            autoFailover: updated.autoFailover,
+            sendgridEnabled: updated.sendgridEnabled,
+            zeptoMailEnabled: updated.zeptoMailEnabled,
+            sendgridKeyChanged: Boolean(encryptedSendgridKey),
+            zeptoMailKeyChanged: Boolean(encryptedZeptoMailKey),
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
     });
-    return NextResponse.json({ success: true, message: "Email delivery settings updated.", config });
+
+    const config = await getEmailDeliverySettingsStrict();
+    return NextResponse.json({
+      success: true,
+      message: "Email delivery settings updated.",
+      config,
+    });
   } catch (error) {
     return handleApiError(error);
   }

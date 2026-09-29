@@ -16,6 +16,7 @@ type EmailDeliveryConfig = {
   zeptoMailFromEmail: string;
   sendgridKeyConfigured: boolean;
   zeptoMailKeyConfigured: boolean;
+  updatedAt: string | null;
 };
 
 type FormConfig = EmailDeliveryConfig & {
@@ -33,6 +34,7 @@ const initialConfig: FormConfig = {
   zeptoMailFromEmail: "",
   sendgridKeyConfigured: false,
   zeptoMailKeyConfigured: false,
+  updatedAt: null,
   sendgridApiKey: "",
   zeptoMailApiKey: "",
 };
@@ -114,18 +116,18 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
           zeptoMailFromEmail: config.zeptoMailFromEmail,
           ...(config.sendgridApiKey ? { sendgridApiKey: config.sendgridApiKey } : {}),
           ...(config.zeptoMailApiKey ? { zeptoMailApiKey: config.zeptoMailApiKey } : {}),
+          expectedUpdatedAt: config.updatedAt,
         }),
       });
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(result.message || "Could not save email delivery settings.");
+      const result = (await response.json().catch(() => ({}))) as { message?: string; error?: string; config?: EmailDeliveryConfig };
+      if (!response.ok || !result.config) throw new Error(result.error || result.message || "Could not save email delivery settings.");
 
-      setConfig((current) => ({
-        ...current,
+      setConfig({
+        ...initialConfig,
+        ...result.config,
         sendgridApiKey: "",
         zeptoMailApiKey: "",
-        sendgridKeyConfigured: current.sendgridKeyConfigured || Boolean(current.sendgridApiKey),
-        zeptoMailKeyConfigured: current.zeptoMailKeyConfigured || Boolean(current.zeptoMailApiKey),
-      }));
+      });
       setNotice({ tone: "success", message: result.message || "Email delivery configuration saved." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not save email delivery settings." });
@@ -152,9 +154,14 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: testEmail.trim(), provider }),
       });
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(result.message || `Could not send a ${providerInfo[provider].name} test email.`);
-      setNotice({ tone: "success", message: result.message || `Test email sent through ${providerInfo[provider].name}.` });
+      const result = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(result.error || result.message || `Could not run the ${providerInfo[provider].name} provider test.`);
+      }
+      setNotice({
+        tone: "success",
+        message: result.message || `Test email accepted by ${providerInfo[provider].name}. Delivery/read confirmation is separate.`,
+      });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not send test email." });
     } finally {
@@ -268,7 +275,7 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
         </section>
 
         <section hidden={!configLoaded} className="glass-card rounded-2xl border border-white/10 p-5 sm:p-6" aria-labelledby="test-heading">
-          <div className="mb-5"><h2 id="test-heading" className="text-base font-bold text-white">Test email delivery</h2><p className="mt-1 text-xs text-text-muted">Send a live test to confirm each provider&apos;s current configuration.</p></div>
+          <div className="mb-5"><h2 id="test-heading" className="text-base font-bold text-white">Test email provider acceptance</h2><p className="mt-1 text-xs text-text-muted">Send an allowlisted live test to verify that the selected provider accepts the request. Acceptance does not prove inbox delivery or reading.</p></div>
           <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
             <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder="admin@yourdomain.com" autoComplete="email" disabled={isLoading} className="h-11 min-w-0 rounded-xl border border-white/10 bg-[#1E1E1E] px-3 text-sm text-white outline-none placeholder:text-text-muted focus:border-primary disabled:opacity-50" />
             {(["SENDGRID", "ZEPTOMAIL"] as Provider[]).map((provider) => (

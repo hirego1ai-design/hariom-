@@ -23,6 +23,7 @@ type TemplateEditor = {
   taxRatePct: string;
   specialClauses: string;
   commercialNotes: string;
+  changeReason: string;
 };
 
 const EMPTY_TEMPLATE: TemplateEditor = {
@@ -40,6 +41,7 @@ const EMPTY_TEMPLATE: TemplateEditor = {
   taxRatePct: "",
   specialClauses: "",
   commercialNotes: "",
+  changeReason: "",
 };
 
 function toEditor(template: AgreementTemplateRecord): TemplateEditor {
@@ -62,6 +64,7 @@ function toEditor(template: AgreementTemplateRecord): TemplateEditor {
     taxRatePct: template.taxRatePct === undefined ? "" : String(template.taxRatePct),
     specialClauses: (template.specialClauses || []).join("\n"),
     commercialNotes: template.commercialNotes || "",
+    changeReason: "",
   };
 }
 
@@ -70,7 +73,12 @@ export default function AdminAgreementTemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateEditor | null>(null);
-  const [pendingArchiveId, setPendingArchiveId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    action: "duplicate" | "archive";
+    template: AgreementTemplateRecord;
+  } | null>(null);
+  const [pendingActionReason, setPendingActionReason] = useState("");
+  const [pendingActionSaving, setPendingActionSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const loadTemplates = useCallback(async () => {
@@ -155,6 +163,9 @@ export default function AdminAgreementTemplatesPage() {
     setSaving(true);
     try {
       const payload = buildPayload(editingTemplate);
+      if (editingTemplate.changeReason.trim().length < 3) {
+        throw new Error("Enter a specific reason for this commercial template change.");
+      }
       const isEdit = Boolean(editingTemplate.id);
       if (isEdit && !editingTemplate.expectedUpdatedAt) {
         throw new Error("Template version is missing. Refresh before editing.");
@@ -164,7 +175,18 @@ export default function AdminAgreementTemplatesPage() {
         {
           method: isEdit ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(isEdit ? { ...payload, expectedUpdatedAt: editingTemplate.expectedUpdatedAt } : payload),
+          body: JSON.stringify(
+            isEdit
+              ? {
+                  ...payload,
+                  expectedUpdatedAt: editingTemplate.expectedUpdatedAt,
+                  reason: editingTemplate.changeReason.trim(),
+                }
+              : {
+                  ...payload,
+                  reason: editingTemplate.changeReason.trim(),
+                },
+          ),
         },
       );
       const data = await response.json();
@@ -179,34 +201,67 @@ export default function AdminAgreementTemplatesPage() {
     }
   };
 
-  const handleDuplicate = async (id: string) => {
-    setActionMessage(null);
-    try {
-      const response = await fetch(`/api/agreements/templates/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "duplicate" }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "Unable to clone template.");
-      setActionMessage({ type: "success", text: "Template cloned with the same explicit commercial terms." });
-      await loadTemplates();
-    } catch (error) {
-      setActionMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to clone template." });
+  const handlePendingAction = async () => {
+    if (
+      !pendingAction ||
+      pendingActionSaving ||
+      pendingActionReason.trim().length < 3
+    ) {
+      return;
     }
-  };
 
-  const handleArchive = async (id: string) => {
     setActionMessage(null);
+    setPendingActionSaving(true);
     try {
-      const response = await fetch(`/api/agreements/templates/${id}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "Unable to archive template.");
-      setPendingArchiveId(null);
-      setActionMessage({ type: "success", text: "Template archived." });
+      const isDuplicate = pendingAction.action === "duplicate";
+      const response = await fetch(
+        `/api/agreements/templates/${pendingAction.template.id}`,
+        {
+          method: isDuplicate ? "POST" : "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            isDuplicate
+              ? {
+                  action: "duplicate",
+                  expectedUpdatedAt: pendingAction.template.updatedAt,
+                  reason: pendingActionReason.trim(),
+                }
+              : {
+                  expectedUpdatedAt: pendingAction.template.updatedAt,
+                  reason: pendingActionReason.trim(),
+                },
+          ),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            (isDuplicate
+              ? "Unable to clone template."
+              : "Unable to archive template."),
+        );
+      }
+
+      setActionMessage({
+        type: "success",
+        text: isDuplicate
+          ? "Template cloned from the reviewed source version."
+          : "Template archived. Existing agreements remain unchanged.",
+      });
+      setPendingAction(null);
+      setPendingActionReason("");
       await loadTemplates();
     } catch (error) {
-      setActionMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to archive template." });
+      setActionMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Unable to complete template action.",
+      });
+    } finally {
+      setPendingActionSaving(false);
     }
   };
 
@@ -253,8 +308,28 @@ export default function AdminAgreementTemplatesPage() {
                 </div>
                 <div className="pt-2 border-t border-white/5 flex flex-wrap justify-end gap-2">
                   <button onClick={() => setEditingTemplate(toEditor(template))} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-[#29B6F6] hover:bg-white/5">Edit</button>
-                  <button onClick={() => void handleDuplicate(template.id)} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/5">Clone</button>
-                  {!template.isArchived && <button onClick={() => setPendingArchiveId(template.id)} className="rounded-lg border border-red-500/20 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/10">Archive</button>}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingActionReason("");
+                      setPendingAction({ action: "duplicate", template });
+                    }}
+                    className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/5"
+                  >
+                    Clone
+                  </button>
+                  {!template.isArchived && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingActionReason("");
+                        setPendingAction({ action: "archive", template });
+                      }}
+                      className="rounded-lg border border-red-500/20 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/10"
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -280,25 +355,78 @@ export default function AdminAgreementTemplatesPage() {
                 <label className="text-xs text-slate-400">Tax Rate (%)<input type="number" min="0" max="100" value={editingTemplate.taxRatePct} onChange={(e) => setField("taxRatePct", e.target.value)} className="mt-1 w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" /></label>
                 <label className="text-xs text-slate-400 md:col-span-2">Special Clauses — one per line<textarea value={editingTemplate.specialClauses} onChange={(e) => setField("specialClauses", e.target.value)} rows={4} className="mt-1 w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" /></label>
                 <label className="text-xs text-slate-400 md:col-span-2">Commercial Notes<textarea value={editingTemplate.commercialNotes} onChange={(e) => setField("commercialNotes", e.target.value)} rows={3} className="mt-1 w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" /></label>
+                <label className="text-xs text-slate-400 md:col-span-2">
+                  Change reason
+                  <textarea
+                    value={editingTemplate.changeReason}
+                    onChange={(e) => setField("changeReason", e.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Why is this commercial template being created or changed?"
+                    className="mt-1 w-full bg-[#16161B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </label>
               </div>
               <p className="text-xs text-amber-200/80">Managed-hiring requirements currently support DAY_25 invoicing and no advance payment; the agreement builder will reject incompatible templates instead of silently overriding them.</p>
               <div className="flex justify-end gap-2 pt-4 border-t border-white/10">
                 <button type="button" disabled={saving} onClick={() => setEditingTemplate(null)} className="px-4 py-2 rounded-xl text-xs text-slate-400 disabled:opacity-50">Cancel</button>
-                <button type="button" disabled={saving} onClick={() => void handleSaveTemplate()} className="px-5 py-2 rounded-xl bg-[#29B6F6] text-white text-xs font-bold disabled:opacity-50">{saving ? "Saving..." : "Save Template"}</button>
+                <button type="button" disabled={saving || editingTemplate.changeReason.trim().length < 3} onClick={() => void handleSaveTemplate()} className="px-5 py-2 rounded-xl bg-[#29B6F6] text-white text-xs font-bold disabled:opacity-50">{saving ? "Saving..." : "Save audited template"}</button>
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {pendingArchiveId && (
+      {pendingAction && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="presentation">
-          <div role="dialog" aria-modal="true" aria-labelledby="archive-template-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
-            <h2 id="archive-template-title" className="text-lg font-bold text-white">Archive template?</h2>
-            <p className="mt-2 text-sm text-slate-400">It will no longer be available for new agreements. Existing agreements are unchanged.</p>
+          <div role="dialog" aria-modal="true" aria-labelledby="template-action-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121215] p-6 shadow-2xl">
+            <h2 id="template-action-title" className="text-lg font-bold text-white">
+              {pendingAction.action === "duplicate" ? "Clone template?" : "Archive template?"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              {pendingAction.action === "duplicate"
+                ? "The reviewed source version will be copied with the same explicit commercial terms. The copy can then be edited separately."
+                : "This version will no longer be available for new agreements. Existing agreements keep their snapshotted terms."}
+            </p>
+            <p className="mt-3 text-xs text-slate-500">
+              {pendingAction.template.name} · version observed {pendingAction.template.updatedAt ? new Date(pendingAction.template.updatedAt).toLocaleString() : "timestamp unavailable"}
+            </p>
+            <label className="mt-5 block text-xs text-slate-400">
+              Action reason
+              <textarea
+                value={pendingActionReason}
+                onChange={(event) => setPendingActionReason(event.target.value)}
+                rows={4}
+                maxLength={1000}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+              />
+            </label>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setPendingArchiveId(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white hover:bg-white/5">Cancel</button>
-              <button type="button" onClick={() => void handleArchive(pendingArchiveId)} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500">Archive template</button>
+              <button
+                type="button"
+                disabled={pendingActionSaving}
+                onClick={() => {
+                  setPendingAction(null);
+                  setPendingActionReason("");
+                }}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={pendingActionSaving || pendingActionReason.trim().length < 3}
+                onClick={() => void handlePendingAction()}
+                className={`rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-40 ${
+                  pendingAction.action === "archive" ? "bg-red-600" : "bg-indigo-600"
+                }`}
+              >
+                {pendingActionSaving
+                  ? "Saving…"
+                  : pendingAction.action === "duplicate"
+                    ? "Clone reviewed version"
+                    : "Archive reviewed version"}
+              </button>
             </div>
           </div>
         </div>

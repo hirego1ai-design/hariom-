@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { invoicesDb } from "@/lib/invoices-db";
+import { invoicesDb, presentInvoice } from "@/lib/invoices-db";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, handleApiError, readValidatedJson, enforceRateLimit, getClientIp } from "@/lib/apiSecurity";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { dispatchAdminDirectCommunication, dispatchCommunication } from "@/lib/communications/dispatcher";
 import { buildPublicAppUrl } from "@/lib/env";
 
-const reviewSchema = z.object({ action: z.enum(["mark_paid", "reject_receipt"]), invoiceId: z.string().min(1).max(150), paidDate: z.string().date().optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict();
+const reviewSchema = z.object({
+  action: z.enum(["mark_paid", "reject_receipt"]),
+  invoiceId: z.string().min(1).max(150),
+  paidDate: z.string().date().optional(),
+  expectedUpdatedAt: z.string().datetime().optional(),
+  reason: z.string().trim().min(3).max(1000).optional(),
+}).strict();
+
+const querySchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  status: z.enum(["PAID", "UNPAID", "OVERDUE", "PENDING_VERIFICATION"]).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 const createSchema = z.object({
   action: z.literal("create").optional(),
   agreementId: z.string().min(1).max(150),
@@ -18,17 +32,84 @@ const createSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_invoices_read", 60, 60_000);
-    const invoices = await invoicesDb.getInvoices();
-    const totalBilled = invoices.reduce((acc, i) => acc + i.totalAmount, 0);
-    const totalCollected = invoices.filter((i) => i.status === "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
-    const totalOverdue = invoices.filter((i) => i.status !== "PAID").reduce((acc, i) => acc + i.totalAmount, 0);
+    const session = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_invoices_read:${session.id}`, 60, 60_000);
+    const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()));
+
+    const where: Prisma.InvoiceWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { invoiceNumber: { contains: query.search, mode: "insensitive" } },
+              { companyName: { contains: query.search, mode: "insensitive" } },
+              { candidateName: { contains: query.search, mode: "insensitive" } },
+              { jobTitle: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await prisma.$transaction([
+      prisma.invoice.count({ where }),
+      prisma.invoice.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+    ]);
+
+    const grouped = await prisma.invoice.groupBy({
+      by: ["currency", "status"],
+      where,
+      orderBy: [{ currency: "asc" }, { status: "asc" }],
+      _count: true,
+      _sum: { totalAmount: true },
+    });
+
+    const currencies = [...new Set(grouped.map((row) => row.currency))].sort();
+    const byCurrency = Object.fromEntries(
+      currencies.map((currency) => {
+        const rowsForCurrency = grouped.filter((row) => row.currency === currency);
+        const amountFor = (...statuses: string[]) =>
+          rowsForCurrency
+            .filter((row) => statuses.includes(row.status))
+            .reduce((sum, row) => sum + (row._sum?.totalAmount ?? 0), 0);
+        const countFor = (...statuses: string[]) =>
+          rowsForCurrency
+            .filter((row) => statuses.includes(row.status))
+            .reduce((sum, row) => sum + row._count, 0);
+
+        return [
+          currency,
+          {
+            currency,
+            totalBilled: rowsForCurrency.reduce((sum, row) => sum + (row._sum?.totalAmount ?? 0), 0),
+            totalCollected: amountFor("PAID"),
+            totalOutstanding: amountFor("UNPAID", "OVERDUE", "PENDING_VERIFICATION"),
+            totalOverdue: amountFor("OVERDUE"),
+            pendingVerification: amountFor("PENDING_VERIFICATION"),
+            invoiceCount: countFor("PAID", "UNPAID", "OVERDUE", "PENDING_VERIFICATION"),
+            paidCount: countFor("PAID"),
+            overdueCount: countFor("OVERDUE"),
+          },
+        ];
+      }),
+    );
 
     return NextResponse.json({
       success: true,
-      summary: { totalBilled, totalCollected, totalOverdue, count: invoices.length },
-      invoices,
+      page: query.page,
+      limit: query.limit,
+      total,
+      summary: {
+        currencyMode: currencies.length <= 1 ? "single" : "multiple",
+        currencies,
+        byCurrency,
+        count: total,
+      },
+      invoices: rows.map(presentInvoice),
     });
   } catch (error) {
     return handleApiError(error);
@@ -38,12 +119,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_invoice_review", 30, 60000);
+    await enforceRateLimit(req, `admin_invoice_review:${session.id}`, 30, 60000);
     const body = await readValidatedJson(req, z.union([reviewSchema, createSchema]));
 
     if (body.action === "mark_paid") {
       if (body.paidDate && body.paidDate > new Date().toISOString().slice(0, 10)) throw new ApiError("Payment date cannot be in the future", 400);
-      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "approve", session.id, body.paidDate, body.expectedUpdatedAt, getClientIp(req));
+      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "approve", session.id, body.paidDate, body.expectedUpdatedAt, getClientIp(req), body.reason);
       if (!updated) {
         return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
       }
@@ -54,7 +135,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "reject_receipt") {
-      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "reject", session.id, undefined, body.expectedUpdatedAt, getClientIp(req));
+      if (!body.reason?.trim()) throw new ApiError("A rejection reason is required.", 400);
+      const updated = await invoicesDb.reviewReceipt(body.invoiceId, "reject", session.id, undefined, body.expectedUpdatedAt, getClientIp(req), body.reason);
       if (!updated) {
         return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
       }

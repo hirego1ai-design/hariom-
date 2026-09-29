@@ -15,15 +15,16 @@ const gatewayConfigSchema = z.object({
     PAYU: gatewayStatusSchema.optional(),
     STRIPE: gatewayStatusSchema.optional(),
   }).strict().optional(),
-  priorities: z.array(gatewayNameSchema).min(1).max(2).refine(v => new Set(v).size === v.length, "Gateway priorities must be unique.").optional(),
-}).strict().refine(v=>Object.keys(v).length>0,"At least one gateway configuration field is required.");
+  priorities: z.array(gatewayNameSchema).length(2).refine(v => new Set(v).size === v.length, "Gateway priorities must contain Stripe and PayU exactly once.").optional(),
+  expectedUpdatedAt: z.string().datetime().nullable().optional(),
+}).strict().refine(v=>Object.keys(v).some(key=>key!=="expectedUpdatedAt"),"At least one gateway configuration field is required.");
 
 export async function GET(req: NextRequest) {
   try {
     const admin=await requireAdminSession(req);
     await enforceRateLimit(req,`admin_payment_gateway_config_get:${admin.id}`,30,60_000);
-    const config=await PaymentGatewayController.getConfig();
-    return NextResponse.json({success:true,config},{headers:{"Cache-Control":"no-store"}});
+    const snapshot=await PaymentGatewayController.getAdminConfigSnapshot();
+    return NextResponse.json({success:true,config:snapshot.config,updatedAt:snapshot.updatedAt},{headers:{"Cache-Control":"no-store"}});
   } catch(error){return handleApiError(error);}
 }
 
@@ -32,10 +33,12 @@ export async function POST(req: NextRequest) {
     const admin=await requireAdminSession(req);
     await enforceRateLimit(req,`admin_payment_gateway_config_update:${admin.id}`,10,60_000);
     const body=await readValidatedJson(req,gatewayConfigSchema);
-    const updatedConfig=await PaymentGatewayController.updateConfig(body as Partial<GatewayConfigState>, {
+    const { expectedUpdatedAt, ...configUpdate }=body;
+    const updatedConfig=await PaymentGatewayController.updateConfig(configUpdate as Partial<GatewayConfigState>, {
       actorId: admin.id,
       ipAddress: getClientIp(req),
-    });
-    return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig},{headers:{"Cache-Control":"no-store"}});
+    }, expectedUpdatedAt);
+    const snapshot=await PaymentGatewayController.getAdminConfigSnapshot();
+    return NextResponse.json({success:true,message:"Payment gateway configuration updated successfully.",config:updatedConfig,updatedAt:snapshot.updatedAt},{headers:{"Cache-Control":"no-store"}});
   } catch(error){return handleApiError(error);}
 }

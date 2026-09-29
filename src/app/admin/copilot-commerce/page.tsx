@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import AdminHeader from "@/components/admin/AdminHeader";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 
 type RegionalPrice = {
   id: string;
@@ -12,6 +14,7 @@ type RegionalPrice = {
   taxMode: "NO_TAX_COLLECTION" | "TAX_EXCLUSIVE" | "TAX_INCLUSIVE" | "MERCHANT_OF_RECORD";
   paymentRoute: "PAYU" | "STRIPE" | "MERCHANT_OF_RECORD";
   isActive: boolean;
+  updatedAt: string;
 };
 
 type Plan = {
@@ -22,7 +25,9 @@ type Plan = {
   monthlyCapacityUnits: number;
   softWarningPct: number;
   hardWarningPct: number;
+  featuresAllowed: string[];
   isArchived: boolean;
+  updatedAt: string;
   regionalPrices: RegionalPrice[];
 };
 
@@ -33,6 +38,7 @@ type CapacityOffer = {
   description: string;
   capacityUnits: number;
   isArchived: boolean;
+  updatedAt: string;
   regionalPrices: RegionalPrice[];
 };
 
@@ -45,6 +51,7 @@ type UsageRule = {
   estimatedCostCurrency: string;
   expensive: boolean;
   active: boolean;
+  updatedAt: string;
 };
 
 export default function AdminCopilotCommercePage() {
@@ -55,11 +62,19 @@ export default function AdminCopilotCommercePage() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [catalogueWarnings, setCatalogueWarnings] = useState<string[]>([]);
+  const [changeReason, setChangeReason] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<CapacityOffer | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [planArchiveTarget, setPlanArchiveTarget] = useState<Plan | null>(null);
+  const [planArchiveReason, setPlanArchiveReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setConfigLoaded(false);
     setMessage("");
+    setCatalogueWarnings([]);
     try {
       const [res, offersRes] = await Promise.all([
         fetch("/api/admin/copilot/commerce", { cache: "no-store" }),
@@ -72,9 +87,27 @@ export default function AdminCopilotCommercePage() {
       setPlans(data.plans || []);
       setRules(data.usageRules || []);
       setCapacityOffers(offersData.offers || []);
+      const warnings: string[] = [];
+      if (data.catalogue?.plansTruncated) {
+        warnings.push(`Showing ${data.catalogue.planLoaded} of ${data.catalogue.planTotal} Copilot plans.`);
+      }
+      if (data.catalogue?.usageRulesTruncated) {
+        warnings.push(`Showing ${data.catalogue.usageRuleLoaded} of ${data.catalogue.usageRuleTotal} usage rules.`);
+      }
+      if (Array.isArray(data.catalogue?.priceTruncatedPlanIds) && data.catalogue.priceTruncatedPlanIds.length) {
+        warnings.push(`Regional prices are truncated for ${data.catalogue.priceTruncatedPlanIds.length} plan(s).`);
+      }
+      if (offersData.catalogue?.offersTruncated) {
+        warnings.push(`Showing ${offersData.catalogue.offerLoaded} of ${offersData.catalogue.offerTotal} capacity offers.`);
+      }
+      if (Array.isArray(offersData.catalogue?.priceTruncatedOfferIds) && offersData.catalogue.priceTruncatedOfferIds.length) {
+        warnings.push(`Regional prices are truncated for ${offersData.catalogue.priceTruncatedOfferIds.length} capacity offer(s).`);
+      }
+      setCatalogueWarnings(warnings);
       setConfigLoaded(true);
     } catch (error) {
       setConfigLoaded(false);
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to load Copilot commerce.");
     } finally {
       setLoading(false);
@@ -86,6 +119,7 @@ export default function AdminCopilotCommercePage() {
   async function createCapacityOffer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!configLoaded) {
+      setMessageTone("error");
       setMessage("Authoritative Copilot commerce configuration must load before offers can be created.");
       return;
     }
@@ -99,6 +133,7 @@ export default function AdminCopilotCommercePage() {
       name: String(form.get("name") || "").trim(),
       description: String(form.get("description") || "").trim(),
       capacityUnits: Number(form.get("capacityUnits")),
+      reason: String(form.get("reason") || "").trim(),
       prices: [{
         regionCode: String(form.get("regionCode") || "").trim().toUpperCase(),
         countries,
@@ -122,18 +157,26 @@ export default function AdminCopilotCommercePage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Unable to create capacity offer.");
       event.currentTarget.reset();
+      setMessageTone("success");
       setMessage("Capacity offer created.");
       await load();
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to create capacity offer.");
     } finally {
       setSaving("");
     }
   }
 
-  async function patch(payload: Record<string, unknown>, key: string) {
+  async function patch(payload: Record<string, unknown>, key: string, expectedUpdatedAt: string) {
     if (!configLoaded) {
+      setMessageTone("error");
       setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
+      return;
+    }
+    if (changeReason.trim().length < 3) {
+      setMessageTone("error");
+      setMessage("Enter a change reason before saving Copilot commerce configuration.");
       return;
     }
     setSaving(key);
@@ -142,21 +185,145 @@ export default function AdminCopilotCommercePage() {
       const res = await fetch("/api/admin/copilot/commerce", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt,
+          reason: changeReason.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Update failed.");
-      setMessage("Saved.");
+      setMessageTone("success");
+      setMessage("Saved and audited.");
+      setChangeReason("");
       await load();
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Update failed.");
     } finally {
       setSaving("");
     }
   }
 
+  async function patchCapacityOffer(
+    payload: Record<string, unknown>,
+    key: string,
+    expectedUpdatedAt: string,
+  ) {
+    if (!configLoaded) {
+      setMessageTone("error");
+      setMessage("Authoritative Copilot commerce configuration must load before it can be changed.");
+      return;
+    }
+    if (changeReason.trim().length < 3) {
+      setMessageTone("error");
+      setMessage("Enter a change reason before saving Copilot capacity configuration.");
+      return;
+    }
+
+    setSaving(key);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/copilot/capacity-offers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt,
+          reason: changeReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Capacity offer update failed.");
+      }
+      setMessageTone("success");
+      setMessage("Capacity configuration saved and audited.");
+      setChangeReason("");
+      await load();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Capacity offer update failed.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function archivePlan() {
+    if (!planArchiveTarget || saving || planArchiveReason.trim().length < 3) return;
+    setSaving(`plan-state-${planArchiveTarget.id}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/copilot/commerce", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "PLAN",
+          planId: planArchiveTarget.id,
+          isArchived: true,
+          expectedUpdatedAt: planArchiveTarget.updatedAt,
+          reason: planArchiveReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to archive Copilot plan.");
+      }
+      setPlanArchiveTarget(null);
+      setPlanArchiveReason("");
+      setMessageTone("success");
+      setMessage("Copilot plan archived and audited.");
+      await load();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Unable to archive Copilot plan.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function archiveCapacityOffer() {
+    if (!archiveTarget || saving || archiveReason.trim().length < 3) return;
+    setSaving(`offer-state-${archiveTarget.id}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/copilot/capacity-offers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "OFFER",
+          offerId: archiveTarget.id,
+          isArchived: true,
+          expectedUpdatedAt: archiveTarget.updatedAt,
+          reason: archiveReason.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to archive capacity offer.");
+      }
+      setArchiveTarget(null);
+      setArchiveReason("");
+      setMessageTone("success");
+      setMessage("Capacity offer archived and audited.");
+      await load();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Unable to archive capacity offer.");
+    } finally {
+      setSaving("");
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="min-h-screen bg-[#0E0E0E] text-white">
+      <AdminSidebar />
+      <div className="min-h-screen md:pl-[116px]">
+        <AdminHeader
+          title="Copilot Commerce"
+          subtitle="Standalone Copilot plans, regional pricing, capacity offers and internal usage economics."
+        />
+        <main className="mx-auto max-w-7xl space-y-8 p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
       <header className="rounded-[28px] border border-white/10 bg-[#141418] p-6 md:p-8">
         <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-[#7FB0FF]">Admin · Global Commerce</p>
         <h1 className="mt-2 text-3xl font-extrabold text-white">HireGo Copilot Commerce Control</h1>
@@ -166,7 +333,46 @@ export default function AdminCopilotCommercePage() {
         </p>
       </header>
 
-      {message && <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#D5DBE5]">{message}</div>}
+      {(plans.some((plan) => plan.regionalPrices.some((price) => price.paymentRoute === "MERCHANT_OF_RECORD" || price.taxMode === "MERCHANT_OF_RECORD")) ||
+        capacityOffers.some((offer) => offer.regionalPrices.some((price) => price.paymentRoute === "MERCHANT_OF_RECORD" || price.taxMode === "MERCHANT_OF_RECORD"))) && (
+        <div role="alert" className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
+          Legacy Merchant-of-Record pricing exists in persisted data. It is not an approved checkout route. Replace each affected price with Stripe or PayU and a supported tax mode before enabling it.
+        </div>
+      )}
+
+      <section className="rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4">
+        <label className="block text-xs font-bold uppercase tracking-wider text-amber-200">
+          Change reason for existing commerce configuration
+          <textarea
+            value={changeReason}
+            onChange={(event) => setChangeReason(event.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="Required before saving an existing plan, price or usage rule."
+            className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm font-normal normal-case tracking-normal text-white"
+          />
+        </label>
+      </section>
+
+      {message && (
+        <div
+          role={messageTone === "error" ? "alert" : "status"}
+          aria-live={messageTone === "error" ? "assertive" : "polite"}
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            messageTone === "error"
+              ? "border-red-400/25 bg-red-500/10 text-red-200"
+              : "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+      {catalogueWarnings.length > 0 && (
+        <div role="status" className="space-y-1 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+          <p className="font-bold">Catalogue display is bounded</p>
+          {catalogueWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+        </div>
+      )}
 
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-[#16161B] p-10 text-center text-sm text-[#94A3B8]">Loading configuration…</div>
@@ -178,11 +384,19 @@ export default function AdminCopilotCommercePage() {
         <>
           <section className="space-y-5">
             <h2 className="text-xl font-extrabold text-white">Plans & regional prices</h2>
+            {plans.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-sm text-[#94A3B8]">
+                No Copilot plans are configured.
+              </div>
+            )}
             {plans.map((plan) => (
               <article key={plan.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-6">
-                <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-end">
                   <div>
-                    <p className="text-xs font-extrabold uppercase tracking-wider text-[#7FB0FF]">{plan.code}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-extrabold uppercase tracking-wider text-[#7FB0FF]">{plan.code}</p>
+                      {plan.isArchived && <span className="rounded-full border border-slate-500/30 px-2 py-0.5 text-[9px] text-slate-400">ARCHIVED</span>}
+                    </div>
                     <h3 className="mt-1 text-2xl font-extrabold text-white">{plan.name}</h3>
                     <p className="mt-2 text-xs text-[#94A3B8]">{plan.description}</p>
                   </div>
@@ -207,16 +421,89 @@ export default function AdminCopilotCommercePage() {
                       className="mt-2 block w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
                     />
                   </label>
+                  <label className="text-xs text-[#94A3B8]">
+                    Hard warning %
+                    <input
+                      id={`hard-${plan.id}`}
+                      type="number"
+                      min={2}
+                      max={100}
+                      defaultValue={plan.hardWarningPct}
+                      className="mt-2 block w-28 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white"
+                    />
+                  </label>
                   <button
                     disabled={saving === plan.id}
                     onClick={() => {
                       const cap = Number((document.getElementById(`cap-${plan.id}`) as HTMLInputElement)?.value);
                       const soft = Number((document.getElementById(`soft-${plan.id}`) as HTMLInputElement)?.value);
-                      void patch({ type: "PLAN", planId: plan.id, monthlyCapacityUnits: cap, softWarningPct: soft }, plan.id);
+                      const hard = Number((document.getElementById(`hard-${plan.id}`) as HTMLInputElement)?.value);
+                      void patch(
+                        {
+                          type: "PLAN",
+                          planId: plan.id,
+                          monthlyCapacityUnits: cap,
+                          softWarningPct: soft,
+                          hardWarningPct: hard,
+                        },
+                        plan.id,
+                        plan.updatedAt,
+                      );
                     }}
                     className="rounded-xl bg-[#448AFF] px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
                   >
                     Save plan
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+                  <label className="text-xs text-[#94A3B8]">
+                    Employer-facing feature entitlements
+                    <input
+                      id={`features-${plan.id}`}
+                      defaultValue={plan.featuresAllowed.join(",")}
+                      placeholder="FEATURE_A,FEATURE_B"
+                      className="mt-2 block w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={saving === `features-${plan.id}`}
+                    onClick={() => {
+                      const featuresAllowed = ((document.getElementById(`features-${plan.id}`) as HTMLInputElement)?.value || "")
+                        .split(",")
+                        .map((value) => value.trim().toUpperCase())
+                        .filter(Boolean);
+                      void patch(
+                        { type: "PLAN", planId: plan.id, featuresAllowed },
+                        `features-${plan.id}`,
+                        plan.updatedAt,
+                      );
+                    }}
+                    className="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    Save entitlements
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving === `plan-state-${plan.id}`}
+                    onClick={() => {
+                      if (plan.isArchived) {
+                        void patch(
+                          { type: "PLAN", planId: plan.id, isArchived: false },
+                          `plan-state-${plan.id}`,
+                          plan.updatedAt,
+                        );
+                        return;
+                      }
+                      setPlanArchiveReason("");
+                      setPlanArchiveTarget(plan);
+                    }}
+                    className={`rounded-xl border px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${
+                      plan.isArchived ? "border-emerald-500/30 text-emerald-300" : "border-red-500/30 text-red-300"
+                    }`}
+                  >
+                    {plan.isArchived ? "Restore plan" : "Archive plan"}
                   </button>
                 </div>
 
@@ -238,7 +525,14 @@ export default function AdminCopilotCommercePage() {
                       {plan.regionalPrices.map((price) => (
                         <tr key={price.id} className="border-b border-white/5 text-[#D5DBE5]">
                           <td className="py-3 pr-3 font-bold">{price.regionCode}</td>
-                          <td className="py-3 pr-3 max-w-[260px] truncate" title={price.countries.join(", ")}>{price.countries.length ? price.countries.join(", ") : "Fallback"}</td>
+                          <td className="py-3 pr-3">
+                            <input
+                              id={`countries-${price.id}`}
+                              defaultValue={price.countries.join(",")}
+                              placeholder="IN or DE,FR"
+                              className="w-44 rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white"
+                            />
+                          </td>
                           <td className="py-3 pr-3">
                             <input id={`cur-${price.id}`} defaultValue={price.currency} maxLength={3} className="w-20 rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white" />
                           </td>
@@ -247,10 +541,10 @@ export default function AdminCopilotCommercePage() {
                           </td>
                           <td className="py-3 pr-3">
                             <select id={`tax-${price.id}`} defaultValue={price.taxMode} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.taxMode === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
                               <option value="NO_TAX_COLLECTION">No tax collection</option>
                               <option value="TAX_EXCLUSIVE">Tax exclusive</option>
                               <option value="TAX_INCLUSIVE">Tax inclusive</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </td>
                           <td className="py-3 pr-3">
@@ -258,25 +552,45 @@ export default function AdminCopilotCommercePage() {
                           </td>
                           <td className="py-3 pr-3">
                             <select id={`route-${price.id}`} defaultValue={price.paymentRoute} className="rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.paymentRoute === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
                               <option value="PAYU">PayU</option>
                               <option value="STRIPE">Stripe</option>
-                              <option value="MERCHANT_OF_RECORD">Merchant of Record</option>
                             </select>
                           </td>
                           <td className="py-3">
                             <button
                               disabled={saving === price.id}
                               onClick={() => {
+                                const countries = ((document.getElementById(`countries-${price.id}`) as HTMLInputElement)?.value || "")
+                                  .split(",")
+                                  .map((value) => value.trim().toUpperCase())
+                                  .filter(Boolean);
                                 const currency = (document.getElementById(`cur-${price.id}`) as HTMLInputElement)?.value.toUpperCase();
                                 const amountMinor = Number((document.getElementById(`amt-${price.id}`) as HTMLInputElement)?.value);
                                 const taxMode = (document.getElementById(`tax-${price.id}`) as HTMLSelectElement)?.value;
                                 const taxRateBps = Math.round(Number((document.getElementById(`tax-rate-${price.id}`) as HTMLInputElement)?.value) * 100);
                                 const paymentRoute = (document.getElementById(`route-${price.id}`) as HTMLSelectElement)?.value;
-                                void patch({ type: "PRICE", priceId: price.id, currency, amountMinor, taxMode, taxRateBps, paymentRoute }, price.id);
+                                void patch({ type: "PRICE", priceId: price.id, countries, currency, amountMinor, taxMode, taxRateBps, paymentRoute }, price.id, price.updatedAt);
                               }}
                               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-bold text-white hover:bg-white/10 disabled:opacity-50"
                             >
                               Save
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving === `price-state-${price.id}`}
+                              onClick={() =>
+                                void patch(
+                                  { type: "PRICE", priceId: price.id, isActive: !price.isActive },
+                                  `price-state-${price.id}`,
+                                  price.updatedAt,
+                                )
+                              }
+                              className={`ml-2 rounded-lg border px-3 py-2 font-bold disabled:opacity-50 ${
+                                price.isActive ? "border-red-500/30 text-red-300" : "border-emerald-500/30 text-emerald-300"
+                              }`}
+                            >
+                              {price.isActive ? "Disable" : "Enable"}
                             </button>
                           </td>
                         </tr>
@@ -301,6 +615,7 @@ export default function AdminCopilotCommercePage() {
               <input name="name" required placeholder="Customer name, e.g. Small Boost" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
               <input name="description" required placeholder="Customer-facing description" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white lg:col-span-2" />
               <input name="capacityUnits" required type="number" min={1} placeholder="Internal capacity units" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white" />
+              <input name="reason" required minLength={3} maxLength={500} placeholder="Creation reason (required)" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white lg:col-span-2" />
               <input name="regionCode" required placeholder="Region, e.g. IN" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="countries" required placeholder="Countries, e.g. IN or DE,FR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
               <input name="currency" required maxLength={3} placeholder="INR" className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm uppercase text-white" />
@@ -333,22 +648,144 @@ export default function AdminCopilotCommercePage() {
               <div className="grid gap-4 lg:grid-cols-2">
                 {capacityOffers.map((offer) => (
                   <article key={offer.id} className="rounded-[24px] border border-white/10 bg-[#16161B] p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#7FB0FF]">{offer.code}</p>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#7FB0FF]">{offer.code}</p>
+                          {offer.isArchived && <span className="rounded-full border border-slate-500/30 px-2 py-0.5 text-[9px] text-slate-400">ARCHIVED</span>}
+                        </div>
                         <h3 className="mt-1 text-lg font-extrabold text-white">{offer.name}</h3>
                         <p className="mt-2 text-xs text-[#94A3B8]">{offer.description}</p>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right">
-                        <p className="text-[10px] uppercase text-[#64748B]">Internal units</p>
-                        <p className="font-mono text-lg font-bold text-white">{offer.capacityUnits}</p>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="text-[10px] uppercase text-[#64748B]">
+                          Internal units
+                          <input
+                            id={`offer-cap-${offer.id}`}
+                            type="number"
+                            min={1}
+                            defaultValue={offer.capacityUnits}
+                            className="mt-1 block w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-white"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          disabled={saving === `offer-${offer.id}`}
+                          onClick={() => {
+                            const capacityUnits = Number((document.getElementById(`offer-cap-${offer.id}`) as HTMLInputElement)?.value);
+                            void patchCapacityOffer(
+                              { type: "OFFER", offerId: offer.id, capacityUnits },
+                              `offer-${offer.id}`,
+                              offer.updatedAt,
+                            );
+                          }}
+                          className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold disabled:opacity-50"
+                        >
+                          Save units
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving === `offer-state-${offer.id}`}
+                          onClick={() => {
+                            if (offer.isArchived) {
+                              void patchCapacityOffer(
+                                { type: "OFFER", offerId: offer.id, isArchived: false },
+                                `offer-state-${offer.id}`,
+                                offer.updatedAt,
+                              );
+                              return;
+                            }
+                            setArchiveReason("");
+                            setArchiveTarget(offer);
+                          }}
+                          className={`rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50 ${
+                            offer.isArchived ? "border-emerald-500/30 text-emerald-300" : "border-red-500/30 text-red-300"
+                          }`}
+                        >
+                          {offer.isArchived ? "Restore offer" : "Archive offer"}
+                        </button>
                       </div>
                     </div>
-                    <div className="mt-4 space-y-2">
+
+                    <div className="mt-4 space-y-3">
                       {offer.regionalPrices.map((price) => (
-                        <div key={price.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
-                          <span className="font-bold text-[#D5DBE5]">{price.regionCode} · {price.currency}</span>
-                          <span className="text-[#94A3B8]">{price.amountMinor} minor units · {price.taxMode} {price.taxRateBps ? `(${price.taxRateBps / 100}%)` : ""} · {price.paymentRoute}</span>
+                        <div key={price.id} className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs sm:grid-cols-2 lg:grid-cols-8 lg:items-end">
+                          <div className="rounded-lg border border-white/5 bg-black/10 p-2 text-[#94A3B8]">
+                            <span className="block text-[9px] uppercase text-[#64748B]">Region</span>
+                            <strong className="mt-1 block text-white">{price.regionCode}</strong>
+                          </div>
+                          <label className="text-[#94A3B8]">
+                            Countries
+                            <input id={`offer-countries-${price.id}`} defaultValue={price.countries.join(",")} placeholder="IN or DE,FR" className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Currency
+                            <input id={`offer-cur-${price.id}`} defaultValue={price.currency} maxLength={3} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Amount minor
+                            <input id={`offer-amt-${price.id}`} type="number" min={1} defaultValue={price.amountMinor} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Tax mode
+                            <select id={`offer-tax-${price.id}`} defaultValue={price.taxMode} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.taxMode === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
+                              <option value="NO_TAX_COLLECTION">No tax</option>
+                              <option value="TAX_EXCLUSIVE">Tax exclusive</option>
+                              <option value="TAX_INCLUSIVE">Tax inclusive</option>
+                            </select>
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Tax %
+                            <input id={`offer-rate-${price.id}`} type="number" min={0} max={100} step={0.01} defaultValue={price.taxRateBps / 100} className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" />
+                          </label>
+                          <label className="text-[#94A3B8]">
+                            Route
+                            <select id={`offer-route-${price.id}`} defaultValue={price.paymentRoute} className="mt-1 w-full rounded-lg border border-white/10 bg-[#1A1A20] px-2 py-2 text-white">
+                              {price.paymentRoute === "MERCHANT_OF_RECORD" && <option value="MERCHANT_OF_RECORD" disabled>Legacy MoR — replace</option>}
+                              <option value="STRIPE">Stripe</option>
+                              <option value="PAYU">PayU</option>
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={saving === `offer-price-${price.id}`}
+                            onClick={() => {
+                              const countries = ((document.getElementById(`offer-countries-${price.id}`) as HTMLInputElement)?.value || "")
+                                .split(",")
+                                .map((value) => value.trim().toUpperCase())
+                                .filter(Boolean);
+                              const currency = (document.getElementById(`offer-cur-${price.id}`) as HTMLInputElement)?.value.toUpperCase();
+                              const amountMinor = Number((document.getElementById(`offer-amt-${price.id}`) as HTMLInputElement)?.value);
+                              const taxMode = (document.getElementById(`offer-tax-${price.id}`) as HTMLSelectElement)?.value;
+                              const taxRateBps = Math.round(Number((document.getElementById(`offer-rate-${price.id}`) as HTMLInputElement)?.value) * 100);
+                              const paymentRoute = (document.getElementById(`offer-route-${price.id}`) as HTMLSelectElement)?.value;
+                              void patchCapacityOffer(
+                                { type: "PRICE", priceId: price.id, countries, currency, amountMinor, taxMode, taxRateBps, paymentRoute },
+                                `offer-price-${price.id}`,
+                                price.updatedAt,
+                              );
+                            }}
+                            className="rounded-lg border border-white/10 px-3 py-2 font-bold text-white disabled:opacity-50"
+                          >
+                            Save price
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving === `offer-price-state-${price.id}`}
+                            onClick={() =>
+                              void patchCapacityOffer(
+                                { type: "PRICE", priceId: price.id, isActive: !price.isActive },
+                                `offer-price-state-${price.id}`,
+                                price.updatedAt,
+                              )
+                            }
+                            className={`rounded-lg border px-3 py-2 font-bold disabled:opacity-50 ${
+                              price.isActive ? "border-red-500/30 text-red-300" : "border-emerald-500/30 text-emerald-300"
+                            }`}
+                          >
+                            {price.isActive ? "Disable" : "Enable"}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -371,12 +808,16 @@ export default function AdminCopilotCommercePage() {
                     <th>Unit type</th>
                     <th>Weight</th>
                     <th>Estimated cost</th>
+                    <th>Cost currency</th>
                     <th>Expensive</th>
                     <th>Enabled</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
+                  {rules.length === 0 && (
+                    <tr><td colSpan={8} className="p-8 text-center text-[#94A3B8]">No Copilot usage rules are configured.</td></tr>
+                  )}
                   {rules.map((rule) => (
                     <tr key={rule.actionKey} className="border-b border-white/5 text-[#D5DBE5]">
                       <td className="py-3 pr-3">
@@ -386,15 +827,51 @@ export default function AdminCopilotCommercePage() {
                       <td>{rule.unitType}</td>
                       <td><input id={`rule-units-${rule.actionKey}`} type="number" min={1} defaultValue={rule.unitsPerQuantity} className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" /></td>
                       <td><input id={`rule-cost-${rule.actionKey}`} type="number" min={0} defaultValue={rule.estimatedCostMinor} className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white" /></td>
-                      <td>{rule.expensive ? "Yes" : "No"}</td>
-                      <td>{rule.active ? "Yes" : "No"}</td>
+                      <td><input id={`rule-currency-${rule.actionKey}`} maxLength={3} defaultValue={rule.estimatedCostCurrency} className="w-20 rounded-lg border border-white/10 bg-white/5 px-2 py-2 uppercase text-white" /></td>
+                      <td>
+                        <button
+                          type="button"
+                          disabled={saving === `rule-expensive-${rule.actionKey}`}
+                          onClick={() => void patch(
+                            { type: "USAGE_RULE", actionKey: rule.actionKey, expensive: !rule.expensive },
+                            `rule-expensive-${rule.actionKey}`,
+                            rule.updatedAt,
+                          )}
+                          className={`rounded-lg border px-3 py-2 font-bold disabled:opacity-50 ${
+                            rule.expensive ? "border-amber-500/30 text-amber-300" : "border-white/10 text-slate-300"
+                          }`}
+                        >
+                          {rule.expensive ? "Expensive" : "Standard"}
+                        </button>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          disabled={saving === `rule-active-${rule.actionKey}`}
+                          onClick={() => void patch(
+                            { type: "USAGE_RULE", actionKey: rule.actionKey, active: !rule.active },
+                            `rule-active-${rule.actionKey}`,
+                            rule.updatedAt,
+                          )}
+                          className={`rounded-lg border px-3 py-2 font-bold disabled:opacity-50 ${
+                            rule.active ? "border-emerald-500/30 text-emerald-300" : "border-red-500/30 text-red-300"
+                          }`}
+                        >
+                          {rule.active ? "Enabled" : "Disabled"}
+                        </button>
+                      </td>
                       <td>
                         <button
                           disabled={saving === rule.actionKey}
                           onClick={() => {
                             const unitsPerQuantity = Number((document.getElementById(`rule-units-${rule.actionKey}`) as HTMLInputElement)?.value);
                             const estimatedCostMinor = Number((document.getElementById(`rule-cost-${rule.actionKey}`) as HTMLInputElement)?.value);
-                            void patch({ type: "USAGE_RULE", actionKey: rule.actionKey, unitsPerQuantity, estimatedCostMinor }, rule.actionKey);
+                            const estimatedCostCurrency = (document.getElementById(`rule-currency-${rule.actionKey}`) as HTMLInputElement)?.value.toUpperCase();
+                            void patch(
+                              { type: "USAGE_RULE", actionKey: rule.actionKey, unitsPerQuantity, estimatedCostMinor, estimatedCostCurrency },
+                              rule.actionKey,
+                              rule.updatedAt,
+                            );
                           }}
                           className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-bold text-white hover:bg-white/10 disabled:opacity-50"
                         >
@@ -408,6 +885,98 @@ export default function AdminCopilotCommercePage() {
             </div>
           </section>
         </>
+      )}
+        </main>
+      </div>
+
+      {planArchiveTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-copilot-plan-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161B] p-6 shadow-2xl">
+            <h2 id="archive-copilot-plan-title" className="text-lg font-extrabold text-white">
+              Archive {planArchiveTarget.name}?
+            </h2>
+            <p className="mt-2 text-sm text-[#94A3B8]">
+              The plan will stop being offered for new Copilot purchases. Existing subscriptions, purchases and usage history remain persisted.
+            </p>
+            <label className="mt-5 block text-xs text-[#94A3B8]">
+              Archive reason
+              <textarea
+                value={planArchiveReason}
+                onChange={(event) => setPlanArchiveReason(event.target.value)}
+                maxLength={500}
+                rows={4}
+                placeholder="Why should this Copilot plan stop being sold?"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={Boolean(saving)}
+                onClick={() => {
+                  setPlanArchiveTarget(null);
+                  setPlanArchiveReason("");
+                }}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(saving) || planArchiveReason.trim().length < 3}
+                onClick={() => void archivePlan()}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {saving ? "Archiving…" : "Archive plan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {archiveTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-capacity-offer-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#16161B] p-6 shadow-2xl">
+            <h2 id="archive-capacity-offer-title" className="text-lg font-extrabold text-white">
+              Archive {archiveTarget.name}?
+            </h2>
+            <p className="mt-2 text-sm text-[#94A3B8]">
+              The offer will stop being available for new capacity purchases. Existing purchase and entitlement history remains persisted.
+            </p>
+            <label className="mt-5 block text-xs text-[#94A3B8]">
+              Archive reason
+              <textarea
+                value={archiveReason}
+                onChange={(event) => setArchiveReason(event.target.value)}
+                maxLength={500}
+                rows={4}
+                placeholder="Why should this capacity offer stop being sold?"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+              />
+            </label>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={Boolean(saving)}
+                onClick={() => {
+                  setArchiveTarget(null);
+                  setArchiveReason("");
+                }}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-bold disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(saving) || archiveReason.trim().length < 3}
+                onClick={() => void archiveCapacityOffer()}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {saving ? "Archiving…" : "Archive offer"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

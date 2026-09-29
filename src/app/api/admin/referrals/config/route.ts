@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, getClientIp, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { requireAdminSession } from "@/lib/routeAuthorization";
 import {
   getReferralProgramConfig,
   updateReferralProgramConfig,
@@ -18,25 +18,17 @@ const configUpdateSchema = z.object({
   managedHiringDefaultLockDays: z.union([z.literal(45), z.literal(60), z.literal(90)]).optional(),
   minPayoutAmount: z.number().min(100).max(100000).optional(),
   attributionWindowDays: z.number().int().min(1).max(365).optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one referral configuration field is required.");
+  reason: z.string().trim().min(3).max(500),
+  expectedUpdatedAt: z.string().datetime(),
+}).strict().refine(
+  (value) => Object.keys(value).some((key) => key !== "expectedUpdatedAt" && key !== "reason"),
+  "At least one referral configuration field is required.",
+);
 
 export async function GET(request: Request) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
-    }
-    if (session.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Administrator access required" },
-        { status: 403 }
-      );
-    }
-
-    await enforceRateLimit(request, "admin_referral_config_read", 60, 60_000);
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_referral_config_read:${admin.id}`, 60, 60_000);
     const config = await getReferralProgramConfig();
     return NextResponse.json({ success: true, config });
   } catch (error) {
@@ -46,29 +38,24 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: Authentication required" },
-        { status: 401 }
-      );
-    }
-    if (session.role !== "ADMIN") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Administrator access required" },
-        { status: 403 }
-      );
-    }
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_referral_config_write:${admin.id}`, 20, 60_000);
+    const body = await readValidatedJson(request, configUpdateSchema, 8 * 1024);
+    const { expectedUpdatedAt, reason, ...updates } = body;
 
-    await enforceRateLimit(request, "admin_referral_config_write", 20, 60_000);
-    const body = await readValidatedJson(request, configUpdateSchema);
-    const updated = await updateReferralProgramConfig(body, {
-      actorId: session.id,
-      ipAddress: getClientIp(request),
-    });
+    const updated = await updateReferralProgramConfig(
+      updates,
+      {
+        actorId: admin.id,
+        ipAddress: getClientIp(request),
+        reason,
+      },
+      expectedUpdatedAt,
+    );
+
     return NextResponse.json({
       success: true,
-      message: "Referral program configuration updated successfully",
+      message: "Referral program configuration updated successfully.",
       config: updated,
     });
   } catch (error) {

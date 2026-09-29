@@ -69,7 +69,7 @@ export default function AdminLoginPage() {
           {/* Login Form Card */}
           <div className="glass-card w-full p-6 lg:p-8 rounded-2xl border border-outline shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
             {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
+              <div role="alert" aria-live="assertive" className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2">
                 <CircleAlert className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
                 {error}
               </div>
@@ -89,6 +89,7 @@ export default function AdminLoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@hirego.ai"
+                    autoComplete="username"
                     required
                     type="email"
                   />
@@ -110,11 +111,14 @@ export default function AdminLoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
+                    autoComplete="current-password"
                     required
                     type={showPassword ? "text" : "password"}
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? "Hide administrator password" : "Show administrator password"}
+                    aria-pressed={showPassword}
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors"
                   >
@@ -152,7 +156,7 @@ export default function AdminLoginPage() {
               <div className="pt-3 border-t border-white/5 text-center">
                 <p className="text-[11px] text-text-muted italic flex items-center justify-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Admin System Active. All session logs recorded.
+                  Administrator sign-in activity is security monitored.
                 </p>
               </div>
             </form>

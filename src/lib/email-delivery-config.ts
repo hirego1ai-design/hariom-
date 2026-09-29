@@ -75,11 +75,16 @@ function environmentConfig(provider: EmailProvider): EmailProviderRuntimeConfig 
   return apiKey && fromEmail ? { provider, apiKey, fromEmail } : null;
 }
 
+async function databaseConfigStrict() {
+  return prisma.emailDeliveryConfig.findUnique({ where: { id: CONFIG_ID } });
+}
+
 async function databaseConfig() {
   try {
-    return await prisma.emailDeliveryConfig.findUnique({ where: { id: CONFIG_ID } });
+    return await databaseConfigStrict();
   } catch (error) {
     console.error("[Email Dispatch] Unable to load admin delivery configuration.", error);
+    if (process.env.NODE_ENV === "production") throw error;
     return null;
   }
 }
@@ -99,8 +104,9 @@ function resolveProviderConfig(
   return apiKey && fromEmail ? { provider, apiKey, fromEmail } : null;
 }
 
-export async function getEmailDeliverySettings(): Promise<EmailDeliverySettings> {
-  const stored = await databaseConfig();
+function presentEmailDeliverySettings(
+  stored: Awaited<ReturnType<typeof databaseConfigStrict>>,
+): EmailDeliverySettings {
   const sendgridFromEmail = stored?.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL || "";
   const zeptoMailFromEmail = stored?.zeptoMailFromEmail || process.env.ZOHO_CPAAS_FROM_EMAIL || process.env.ZEPTOMAIL_FROM_EMAIL || "";
   return {
@@ -115,6 +121,14 @@ export async function getEmailDeliverySettings(): Promise<EmailDeliverySettings>
     zeptoMailKeyConfigured: Boolean(stored?.zeptoMailApiKeyEncrypted || process.env.ZOHO_CPAAS_SEND_MAIL_TOKEN || process.env.ZEPTOMAIL_API_KEY),
     updatedAt: stored?.updatedAt.toISOString() || null,
   };
+}
+
+export async function getEmailDeliverySettings(): Promise<EmailDeliverySettings> {
+  return presentEmailDeliverySettings(await databaseConfig());
+}
+
+export async function getEmailDeliverySettingsStrict(): Promise<EmailDeliverySettings> {
+  return presentEmailDeliverySettings(await databaseConfigStrict());
 }
 
 export async function getConfiguredEmailProviders(): Promise<EmailProviderRuntimeConfig[]> {

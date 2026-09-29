@@ -5,8 +5,8 @@ import { enforceRateLimit } from "@/lib/apiSecurity";
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdminSession(req);
-    await enforceRateLimit(req, "admin_revenue_managed_hiring", 60, 60_000);
+    const admin = await requireAdminSession(req);
+    await enforceRateLimit(req, `admin_revenue_managed_hiring:${admin.id}`, 60, 60_000);
     const data = await loadManagedHiringRevenue();
     const activeAgreements = data.agreements.filter((agreement) => agreement.status === "ACTIVE");
     return NextResponse.json({

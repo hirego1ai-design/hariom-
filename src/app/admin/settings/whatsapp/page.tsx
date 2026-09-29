@@ -7,9 +7,9 @@ export default function AdminWhatsappSettingsPage() {
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
       <AdminSidebar />
-      <div className="flex-1 ml-[116px] min-w-0">
+      <div className="min-w-0 flex-1 md:ml-[116px]">
         <AdminHeader title="WhatsApp Messaging Configuration" />
-        <main className="pt-24 p-gutter max-w-4xl mx-auto">
+        <main className="mx-auto max-w-4xl p-4 pt-24 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6">
             <h1 className="text-xl font-bold text-white">Provider configuration is server-managed</h1>
             <p className="mt-3 text-sm text-text-secondary">

@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { RecordedAssessmentRestrictionStatus } from "@prisma/client";
-import { getCurrentSession } from "@/lib/auth";
-import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { z } from "zod";
+import {
+  ApiError,
+  enforceRateLimit,
+  getClientIp,
+  handleApiError,
+  readValidatedJson,
+} from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { requireAdminSession } from "@/lib/routeAuthorization";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+
+const querySchema = z.object({
+  status: z.nativeEnum(RecordedAssessmentRestrictionStatus).default("PENDING_REVIEW"),
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 
 const proposalSchema = z.object({
   userId: z.string().uuid(),
@@ -15,49 +27,114 @@ const proposalSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getCurrentSession(request.headers);
-    if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required.", 403);
-    const statusParam = request.nextUrl.searchParams.get("status") || "PENDING_REVIEW";
-    if (!Object.values(RecordedAssessmentRestrictionStatus).includes(statusParam as RecordedAssessmentRestrictionStatus)) throw new ApiError("Invalid restriction status.", 400);
-    const status = statusParam as RecordedAssessmentRestrictionStatus;
-    const restrictions = await prisma.recordedAssessmentRestriction.findMany({
-      where: { status },
-      orderBy: { createdAt: "asc" },
-      take: 100,
-      include: { user: { select: { id: true, name: true, email: true } } },
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_assessment_restrictions_read:${admin.id}`, 60, 60_000);
+    const query = querySchema.parse(Object.fromEntries(request.nextUrl.searchParams.entries()));
+
+    const where = { status: query.status };
+    const [total, restrictions] = await prisma.$transaction([
+      prisma.recordedAssessmentRestriction.count({ where }),
+      prisma.recordedAssessmentRestriction.findMany({
+        where,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      total,
+      page: query.page,
+      limit: query.limit,
+      restrictions,
     });
-    return NextResponse.json({ success: true, restrictions });
-  } catch (error) { return handleApiError(error); }
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await enforceRateLimit(request, "assessment_restriction_proposal", 20);
-    const session = await getCurrentSession(request.headers);
-    if (!session || session.role !== "ADMIN") throw new ApiError("Administrator access required.", 403);
-    const body = await readValidatedJson(request, proposalSchema);
-    const attempt = await prisma.recordedAssessmentAttempt.findFirst({
-      where: { id: body.attemptId, candidateProfile: { userId: body.userId } },
-      include: { proctoringEvents: { orderBy: { createdAt: "asc" }, take: 100 } },
-    });
-    if (!attempt) throw new ApiError("Assessment attempt does not belong to this candidate.", 404);
-    if (!attempt.proctoringEvents.length) throw new ApiError("Restriction proposals require preserved proctoring evidence.", 409);
-    const existing = await prisma.recordedAssessmentRestriction.findFirst({
-      where: { userId: body.userId, attemptId: body.attemptId, status: { in: ["PENDING_REVIEW","ACTIVE"] } },
-      select: { id: true },
-    });
-    if (existing) throw new ApiError("This assessment already has an open restriction review.", 409);
-    const restriction = await prisma.recordedAssessmentRestriction.create({
-      data: {
-        ...body,
-        status: "PENDING_REVIEW",
-        evidence: {
-          attemptStatus: attempt.status,
-          events: attempt.proctoringEvents.map((event) => ({ id: event.id, type: event.eventType, severity: event.severity, warningNumber: event.warningNumber, evidence: event.evidence, createdAt: event.createdAt })),
+    const admin = await requireAdminSession(request);
+    await enforceRateLimit(request, `admin_assessment_restrictions_write:${admin.id}`, 20, 60_000);
+    const body = await readValidatedJson(request, proposalSchema, 12 * 1024);
+
+    const restriction = await prisma.$transaction(async (tx) => {
+      const attempt = await tx.recordedAssessmentAttempt.findFirst({
+        where: {
+          id: body.attemptId,
+          candidateProfile: { userId: body.userId },
         },
-      },
+        include: {
+          proctoringEvents: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: 100,
+          },
+        },
+      });
+      if (!attempt) {
+        throw new ApiError("Assessment attempt does not belong to this candidate.", 404);
+      }
+      if (!attempt.proctoringEvents.length) {
+        throw new ApiError("Restriction proposals require preserved proctoring evidence.", 409);
+      }
+
+      const existing = await tx.recordedAssessmentRestriction.findFirst({
+        where: {
+          userId: body.userId,
+          attemptId: body.attemptId,
+          status: { in: ["PENDING_REVIEW", "ACTIVE"] },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new ApiError("This assessment already has an open restriction review.", 409);
+      }
+
+      const created = await tx.recordedAssessmentRestriction.create({
+        data: {
+          ...body,
+          status: "PENDING_REVIEW",
+          evidence: {
+            attemptStatus: attempt.status,
+            events: attempt.proctoringEvents.map((event) => ({
+              id: event.id,
+              type: event.eventType,
+              severity: event.severity,
+              warningNumber: event.warningNumber,
+              evidence: event.evidence,
+              createdAt: event.createdAt.toISOString(),
+            })),
+          },
+        },
+      });
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: "ASSESSMENT_RESTRICTION_PROPOSED",
+          resource: `RecordedAssessmentRestriction:${created.id}`,
+          ipAddress: getClientIp(request) || "unknown",
+          details: JSON.stringify({
+            attemptId: body.attemptId,
+            proposedMonths: body.proposedMonths,
+            evidenceEvents: attempt.proctoringEvents.length,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+
+      return created;
     });
-    await logAuditEvent({ userId: session.id, action: "ASSESSMENT_RESTRICTION_PROPOSED", resource: `RecordedAssessmentRestriction:${restriction.id}`, details: `Created human-review proposal for assessment attempt ${body.attemptId}; proposed duration ${body.proposedMonths} month(s).` });
+
     return NextResponse.json({ success: true, restriction }, { status: 201 });
-  } catch (error) { return handleApiError(error); }
+  } catch (error) {
+    return handleApiError(error);
+  }
 }

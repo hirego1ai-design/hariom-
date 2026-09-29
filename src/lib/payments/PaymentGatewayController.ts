@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { ApiError } from "@/lib/apiSecurity";
 import {
   PaymentGateway,
   GatewayName,
@@ -89,6 +90,46 @@ export class PaymentGatewayController {
     };
   }
 
+  /** Fresh database snapshot for administrative editing.
+   * The config and version token come from the same row read, so an admin
+   * never receives a stale cached policy paired with a newer concurrency token.
+   */
+  static async getAdminConfigSnapshot(): Promise<{ config: GatewayConfigState; updatedAt: string | null }> {
+    const record = await prisma.paymentGatewayConfig.findUnique({
+      where: { id: "global-gateway-config" },
+    });
+
+    if (record) {
+      return {
+        config: this.normalizeConfig({
+          mode: record.mode as GatewayConfigState["mode"],
+          primaryGateway: record.primaryGateway as GatewayName,
+          autoFailover: record.autoFailover,
+          allowEmployerSelection: record.allowEmployerSelection,
+          gatewaysStatus: record.gatewaysStatus as GatewayConfigState["gatewaysStatus"],
+          priorities: record.priorities as GatewayName[],
+        }),
+        updatedAt: record.updatedAt.toISOString(),
+      };
+    }
+
+    const isProduction = process.env.NODE_ENV === "production";
+    return {
+      config: this.normalizeConfig({
+        mode: "AUTO",
+        primaryGateway: "STRIPE",
+        autoFailover: true,
+        allowEmployerSelection: true,
+        gatewaysStatus: {
+          PAYU: isProduction ? "DISABLED" : "HEALTHY",
+          STRIPE: isProduction ? "DISABLED" : "HEALTHY",
+        },
+        priorities: ["STRIPE", "PAYU"],
+      }),
+      updatedAt: null,
+    };
+  }
+
   /**
    * Fetch current admin gateway configuration (or initialize default)
    */
@@ -154,8 +195,10 @@ export class PaymentGatewayController {
   static async updateConfig(
     newConfig: Partial<GatewayConfigState>,
     auditContext?: GatewayConfigAuditContext,
+    expectedUpdatedAt?: string | null,
   ): Promise<GatewayConfigState> {
-    const current = await this.getConfig();
+    const currentSnapshot = await this.getAdminConfigSnapshot();
+    const current = currentSnapshot.config;
     const updated: GatewayConfigState = {
       ...current,
       ...newConfig,
@@ -180,6 +223,18 @@ export class PaymentGatewayController {
 
     try {
       await prisma.$transaction(async (tx) => {
+        const existing = await tx.paymentGatewayConfig.findUnique({
+          where: { id: "global-gateway-config" },
+          select: { updatedAt: true },
+        });
+        if (existing) {
+          if (!expectedUpdatedAt || existing.updatedAt.toISOString() !== expectedUpdatedAt) {
+            throw new ApiError("Payment gateway configuration changed; reload before saving.", 409);
+          }
+        } else if (expectedUpdatedAt) {
+          throw new ApiError("Payment gateway configuration changed; reload before saving.", 409);
+        }
+
         await tx.paymentGatewayConfig.upsert({
           where: { id: "global-gateway-config" },
           update: {

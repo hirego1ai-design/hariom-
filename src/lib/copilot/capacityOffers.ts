@@ -39,12 +39,16 @@ export async function resolveCapacityOffer(offerId: string, countryInput: string
   const price = selectPrice(offer.regionalPrices, countryCode);
   if (!price) throw new ApiError("This capacity offer is not available for the billing country.", 409);
 
-  assertCurrentCopilotTaxPolicy({
-    regionCode: price.regionCode,
-    countries: price.countries,
-    taxMode: price.taxMode,
-    taxRateBps: price.taxRateBps,
-  });
+  try {
+    assertCurrentCopilotTaxPolicy({
+      regionCode: price.regionCode,
+      countries: price.countries,
+      taxMode: price.taxMode,
+      taxRateBps: price.taxRateBps,
+    });
+  } catch {
+    throw new ApiError("Copilot capacity pricing configuration is unavailable for this billing country.", 409);
+  }
   const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
   return {
     offerId: offer.id,
@@ -78,12 +82,16 @@ export async function listPublicCapacityOffers(countryInput: string) {
   return offers.flatMap((offer) => {
     const price = selectPrice(offer.regionalPrices, countryCode);
     if (!price) return [];
-    assertCurrentCopilotTaxPolicy({
-      regionCode: price.regionCode,
-      countries: price.countries,
-      taxMode: price.taxMode,
-      taxRateBps: price.taxRateBps,
-    });
+    try {
+      assertCurrentCopilotTaxPolicy({
+        regionCode: price.regionCode,
+        countries: price.countries,
+        taxMode: price.taxMode,
+        taxRateBps: price.taxRateBps,
+      });
+    } catch {
+      return [];
+    }
     const tax = calculateCopilotTax(price.amountMinor, price.taxMode, price.taxRateBps);
     return [{
       id: offer.id,

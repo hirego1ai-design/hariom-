@@ -5,13 +5,21 @@ import { fetchEmployerCandidates, pipelineStageLabels, pipelineStageStatus } fro
 import { subscriptionCredits } from "../lib/payments/subscriptionCredits";
 import { isGateway, GatewayName } from "../lib/payments/PaymentGatewayInterface";
 
+function mockJsonResponse(payload: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+  } as Response;
+}
+
 test("pipeline fetch includes applications beyond the first 100 and preserves duplicate candidate applications", async () => {
   const original = globalThis.fetch;
   const urls: string[] = [];
   globalThis.fetch = async (input) => {
     urls.push(String(input));
     const page = urls.length;
-    return Response.json({ success: true, candidates: [{ id: "same-candidate", applicationId: `app-${page}` }],
+    return mockJsonResponse({ success: true, candidates: [{ id: "same-candidate", applicationId: `app-${page}` }],
       pagination: { nextCursor: page < 3 ? `cursor-${page}` : null } });
   };
   try {
@@ -25,15 +33,15 @@ test("pipeline rejects failed later pages instead of presenting partial results 
   const original = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => ++calls === 1
-    ? Response.json({ success: true, candidates: [{ id: "first" }], pagination: { nextCursor: "second" } })
-    : Response.json({ success: false, error: "Database unavailable" }, { status: 503 });
+    ? mockJsonResponse({ success: true, candidates: [{ id: "first" }], pagination: { nextCursor: "second" } })
+    : mockJsonResponse({ success: false, error: "Database unavailable" }, 503);
   try { await assert.rejects(fetchEmployerCandidates(), /Database unavailable/); }
   finally { globalThis.fetch = original; }
 });
 
 test("pipeline detects repeated cursors instead of an endless fetch loop", async () => {
   const original = globalThis.fetch;
-  globalThis.fetch = async () => Response.json({ success: true, candidates: [], pagination: { nextCursor: "same" } });
+  globalThis.fetch = async () => mockJsonResponse({ success: true, candidates: [], pagination: { nextCursor: "same" } });
   try { await assert.rejects(fetchEmployerCandidates(), /did not advance/); }
   finally { globalThis.fetch = original; }
 });
@@ -495,7 +503,7 @@ test("admin invoice creation derives commercial terms from authoritative agreeme
 
   assert(!ui.includes("useState(150000)"));
   assert(!ui.includes("setCompanyName"));
-  assert(ui.includes("tax rate, currency and payment due date are derived"));
+  assert(ui.includes("Company identity, billing currency, tax rate and due date are derived from the signed agreement and linked hiring requirement."));
 });
 
 test("recorded assessment question-bank publication and retirement are atomically audited", () => {
@@ -504,10 +512,10 @@ test("recorded assessment question-bank publication and retirement are atomicall
 
   assert(create.includes("prisma.$transaction"));
   assert(create.includes("RECORDED_ASSESSMENT_QUESTION_PUBLISHED"));
-  assert(create.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(create.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
 
   assert(retire.includes("prisma.$transaction"));
   assert(retire.includes("RECORDED_ASSESSMENT_QUESTION_RETIRED"));
   assert(retire.includes("updateMany"));
-  assert(retire.includes("enqueueSecurityAuditEvent(tx, auditLog, session.id)"));
+  assert(retire.includes("enqueueSecurityAuditEvent(tx, auditLog, admin.id)"));
 });

@@ -19,6 +19,7 @@ import {
 } from "@/types/referral";
 import { prisma } from "./prisma";
 import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
+import { ApiError } from "./apiSecurity";
 
 export const DEFAULT_REFERRAL_CONFIG: ReferralProgramConfig = {
   id: "global-referral-config",
@@ -62,6 +63,9 @@ export async function getReferralProgramConfig(): Promise<ReferralProgramConfig>
         };
         return cachedConfig;
       }
+      if (isProduction) {
+        throw new Error("Referral program configuration is missing from the database.");
+      }
     }
   } catch (error: any) {
     if (isProduction) {
@@ -77,53 +81,60 @@ export async function getReferralProgramConfig(): Promise<ReferralProgramConfig>
 type ReferralConfigAuditContext = {
   actorId: string;
   ipAddress?: string;
+  reason?: string;
 };
 
 export async function updateReferralProgramConfig(
   updates: Partial<ReferralProgramConfig>,
   auditContext?: ReferralConfigAuditContext,
+  expectedUpdatedAt?: string | null,
 ): Promise<ReferralProgramConfig> {
   const isProduction = process.env.NODE_ENV === "production";
-  const current = await getReferralProgramConfig();
-  const nextConfig: ReferralProgramConfig = {
-    ...current,
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
 
-  try {
-    const client = prisma as any;
-    if (client.referralProgramConfig) {
-      await prisma.$transaction(async (tx) => {
-        const txClient = tx as any;
-        await txClient.referralProgramConfig.upsert({
+  if (isProduction) {
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        const current = await tx.referralProgramConfig.findUnique({
           where: { id: "global-referral-config" },
-          update: {
-            isEnabled: nextConfig.isEnabled,
-            candidateRewardAmount: nextConfig.candidateRewardAmount,
-            candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
-            employerJobRewardAmount: nextConfig.employerJobRewardAmount,
-            employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
-            managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
-            managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
-            managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
-            minPayoutAmount: nextConfig.minPayoutAmount,
-            attributionWindowDays: nextConfig.attributionWindowDays,
-          },
-          create: {
-            id: "global-referral-config",
-            isEnabled: nextConfig.isEnabled,
-            candidateRewardAmount: nextConfig.candidateRewardAmount,
-            candidateMaxQualifyingTransactions: nextConfig.candidateMaxQualifyingTransactions,
-            employerJobRewardAmount: nextConfig.employerJobRewardAmount,
-            employerMaxQualifyingTransactions: nextConfig.employerMaxQualifyingTransactions,
-            managedHiringRewardAmount: nextConfig.managedHiringRewardAmount,
-            managedHiringMaxRewards: nextConfig.managedHiringMaxRewards,
-            managedHiringDefaultLockDays: nextConfig.managedHiringDefaultLockDays,
-            minPayoutAmount: nextConfig.minPayoutAmount,
-            attributionWindowDays: nextConfig.attributionWindowDays,
-          },
         });
+        if (!current) {
+          throw new ApiError(
+            "Referral program configuration is missing; apply database migrations before editing it.",
+            409,
+          );
+        }
+        if (!expectedUpdatedAt || current.updatedAt.toISOString() !== expectedUpdatedAt) {
+          throw new ApiError("Referral program configuration changed; reload before saving.", 409);
+        }
+
+        const nextConfig = {
+          isEnabled: updates.isEnabled ?? current.isEnabled,
+          candidateRewardAmount: updates.candidateRewardAmount ?? current.candidateRewardAmount,
+          candidateMaxQualifyingTransactions:
+            updates.candidateMaxQualifyingTransactions ?? current.candidateMaxQualifyingTransactions,
+          employerJobRewardAmount: updates.employerJobRewardAmount ?? current.employerJobRewardAmount,
+          employerMaxQualifyingTransactions:
+            updates.employerMaxQualifyingTransactions ?? current.employerMaxQualifyingTransactions,
+          managedHiringRewardAmount:
+            updates.managedHiringRewardAmount ?? current.managedHiringRewardAmount,
+          managedHiringMaxRewards:
+            updates.managedHiringMaxRewards ?? current.managedHiringMaxRewards,
+          managedHiringDefaultLockDays:
+            updates.managedHiringDefaultLockDays ?? current.managedHiringDefaultLockDays,
+          minPayoutAmount: updates.minPayoutAmount ?? current.minPayoutAmount,
+          attributionWindowDays: updates.attributionWindowDays ?? current.attributionWindowDays,
+        };
+
+        const changed = await tx.referralProgramConfig.updateMany({
+          where: {
+            id: current.id,
+            updatedAt: current.updatedAt,
+          },
+          data: nextConfig,
+        });
+        if (changed.count !== 1) {
+          throw new ApiError("Referral program configuration changed; reload before saving.", 409);
+        }
 
         if (auditContext) {
           const auditLog = await tx.auditLog.create({
@@ -132,24 +143,55 @@ export async function updateReferralProgramConfig(
               action: "REFERRAL_CONFIG_UPDATED",
               resource: "ReferralProgramConfig:global-referral-config",
               ...(auditContext.ipAddress ? { ipAddress: auditContext.ipAddress } : {}),
-              details: `changedKeys:${Object.keys(updates).sort().join(",")}`,
+              details: JSON.stringify({
+                changedKeys: Object.keys(updates).filter((key) => key !== "updatedAt").sort(),
+                previousUpdatedAt: current.updatedAt.toISOString(),
+              }),
             },
           });
           await enqueueSecurityAuditEvent(tx, auditLog, auditContext.actorId);
         }
+
+        return tx.referralProgramConfig.findUniqueOrThrow({
+          where: { id: current.id },
+        });
       });
-      cachedConfig = nextConfig;
-      return nextConfig;
-    }
-  } catch (error: any) {
-    if (isProduction) {
+
+      const result: ReferralProgramConfig = {
+        id: updated.id,
+        isEnabled: updated.isEnabled,
+        candidateRewardAmount: updated.candidateRewardAmount,
+        candidateMaxQualifyingTransactions: updated.candidateMaxQualifyingTransactions,
+        employerJobRewardAmount: updated.employerJobRewardAmount,
+        employerMaxQualifyingTransactions: updated.employerMaxQualifyingTransactions,
+        managedHiringRewardAmount: updated.managedHiringRewardAmount,
+        managedHiringMaxRewards: updated.managedHiringMaxRewards,
+        managedHiringDefaultLockDays: updated.managedHiringDefaultLockDays,
+        minPayoutAmount: updated.minPayoutAmount,
+        attributionWindowDays: updated.attributionWindowDays,
+        updatedAt: updated.updatedAt.toISOString(),
+      };
+      cachedConfig = result;
+      return result;
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
       const correlationId = `err-cfg-upd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      console.error(`[PROD-ERROR][CORRELATION: ${correlationId}] Database error updating referral config:`, error);
-      throw new Error(`[${correlationId}] Database unavailable: failed to update referral program configuration.`);
+      console.error(
+        `[PROD-ERROR][CORRELATION: ${correlationId}] Database error updating referral config:`,
+        error,
+      );
+      throw new Error(
+        `[${correlationId}] Database unavailable: failed to update referral program configuration.`,
+      );
     }
-    // Fallback persistence for offline dev/test
   }
 
+  const current = await getReferralProgramConfig();
+  const nextConfig: ReferralProgramConfig = {
+    ...current,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
   cachedConfig = nextConfig;
   return nextConfig;
 }

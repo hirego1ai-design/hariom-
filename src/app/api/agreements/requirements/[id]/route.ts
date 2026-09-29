@@ -9,11 +9,13 @@ import {
 import {
   ApiError,
   enforceRateLimit,
+  getClientIp,
   handleApiError,
   readValidatedJson,
 } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { activateManagedHiringRequirement } from "@/lib/managedHiring/RequirementActivation";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const requirementUpdateSchema = z.object({
   status: z.enum([
@@ -26,6 +28,8 @@ const requirementUpdateSchema = z.object({
   ]),
   assignedSalesLead: z.string().trim().min(1).max(200).optional(),
   activeAgreementId: z.string().trim().min(1).max(128).optional(),
+  expectedUpdatedAt: z.string().datetime(),
+  reason: z.string().trim().min(3).max(1000),
 }).strict();
 
 export async function GET(
@@ -33,8 +37,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await enforceRateLimit(req, "agreement_requirement_detail_read", 60, 60_000);
     const session = await requireEmployerOrAdminSession(req);
+    await enforceRateLimit(req, `agreement_requirement_detail_read:${session.id}`, 60, 60_000);
     const { id } = await params;
     const requirement = await agreementsDb.getRequirementById(id);
     if (!requirement) {
@@ -65,67 +69,24 @@ export async function PATCH(
     const { id } = await params;
     const body = await readValidatedJson(req, requirementUpdateSchema, 8 * 1024);
 
-    const current = await prisma.hiringRequirement.findFirst({
+    const observed = await prisma.hiringRequirement.findFirst({
       where: { OR: [{ id }, { referenceCode: id }] },
-      select: { id: true, companyId: true, status: true },
+      select: { id: true, updatedAt: true },
     });
-    if (!current) {
-      throw new ApiError("Requirement not found.", 404);
-    }
-
-    if (body.activeAgreementId) {
-      const agreement = await prisma.commercialAgreement.findUnique({
-        where: { id: body.activeAgreementId },
-        select: { requirementId: true, companyId: true, status: true },
-      });
-      if (
-        !agreement ||
-        agreement.requirementId !== current.id ||
-        agreement.companyId !== current.companyId
-      ) {
-        throw new ApiError(
-          "activeAgreementId must reference an agreement linked to this requirement and company.",
-          409,
-        );
-      }
-
-      if (body.status === "AGREEMENT_SENT" && agreement.status !== "SENT_TO_EMPLOYER") {
-        throw new ApiError(
-          "Requirement cannot be marked AGREEMENT_SENT until the linked agreement is sent to the employer.",
-          409,
-        );
-      }
-      if (body.status === "ACTIVE" && agreement.status !== "ACTIVE") {
-        throw new ApiError(
-          "Requirement cannot be marked ACTIVE until the linked agreement is signed and active.",
-          409,
-        );
-      }
-    } else if (["AGREEMENT_SENT", "ACTIVE"].includes(body.status)) {
-      const requiredAgreementStatus =
-        body.status === "ACTIVE" ? "ACTIVE" : "SENT_TO_EMPLOYER";
-      const linkedAgreement = await prisma.commercialAgreement.findFirst({
-        where: {
-          requirementId: current.id,
-          companyId: current.companyId,
-          status: requiredAgreementStatus,
-        },
-        select: { id: true },
-      });
-      if (!linkedAgreement) {
-        throw new ApiError(
-          `Requirement cannot enter ${body.status} without a linked ${requiredAgreementStatus} agreement.`,
-          409,
-        );
-      }
+    if (!observed) throw new ApiError("Requirement not found.", 404);
+    if (observed.updatedAt.toISOString() !== body.expectedUpdatedAt) {
+      throw new ApiError("Managed hiring requirement changed; reload before saving.", 409);
     }
 
     if (body.status === "ACTIVE") {
       const activation = await activateManagedHiringRequirement({
-        requirementId: current.id,
+        requirementId: observed.id,
         activeAgreementId: body.activeAgreementId,
         assignedSalesLead: body.assignedSalesLead,
         activatedById: session.id,
+        expectedUpdatedAt: body.expectedUpdatedAt,
+        reason: body.reason,
+        ipAddress: getClientIp(req),
       });
       return NextResponse.json({
         success: true,
@@ -141,21 +102,99 @@ export async function PATCH(
       });
     }
 
-    const updated = await agreementsDb.updateRequirementStatus(
-      current.id,
-      body.status,
-      body.assignedSalesLead,
-      body.activeAgreementId,
-    );
+    const updatedId = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "HiringRequirement" WHERE id = ${observed.id} FOR UPDATE`;
 
-    if (!updated) {
-      throw new ApiError("Requirement not found.", 404);
-    }
+      const current = await tx.hiringRequirement.findUnique({
+        where: { id: observed.id },
+      });
+      if (!current) throw new ApiError("Requirement not found.", 404);
+      if (current.updatedAt.toISOString() !== body.expectedUpdatedAt) {
+        throw new ApiError("Managed hiring requirement changed; reload before saving.", 409);
+      }
+
+      if (body.activeAgreementId) {
+        const agreement = await tx.commercialAgreement.findUnique({
+          where: { id: body.activeAgreementId },
+          select: { requirementId: true, companyId: true, status: true },
+        });
+        if (
+          !agreement ||
+          agreement.requirementId !== current.id ||
+          agreement.companyId !== current.companyId
+        ) {
+          throw new ApiError(
+            "activeAgreementId must reference an agreement linked to this requirement and company.",
+            409,
+          );
+        }
+        if (
+          body.status === "AGREEMENT_SENT" &&
+          agreement.status !== "SENT_TO_EMPLOYER"
+        ) {
+          throw new ApiError(
+            "Requirement cannot be marked AGREEMENT_SENT until the linked agreement is sent to the employer.",
+            409,
+          );
+        }
+      } else if (body.status === "AGREEMENT_SENT") {
+        const linkedAgreement = await tx.commercialAgreement.findFirst({
+          where: {
+            requirementId: current.id,
+            companyId: current.companyId,
+            status: "SENT_TO_EMPLOYER",
+          },
+          select: { id: true },
+        });
+        if (!linkedAgreement) {
+          throw new ApiError(
+            "Requirement cannot enter AGREEMENT_SENT without a linked SENT_TO_EMPLOYER agreement.",
+            409,
+          );
+        }
+      }
+
+      const changed = await tx.hiringRequirement.updateMany({
+        where: { id: current.id, updatedAt: current.updatedAt },
+        data: {
+          status: body.status,
+          ...(body.assignedSalesLead
+            ? { assignedSalesLead: body.assignedSalesLead }
+            : {}),
+        },
+      });
+      if (changed.count !== 1) {
+        throw new ApiError("Managed hiring requirement changed; reload before saving.", 409);
+      }
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: current.companyId,
+          action: "MANAGED_HIRING_REQUIREMENT_UPDATED",
+          resource: `HiringRequirement:${current.id}`,
+          ipAddress: getClientIp(req) || "unknown",
+          details: JSON.stringify({
+            previousStatus: current.status,
+            newStatus: body.status,
+            assignedSalesLead: body.assignedSalesLead || null,
+            activeAgreementId: body.activeAgreementId || null,
+            reason: body.reason,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+
+      return current.id;
+    });
+
+    const requirement = await agreementsDb.getRequirementById(updatedId);
+    if (!requirement) throw new ApiError("Requirement could not be reloaded after update.", 500);
 
     return NextResponse.json({
       success: true,
-      message: "Requirement updated successfully",
-      requirement: updated,
+      message: "Requirement updated and audited successfully.",
+      requirement,
     });
   } catch (error) {
     return handleApiError(error);
