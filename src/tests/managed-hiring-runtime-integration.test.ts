@@ -66,7 +66,7 @@ test("managed hiring requirement activation and safe sourcing work against the r
         replacementExpectation: "90 days",
         status: "SUBMITTED",
       },
-      select: { id: true },
+      select: { id: true, updatedAt: true },
     });
     requirementId = requirement.id;
 
@@ -100,6 +100,8 @@ test("managed hiring requirement activation and safe sourcing work against the r
       requirementId,
       activeAgreementId: agreementId,
       activatedById: adminId,
+      expectedUpdatedAt: requirement.updatedAt.toISOString(),
+      reason: "CI verifies managed-hiring activation against the real schema.",
     });
     assert.equal(activation.jobs.length, 1);
     jobId = activation.jobs[0].id;
@@ -107,10 +109,16 @@ test("managed hiring requirement activation and safe sourcing work against the r
     assert.equal(activation.jobs[0].managedAgreementId, agreementId);
     assert.equal(activation.jobs[0].status, "ACTIVE");
 
+    const requirementAfterActivation = await prisma.hiringRequirement.findUniqueOrThrow({
+      where: { id: requirementId },
+      select: { updatedAt: true },
+    });
     const replay = await activateManagedHiringRequirement({
       requirementId,
       activeAgreementId: agreementId,
       activatedById: adminId,
+      expectedUpdatedAt: requirementAfterActivation.updatedAt.toISOString(),
+      reason: "CI verifies idempotent managed-hiring activation replay.",
     });
     assert.equal(replay.jobs[0].id, jobId);
     assert.equal(
