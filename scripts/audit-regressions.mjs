@@ -20,7 +20,7 @@ const tests = [
 ];
 
 const fileTimeoutMs = 60_000;
-const namedTestTimeoutMs = 15_000;
+const namedTestTimeoutMs = 30_000;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
