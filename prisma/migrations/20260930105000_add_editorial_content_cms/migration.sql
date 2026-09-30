@@ -48,6 +48,14 @@ CREATE INDEX IF NOT EXISTS "EditorialContent_type_status_publishedAt_idx" ON "Ed
 CREATE INDEX IF NOT EXISTS "EditorialContent_authorId_updatedAt_idx" ON "EditorialContent"("authorId", "updatedAt");
 CREATE INDEX IF NOT EXISTS "EditorialContent_scheduledAt_idx" ON "EditorialContent"("scheduledAt");
 
+DO $ BEGIN
+  ALTER TABLE "EditorialContent"
+    ADD CONSTRAINT "EditorialContent_revision_check"
+    CHECK ("revision" >= 1);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $;
+
 DO $$ BEGIN
   ALTER TABLE "EditorialContent"
     ADD CONSTRAINT "EditorialContent_authorId_fkey"
@@ -56,3 +64,20 @@ DO $$ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
+
+
+-- HireGo uses custom JWT sessions and server-side Prisma. Keep editorial
+-- content private from Supabase Data API roles; public reads go through the
+-- application so publication state is always enforced.
+ALTER TABLE "EditorialContent" ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON TABLE "EditorialContent" FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE "EditorialContent" FROM authenticated;
+  END IF;
+END
+$$;
