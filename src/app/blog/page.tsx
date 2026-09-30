@@ -9,7 +9,7 @@ export const metadata: Metadata = marketingMetadata({
   title: "HireGo AI Insights",
   description: "Practical guidance and perspectives on hiring, job readiness, recruiting workflows and responsible AI.",
 });
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default function BlogPage() {
   return (
