@@ -9,7 +9,7 @@ export const metadata: Metadata = marketingMetadata({
   title: "Press Releases — HireGo AI",
   description: "Official HireGo AI announcements, company news, product updates and media information.",
 });
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default function PressReleasesPage() {
   return (
