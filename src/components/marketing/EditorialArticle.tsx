@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { EditorialContent, User } from "@prisma/client";
 import styles from "./EditorialArticle.module.css";
-import { editorialPublicPath } from "@/lib/contentCms";
+import { editorialPublicPath, sanitizeRichHtml } from "@/lib/contentCms";
 
 type Item = EditorialContent & { author: Pick<User, "name"> };
 
@@ -57,7 +57,7 @@ export default function EditorialArticle({ item }: { item: Item }) {
         <div className={styles.layout}>
           <div>
             {item.type === "PRESS_RELEASE" && item.dateline && <p className={styles.dateline}>{item.dateline}</p>}
-            <div className={styles.prose} dangerouslySetInnerHTML={{ __html: item.contentHtml }} />
+            <div className={styles.prose} dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(item.contentHtml) }} />
 
             {item.type === "PRESS_RELEASE" && item.companyBoilerplate && (
               <section className={styles.boilerplate} aria-labelledby="about-hirego">
