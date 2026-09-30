@@ -90,7 +90,35 @@ export default function InterviewRoundBuilderPage() {
             <label className="text-sm text-text-secondary">Department<input value={round.department} onChange={(e) => update(index, "department", e.target.value)} maxLength={100} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-4 text-text-primary" placeholder="e.g. Engineering" /></label>
             <label className="md:col-span-2 text-sm text-text-secondary">Purpose<textarea value={round.purpose} onChange={(e) => update(index, "purpose", e.target.value)} maxLength={500} className="mt-2 min-h-20 w-full rounded-xl border border-outline bg-bg-page p-4 text-text-primary" placeholder="What should this round evaluate?" /></label>
             <label className="text-sm text-text-secondary">Interview type<select value={round.interviewType} onChange={(e) => update(index, "interviewType", e.target.value as Round["interviewType"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="VIDEO">Video</option><option value="PHONE">Phone</option><option value="IN_PERSON">In person</option></select></label>
-            <label className="text-sm text-text-secondary">Duration (minutes)<input type="number" min={10} max={60} step={5} value={round.durationMins} onChange={(e) => update(index, "durationMins", Number(e.target.value))} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary" aria-describedby={`duration-help-${index}`} /><span id={`duration-help-${index}`} className="mt-1 block text-xs text-text-secondary">Custom duration from 10 to 60 minutes.</span></label>
+            <div className="text-sm text-text-secondary">
+              <label htmlFor={`duration-preset-${index}`}>Duration</label>
+              <select
+                id={`duration-preset-${index}`}
+                value={[15, 30, 45, 60].includes(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
+                onChange={(e) => update(index, "durationMins", e.target.value === "CUSTOM" ? 20 : Number(e.target.value))}
+                className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"
+              >
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+                <option value="CUSTOM">Custom</option>
+              </select>
+              {![15, 30, 45, 60].includes(round.durationMins) && (
+                <label className="mt-2 block text-xs text-text-secondary">
+                  Custom duration (10–60 minutes)
+                  <input
+                    type="number"
+                    min={10}
+                    max={60}
+                    step={1}
+                    value={round.durationMins}
+                    onChange={(e) => update(index, "durationMins", Number(e.target.value))}
+                    className="mt-1 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-sm text-text-primary"
+                  />
+                </label>
+              )}
+            </div>
             <fieldset className="md:col-span-2"><legend className="mb-2 text-sm text-text-secondary">Assigned interviewers</legend><div className="grid gap-2 sm:grid-cols-2">{team.map((m) => <label key={m.userId} className="flex min-h-12 items-center gap-3 rounded-xl border border-outline bg-bg-page px-4 text-sm text-text-primary"><input type="checkbox" checked={round.interviewerUserIds.includes(m.userId)} onChange={(e) => update(index, "interviewerUserIds", e.target.checked ? [...round.interviewerUserIds, m.userId] : round.interviewerUserIds.filter((id) => id !== m.userId))}/><span><strong>{m.name}</strong><span className="block text-xs text-text-secondary">{m.designation || m.role}</span></span></label>)}</div>{team.length === 0 && <p className="rounded-xl border border-outline p-4 text-sm text-text-secondary">No active company team members are available. Add team members before publishing this process.</p>}</fieldset>
             <label className="text-sm text-text-secondary">Candidate-facing feedback draft<select value={round.candidateFeedbackPolicy} onChange={(e) => update(index, "candidateFeedbackPolicy", e.target.value as Round["candidateFeedbackPolicy"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="REQUIRED">Draft required</option><option value="OPTIONAL">Draft optional</option><option value="NOT_SHARED">Do not collect</option></select></label>
             <label className="text-sm text-text-secondary">Previous feedback visibility<select value={round.previousFeedbackVisibility} onChange={(e) => update(index, "previousFeedbackVisibility", e.target.value as Round["previousFeedbackVisibility"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="HIDDEN_UNTIL_OWN_FEEDBACK">Hidden until own feedback</option><option value="HIDDEN">Hidden</option><option value="SUMMARY_ONLY">Summary only</option><option value="FULL">Full feedback</option></select></label>
