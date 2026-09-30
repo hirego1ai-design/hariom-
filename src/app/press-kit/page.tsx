@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Metadata } from "next";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { marketingMetadata } from "@/lib/marketingMetadata";
@@ -89,7 +90,7 @@ export default function PressKitPage() {
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#82b1ff]">Brand assets</p>
               <h2 className="mt-3 text-2xl font-bold">Official logo</h2>
               <div className="mt-5 rounded-2xl bg-white p-5">
-                <img src="/marketing/hirego-logo-hd.png" alt="HireGo AI official logo" className="h-auto w-[220px] max-w-full" />
+                <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI official logo" width={660} height={220} className="h-auto w-[220px] max-w-full" sizes="220px" />
               </div>
               <a href="/marketing/hirego-logo-hd.png" download className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#0c2551]">Download logo</a>
             </article>
