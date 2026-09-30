@@ -16,6 +16,18 @@ enum Role {
   ADMIN
 }
 
+enum EditorialContentType {
+  BLOG
+  PRESS_RELEASE
+}
+
+enum EditorialContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
 enum ApplicationStatus {
   APPLIED
   SCREENING
@@ -160,6 +172,7 @@ model User {
   updatedAt      DateTime @updatedAt
 
   candidateProfile              CandidateProfile?
+  editorialContents             EditorialContent[]
   employerProfile               EmployerProfile?
   invitationsSent               CompanyInvitation[]             @relation("InvitedByUser")
   auditLogs                     AuditLog[]
@@ -193,6 +206,44 @@ enum CandidateAvailabilityStatus {
   NOT_LOOKING
   JOINED
   TEMPORARILY_UNAVAILABLE
+}
+
+
+model EditorialContent {
+  id                    String                 @id @default(uuid())
+  type                  EditorialContentType
+  status                EditorialContentStatus @default(DRAFT)
+  title                 String
+  slug                  String                 @unique
+  excerpt               String?
+  contentHtml           String                 @db.Text
+  contentText           String                 @db.Text
+  featuredImageFileId   String?
+  featuredImageAlt      String?
+  inlineMediaFileIds    String[]               @default([])
+  ogImageFileId         String?
+  authorId              String
+  author                User                   @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  category              String?
+  tags                  String[]               @default([])
+  dateline              String?
+  mediaContactName      String?
+  mediaContactEmail     String?
+  mediaContactPhone     String?
+  companyBoilerplate    String?                @db.Text
+  seoTitle              String?
+  seoDescription        String?
+  canonicalUrl          String?
+  scheduledAt           DateTime?
+  publishedAt           DateTime?
+  revision              Int                    @default(1)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([type, status, publishedAt])
+  @@index([authorId, updatedAt])
+  @@index([scheduledAt])
 }
 
 model CandidateProfile {
