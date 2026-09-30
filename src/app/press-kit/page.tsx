@@ -59,7 +59,7 @@ export default function PressKitPage() {
                 HireGo AI is a hiring platform that connects job requirements, candidate sourcing, screening, assessments, interview coordination and joining follow-up in one workflow. Autonomous AI agents can help execute permitted operational steps while authorized people remain responsible for consequential hiring decisions.
               </p>
               <p className="mt-4 leading-7 text-slate-300">
-                The platform supports employers, candidates and managed hiring workflows, with an emphasis on evidence-based evaluation rather than fabricated scores or automated final hiring decisions.
+                The platform supports employers, candidates and managed hiring workflows, with an emphasis on evidence-based evaluation and human-controlled final hiring decisions.
               </p>
             </article>
 
