@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
+import {
+  INTERVIEW_INTERVIEW_DURATION_PRESETS,
+  MAX_INTERVIEW_DURATION_MINS,
+  MIN_INTERVIEW_DURATION_MINS,
+  isPresetInterviewDurationMins,
+  isValidInterviewDurationMins,
+} from "@/lib/interviewDuration";
 
 type TeamMember = { userId: string; name: string; email: string; role: string; designation?: string | null };
 type Round = {
@@ -13,10 +20,6 @@ type Round = {
   previousFeedbackVisibility: "FULL" | "SUMMARY_ONLY" | "HIDDEN_UNTIL_OWN_FEEDBACK" | "HIDDEN";
   interviewerUserIds: string[];
 };
-const DURATION_PRESETS = [15, 30, 45, 60] as const;
-const MIN_DURATION_MINS = 10;
-const MAX_DURATION_MINS = 60;
-const isPresetDuration = (value: number) => DURATION_PRESETS.some((item) => item === value);
 const blankRound = (): Round => ({ name: "", purpose: "", department: "", interviewType: "VIDEO", durationMins: 30, mandatory: true, mandatoryFeedback: true, candidateFeedbackPolicy: "OPTIONAL", previousFeedbackVisibility: "HIDDEN_UNTIL_OWN_FEEDBACK", interviewerUserIds: [] });
 
 export default function InterviewRoundBuilderPage() {
@@ -56,7 +59,7 @@ export default function InterviewRoundBuilderPage() {
     if (!jobId) return;
     setError(""); setMessage("");
     if (rounds.some((r) => r.name.trim().length < 2 || r.interviewerUserIds.length === 0)) { setError("Every round needs a name and at least one assigned interviewer."); return; }
-    if (rounds.some((r) => !Number.isInteger(r.durationMins) || r.durationMins < MIN_DURATION_MINS || r.durationMins > MAX_DURATION_MINS)) { setError(`Interview duration must be a whole number between ${MIN_DURATION_MINS} and ${MAX_DURATION_MINS} minutes.`); return; }
+    if (rounds.some((r) => !isValidInterviewDurationMins(r.durationMins))) { setError(`Interview duration must be a whole number between ${MIN_INTERVIEW_DURATION_MINS} and ${MAX_INTERVIEW_DURATION_MINS} minutes.`); return; }
     setSaving(true);
     try {
       const response = await fetch(`/api/employer/jobs/${encodeURIComponent(jobId)}/interview-process`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ rounds }) });
@@ -99,28 +102,28 @@ export default function InterviewRoundBuilderPage() {
               <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]">
                 <select
                   aria-label={`Interview duration for round ${index + 1}`}
-                  value={isPresetDuration(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
+                  value={isPresetInterviewDurationMins(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
                   onChange={(e) => {
                     if (e.target.value === "CUSTOM") {
-                      if (isPresetDuration(round.durationMins)) update(index, "durationMins", 10);
+                      if (isPresetInterviewDurationMins(round.durationMins)) update(index, "durationMins", 10);
                       return;
                     }
                     update(index, "durationMins", Number(e.target.value));
                   }}
                   className="h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"
                 >
-                  {DURATION_PRESETS.map((v) => <option key={v} value={v}>{v} minutes</option>)}
+                  {INTERVIEW_DURATION_PRESETS.map((v) => <option key={v} value={v}>{v} minutes</option>)}
                   <option value="CUSTOM">Custom</option>
                 </select>
-                {!isPresetDuration(round.durationMins) && (
+                {!isPresetInterviewDurationMins(round.durationMins) && (
                   <div>
                     <label htmlFor={`custom-duration-${index}`} className="sr-only">Custom interview duration in minutes</label>
                     <input
                       id={`custom-duration-${index}`}
                       type="number"
                       inputMode="numeric"
-                      min={MIN_DURATION_MINS}
-                      max={MAX_DURATION_MINS}
+                      min={MIN_INTERVIEW_DURATION_MINS}
+                      max={MAX_INTERVIEW_DURATION_MINS}
                       step={1}
                       value={round.durationMins}
                       onChange={(e) => update(index, "durationMins", Number(e.target.value))}
