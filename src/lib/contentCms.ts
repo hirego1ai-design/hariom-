@@ -6,11 +6,12 @@ import { ApiError } from "@/lib/apiSecurity";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MEDIA_SRC_RE = /^\/api\/content\/media\/([0-9a-f-]{36})$/i;
-const DANGEROUS_TAGS = new Set(["script", "style", "iframe", "object", "embed", "form", "input", "button", "textarea", "select", "option", "svg", "math", "video", "audio", "canvas"]);
-const ALLOWED_TAGS = new Set(["p", "br", "h2", "h3", "h4", "strong", "em", "u", "s", "ul", "ol", "li", "blockquote", "a", "img", "figure", "figcaption", "hr", "code", "pre"]);
+const DANGEROUS_TAGS = new Set(["script", "style", "object", "embed", "form", "input", "button", "textarea", "select", "option", "svg", "math", "video", "audio", "canvas"]);
+const ALLOWED_TAGS = new Set(["p", "br", "h2", "h3", "h4", "strong", "em", "u", "s", "ul", "ol", "li", "blockquote", "a", "img", "figure", "figcaption", "hr", "code", "pre", "table", "thead", "tbody", "tr", "th", "td", "iframe"]);
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  a: new Set(["href", "target", "rel"]),
+  a: new Set(["href", "target", "rel", "data-cta"]),
   img: new Set(["src", "alt", "title", "width", "height", "loading"]),
+  iframe: new Set(["src", "title", "loading", "allow", "allowfullscreen", "referrerpolicy"]),
 };
 
 function cleanUrl(value: string, kind: "href" | "src") {
@@ -19,6 +20,21 @@ function cleanUrl(value: string, kind: "href" | "src") {
   if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
   if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
   return "";
+}
+
+function cleanEmbedUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:") return "";
+    const host = url.hostname.toLowerCase();
+    const youtube = host === "www.youtube-nocookie.com" && /^\/embed\/[A-Za-z0-9_-]{6,20}$/.test(url.pathname);
+    const vimeo = host === "player.vimeo.com" && /^\/video\/\d+$/.test(url.pathname);
+    if (!youtube && !vimeo) return "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 export function sanitizeRichHtml(input: string) {
@@ -54,6 +70,9 @@ export function sanitizeRichHtml(input: string) {
         $(el).removeAttr("target");
         $(el).removeAttr("rel");
       }
+      const cta = ($(el).attr("data-cta") || "").toLowerCase();
+      if (cta === "primary" || cta === "secondary") $(el).attr("data-cta", cta);
+      else $(el).removeAttr("data-cta");
     }
 
     if (tag === "img") {
@@ -73,6 +92,20 @@ export function sanitizeRichHtml(input: string) {
         const value = $(el).attr(dim) || "";
         if (!/^\d{1,4}$/.test(value)) $(el).removeAttr(dim);
       }
+    }
+
+    if (tag === "iframe") {
+      const src = cleanEmbedUrl($(el).attr("src") || "");
+      if (!src) {
+        $(el).remove();
+        return;
+      }
+      $(el).attr("src", src);
+      $(el).attr("title", (($(el).attr("title") || "Embedded video").trim().slice(0, 180) || "Embedded video"));
+      $(el).attr("loading", "lazy");
+      $(el).attr("referrerpolicy", "strict-origin-when-cross-origin");
+      $(el).attr("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+      $(el).attr("allowfullscreen", "");
     }
   });
 
@@ -179,6 +212,8 @@ export function validateEditorialPublication(input: {
   contentText: string;
   dateline?: string | null;
   scheduledAt?: Date | null;
+  featuredImageFileId?: string | null;
+  featuredImageAlt?: string | null;
 }) {
   if (input.status === "DRAFT" || input.status === "ARCHIVED") return;
   if (input.title.trim().length < 3 || input.contentText.trim().length < 40) {
@@ -186,6 +221,9 @@ export function validateEditorialPublication(input: {
   }
   if (input.type === "PRESS_RELEASE" && !input.dateline?.trim()) {
     throw new ApiError("A press release dateline is required before publication.", 422);
+  }
+  if (input.featuredImageFileId && !input.featuredImageAlt?.trim()) {
+    throw new ApiError("Featured image alternative text is required before publication.", 422);
   }
   if (input.status === "SCHEDULED") {
     if (!input.scheduledAt) throw new ApiError("Choose a publication time before scheduling.", 422);
