@@ -12,6 +12,7 @@ const links = [
   { href: "/video-resume", label: "Video Resume" },
   { href: "/pricing", label: "Pricing" },
   { href: "/about", label: "About Us" },
+  { href: "/resources", label: "News & Insights" },
 ];
 
 export default function MarketingNav() {
