@@ -195,7 +195,7 @@ export function validateEditorialPublication(input: {
   }
 }
 
-export function normalizeEditorialPayload(input: z.infer<typeof editorialPayloadSchema>) {
+export function normalizeEditorialPayload(input: z.input<typeof editorialPayloadSchema>) {
   const contentHtml = sanitizeRichHtml(input.contentHtml);
   const contentText = richHtmlToText(contentHtml);
   const inlineMediaFileIds = extractContentMediaIds(contentHtml);
@@ -206,7 +206,7 @@ export function normalizeEditorialPayload(input: z.infer<typeof editorialPayload
     featuredImageAlt: input.featuredImageAlt || null,
     ogImageFileId: input.ogImageFileId || null,
     category: input.category || null,
-    tags: [...new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))],
+    tags: [...new Set((input.tags ?? []).map((tag) => tag.trim()).filter(Boolean))],
     dateline: input.dateline || null,
     mediaContactName: input.mediaContactName || null,
     mediaContactEmail: input.mediaContactEmail || null,
