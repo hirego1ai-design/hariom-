@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 export type SeoJobCategory = {
   slug: string;
   name: string;
@@ -187,7 +189,7 @@ export function matchesSeoCategory(job: SeoJobComparable, category: SeoJobCatego
 }
 
 export function categoryPrismaOr(category: SeoJobCategory) {
-  const filters: Array<Record<string, unknown>> = [];
+  const filters: Prisma.JobListingWhereInput[] = [];
 
   for (const term of category.titleTerms) {
     filters.push({ title: { contains: term, mode: "insensitive" } });
