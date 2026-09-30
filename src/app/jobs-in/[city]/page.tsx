@@ -3,17 +3,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { prisma } from "@/lib/prisma";
-import { SEO_JOB_CITIES, findSeoJobCity } from "@/lib/seoJobCities";
+import { findSeoJobCity } from "@/lib/seoJobCities";
 import { categoriesForCity, categoryPrismaOr } from "@/lib/seoJobCategories";
 import { marketingMetadata } from "@/lib/marketingMetadata";
 
 type Props = { params: Promise<{ city: string }> };
 
+export const dynamic = "force-dynamic";
 export const revalidate = 900;
-
-export function generateStaticParams() {
-  return SEO_JOB_CITIES.map((city) => ({ city: city.slug }));
-}
 
 function cityWhere(city: NonNullable<ReturnType<typeof findSeoJobCity>>) {
   return {
