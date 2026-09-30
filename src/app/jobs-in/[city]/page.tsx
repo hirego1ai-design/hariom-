@@ -4,9 +4,12 @@ import { notFound } from "next/navigation";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { prisma } from "@/lib/prisma";
 import { SEO_JOB_CITIES, findSeoJobCity } from "@/lib/seoJobCities";
+import { categoriesForCity, categoryPrismaOr } from "@/lib/seoJobCategories";
 import { marketingMetadata } from "@/lib/marketingMetadata";
 
 type Props = { params: Promise<{ city: string }> };
+
+export const revalidate = 900;
 
 export function generateStaticParams() {
   return SEO_JOB_CITIES.map((city) => ({ city: city.slug }));
@@ -74,6 +77,23 @@ export default async function JobsInCityPage({ params }: Props) {
     },
   });
 
+  const categories = categoriesForCity(city.slug);
+  const categoryCounts = await Promise.all(
+    categories.map(async (category) => ({
+      category,
+      count: await prisma.jobListing.count({
+        where: {
+          ...cityWhere(city),
+          AND: [
+            ...(cityWhere(city).AND ?? []),
+            { OR: categoryPrismaOr(category) },
+          ],
+        },
+      }),
+    })),
+  );
+  const availableCategories = categoryCounts.filter((item) => item.count > 0);
+
   const faq = [
     {
       question: `Where can I find current jobs in ${city.name}?`,
@@ -133,6 +153,24 @@ export default async function JobsInCityPage({ params }: Props) {
               <Link href="/jobs" className="mt-5 inline-flex text-sm font-bold text-[#82b1ff]">Browse all current jobs →</Link>
             </div>
           )}
+
+          {availableCategories.length > 0 ? (
+            <div className="mt-16">
+              <h2 className="text-2xl font-bold">Popular job categories in {city.name}</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-400">Category pages appear here only when genuine published jobs match the city and category.</p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {availableCategories.map(({ category, count }) => (
+                  <Link
+                    key={category.slug}
+                    href={`/jobs-in/${city.slug}/${category.slug}`}
+                    className="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-300 hover:border-[#448aff] hover:text-white"
+                  >
+                    {category.name} ({count})
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-16 grid gap-6 lg:grid-cols-2">
             <article className="rounded-3xl border border-white/10 bg-white/[0.04] p-7">
