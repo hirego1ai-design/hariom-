@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       CANDIDATE: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "assessment-media"]),
       EMPLOYER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
       RECRUITER: new Set(["avatars", "company-logos", "employer-docs", "assessment-media"]),
-      ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media"]),
+      ADMIN: new Set(["resumes", "avatars", "onboarding-docs", "video-resumes", "company-logos", "employer-docs", "assessment-media", "content-media"]),
     };
     if (!allowedCategoriesByRole[session.role]?.has(category)) {
       return jsonError("Invalid upload category", 400);
@@ -48,6 +48,10 @@ export async function POST(req: NextRequest) {
 
     if (!file) {
       return jsonError("No file uploaded", 400);
+    }
+
+    if (category === "content-media" && !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      return jsonError("Editorial media must be a JPEG, PNG, or WebP image.", 415);
     }
 
     const { valid, error: validationError } = validateUploadFile(file.type, file.size, MAX_FILE_SIZE_BYTES);
