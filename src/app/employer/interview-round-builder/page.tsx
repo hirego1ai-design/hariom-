@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
 import {
-  INTERVIEW_INTERVIEW_DURATION_PRESETS,
+  INTERVIEW_DURATION_PRESETS,
   MAX_INTERVIEW_DURATION_MINS,
   MIN_INTERVIEW_DURATION_MINS,
   isPresetInterviewDurationMins,
