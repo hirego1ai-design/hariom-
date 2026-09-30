@@ -12,7 +12,7 @@ export const revalidate = 3600;
 const publicPaths = [
   "/", "/features", "/services", "/solutions", "/video-resume",
   "/pricing", "/about", "/company", "/enterprise", "/contact",
-  "/careers", "/blog", "/press-releases", "/resources", "/find-jobs", "/career-resources",
+  "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources",
   "/ai-features", "/certifications", "/post-job-public", "/jobs", "/jobs-in", "/free-job-posting",
   "/legal", "/privacy", "/terms", "/refund-cancellation", "/service-delivery",
 ];
