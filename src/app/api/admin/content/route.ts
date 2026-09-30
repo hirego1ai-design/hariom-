@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import {
   assertContentMediaFiles,
   editorialMutationSchema,
@@ -79,6 +80,8 @@ export async function POST(req: NextRequest) {
       contentText: normalized.contentText,
       dateline: normalized.dateline,
       scheduledAt,
+      featuredImageFileId: normalized.featuredImageFileId,
+      featuredImageAlt: normalized.featuredImageAlt,
     });
 
     await assertContentMediaFiles([
@@ -126,7 +129,7 @@ export async function POST(req: NextRequest) {
         },
         include: { author: { select: { id: true, name: true, email: true } } },
       });
-      await tx.auditLog.create({
+      const auditLog = await tx.auditLog.create({
         data: {
           userId: admin.id,
           action: "EDITORIAL_CONTENT_CREATED",
@@ -134,6 +137,7 @@ export async function POST(req: NextRequest) {
           details: JSON.stringify({ type: content.type, status: content.status, slug: content.slug, revision: content.revision }),
         },
       });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
       return content;
     });
 
