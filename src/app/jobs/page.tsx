@@ -72,6 +72,7 @@ export default function JobsPage() {
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<Record<string, JobRecommendation>>({});
+  const [candidateAuthenticated, setCandidateAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -134,11 +135,15 @@ export default function JobsPage() {
           setAppliedJobs((applications.applications || []).map((item: { jobId: string }) => item.jobId));
         }
         if (recommended) {
+          setCandidateAuthenticated(true);
           setRecommendations(
             Object.fromEntries(
               (recommended.recommendations || []).map((item: JobRecommendation) => [item.jobId, item]),
             ),
           );
+        } else {
+          setCandidateAuthenticated(false);
+          setRecommendations({});
         }
       } catch (cause) {
         if (!cancelled) {
@@ -293,9 +298,25 @@ export default function JobsPage() {
                       </p>
                     )}
                   </div>
-                ) : recommendation?.jobRequirementsAvailable ? (
+                ) : !candidateStateLoading && !candidateAuthenticated ? (
+                  <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
+                    <strong className="text-text-primary">See how well this job matches you</strong>
+                    <p className="mt-1 text-text-muted">Create your candidate profile to get an evidence-based match score from your skills and experience.</p>
+                    <Link href="/register?redirect=%2Fjobs" className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary hover:bg-primary/10">
+                      Check My Match
+                    </Link>
+                  </div>
+                ) : !candidateStateLoading && candidateAuthenticated && recommendation?.jobRequirementsAvailable ? (
+                  <div className="mt-3 rounded-xl border border-outline bg-surface-container-high p-3 text-xs">
+                    <strong className="text-text-primary">Complete your profile to unlock your match</strong>
+                    <p className="mt-1 text-text-muted">A score is shown only when HireGo has enough relevant profile evidence. No score is guessed.</p>
+                    <Link href="/profile" className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-outline px-3 py-2 font-semibold text-primary hover:bg-bg-card">
+                      Complete Profile
+                    </Link>
+                  </div>
+                ) : !candidateStateLoading && candidateAuthenticated ? (
                   <p className="mt-3 text-xs text-text-muted">
-                    Compatibility not scored yet because relevant candidate evidence is unavailable.
+                    A reliable match cannot be calculated until this role has structured requirements.
                   </p>
                 ) : null}
 
