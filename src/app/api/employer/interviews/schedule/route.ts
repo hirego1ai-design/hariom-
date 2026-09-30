@@ -11,11 +11,16 @@ import {
   releaseCopilotReservation,
   reserveCopilotCapacity,
 } from "@/lib/copilot/capacity";
+import {
+  MAX_INTERVIEW_DURATION_MINS,
+  MIN_INTERVIEW_DURATION_MINS,
+  isValidInterviewDurationMins,
+} from "@/lib/interviewDuration";
 
 const schema = z.object({
   applicationId: z.string().min(1),
   scheduledAt: z.string().datetime(),
-  durationMins: z.number().int().min(10).max(60).optional(),
+  durationMins: z.number().int().min(MIN_INTERVIEW_DURATION_MINS).max(MAX_INTERVIEW_DURATION_MINS).optional(),
   mode: z.enum(["ONLINE", "OFFLINE"]).optional(),
   roundId: z.string().min(1),
   address: z.string().optional(),
@@ -159,7 +164,7 @@ export async function GET(request: NextRequest) {
         const progress = progressByRound.get(round.id);
         if (!progress || progress.status === "PENDING" || progress.status === "CANCELLED") {
           const hasRequiredInterviewer = round.interviewers.some((interviewer) => interviewer.required);
-          const hasValidDuration = Number.isInteger(round.durationMins) && round.durationMins >= 10 && round.durationMins <= 60;
+          const hasValidDuration = isValidInterviewDurationMins(round.durationMins);
           return {
             applicationId: application.id,
             candidateName: application.candidateProfile.user?.name || "Candidate",
@@ -291,7 +296,7 @@ export async function POST(request: NextRequest) {
         ? "PHONE"
         : "ONLINE";
     const durationMins = round.durationMins;
-    if (!Number.isInteger(durationMins) || durationMins < 10 || durationMins > 60) return NextResponse.json({ success: false, error: "Interview duration must be between 10 and 60 minutes. Update the interview process before scheduling." }, { status: 409 });
+    if (!isValidInterviewDurationMins(durationMins)) return NextResponse.json({ success: false, error: `Interview duration must be between ${MIN_INTERVIEW_DURATION_MINS} and ${MAX_INTERVIEW_DURATION_MINS} minutes. Update the interview process before scheduling.` }, { status: 409 });
     if (mode === "OFFLINE" && !body.address) return NextResponse.json({ success: false, error: "Address is required for this configured offline round." }, { status: 400 });
     if ((mode === "OFFLINE" || mode === "PHONE") && !body.contactNumber) return NextResponse.json({ success: false, error: `Contact number is required for this configured ${mode.toLowerCase()} round.` }, { status: 400 });
     if (!round.interviewers.some((interviewer) => interviewer.required)) return NextResponse.json({ success: false, error: "Assign at least one required interviewer before scheduling this round." }, { status: 400 });
