@@ -9,7 +9,7 @@ export const metadata: Metadata = marketingMetadata({
   title: "News & Insights — HireGo AI",
   description: "Read HireGo AI hiring insights, product perspectives, company announcements and press releases.",
 });
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default async function ResourcesPage({ searchParams }: { searchParams: Promise<{ type?: string }> }) {
   const query = await searchParams;
