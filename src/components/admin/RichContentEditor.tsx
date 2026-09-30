@@ -26,6 +26,7 @@ export default function RichContentEditor({ value, onChange, disabled = false }:
   const [uploadError, setUploadError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [imageAlt, setImageAlt] = useState("");
+  const [draggingImage, setDraggingImage] = useState(false);
 
   useEffect(() => {
     const el = editorRef.current;
@@ -48,15 +49,88 @@ export default function RichContentEditor({ value, onChange, disabled = false }:
     onChange(editorRef.current?.innerHTML || "");
   }
 
+  function validLink(raw: string) {
+    const url = raw.trim();
+    return /^(https?:\/\/|\/[^/]|mailto:|tel:)/i.test(url) ? url : "";
+  }
+
   function addLink() {
     const raw = window.prompt("Enter a URL (https://…, /internal-path, mailto: or tel:)");
     if (!raw) return;
-    const url = raw.trim();
-    if (!/^(https?:\/\/|\/[^/]|mailto:|tel:)/i.test(url)) {
+    const url = validLink(raw);
+    if (!url) {
       setUploadError("Use an HTTPS URL, an internal /path, mailto:, or tel: link.");
       return;
     }
     command("createLink", url);
+  }
+
+  function insertTable() {
+    if (disabled) return;
+    editorRef.current?.focus();
+    document.execCommand(
+      "insertHTML",
+      false,
+      "<table><thead><tr><th>Heading</th><th>Heading</th></tr></thead><tbody><tr><td>Cell</td><td>Cell</td></tr><tr><td>Cell</td><td>Cell</td></tr></tbody></table><p><br></p>",
+    );
+    onChange(editorRef.current?.innerHTML || "");
+  }
+
+  function insertCta() {
+    if (disabled) return;
+    const label = window.prompt("CTA button label", "Learn more")?.trim();
+    if (!label) return;
+    const raw = window.prompt("CTA destination URL (https://… or /internal-path)");
+    if (!raw) return;
+    const url = validLink(raw);
+    if (!url) {
+      setUploadError("Use a valid HTTPS or internal HireGo path for the CTA.");
+      return;
+    }
+    editorRef.current?.focus();
+    document.execCommand("insertHTML", false, `<p><a data-cta="primary" href="${escapeHtml(url)}">${escapeHtml(label).slice(0, 80)}</a></p><p><br></p>`);
+    onChange(editorRef.current?.innerHTML || "");
+  }
+
+  function trustedEmbedUrl(raw: string) {
+    try {
+      const url = new URL(raw.trim());
+      const host = url.hostname.toLowerCase();
+      if (host === "youtu.be") {
+        const id = url.pathname.slice(1);
+        return /^[A-Za-z0-9_-]{6,20}$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : "";
+      }
+      if (host === "youtube.com" || host === "www.youtube.com") {
+        const id = url.pathname.startsWith("/embed/") ? url.pathname.split("/")[2] : url.searchParams.get("v");
+        return id && /^[A-Za-z0-9_-]{6,20}$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : "";
+      }
+      if (host === "vimeo.com" || host === "www.vimeo.com" || host === "player.vimeo.com") {
+        const id = url.pathname.split("/").filter(Boolean).pop() || "";
+        return /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}` : "";
+      }
+    } catch {
+      return "";
+    }
+    return "";
+  }
+
+  function insertVideoEmbed() {
+    if (disabled) return;
+    const raw = window.prompt("Paste a YouTube or Vimeo video URL");
+    if (!raw) return;
+    const src = trustedEmbedUrl(raw);
+    if (!src) {
+      setUploadError("Only valid YouTube and Vimeo video links can be embedded.");
+      return;
+    }
+    const title = window.prompt("Accessible video title", "Embedded video")?.trim() || "Embedded video";
+    editorRef.current?.focus();
+    document.execCommand(
+      "insertHTML",
+      false,
+      `<figure><iframe src="${escapeHtml(src)}" title="${escapeHtml(title).slice(0, 180)}" loading="lazy" allowfullscreen></iframe></figure><p><br></p>`,
+    );
+    onChange(editorRef.current?.innerHTML || "");
   }
 
   function beginImageUpload(file: File | null) {
@@ -160,6 +234,15 @@ export default function RichContentEditor({ value, onChange, disabled = false }:
         <button type="button" className={styles.toolButton} disabled={disabled} onClick={() => command("insertHorizontalRule")} title="Divider" aria-label="Insert divider">
           <span className="material-symbols-outlined text-[19px]">horizontal_rule</span>
         </button>
+        <button type="button" className={styles.toolButton} disabled={disabled} onClick={insertTable} title="Insert table" aria-label="Insert table">
+          <span className="material-symbols-outlined text-[19px]">table</span>
+        </button>
+        <button type="button" className={styles.toolButton} disabled={disabled} onClick={insertCta} title="Insert CTA button" aria-label="Insert CTA button">
+          <span className="material-symbols-outlined text-[19px]">smart_button</span>
+        </button>
+        <button type="button" className={styles.toolButton} disabled={disabled} onClick={insertVideoEmbed} title="Embed YouTube or Vimeo video" aria-label="Embed video">
+          <span className="material-symbols-outlined text-[19px]">video_library</span>
+        </button>
         <button type="button" className={styles.toolButton} disabled={disabled} onClick={() => fileInputRef.current?.click()} title="Insert image" aria-label="Insert image">
           <span className="material-symbols-outlined text-[19px]">image</span>
         </button>
@@ -213,7 +296,7 @@ export default function RichContentEditor({ value, onChange, disabled = false }:
 
       <div
         ref={editorRef}
-        className={styles.editor}
+        className={`${styles.editor} ${draggingImage ? styles.dragging : ""}`}
         contentEditable={!disabled}
         suppressContentEditableWarning
         role="textbox"
@@ -222,6 +305,23 @@ export default function RichContentEditor({ value, onChange, disabled = false }:
         data-placeholder="Write your article or press release…"
         onInput={(event) => onChange(event.currentTarget.innerHTML)}
         onBlur={(event) => onChange(event.currentTarget.innerHTML)}
+        onDragOver={(event) => {
+          if (disabled) return;
+          if ([...event.dataTransfer.items].some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            setDraggingImage(true);
+          }
+        }}
+        onDragLeave={() => setDraggingImage(false)}
+        onDrop={(event) => {
+          setDraggingImage(false);
+          if (disabled) return;
+          const file = [...event.dataTransfer.files].find((candidate) => candidate.type.startsWith("image/")) || null;
+          if (!file) return;
+          event.preventDefault();
+          beginImageUpload(file);
+        }}
       />
 
       <div className={styles.footer}>
