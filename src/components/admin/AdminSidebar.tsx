@@ -33,6 +33,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "pricing-engine", label: "Pricing Engine", href: "/admin/pricing-engine", icon: "sell" },
   { id: "payment-gateways", label: "Payment Gateways", href: "/admin/payment-gateways", icon: "account_balance" },
   { id: "communications", label: "Communications", href: "/admin/communications", icon: "forum" },
+  { id: "content", label: "Content Management", href: "/admin/content", icon: "article" },
   { id: "settings", label: "Admin Settings Hub", href: "/admin/settings/hub", icon: "settings" },
   { id: "ai-command-centre", label: "AI Control Centre", href: "/admin/ai-command-centre-dashboard", icon: "neurology" },
   { id: "system-health", label: "System Health", href: "/admin/system-health", icon: "monitoring" },
