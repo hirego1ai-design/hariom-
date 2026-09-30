@@ -15,6 +15,7 @@ import {
 const schema = z.object({
   applicationId: z.string().min(1),
   scheduledAt: z.string().datetime(),
+  durationMins: z.number().int().min(15).max(240).optional(),
   mode: z.enum(["ONLINE", "OFFLINE"]).optional(),
   roundId: z.string().min(1),
   address: z.string().optional(),
@@ -23,7 +24,7 @@ const schema = z.object({
   notifyEmail: z.boolean().default(true),
   notifyWhatsapp: z.boolean().default(false),
   copilotManaged: z.boolean().default(false),
-}).strict();
+});
 
 const SCHEDULE_OPTIONS_DEFAULT_LIMIT = 50;
 const SCHEDULE_OPTIONS_MAX_LIMIT = 100;
