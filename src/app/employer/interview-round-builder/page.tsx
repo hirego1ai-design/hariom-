@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageContainer } from "@/components/employer/LayoutSystem";
+import {
+  INTERVIEW_DURATION_PRESETS,
+  MAX_INTERVIEW_DURATION_MINS,
+  MIN_INTERVIEW_DURATION_MINS,
+  isPresetInterviewDurationMins,
+  isValidInterviewDurationMins,
+} from "@/lib/interviewDuration";
 
 type TeamMember = { userId: string; name: string; email: string; role: string; designation?: string | null };
 type Round = {
@@ -52,7 +59,7 @@ export default function InterviewRoundBuilderPage() {
     if (!jobId) return;
     setError(""); setMessage("");
     if (rounds.some((r) => r.name.trim().length < 2 || r.interviewerUserIds.length === 0)) { setError("Every round needs a name and at least one assigned interviewer."); return; }
-    if (rounds.some((r) => !Number.isInteger(r.durationMins) || r.durationMins < 10 || r.durationMins > 60)) { setError("Interview duration must be between 10 and 60 minutes."); return; }
+    if (rounds.some((r) => !isValidInterviewDurationMins(r.durationMins))) { setError(`Interview duration must be between ${MIN_INTERVIEW_DURATION_MINS} and ${MAX_INTERVIEW_DURATION_MINS} minutes.`); return; }
     setSaving(true);
     try {
       const response = await fetch(`/api/employer/jobs/${encodeURIComponent(jobId)}/interview-process`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ rounds }) });
@@ -94,23 +101,20 @@ export default function InterviewRoundBuilderPage() {
               <label htmlFor={`duration-preset-${index}`}>Duration</label>
               <select
                 id={`duration-preset-${index}`}
-                value={[15, 30, 45, 60].includes(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
+                value={isPresetInterviewDurationMins(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
                 onChange={(e) => update(index, "durationMins", e.target.value === "CUSTOM" ? 20 : Number(e.target.value))}
                 className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"
               >
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="45">45 minutes</option>
-                <option value="60">60 minutes</option>
+                {INTERVIEW_DURATION_PRESETS.map((value) => <option key={value} value={value}>{value} minutes</option>)}
                 <option value="CUSTOM">Custom</option>
               </select>
-              {![15, 30, 45, 60].includes(round.durationMins) && (
+              {!isPresetInterviewDurationMins(round.durationMins) && (
                 <label className="mt-2 block text-xs text-text-secondary">
                   Custom duration (10–60 minutes)
                   <input
                     type="number"
-                    min={10}
-                    max={60}
+                    min={MIN_INTERVIEW_DURATION_MINS}
+                    max={MAX_INTERVIEW_DURATION_MINS}
                     step={1}
                     value={round.durationMins}
                     onChange={(e) => update(index, "durationMins", Number(e.target.value))}
