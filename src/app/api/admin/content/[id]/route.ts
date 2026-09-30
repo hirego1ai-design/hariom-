@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import {
   assertContentMediaFiles,
   editorialMutationSchema,
@@ -113,7 +114,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
         include: { author: { select: { id: true, name: true, email: true } } },
       });
-      await tx.auditLog.create({
+      const auditLog = await tx.auditLog.create({
         data: {
           userId: admin.id,
           action: "EDITORIAL_CONTENT_UPDATED",
@@ -127,6 +128,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }),
         },
       });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
       return content;
     });
 
@@ -154,7 +156,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           where: { id },
           data: { status: "ARCHIVED", scheduledAt: null, revision: { increment: 1 } },
         });
-        await tx.auditLog.create({
+        const auditLog = await tx.auditLog.create({
           data: {
             userId: admin.id,
             action: "EDITORIAL_CONTENT_ARCHIVED",
@@ -162,11 +164,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             details: JSON.stringify({ previousStatus: existing.status, slug: existing.slug, revision: row.revision }),
           },
         });
+        await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
         return { archived: true as const, content: row };
       }
 
       await tx.editorialContent.delete({ where: { id } });
-      await tx.auditLog.create({
+      const auditLog = await tx.auditLog.create({
         data: {
           userId: admin.id,
           action: "EDITORIAL_CONTENT_DRAFT_DELETED",
@@ -174,6 +177,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           details: JSON.stringify({ type: existing.type, slug: existing.slug }),
         },
       });
+      await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
       return { deleted: true as const };
     });
 
