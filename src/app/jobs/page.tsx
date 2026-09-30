@@ -36,7 +36,6 @@ async function fetchJobsPage(query: string, page: number, signal?: AbortSignal) 
     limit: String(PAGE_SIZE),
   });
   const response = await fetch(`/api/jobs/search?${params.toString()}`, {
-    cache: "no-store",
     signal,
   });
   const raw: unknown = await response.json().catch(() => null);
@@ -84,6 +83,7 @@ export default function JobsPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const delay = query ? 250 : 0;
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError("");
@@ -98,7 +98,7 @@ export default function JobsPage() {
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, delay);
 
     return () => {
       controller.abort();
@@ -122,6 +122,24 @@ export default function JobsPage() {
     async function loadCandidateState() {
       setCandidateStateLoading(true);
       try {
+        const authResponse = await fetch("/api/auth/me", { cache: "no-store" });
+        const authBody = await authResponse.json().catch(() => ({}));
+        if (
+          authResponse.status === 401 ||
+          authResponse.status === 403 ||
+          !authResponse.ok ||
+          authBody?.success !== true ||
+          authBody?.user?.role !== "CANDIDATE"
+        ) {
+          if (!cancelled) {
+            setCandidateAuthenticated(false);
+            setSavedJobs([]);
+            setAppliedJobs([]);
+            setRecommendations({});
+          }
+          return;
+        }
+
         const [saved, applications, recommended] = await Promise.all([
           candidateJson("/api/candidate/saved-jobs"),
           candidateJson("/api/applications"),
@@ -299,7 +317,7 @@ export default function JobsPage() {
                   <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
                     <strong className="text-text-primary">See how well this job matches you</strong>
                     <p className="mt-1 text-text-muted">Create your candidate profile to get an evidence-based match score from your skills and experience.</p>
-                    <Link href="/register?redirect=%2Fjobs" className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary hover:bg-primary/10">
+                    <Link href="/register?redirect=%2Fjobs" prefetch={false} className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary hover:bg-primary/10">
                       Check My Match
                     </Link>
                   </div>
@@ -307,7 +325,7 @@ export default function JobsPage() {
                   <div className="mt-3 rounded-xl border border-outline bg-surface-container-high p-3 text-xs">
                     <strong className="text-text-primary">Complete your profile to unlock your match</strong>
                     <p className="mt-1 text-text-muted">A score is shown only when HireGo has enough relevant profile evidence. No score is guessed.</p>
-                    <Link href="/profile" className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-outline px-3 py-2 font-semibold text-primary hover:bg-bg-card">
+                    <Link href="/profile" prefetch={false} className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-outline px-3 py-2 font-semibold text-primary hover:bg-bg-card">
                       Complete Profile
                     </Link>
                   </div>
@@ -325,6 +343,7 @@ export default function JobsPage() {
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Link
                     href={`/jobs/${job.id}`}
+                    prefetch={false}
                     className="min-h-11 inline-flex items-center rounded-lg border border-outline px-4 py-2 text-sm hover:bg-surface-container-high"
                   >
                     Details
