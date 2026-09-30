@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib";
 import { ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
-import { reconcileExpiredJobs } from "@/lib/jobExpiry";
 
 export async function GET(req: NextRequest) {
   try {
     await enforceRateLimit(req, "public_jobs_search", 120, 60_000);
-    await reconcileExpiredJobs(prisma);
     const { searchParams } = new URL(req.url);
     const query = (searchParams.get("q") || "").trim();
     const location = (searchParams.get("location") || "").trim();
@@ -56,7 +54,14 @@ export async function GET(req: NextRequest) {
         skip,
         take: limit,
         orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-        include: {
+        select: {
+          id: true,
+          title: true,
+          location: true,
+          type: true,
+          salaryRange: true,
+          description: true,
+          requirements: true,
           company: {
             select: {
               id: true,
@@ -70,7 +75,7 @@ export async function GET(req: NextRequest) {
       prisma.jobListing.count({ where }),
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       jobs,
       pagination: {
@@ -80,6 +85,15 @@ export async function GET(req: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
     });
+
+    const isUnfiltered = !query && !location && !department && !type;
+    response.headers.set(
+      "Cache-Control",
+      isUnfiltered
+        ? "public, s-maxage=15, stale-while-revalidate=60"
+        : "public, s-maxage=10, stale-while-revalidate=30",
+    );
+    return response;
   } catch (error) {
     return handleApiError(error);
   }
