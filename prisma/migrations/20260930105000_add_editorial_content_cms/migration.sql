@@ -48,13 +48,15 @@ CREATE INDEX IF NOT EXISTS "EditorialContent_type_status_publishedAt_idx" ON "Ed
 CREATE INDEX IF NOT EXISTS "EditorialContent_authorId_updatedAt_idx" ON "EditorialContent"("authorId", "updatedAt");
 CREATE INDEX IF NOT EXISTS "EditorialContent_scheduledAt_idx" ON "EditorialContent"("scheduledAt");
 
-DO $ BEGIN
+DO $cms$
+BEGIN
   ALTER TABLE "EditorialContent"
     ADD CONSTRAINT "EditorialContent_revision_check"
     CHECK ("revision" >= 1);
 EXCEPTION
   WHEN duplicate_object THEN null;
-END $;
+END
+$cms$;
 
 DO $$ BEGIN
   ALTER TABLE "EditorialContent"
