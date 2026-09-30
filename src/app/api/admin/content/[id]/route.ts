@@ -40,27 +40,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const parsed = await readValidatedJson(req, editorialMutationSchema, 256 * 1024);
     const normalized = normalizeEditorialPayload(parsed);
-    const existing = await prisma.editorialContent.findUnique({ where: { id } });
-    if (!existing) throw new ApiError("Content not found.", 404);
-    if (parsed.expectedRevision && existing.revision !== parsed.expectedRevision) {
-      throw new ApiError("This content changed in another session. Reload before saving again.", 409);
-    }
-
-    const status = parsed.status || existing.status;
-    const scheduledAt = parsed.scheduledAt
-      ? new Date(parsed.scheduledAt)
-      : status === "SCHEDULED"
-        ? existing.scheduledAt
-        : null;
-
-    validateEditorialPublication({
-      type: normalized.type,
-      status,
-      title: normalized.title,
-      contentText: normalized.contentText,
-      dateline: normalized.dateline,
-      scheduledAt,
-    });
 
     await assertContentMediaFiles([
       ...normalized.inlineMediaFileIds,
@@ -68,14 +47,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(normalized.ogImageFileId ? [normalized.ogImageFileId] : []),
     ]);
 
-    const slugOwner = await prisma.editorialContent.findFirst({
-      where: { slug: normalized.slug, id: { not: id } },
-      select: { id: true },
-    });
-    if (slugOwner) throw new ApiError("This slug is already in use.", 409);
-
     const now = new Date();
     const updated = await prisma.$transaction(async (tx) => {
+      const contentLockKey = `editorial-content:${id}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${contentLockKey}))`;
+      const existing = await tx.editorialContent.findUnique({ where: { id } });
+      if (!existing) throw new ApiError("Content not found.", 404);
+      if (parsed.expectedRevision && existing.revision !== parsed.expectedRevision) {
+        throw new ApiError("This content changed in another session. Reload before saving again.", 409);
+      }
+
+      const status = parsed.status || existing.status;
+      const scheduledAt = parsed.scheduledAt
+        ? new Date(parsed.scheduledAt)
+        : status === "SCHEDULED"
+          ? existing.scheduledAt
+          : null;
+
+      validateEditorialPublication({
+        type: normalized.type,
+        status,
+        title: normalized.title,
+        contentText: normalized.contentText,
+        dateline: normalized.dateline,
+        scheduledAt,
+        featuredImageFileId: normalized.featuredImageFileId,
+        featuredImageAlt: normalized.featuredImageAlt,
+      });
+
+      const slugLockKey = `editorial-content-slug:${normalized.slug}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${slugLockKey}))`;
+      const slugOwner = await tx.editorialContent.findFirst({
+        where: { slug: normalized.slug, id: { not: id } },
+        select: { id: true },
+      });
+      if (slugOwner) throw new ApiError("This slug is already in use.", 409);
+
       const content = await tx.editorialContent.update({
         where: { id },
         data: {
@@ -136,11 +143,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     if (!validId(id)) throw new ApiError("Content not found.", 404);
 
-    const existing = await prisma.editorialContent.findUnique({ where: { id } });
-    if (!existing) throw new ApiError("Content not found.", 404);
+    const result = await prisma.$transaction(async (tx) => {
+      const lockKey = `editorial-content:${id}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      const existing = await tx.editorialContent.findUnique({ where: { id } });
+      if (!existing) throw new ApiError("Content not found.", 404);
 
-    if (existing.publishedAt || existing.status === "PUBLISHED" || existing.status === "SCHEDULED") {
-      const archived = await prisma.$transaction(async (tx) => {
+      if (existing.publishedAt || existing.status === "PUBLISHED" || existing.status === "SCHEDULED") {
         const row = await tx.editorialContent.update({
           where: { id },
           data: { status: "ARCHIVED", scheduledAt: null, revision: { increment: 1 } },
@@ -153,12 +162,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             details: JSON.stringify({ previousStatus: existing.status, slug: existing.slug, revision: row.revision }),
           },
         });
-        return row;
-      });
-      return NextResponse.json({ success: true, archived: true, content: archived });
-    }
+        return { archived: true as const, content: row };
+      }
 
-    await prisma.$transaction(async (tx) => {
       await tx.editorialContent.delete({ where: { id } });
       await tx.auditLog.create({
         data: {
@@ -168,8 +174,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           details: JSON.stringify({ type: existing.type, slug: existing.slug }),
         },
       });
+      return { deleted: true as const };
     });
-    return NextResponse.json({ success: true, deleted: true });
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return handleApiError(error);
   }
