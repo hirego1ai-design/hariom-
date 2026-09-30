@@ -26,7 +26,11 @@ export async function GET(req: NextRequest) {
     }
     
     const jobs = await prisma.jobListing.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        publishedAt: { not: null },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
       take: 20,
       include: { company: true }
     });

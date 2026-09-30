@@ -254,10 +254,6 @@ export default function JobsPage() {
       {!candidateStateLoading && (candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />)}
       <main className={`w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 ${candidateAuthenticated ? "md:ml-[116px]" : "pt-28 sm:pt-32"}`}>
         <h1 className="text-3xl font-bold">Find jobs</h1>
-        <p className="mt-2 text-sm text-text-muted">
-          Only active jobs from HireGo employers are shown. Compatibility appears only when relevant profile evidence exists.
-        </p>
-
         <label className="sr-only" htmlFor="job-search">Search jobs</label>
         <input
           id="job-search"
@@ -271,7 +267,7 @@ export default function JobsPage() {
         {error && <p role="alert" className="mt-4 rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
         {loading && <p className="mt-8 text-text-muted">Loading jobs…</p>}
         {!loading && !error && jobs.length === 0 && (
-          <p className="mt-8 rounded-xl border border-outline bg-bg-card p-6 text-text-secondary">No active jobs match this search.</p>
+          <p className="mt-8 rounded-xl border border-outline bg-bg-card p-6 text-text-secondary">{query ? "No jobs match your search." : "No jobs are available right now."}</p>
         )}
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">

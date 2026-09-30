@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const where: any = {
       status: "ACTIVE",
+      publishedAt: { not: null },
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     };
 

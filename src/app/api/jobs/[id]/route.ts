@@ -9,6 +9,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       where: {
         id,
         status: "ACTIVE",
+        publishedAt: { not: null },
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       include: {
