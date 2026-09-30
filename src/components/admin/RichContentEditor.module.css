@@ -1,0 +1,84 @@
+.shell {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 18px;
+  background: #121215;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: #17171c;
+}
+.select, .toolButton {
+  min-height: 38px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: #202026;
+  color: #f4f4f5;
+}
+.select { padding: 0 10px; font-size: 12px; font-weight: 700; }
+.toolButton { display: inline-grid; width: 38px; place-items: center; }
+.toolButton:hover:not(:disabled), .select:hover:not(:disabled) { border-color: rgba(41,182,246,.55); background: #24242b; }
+.toolButton:focus-visible, .select:focus-visible, .altInput:focus-visible, .editor:focus-visible { outline: 2px solid #29b6f6; outline-offset: 2px; }
+.toolButton:disabled, .select:disabled { opacity: .45; cursor: not-allowed; }
+.imagePanel {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 2fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(41,182,246,.06);
+}
+.altInput {
+  min-height: 40px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  background: #0f0f12;
+  padding: 0 12px;
+  color: white;
+  font-size: 13px;
+}
+.insertButton, .cancelButton {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.insertButton { background: #29b6f6; color: #03111a; }
+.cancelButton { border: 1px solid rgba(255,255,255,.12); color: #d4d4d8; }
+.error { border-bottom: 1px solid rgba(239,68,68,.22); background: rgba(127,29,29,.22); padding: 10px 12px; color: #fecaca; font-size: 12px; }
+.editor {
+  min-height: 520px;
+  padding: 28px;
+  color: #f4f4f5;
+  font-size: 16px;
+  line-height: 1.8;
+  outline: none;
+}
+.editor:empty::before { content: attr(data-placeholder); color: #71717a; pointer-events: none; }
+.editor p { margin: 0 0 1.1em; }
+.editor h2 { margin: 1.6em 0 .55em; font-size: 1.85rem; line-height: 1.25; font-weight: 800; }
+.editor h3 { margin: 1.45em 0 .5em; font-size: 1.45rem; line-height: 1.3; font-weight: 800; }
+.editor h4 { margin: 1.35em 0 .45em; font-size: 1.15rem; line-height: 1.35; font-weight: 800; }
+.editor ul, .editor ol { margin: 0 0 1.2em 1.6em; }
+.editor ul { list-style: disc; }
+.editor ol { list-style: decimal; }
+.editor blockquote { margin: 1.4em 0; border-left: 4px solid #29b6f6; padding: .4em 0 .4em 1em; color: #d4d4d8; }
+.editor pre { overflow-x: auto; border-radius: 12px; background: #09090b; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.editor a { color: #7dd3fc; text-decoration: underline; text-underline-offset: 3px; }
+.editor img { display: block; max-width: 100%; height: auto; margin: 1.2em auto .5em; border-radius: 14px; }
+.editor figure { margin: 1.5em 0; }
+.editor figcaption { text-align: center; color: #a1a1aa; font-size: 12px; }
+.editor hr { margin: 2em 0; border: 0; border-top: 1px solid rgba(255,255,255,.14); }
+.footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(255,255,255,.08); padding: 9px 12px; color: #71717a; font-size: 11px; }
+@media (max-width: 760px) {
+  .imagePanel { grid-template-columns: 1fr; }
+  .editor { min-height: 420px; padding: 20px; }
+  .footer { flex-direction: column; }
+}
