@@ -13,6 +13,10 @@ type Round = {
   previousFeedbackVisibility: "FULL" | "SUMMARY_ONLY" | "HIDDEN_UNTIL_OWN_FEEDBACK" | "HIDDEN";
   interviewerUserIds: string[];
 };
+const DURATION_PRESETS = [15, 30, 45, 60] as const;
+const MIN_DURATION_MINS = 10;
+const MAX_DURATION_MINS = 60;
+const isPresetDuration = (value: number) => DURATION_PRESETS.some((item) => item === value);
 const blankRound = (): Round => ({ name: "", purpose: "", department: "", interviewType: "VIDEO", durationMins: 30, mandatory: true, mandatoryFeedback: true, candidateFeedbackPolicy: "OPTIONAL", previousFeedbackVisibility: "HIDDEN_UNTIL_OWN_FEEDBACK", interviewerUserIds: [] });
 
 export default function InterviewRoundBuilderPage() {
@@ -52,6 +56,7 @@ export default function InterviewRoundBuilderPage() {
     if (!jobId) return;
     setError(""); setMessage("");
     if (rounds.some((r) => r.name.trim().length < 2 || r.interviewerUserIds.length === 0)) { setError("Every round needs a name and at least one assigned interviewer."); return; }
+    if (rounds.some((r) => !Number.isInteger(r.durationMins) || r.durationMins < MIN_DURATION_MINS || r.durationMins > MAX_DURATION_MINS)) { setError(`Interview duration must be a whole number between ${MIN_DURATION_MINS} and ${MAX_DURATION_MINS} minutes.`); return; }
     setSaving(true);
     try {
       const response = await fetch(`/api/employer/jobs/${encodeURIComponent(jobId)}/interview-process`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ rounds }) });
@@ -89,7 +94,44 @@ export default function InterviewRoundBuilderPage() {
             <label className="text-sm text-text-secondary">Department<input value={round.department} onChange={(e) => update(index, "department", e.target.value)} maxLength={100} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-4 text-text-primary" placeholder="e.g. Engineering" /></label>
             <label className="md:col-span-2 text-sm text-text-secondary">Purpose<textarea value={round.purpose} onChange={(e) => update(index, "purpose", e.target.value)} maxLength={500} className="mt-2 min-h-20 w-full rounded-xl border border-outline bg-bg-page p-4 text-text-primary" placeholder="What should this round evaluate?" /></label>
             <label className="text-sm text-text-secondary">Interview type<select value={round.interviewType} onChange={(e) => update(index, "interviewType", e.target.value as Round["interviewType"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="VIDEO">Video</option><option value="PHONE">Phone</option><option value="IN_PERSON">In person</option></select></label>
-            <label className="text-sm text-text-secondary">Duration<select value={round.durationMins} onChange={(e) => update(index, "durationMins", Number(e.target.value))} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary">{[15,30,45,60,90,120].map((v) => <option key={v} value={v}>{v} minutes</option>)}</select></label>
+            <div className="text-sm text-text-secondary">
+              <span>Duration</span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]">
+                <select
+                  aria-label={`Interview duration for round ${index + 1}`}
+                  value={isPresetDuration(round.durationMins) ? String(round.durationMins) : "CUSTOM"}
+                  onChange={(e) => {
+                    if (e.target.value === "CUSTOM") {
+                      if (isPresetDuration(round.durationMins)) update(index, "durationMins", 10);
+                      return;
+                    }
+                    update(index, "durationMins", Number(e.target.value));
+                  }}
+                  className="h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"
+                >
+                  {DURATION_PRESETS.map((v) => <option key={v} value={v}>{v} minutes</option>)}
+                  <option value="CUSTOM">Custom</option>
+                </select>
+                {!isPresetDuration(round.durationMins) && (
+                  <div>
+                    <label htmlFor={`custom-duration-${index}`} className="sr-only">Custom interview duration in minutes</label>
+                    <input
+                      id={`custom-duration-${index}`}
+                      type="number"
+                      inputMode="numeric"
+                      min={MIN_DURATION_MINS}
+                      max={MAX_DURATION_MINS}
+                      step={1}
+                      value={round.durationMins}
+                      onChange={(e) => update(index, "durationMins", Number(e.target.value))}
+                      aria-describedby={`custom-duration-help-${index}`}
+                      className="h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"
+                    />
+                    <p id={`custom-duration-help-${index}`} className="mt-1 text-xs text-text-secondary">10–60 min</p>
+                  </div>
+                )}
+              </div>
+            </div>
             <fieldset className="md:col-span-2"><legend className="mb-2 text-sm text-text-secondary">Assigned interviewers</legend><div className="grid gap-2 sm:grid-cols-2">{team.map((m) => <label key={m.userId} className="flex min-h-12 items-center gap-3 rounded-xl border border-outline bg-bg-page px-4 text-sm text-text-primary"><input type="checkbox" checked={round.interviewerUserIds.includes(m.userId)} onChange={(e) => update(index, "interviewerUserIds", e.target.checked ? [...round.interviewerUserIds, m.userId] : round.interviewerUserIds.filter((id) => id !== m.userId))}/><span><strong>{m.name}</strong><span className="block text-xs text-text-secondary">{m.designation || m.role}</span></span></label>)}</div>{team.length === 0 && <p className="rounded-xl border border-outline p-4 text-sm text-text-secondary">No active company team members are available. Add team members before publishing this process.</p>}</fieldset>
             <label className="text-sm text-text-secondary">Candidate-facing feedback draft<select value={round.candidateFeedbackPolicy} onChange={(e) => update(index, "candidateFeedbackPolicy", e.target.value as Round["candidateFeedbackPolicy"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="REQUIRED">Draft required</option><option value="OPTIONAL">Draft optional</option><option value="NOT_SHARED">Do not collect</option></select></label>
             <label className="text-sm text-text-secondary">Previous feedback visibility<select value={round.previousFeedbackVisibility} onChange={(e) => update(index, "previousFeedbackVisibility", e.target.value as Round["previousFeedbackVisibility"])} className="mt-2 h-11 w-full rounded-xl border border-outline bg-bg-page px-3 text-text-primary"><option value="HIDDEN_UNTIL_OWN_FEEDBACK">Hidden until own feedback</option><option value="HIDDEN">Hidden</option><option value="SUMMARY_ONLY">Summary only</option><option value="FULL">Full feedback</option></select></label>
