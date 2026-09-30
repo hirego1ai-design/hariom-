@@ -75,7 +75,13 @@
 .editor img { display: block; max-width: 100%; height: auto; margin: 1.2em auto .5em; border-radius: 14px; }
 .editor figure { margin: 1.5em 0; }
 .editor figcaption { text-align: center; color: #a1a1aa; font-size: 12px; }
+.editor table { width: 100%; margin: 1.5em 0; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+.editor th, .editor td { border: 1px solid rgba(255,255,255,.14); padding: 10px 12px; text-align: left; vertical-align: top; }
+.editor th { background: rgba(255,255,255,.06); font-weight: 800; }
+.editor iframe { display: block; width: 100%; aspect-ratio: 16/9; border: 0; border-radius: 14px; background: #09090b; }
+.editor a[data-cta] { display: inline-flex; min-height: 42px; align-items: center; border-radius: 999px; padding: 0 18px; background: #29b6f6; color: #03111a; font-weight: 800; text-decoration: none; }
 .editor hr { margin: 2em 0; border: 0; border-top: 1px solid rgba(255,255,255,.14); }
+.dragging { box-shadow: inset 0 0 0 2px #29b6f6; background: rgba(41,182,246,.05); }
 .footer { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(255,255,255,.08); padding: 9px 12px; color: #71717a; font-size: 11px; }
 @media (max-width: 760px) {
   .imagePanel { grid-template-columns: 1fr; }
