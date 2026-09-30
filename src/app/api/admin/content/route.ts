@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import {
   assertContentMediaFiles,
@@ -87,13 +87,16 @@ export async function POST(req: NextRequest) {
       ...(normalized.ogImageFileId ? [normalized.ogImageFileId] : []),
     ]);
 
-    const duplicate = await prisma.editorialContent.findUnique({ where: { slug: normalized.slug }, select: { id: true } });
-    if (duplicate) {
-      return NextResponse.json({ success: false, error: "This slug is already in use." }, { status: 409 });
-    }
-
     const now = new Date();
     const created = await prisma.$transaction(async (tx) => {
+      const lockKey = `editorial-content-slug:${normalized.slug}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      const duplicate = await tx.editorialContent.findUnique({
+        where: { slug: normalized.slug },
+        select: { id: true },
+      });
+      if (duplicate) throw new ApiError("This slug is already in use.", 409);
+
       const content = await tx.editorialContent.create({
         data: {
           type: normalized.type,
