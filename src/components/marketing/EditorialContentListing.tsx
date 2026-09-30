@@ -7,12 +7,23 @@ type Filter = "ALL" | "BLOG" | "PRESS_RELEASE";
 
 export default async function EditorialContentListing({ filter = "ALL" }: { filter?: Filter }) {
   const type = filter === "ALL" ? undefined : filter;
-  const rows = await prisma.editorialContent.findMany({
-    where: effectivePublishedWhere(new Date(), type),
-    include: { author: { select: { name: true } } },
-    orderBy: [{ publishedAt: "desc" }, { scheduledAt: "desc" }, { createdAt: "desc" }],
-    take: 60,
-  });
+  let rows;
+  try {
+    rows = await prisma.editorialContent.findMany({
+      where: effectivePublishedWhere(new Date(), type),
+      include: { author: { select: { name: true } } },
+      orderBy: [{ publishedAt: "desc" }, { scheduledAt: "desc" }, { createdAt: "desc" }],
+      take: 60,
+    });
+  } catch (error) {
+    console.error("Editorial content listing unavailable", error);
+    return (
+      <div role="status" className="rounded-3xl border border-amber-400/20 bg-amber-400/[0.05] p-10 text-center">
+        <p className="text-sm font-semibold text-amber-100">News & Insights are temporarily unavailable.</p>
+        <p className="mt-2 text-sm text-slate-500">Please try again shortly.</p>
+      </div>
+    );
+  }
 
   if (!rows.length) {
     return (
