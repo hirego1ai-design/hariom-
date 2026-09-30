@@ -100,7 +100,7 @@ export default function AdminContentEditorPage() {
 
   const publicPath = form.type === "BLOG" ? `/blog/${form.slug || "slug"}` : `/press-releases/${form.slug || "slug"}`;
 
-  const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+  const setField = useCallback(<K extends keyof FormState,>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setDirty(true);
     setNotice("");
