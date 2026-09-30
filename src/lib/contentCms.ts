@@ -22,7 +22,7 @@ function cleanUrl(value: string, kind: "href" | "src") {
 }
 
 export function sanitizeRichHtml(input: string) {
-  const $ = cheerio.load(input || "", null, false);
+  const $ = cheerio.load(input || "", undefined, false);
   $("*").each((_, node) => {
     const el = node as any;
     if (!el.tagName) return;
@@ -80,12 +80,12 @@ export function sanitizeRichHtml(input: string) {
 }
 
 export function richHtmlToText(html: string) {
-  const $ = cheerio.load(html || "", null, false);
+  const $ = cheerio.load(html || "", undefined, false);
   return $.root().text().replace(/\s+/g, " ").trim();
 }
 
 export function extractContentMediaIds(html: string) {
-  const $ = cheerio.load(html || "", null, false);
+  const $ = cheerio.load(html || "", undefined, false);
   const ids = new Set<string>();
   $("img").each((_, el) => {
     const src = $(el).attr("src") || "";
