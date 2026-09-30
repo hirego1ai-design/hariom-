@@ -51,7 +51,8 @@ export default function InterviewRoundBuilderPage() {
   async function save() {
     if (!jobId) return;
     setError(""); setMessage("");
-    if (rounds.some((r) => r.name.trim().length < 2 || r.interviewerUserIds.length === 0)) { setError("Every round needs a name and at least one assigned interviewer."); return; }\n    if (rounds.some((r) => !Number.isInteger(r.durationMins) || r.durationMins < 10 || r.durationMins > 60)) { setError("Interview duration must be between 10 and 60 minutes."); return; }
+    if (rounds.some((r) => r.name.trim().length < 2 || r.interviewerUserIds.length === 0)) { setError("Every round needs a name and at least one assigned interviewer."); return; }
+    if (rounds.some((r) => !Number.isInteger(r.durationMins) || r.durationMins < 10 || r.durationMins > 60)) { setError("Interview duration must be between 10 and 60 minutes."); return; }
     setSaving(true);
     try {
       const response = await fetch(`/api/employer/jobs/${encodeURIComponent(jobId)}/interview-process`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ rounds }) });
