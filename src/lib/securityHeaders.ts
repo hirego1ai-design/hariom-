@@ -33,7 +33,7 @@ export function contentSecurityPolicy(isDevelopment = false): string {
     "connect-src 'self' https: wss:",
     "media-src 'self' blob: https:",
     "worker-src 'self' blob:",
-    "frame-src 'self' https://js.stripe.com https://checkout.stripe.com",
+    "frame-src 'self' https://js.stripe.com https://checkout.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self' https://secure.payu.in https://test.payu.in",

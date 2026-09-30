@@ -6,7 +6,7 @@ const groups = [
   { title: "Platform", links: [["Platform", "/features"], ["Services", "/services"], ["Solutions", "/solutions"], ["Pricing", "/pricing"]] },
   { title: "Employers", links: [["Managed Hiring · Pay Per Hire", "/services#managed-hiring"], ["Employer Co-Pilot", "/services#employer-copilot"], ["Candidate Sourcing", "/services#candidate-sourcing"], ["Interview Workflows", "/services#interview-orchestration"]] },
   { title: "Candidates", links: [["Find Jobs", "/find-jobs"], ["Video Resume", "/video-resume"], ["Mock Interview", "/services#mock-interview"], ["Career Resources", "/career-resources"]] },
-  { title: "Company", links: [["About Us", "/about"], ["Careers", "/careers"], ["Blog", "/blog"], ["Contact", "/contact"]] },
+  { title: "Company", links: [["About Us", "/about"], ["Careers", "/careers"], ["News & Insights", "/resources"], ["Press Releases", "/press-releases"], ["Contact", "/contact"]] },
   { title: "Legal", links: [["Legal & Trust Center", "/legal"], ["Privacy Policy", "/privacy"], ["Terms & Conditions", "/terms"], ["Refund & Cancellation", "/refund-cancellation"], ["Service Delivery", "/service-delivery"]] },
 ];
 
