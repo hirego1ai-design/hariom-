@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
+import MarketingNav from "@/components/marketing/MarketingNav";
 
 type Job = {
   id: string;
@@ -250,8 +251,8 @@ export default function JobsPage() {
 
   return (
     <div className="min-h-screen bg-bg-page text-text-primary flex">
-      <CandidateSidebar />
-      <main className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 md:ml-[116px]">
+      {!candidateStateLoading && (candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />)}
+      <main className={`w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 ${candidateAuthenticated ? "md:ml-[116px]" : "pt-28 sm:pt-32"}`}>
         <h1 className="text-3xl font-bold">Find jobs</h1>
         <p className="mt-2 text-sm text-text-muted">
           Only active jobs from HireGo employers are shown. Compatibility appears only when relevant profile evidence exists.
