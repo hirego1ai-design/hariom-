@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { prisma } from "@/lib/prisma";
-import { findSeoJobCity, SEO_JOB_CITIES } from "@/lib/seoJobCities";
+import { findSeoJobCity } from "@/lib/seoJobCities";
 import {
   categoriesForCity,
   categoryPrismaOr,
@@ -13,14 +13,7 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 type Props = { params: Promise<{ city: string; category: string }> };
 
-export function generateStaticParams() {
-  return SEO_JOB_CITIES.flatMap((city) =>
-    categoriesForCity(city.slug).map((category) => ({
-      city: city.slug,
-      category: category.slug,
-    })),
-  );
-}
+export const dynamic = "force-dynamic";
 
 function categoryWhere(
   city: NonNullable<ReturnType<typeof findSeoJobCity>>,
