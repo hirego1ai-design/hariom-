@@ -8,6 +8,7 @@ import ManagedHiringVisual from "@/components/marketing/ManagedHiringVisual";
 import heroStyles from "@/components/marketing/HomeHero.module.css";
 import { JsonLd, styles } from "@/components/marketing/Editorial";
 import { marketingMetadata } from "@/lib/marketingMetadata";
+import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 
 const heroFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font-home-hero" });
 
@@ -41,6 +42,6 @@ export default function HomePage() {
     <section className={`${styles.section} ${styles.sectionDark}`}><div className={styles.container}><div className={styles.sectionHead}><p className={styles.eyebrow}>Human control</p><h2>AI handles operational work. People own hiring decisions.</h2><p>Automation can organize evidence, coordinate interviews and prepare the next action. Final selection and rejection belong to authorized hiring teams.</p></div><Link className={styles.buttonLight} href="/about#human-control">Why HireGo is building this way ↗</Link></div></section>
 
     <section className={styles.section}><div className={styles.container}><div className={styles.cta}><h2>See the workflow behind the platform.</h2><p>Explore what HireGo does, who it is designed for and how we think about responsible automation.</p><div className={styles.actions}><Link href="/services" className={styles.buttonLight}>Services ↗</Link><Link href="/solutions" className={styles.buttonOutline}>Solutions</Link><Link href="/about" className={styles.buttonOutline}>About HireGo AI</Link></div></div></div></section>
-    <JsonLd data={{"@context":"https://schema.org","@type":"Organization",name:"HireGo AI",url:"https://hiregoai.com",logo:"https://hiregoai.com/marketing/hirego-logo-hd.png",description:"HireGo AI builds connected hiring workflows with human-controlled hiring decisions."}} />
+    <JsonLd data={{"@context":"https://schema.org","@type":"Organization",name:"HireGo AI",alternateName:["HireGoAI","Hire Go AI","HireGo"],url:"https://hiregoai.com",logo:"https://hiregoai.com/marketing/hirego-logo-hd.png",description:"HireGo AI builds connected hiring workflows with human-controlled hiring decisions.",email:PUBLIC_BUSINESS_DETAILS.supportEmail,address:{"@type":"PostalAddress",streetAddress:"G-31, Sector 63",addressLocality:"Noida",addressRegion:"Uttar Pradesh",postalCode:"201301",addressCountry:"IN"},contactPoint:{"@type":"ContactPoint",email:PUBLIC_BUSINESS_DETAILS.supportEmail,contactType:"customer support",areaServed:"IN",availableLanguage:["English","Hindi"]}}} />
   </MarketingShell>;
 }
