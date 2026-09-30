@@ -6,6 +6,7 @@ import {
   richHtmlToText,
   sanitizeRichHtml,
   slugifyEditorialTitle,
+  validateEditorialPublication,
 } from "@/lib/contentCms";
 
 test("editorial HTML sanitizer removes active content and unsafe attributes", () => {
@@ -55,4 +56,34 @@ test("editorial schema rejects external canonical domains", () => {
   };
   assert.equal(editorialPayloadSchema.safeParse({ ...base, canonicalUrl: "https://hiregoai.com/blog/a-production-article" }).success, true);
   assert.equal(editorialPayloadSchema.safeParse({ ...base, canonicalUrl: "https://example.com/article" }).success, false);
+});
+
+
+test("editorial sanitizer keeps tables, CTA links and trusted video embeds only", () => {
+  const html = sanitizeRichHtml(`
+    <table><tbody><tr><td>Signal</td><td>Evidence</td></tr></tbody></table>
+    <a data-cta="primary" href="/register" onclick="remove-me()">Get started</a>
+    <iframe src="https://www.youtube-nocookie.com/embed/abcDEF12345" title="Demo"></iframe>
+    <iframe src="https://invalid.example/embed/abcDEF12345" title="Tracker"></iframe>
+  `);
+
+  assert.equal(html.includes("<table>"), true);
+  assert.equal(html.includes('data-cta="primary"'), true);
+  assert.equal(html.includes("onclick"), false);
+  assert.equal(html.includes("youtube-nocookie.com/embed/abcDEF12345"), true);
+  assert.equal(html.includes("invalid.example"), false);
+});
+
+test("publication requires accessible alt text when a featured image is present", () => {
+  assert.throws(
+    () => validateEditorialPublication({
+      type: "BLOG",
+      status: "PUBLISHED",
+      title: "Accessible publishing",
+      contentText: "This body is deliberately long enough to pass the publication content threshold.",
+      featuredImageFileId: "123e4567-e89b-12d3-a456-426614174000",
+      featuredImageAlt: "",
+    }),
+    /alternative text/i,
+  );
 });
