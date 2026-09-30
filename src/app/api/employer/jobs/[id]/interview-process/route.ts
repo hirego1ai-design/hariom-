@@ -5,13 +5,14 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { MAX_INTERVIEW_DURATION_MINS, MIN_INTERVIEW_DURATION_MINS } from "@/lib/interviewDuration";
 
 const roundSchema = z.object({
   name: z.string().trim().min(2).max(100),
   purpose: z.string().trim().max(500).optional().nullable(),
   department: z.string().trim().max(100).optional().nullable(),
   interviewType: z.enum(["VIDEO", "PHONE", "IN_PERSON"]).default("VIDEO"),
-  durationMins: z.number().int().min(10).max(60),
+  durationMins: z.number().int().min(MIN_INTERVIEW_DURATION_MINS).max(MAX_INTERVIEW_DURATION_MINS),
   mandatory: z.boolean().default(true),
   mandatoryFeedback: z.boolean().default(true),
   candidateFeedbackPolicy: z.enum(["REQUIRED", "OPTIONAL", "NOT_SHARED"]).default("OPTIONAL"),
