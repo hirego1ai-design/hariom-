@@ -11,7 +11,7 @@ const roundSchema = z.object({
   purpose: z.string().trim().max(500).optional().nullable(),
   department: z.string().trim().max(100).optional().nullable(),
   interviewType: z.enum(["VIDEO", "PHONE", "IN_PERSON"]).default("VIDEO"),
-  durationMins: z.number().int().min(15).max(240),
+  durationMins: z.number().int().min(10).max(60),
   mandatory: z.boolean().default(true),
   mandatoryFeedback: z.boolean().default(true),
   candidateFeedbackPolicy: z.enum(["REQUIRED", "OPTIONAL", "NOT_SHARED"]).default("OPTIONAL"),
