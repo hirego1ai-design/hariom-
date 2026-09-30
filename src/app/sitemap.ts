@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { effectivePublishedWhere, editorialPublicPath } from "@/lib/contentCms";
 import { SEO_JOB_CITIES, matchesSeoCity } from "@/lib/seoJobCities";
+import { categoriesForCity, matchesSeoCategory } from "@/lib/seoJobCategories";
 
 const base = "https://hiregoai.com";
 export const revalidate = 3600;
@@ -45,7 +46,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
           NOT: { aiFocusAreas: "QA_TEST_PUBLIC_JOB" },
         },
-        select: { id: true, updatedAt: true, location: true },
+        select: {
+          id: true,
+          updatedAt: true,
+          location: true,
+          title: true,
+          department: true,
+          requirements: true,
+          experienceLevel: true,
+        },
         orderBy: { updatedAt: "desc" },
         take: 5000,
       }),
@@ -66,10 +75,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: .7,
       }));
 
+    const categoryEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.flatMap((city) => {
+      const cityJobs = jobs.filter((job) => matchesSeoCity(job.location, city));
+      return categoriesForCity(city.slug)
+        .filter((category) => cityJobs.filter((job) => matchesSeoCategory(job, category)).length >= 3)
+        .map((category) => ({
+          url: `${base}/jobs-in/${city.slug}/${category.slug}`,
+          changeFrequency: "daily" as const,
+          priority: .68,
+        }));
+    });
+
     return [
       ...staticEntries,
       ...freePostingCityEntries,
       ...cityEntries,
+      ...categoryEntries,
       ...jobEntries,
       ...editorial.map((item) => ({
         url: `${base}${editorialPublicPath(item.type, item.slug)}`,
