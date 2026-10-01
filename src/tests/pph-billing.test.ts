@@ -15,7 +15,29 @@ function fixture(t: TestContext) {
     creditDays: 15, advancePaymentAmount: 0, feeType: "PERCENTAGE", feeValue: 8.33, taxRatePct: 18,
     discountPercentage: 0, replacementDays: 90, customClauses: [], commercialNotes: null,
     agreementNumber: "TEST", updatedAt: new Date("2026-07-01") };
-  let app = { id: "app", status: "SHORTLISTED", job: { companyId: "company", title: "Engineer", company: { name: "Test company" } }, candidateProfile: { user: { name: "Test candidate" } } };
+  let app = {
+    id: "app",
+    jobId: "job",
+    candidateProfileId: "candidate-profile",
+    status: "SHORTLISTED",
+    job: {
+      companyId: "company",
+      title: "Engineer",
+      managedAgreementId: "agreement",
+      company: { name: "Test company" },
+    },
+    candidateProfile: { user: { name: "Test candidate" } },
+  };
+  const acceptedOffer = {
+    id: "offer",
+    companyId: "company",
+    createdById: "employer",
+    compensationAmount: 1200000,
+    currency: "INR",
+    acceptedAt: new Date("2026-07-31T04:30:00.000Z"),
+  };
+  let joiningWorkflow: any = null;
+  let candidateAvailability: any = {};
   let placements: any[] = [];
   let invoices: any[] = [];
   let failUpdate = false;
@@ -23,15 +45,47 @@ function fixture(t: TestContext) {
   const original = prisma.$transaction;
   (prisma as any).$transaction = (run: any) => {
     const result = queue.then(async () => {
-      const oldPlacements = placements.map(p => ({ ...p })); const oldInvoices = [...invoices]; const oldApp = { ...app };
+      const oldPlacements = placements.map(p => ({ ...p }));
+      const oldInvoices = [...invoices];
+      const oldApp = { ...app };
+      const oldJoiningWorkflow = joiningWorkflow ? { ...joiningWorkflow } : null;
+      const oldCandidateAvailability = { ...candidateAvailability };
+      let auditSequence = 0;
       const tx = {
         $queryRaw: async (strings: TemplateStringsArray, ...values: any[]) => {
           if (!strings.join("").includes('FROM "PphPlacement"')) return [{ id: "app" }];
           assert.match(strings.join(""), /FOR UPDATE SKIP LOCKED/);
           return placements.filter(p => p.status === "SCHEDULED" && p.invoiceEligibleAt <= values[0]).slice(0, 1).map(p => ({ id: p.id }));
         },
-        application: { findUnique: async () => app, update: async ({ data }: any) => { app = { ...app, ...data }; return app; } },
+        application: {
+          findUnique: async () => app,
+          update: async ({ data }: any) => { app = { ...app, ...data }; return app; },
+        },
+        offer: {
+          findFirst: async () => acceptedOffer,
+        },
+        workflowInstance: {
+          findUnique: async () => joiningWorkflow,
+          create: async ({ data }: any) => {
+            joiningWorkflow = {
+              id: "joining-workflow",
+              checkpointState: null,
+              ...data,
+            };
+            return joiningWorkflow;
+          },
+          update: async ({ data }: any) => {
+            joiningWorkflow = { ...joiningWorkflow, ...data };
+            return joiningWorkflow;
+          },
+        },
         commercialAgreement: { findUnique: async () => agreement },
+        candidateProfile: {
+          update: async ({ data }: any) => {
+            candidateAvailability = { ...candidateAvailability, ...data };
+            return { id: app.candidateProfileId, ...candidateAvailability };
+          },
+        },
         pphPlacement: {
           findUnique: async () => placements[0] || null,
           create: async ({ data }: any) => { const p = { id: "test-placement", status: "SCHEDULED", currency: "INR", invoiceId: null, ...data }; placements.push(p); return p; },
@@ -40,15 +94,43 @@ function fixture(t: TestContext) {
         },
         invoice: { create: async ({ data }: any) => { invoices.push(data); return data; } },
         agreementEvent: { create: async () => ({}) },
+        auditLog: {
+          create: async ({ data }: any) => ({
+            id: `audit-${++auditSequence}`,
+            userId: data.userId ?? null,
+            companyId: data.companyId ?? null,
+            action: data.action,
+            resource: data.resource,
+            ipAddress: data.ipAddress ?? null,
+            details: data.details ?? null,
+            createdAt: new Date(),
+          }),
+        },
+        securityAuditOutboxEvent: { create: async ({ data }: any) => ({ id: "outbox", ...data }) },
       };
-      try { return await run(tx); } catch (error) { placements = oldPlacements; invoices = oldInvoices; app = oldApp; throw error; }
+      try {
+        return await run(tx);
+      } catch (error) {
+        placements = oldPlacements;
+        invoices = oldInvoices;
+        app = oldApp;
+        joiningWorkflow = oldJoiningWorkflow;
+        candidateAvailability = oldCandidateAvailability;
+        throw error;
+      }
     });
     queue = result.then(() => undefined, () => undefined);
     return result;
   };
   t.after(() => { prisma.$transaction = original; });
-  return { agreement, get placements() { return placements; }, get invoices() { return invoices; },
-    failUpdate(value: boolean) { failUpdate = value; } };
+  return {
+    agreement,
+    acceptedOffer,
+    get placements() { return placements; },
+    get invoices() { return invoices; },
+    get candidateAvailability() { return candidateAvailability; },
+    failUpdate(value: boolean) { failUpdate = value; },
+  };
 }
 
 test("eligibility is exactly 25 full days including timezone and month boundary", () => {
@@ -80,7 +162,8 @@ test("joining snapshots approved terms without creating an invoice; concurrent r
   const results = await Promise.all([confirmPphJoining(input, actor, joined), confirmPphJoining(input, actor, joined)]);
   assert.equal(f.placements.length, 1); assert.equal(f.invoices.length, 0); assert.equal(results[1].duplicate, true);
   assert.equal(f.placements[0].approvedBy, "employer");
-  await assert.rejects(confirmPphJoining({ ...input, annualCtc: 2000000 }, actor, joined), /different terms/);
+  await assert.rejects(confirmPphJoining({ ...input, agreementId: "different-agreement" }, actor, joined), /different terms/);
+  assert.equal(f.candidateAvailability.availabilityStatus, "JOINED");
 });
 
 test("unsigned, non-DAY_25 and foreign agreements cannot schedule billing", async t => {
