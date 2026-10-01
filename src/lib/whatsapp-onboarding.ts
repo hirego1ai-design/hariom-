@@ -31,6 +31,7 @@ import {
   ensureWhatsAppContact,
   linkContactToUser,
   waIdToE164,
+  setWhatsAppConsent,
 } from "./whatsapp-identity";
 import { handleCompletedWhatsAppAssistant } from "./whatsapp-candidate-assistant";
 
@@ -43,6 +44,7 @@ export type OnboardingStep =
   | "ROLE"
   | "EXPERIENCE"
   | "LOCATION"
+  | "CONSENT"
   | "CONFIRMATION"
   | "EXISTING_USER_VERIFY"
   | "CREATING"
@@ -193,7 +195,7 @@ function detectCommand(msg: string) {
   return COMMANDS[msg.trim().toLowerCase()] ?? null;
 }
 
-const STEP_ORDER: OnboardingStep[] = ["NAME", "EMAIL", "ROLE", "EXPERIENCE", "LOCATION", "CONFIRMATION"];
+const STEP_ORDER: OnboardingStep[] = ["NAME", "EMAIL", "ROLE", "EXPERIENCE", "LOCATION", "CONSENT", "CONFIRMATION"];
 
 function prevStep(current: OnboardingStep): OnboardingStep {
   const idx = STEP_ORDER.indexOf(current);
@@ -216,6 +218,12 @@ function stepPrompt(step: OnboardingStep, data: CollectedData, stepNum?: number)
       return `*${num}/${total} — How many years of experience do you have?*\n\nReply *Fresher* if you're just starting out.`;
     case "LOCATION":
       return `*${num}/${total} — What's your current city or location?*\n\nExample: _Bangalore_, _Mumbai_, _Delhi_`;
+    case "CONSENT":
+      return (
+        `*${num}/${total} — WhatsApp updates*\n\n` +
+        "Would you like HireGo to send job, application, assessment and interview updates to this WhatsApp number?\n\n" +
+        "Reply *YES* to opt in or *NO* to continue without proactive WhatsApp updates. You can reply *STOP* anytime."
+      );
     default:
       return "Please continue.";
   }
@@ -663,8 +671,32 @@ export async function processWhatsAppMessage(
         return { reply: `❌ ${result.error}`, nextStep: "LOCATION", sessionComplete: false };
       }
       const updated = { ...data, location: result.value };
+      await saveStep(session.id, "CONSENT", updated);
+      return { reply: stepPrompt("CONSENT", updated, 6), nextStep: "CONSENT", sessionComplete: false };
+    }
+
+    // ── CONSENT ─────────────────────────────────────────────────────────────
+    case "CONSENT": {
+      const answer = msg.trim().toLowerCase();
+      const yes = ["yes", "y", "haan", "ha", "1", "opt in", "agree"].includes(answer);
+      const no = ["no", "n", "nahi", "nahin", "2", "skip"].includes(answer);
+      if (!yes && !no) {
+        return {
+          reply: "Please reply *YES* to receive proactive HireGo WhatsApp updates or *NO* to continue without them.",
+          nextStep: "CONSENT",
+          sessionComplete: false,
+        };
+      }
+      if (yes) {
+        await setWhatsAppConsent(waId, "OPTED_IN", "whatsapp_onboarding_explicit_consent");
+      }
+      const updated = { ...data, whatsappUpdatesOptIn: yes };
       await saveStep(session.id, "CONFIRMATION", updated);
-      return { reply: confirmationMessage(updated), nextStep: "CONFIRMATION", sessionComplete: false };
+      return {
+        reply: (yes ? "✅ WhatsApp updates enabled.\n\n" : "No problem — proactive WhatsApp updates are off.\n\n") + confirmationMessage(updated),
+        nextStep: "CONFIRMATION",
+        sessionComplete: false,
+      };
     }
 
     // ── CONFIRMATION ────────────────────────────────────────────────────────
