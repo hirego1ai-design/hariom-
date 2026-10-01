@@ -421,6 +421,14 @@ export async function runHiringWorkflowTests(): Promise<{
       );
 
       // 4. Interview Rescheduling and Cancellation Verification
+      // Generic stage mutation above intentionally cannot forge AI_INTERVIEW.
+      // This fixture now models the legitimate state produced by the dedicated
+      // interview scheduling workflow before testing interview operations.
+      await prisma.application.update({
+        where: { id: applicationA.id },
+        data: { status: "AI_INTERVIEW" },
+      });
+
       const newTime = new Date(Date.now() + 172800000).toISOString();
       const resReschedule = await callInterviewPatch(tokenA, interviewA.id, "RESCHEDULE", newTime);
       const dbInterviewRescheduled = await prisma.interview.findUnique({ where: { id: interviewA.id } });
@@ -502,10 +510,33 @@ export async function runHiringWorkflowTests(): Promise<{
         await prisma.jobListing.deleteMany({ where: { id: offerStateJob.id } }).catch(() => undefined);
       }
       if (interviewA) {
+        const interviewAudits = await prisma.auditLog.findMany({
+          where: { resource: `Interview:${interviewA.id}` },
+          select: { id: true },
+        }).catch(() => []);
+        if (interviewAudits.length) {
+          await prisma.securityAuditOutboxEvent.deleteMany({
+            where: { auditLogId: { in: interviewAudits.map((audit) => audit.id) } },
+          }).catch(() => undefined);
+          await prisma.auditLog.deleteMany({
+            where: { id: { in: interviewAudits.map((audit) => audit.id) } },
+          }).catch(() => undefined);
+        }
         await prisma.interview.delete({ where: { id: interviewA.id } }).catch(() => undefined);
       }
       if (applicationA) {
-        await prisma.auditLog.deleteMany({ where: { resource: `Application:${applicationA.id}` } }).catch(() => undefined);
+        const applicationAudits = await prisma.auditLog.findMany({
+          where: { resource: `Application:${applicationA.id}` },
+          select: { id: true },
+        }).catch(() => []);
+        if (applicationAudits.length) {
+          await prisma.securityAuditOutboxEvent.deleteMany({
+            where: { auditLogId: { in: applicationAudits.map((audit) => audit.id) } },
+          }).catch(() => undefined);
+          await prisma.auditLog.deleteMany({
+            where: { id: { in: applicationAudits.map((audit) => audit.id) } },
+          }).catch(() => undefined);
+        }
         await prisma.application.delete({ where: { id: applicationA.id } }).catch(() => undefined);
       }
       if (applicationB) {
