@@ -35,12 +35,12 @@ export class PayUGateway implements PaymentGateway {
     const requestedPhone = (params.customerPhone || "").replace(/[^0-9+]/g, "").slice(0, 20);
 
     if (isProduction && (!requestedEmail || !requestedPhone)) {
-      throw new Error("PayU checkout requires the employer billing email and phone number.");
+      throw new Error("PayU checkout requires a billing email and phone number.");
     }
     const email = requestedEmail || "dev-billing@example.test";
     const phone = requestedPhone || "9999999999";
-    const surl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU`;
-    const furl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU&status=FAILED`;
+    const surl = params.successUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU`;
+    const furl = params.cancelUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU&status=FAILED`;
     const udf1 = params.orderId;
     const udf2 = params.companyId;
     const udf3 = params.planId || "";
