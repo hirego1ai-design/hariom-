@@ -7,7 +7,7 @@ import {
   classifyWhatsAppAudience,
   routeEmployerIntentDeterministically,
 } from "@/lib/whatsapp-autonomous-agent";
-import { isCustomerServiceWindowNudgeAge } from "@/lib/whatsapp-engagement";
+import { isWhatsAppFollowupAgeEligible } from "@/lib/whatsapp-followup";
 
 test("candidate WhatsApp routes high-value product intents without LLM", () => {
   assert.equal(routeWhatsAppCandidateIntent("I want to practice mock interview").type, "MOCK_INTERVIEW");
@@ -31,11 +31,11 @@ test("employer common intents are deterministic so LLM is fallback-only", () => 
 
 test("proactive WhatsApp nudge is eligible only near the end of the open service window", () => {
   const now = Date.parse("2026-10-01T12:00:00.000Z");
-  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 19 * 60 * 60 * 1000), now), false);
-  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 20 * 60 * 60 * 1000), now), true);
-  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 23 * 60 * 60 * 1000), now), true);
-  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 23.5 * 60 * 60 * 1000), now), false);
-  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 24 * 60 * 60 * 1000), now), false);
+  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 19 * 60 * 60 * 1000), now), false);
+  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 20 * 60 * 60 * 1000), now), true);
+  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 23 * 60 * 60 * 1000), now), true);
+  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 23.5 * 60 * 60 * 1000), now), false);
+  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 24 * 60 * 60 * 1000), now), false);
 });
 
 test("WhatsApp handoff remains allowlist-based for new candidate and employer surfaces", () => {
@@ -56,10 +56,11 @@ test("WhatsApp handoff remains allowlist-based for new candidate and employer su
   assert.doesNotMatch(file, /new URL\(dest\s*,/);
 });
 
-test("Railway recovery runner owns WhatsApp engagement scheduling", () => {
-  const runner = fs.readFileSync(
-    path.join(process.cwd(), "src/lib/workflows/FailureRecoveryRunner.ts"),
+test("inbound WhatsApp worker schedules one durable delayed follow-up check", () => {
+  const worker = fs.readFileSync(
+    path.join(process.cwd(), "src/app/api/internal/whatsapp/process/route.ts"),
     "utf8",
   );
-  assert.match(runner, /WhatsAppEngagementWorker\.run/);
+  assert.match(worker, /scheduleWhatsAppFollowupCheck/);
+  assert.match(worker, /shouldScheduleWhatsAppFollowup/);
 });
