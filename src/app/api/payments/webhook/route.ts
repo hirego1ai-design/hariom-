@@ -69,14 +69,35 @@ export async function POST(req: NextRequest) {
     // result. Never accept a separately supplied client/body identifier.
     const gatewayTxId = verification.gatewayTxId;
 
-    const paymentOrder = await prisma.paymentOrder.findFirst({
+    let paymentOrder = await prisma.paymentOrder.findFirst({
       where: {
         OR: [
           ...(verification.gatewayOrderId ? [{ gatewayOrderId: verification.gatewayOrderId }] : []),
           ...(verification.gatewayTxId ? [{ gatewayTxId: verification.gatewayTxId }] : []),
+          ...(verification.orderId ? [{ orderId: verification.orderId }] : []),
         ],
       },
     });
+
+    // Candidate checkout binding recovery: if the provider accepted an order but the
+    // server lost the response before persisting gateway identifiers, a verified
+    // webhook carrying our deterministic orderId can safely finish the binding.
+    if (
+      paymentOrder?.productType === "CANDIDATE_CREDITS" &&
+      paymentOrder.status === "INITIATED" &&
+      !paymentOrder.gateway &&
+      verification.orderId === paymentOrder.orderId &&
+      verification.gatewayOrderId
+    ) {
+      paymentOrder = await prisma.paymentOrder.update({
+        where: { id: paymentOrder.id },
+        data: {
+          gateway: providerHeader,
+          gatewayOrderId: verification.gatewayOrderId,
+          status: "CREATED",
+        },
+      });
+    }
 
     // Disabling a gateway blocks new checkouts, but must not strand a payment
     // order that was already created with that provider. Unknown or unbound
@@ -106,6 +127,18 @@ export async function POST(req: NextRequest) {
           message: `Webhook transaction ${gatewayTxId} already processed. Zero duplicate credits or rewards provisioned.`,
         });
       }
+    }
+
+    if (paymentOrder?.productType === "CANDIDATE_CREDITS") {
+      const { handleCandidateCreditPaymentWebhook } = await import("@/lib/payments/candidateCreditCommerce");
+      const result = await handleCandidateCreditPaymentWebhook({
+        paymentOrder,
+        verification,
+        provider: providerHeader,
+        gatewayTxId,
+        rawPayload: body,
+      });
+      return NextResponse.json(result);
     }
 
     // 3. Handle Payment Failure / Rejection Events
