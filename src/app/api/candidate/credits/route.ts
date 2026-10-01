@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     }
 
     const returnBase = appBaseUrl();
-    const returnPath = `/credits?paymentOrderId=${encodeURIComponent(orderId)}`;
+    const returnPath = `/api/candidate/credits/return?orderId=${encodeURIComponent(orderId)}`;
     let gatewayResult;
     try {
       gatewayResult = await PaymentGatewayController.createOrder({
