@@ -374,3 +374,22 @@ test("Stripe checkout fails closed when signed webhook readiness is missing and 
   assert.match(controller, /err instanceof AmbiguousPaymentOrderError/);
   assert.match(controller, /Never create a second provider order/);
 });
+
+
+test("mock interview entitlement is fail-closed when service pricing is absent", async () => {
+  const fs = await import("node:fs");
+  const mockStart = fs.readFileSync(new URL("../app/api/assessment/mock-interview/start/route.ts", import.meta.url), "utf8");
+  const adminService = fs.readFileSync(new URL("../app/api/admin/candidate-credits/mock-interview-service/route.ts", import.meta.url), "utf8");
+  const migration = fs.readFileSync(new URL("../../prisma/migrations/20261001000200_candidate_service_cost_guard/migration.sql", import.meta.url), "utf8");
+
+  assert.match(mockStart, /if \(!mockService\)/);
+  assert.match(mockStart, /candidate credit configuration is not published/);
+  assert.doesNotMatch(mockStart, /mockService\?\.creditCost \|\| 0/);
+
+  assert.match(adminService, /const SERVICE_KEY = "mock-interview"/);
+  assert.match(adminService, /creditCost: z\.number\(\)\.int\(\)\.min\(0\)/);
+  assert.match(adminService, /candidateServiceCatalog\.upsert/);
+  assert.match(adminService, /MOCK_INTERVIEW_CREDIT_CONFIG_UPDATED/);
+
+  assert.match(migration, /CHECK \("creditCost" >= 0\)/);
+});
