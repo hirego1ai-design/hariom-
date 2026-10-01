@@ -620,7 +620,15 @@ async function mockInterviewHandoff(userId: string, sessionId: string) {
   ]);
 
   const targetRole = upcoming?.application.job.title || getCandidateTargetRole(candidate.preferences) || candidate.headline || "your target role";
-  const requiredCredits = mockService?.creditCost || 0;
+  if (!mockService) {
+    return [
+      `AI Mock Interview for *${compact(targetRole, 80)}* is not currently available because its credit configuration has not been published.`,
+      "",
+      "I won't send a payment link or pretend the service is free until HireGo publishes the real commercial configuration.",
+    ].join("\n");
+  }
+
+  const requiredCredits = mockService.creditCost;
   const walletBalance = candidate.creditWallet?.balance || 0;
 
   if (requiredCredits > walletBalance) {
