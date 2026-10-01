@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { routeWhatsAppCandidateIntent } from "@/lib/whatsapp-candidate-assistant";
+import { extractWhatsAppReferralCode } from "@/lib/whatsapp-onboarding";
 import {
   classifyWhatsAppAudience,
   routeEmployerIntentDeterministically,
@@ -70,4 +71,14 @@ test("Railway recovery runner owns the single WhatsApp engagement scheduler", ()
     "utf8",
   );
   assert.doesNotMatch(inboundWorker, /scheduleWhatsAppFollowupCheck|shouldScheduleWhatsAppFollowup/);
+});
+
+
+test("WhatsApp captures referral attribution from links and prefilled QR messages", () => {
+  assert.equal(
+    extractWhatsAppReferralCode("https://hiregoai.com/signup?ref=HGABC123&utm_source=qr"),
+    "HGABC123",
+  );
+  assert.equal(extractWhatsAppReferralCode("REF: hgxyz789"), "HGXYZ789");
+  assert.equal(extractWhatsAppReferralCode("hello I need a job"), null);
 });
