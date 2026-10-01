@@ -110,22 +110,23 @@ export async function POST(req: NextRequest) {
 
     // 3. Handle Payment Failure / Rejection Events
     if (verification.status === "FAILED" || verification.status === "REJECTED") {
-      const failCompanyId = paymentOrder?.companyId;
-      if (failCompanyId) {
+      if (paymentOrder) {
         await prisma.$transaction(async (tx) => {
-          // Serialize failure with success on the order row. A late failure
-          // event must never overwrite a captured order or release its promo.
           const failedOrder = await tx.paymentOrder.updateMany({
-            // A failure notification is a state transition, not an event log.
-            // Claim it once so provider retries cannot duplicate audit rows.
-            where: { orderId: paymentOrder!.orderId, status: { in: ["INITIATED", "CREATED"] } },
-            data: { status: "FAILED" },
+            where: {
+              orderId: paymentOrder.orderId,
+              status: { in: ["INITIATED", "CREATED"] },
+            },
+            data: { status: "FAILED", gatewayTxId: gatewayTxId || undefined },
           });
           if (failedOrder.count !== 1) return;
-          const currentOrder = paymentOrder
-            ? await tx.paymentOrder.findUnique({ where: { orderId: paymentOrder.orderId } })
-            : null;
-          if (currentOrder?.promoReservationState === "RESERVED" && currentOrder.promoCode) {
+
+          const currentOrder = await tx.paymentOrder.findUnique({
+            where: { orderId: paymentOrder.orderId },
+          });
+          if (!currentOrder) return;
+
+          if (currentOrder.promoReservationState === "RESERVED" && currentOrder.promoCode) {
             const promos = await tx.$queryRaw<Array<{ id: string; reservedUsage: number }>>`
               SELECT "id", "reservedUsage"
               FROM "PromoCode"
@@ -134,11 +135,14 @@ export async function POST(req: NextRequest) {
             `;
             const promo = promos[0];
             if (promo?.reservedUsage && promo.reservedUsage > 0) {
-              await tx.promoCode.update({ where: { id: promo.id }, data: { reservedUsage: { decrement: 1 } } });
+              await tx.promoCode.update({
+                where: { id: promo.id },
+                data: { reservedUsage: { decrement: 1 } },
+              });
             }
             await tx.paymentOrder.update({
               where: { orderId: currentOrder.orderId },
-              data: { status: "FAILED", gatewayTxId: gatewayTxId || null, promoReservationState: "RELEASED" },
+              data: { promoReservationState: "RELEASED" },
             });
           }
 
@@ -146,16 +150,24 @@ export async function POST(req: NextRequest) {
             await tx.paymentTransaction.upsert({
               where: { gatewayTxId },
               update: {
-                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
+                companyId: currentOrder.companyId,
+                candidateProfileId: currentOrder.candidateProfileId,
+                productType: currentOrder.productType,
+                planId: currentOrder.planId,
+                amount: verification.amount || currentOrder.expectedAmount,
+                currency: verification.currency || "INR",
                 status: "FAILED",
+                provider: providerHeader,
                 errorMessage: "Payment gateway failed event received",
               },
               create: {
                 gatewayTxId,
-                companyId: failCompanyId,
-                productType: currentOrder?.productType || paymentOrder?.productType || "LEGACY_SUBSCRIPTION",
-                planId: currentOrder?.planId || paymentOrder?.planId || null,
-                amount: verification.amount || 0,
+                companyId: currentOrder.companyId,
+                candidateProfileId: currentOrder.candidateProfileId,
+                productType: currentOrder.productType,
+                planId: currentOrder.planId,
+                amount: verification.amount || currentOrder.expectedAmount,
+                currency: verification.currency || "INR",
                 status: "FAILED",
                 provider: providerHeader,
                 errorMessage: "Payment gateway failed event received",
@@ -163,13 +175,20 @@ export async function POST(req: NextRequest) {
             });
           }
 
+          const candidate = currentOrder.candidateProfileId
+            ? await tx.candidateProfile.findUnique({
+                where: { id: currentOrder.candidateProfileId },
+                select: { userId: true },
+              })
+            : null;
+
           await tx.auditLog.create({
             data: {
-              userId: null,
-              companyId: failCompanyId,
+              userId: candidate?.userId || null,
+              companyId: currentOrder.companyId,
               action: "PAYMENT_FAILED",
-              resource: "/api/payments/webhook",
-              details: `Payment failed for gateway transaction ${gatewayTxId || "unknown"}.`,
+              resource: `PaymentOrder:${currentOrder.orderId}`,
+              details: `Payment failed for product ${currentOrder.productType}; gateway transaction ${gatewayTxId || "unknown"}.`,
             },
           });
         });
@@ -179,7 +198,7 @@ export async function POST(req: NextRequest) {
         success: true,
         received: true,
         status: "FAILED",
-        message: "Payment failure recorded. Subscription and credits remain uncharged.",
+        message: "Payment failure recorded. No subscription, candidate credits, or referral reward was provisioned.",
       });
     }
 
@@ -205,8 +224,32 @@ export async function POST(req: NextRequest) {
       if (!paymentOrder.gatewayOrderId || paymentOrder.gatewayOrderId !== verification.gatewayOrderId) {
         throw new ApiError("Gateway order does not match the authoritative payment order", 400);
       }
+
+      if (paymentOrder.productType === "CANDIDATE_CREDITS") {
+        const { fulfillCandidateCreditPayment } = await import("@/lib/payments/candidateCreditFulfillment");
+        const fulfillment = await fulfillCandidateCreditPayment({
+          paymentOrder,
+          verification,
+          provider: providerHeader,
+          gatewayTxId,
+          rawPayload: body,
+        });
+
+        return NextResponse.json({
+          success: true,
+          duplicate: fulfillment.duplicate,
+          received: true,
+          product: "CANDIDATE_CREDITS",
+          status: "SUCCESS",
+          balance: fulfillment.balance,
+          ledgerId: fulfillment.ledgerId,
+        });
+      }
       
       const companyId = paymentOrder.companyId;
+      if (!companyId) {
+        throw new ApiError("Company payment order is missing its company binding.", 409);
+      }
       const planId = paymentOrder.planId;
       const expectedAmount = paymentOrder.expectedAmount;
 
