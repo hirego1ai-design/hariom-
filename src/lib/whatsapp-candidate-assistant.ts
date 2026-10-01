@@ -87,6 +87,9 @@ export function routeWhatsAppCandidateIntent(raw: string): CandidateIntent {
   if (/\b(referral|refer|earn|earning|make money|paisa|paise)\b/.test(text)) {
     return { type: "REFERRAL" };
   }
+  if (/\b(pending assessment|assessment pending|open assessment|continue assessment|assessment)\b/.test(text)) {
+    return { type: "PENDING_ASSESSMENT" };
+  }
   if (text === "0" || /\b(support|human|agent|help me|madad)\b/.test(text)) {
     return { type: "SUPPORT" };
   }
