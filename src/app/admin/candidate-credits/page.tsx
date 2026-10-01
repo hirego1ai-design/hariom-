@@ -16,6 +16,15 @@ type CreditPackage = {
   sortOrder: number;
 };
 
+type MockInterviewService = {
+  id: string;
+  serviceKey: string;
+  name: string;
+  description: string | null;
+  creditCost: number;
+  isActive: boolean;
+};
+
 const emptyForm = {
   id: "",
   code: "",
@@ -33,6 +42,13 @@ export default function AdminCandidateCreditsPage() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [mockService, setMockService] = useState<MockInterviewService | null>(null);
+  const [mockName, setMockName] = useState("AI Mock Interview");
+  const [mockDescription, setMockDescription] = useState("");
+  const [mockCreditCost, setMockCreditCost] = useState("");
+  const [mockActive, setMockActive] = useState(false);
+  const [mockLoading, setMockLoading] = useState(true);
+  const [mockSaving, setMockSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -52,6 +68,66 @@ export default function AdminCandidateCreditsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const loadMockService = useCallback(async () => {
+    setMockLoading(true);
+    try {
+      const response = await fetch("/api/admin/candidate-credits/mock-interview-service", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Could not load Mock Interview credit configuration.");
+      const service = (data.service || null) as MockInterviewService | null;
+      setMockService(service);
+      if (service) {
+        setMockName(service.name);
+        setMockDescription(service.description || "");
+        setMockCreditCost(String(service.creditCost));
+        setMockActive(service.isActive);
+      } else {
+        setMockName("AI Mock Interview");
+        setMockDescription("");
+        setMockCreditCost("");
+        setMockActive(false);
+      }
+    } catch (error) {
+      setMockService(null);
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Could not load Mock Interview credit configuration." });
+    } finally {
+      setMockLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadMockService(); }, [loadMockService]);
+
+  async function saveMockService(event: FormEvent) {
+    event.preventDefault();
+    if (mockSaving) return;
+    setMockSaving(true);
+    setMessage(null);
+    try {
+      const creditCost = Number(mockCreditCost);
+      if (!Number.isInteger(creditCost) || creditCost < 0) {
+        throw new Error("Mock Interview credit cost must be a non-negative whole number.");
+      }
+      const response = await fetch("/api/admin/candidate-credits/mock-interview-service", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: mockName.trim(),
+          description: mockDescription.trim() || null,
+          creditCost,
+          isActive: mockActive,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Could not save Mock Interview credit configuration.");
+      setMessage({ type: "success", text: "Mock Interview credit configuration saved and audited." });
+      await loadMockService();
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Could not save Mock Interview credit configuration." });
+    } finally {
+      setMockSaving(false);
+    }
+  }
 
   function editPackage(pkg: CreditPackage) {
     setForm({
@@ -144,6 +220,71 @@ export default function AdminCandidateCreditsPage() {
               {message.text}
             </div>
           )}
+
+          <section className="rounded-2xl border border-white/10 bg-[#16161B] p-5">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">Mock Interview service pricing</p>
+              <h2 className="mt-1 text-xl font-extrabold">Credit entitlement</h2>
+              <p className="mt-2 text-xs text-slate-400">
+                Missing configuration means Mock Interview is unavailable. Set 0 credits only when you explicitly want it free.
+              </p>
+            </div>
+
+            {mockLoading ? (
+              <div role="status" className="rounded-xl border border-white/10 p-5 text-sm text-slate-400">
+                Loading authoritative service configuration…
+              </div>
+            ) : (
+              <form onSubmit={saveMockService} className="grid gap-4 md:grid-cols-2">
+                <label className="block text-xs font-bold text-slate-300">
+                  Candidate-facing name
+                  <input
+                    value={mockName}
+                    onChange={(event) => setMockName(event.target.value)}
+                    minLength={2}
+                    maxLength={160}
+                    required
+                    className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white"
+                  />
+                </label>
+                <label className="block text-xs font-bold text-slate-300">
+                  Credits per real Mock Interview session
+                  <input
+                    value={mockCreditCost}
+                    onChange={(event) => setMockCreditCost(event.target.value)}
+                    inputMode="numeric"
+                    placeholder="Enter approved credit cost"
+                    required
+                    className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white"
+                  />
+                </label>
+                <label className="block text-xs font-bold text-slate-300 md:col-span-2">
+                  Description
+                  <textarea
+                    value={mockDescription}
+                    onChange={(event) => setMockDescription(event.target.value)}
+                    maxLength={500}
+                    rows={2}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm md:col-span-2">
+                  <span>
+                    <strong className="block">Active / available to candidates</strong>
+                    <span className="text-xs text-slate-400">
+                      {mockService ? `Current stored cost: ${mockService.creditCost} credits.` : "No service record exists yet; candidates are blocked rather than treated as free."}
+                    </span>
+                  </span>
+                  <input type="checkbox" checked={mockActive} onChange={(event) => setMockActive(event.target.checked)} />
+                </label>
+                <div className="md:col-span-2">
+                  <button disabled={mockSaving} className="rounded-xl bg-primary px-5 py-3 text-xs font-extrabold text-white disabled:opacity-40">
+                    {mockSaving ? "Saving…" : "Save Mock Interview pricing"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
 
           <section className="grid gap-6 lg:grid-cols-[380px_1fr]">
             <form onSubmit={save} className="space-y-4 rounded-2xl border border-white/10 bg-[#16161B] p-5">
