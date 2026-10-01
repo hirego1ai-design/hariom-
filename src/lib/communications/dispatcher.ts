@@ -690,7 +690,7 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
   try {
     providerAttempted = true;
     const result = await executeProviderAttempt(input, definition, template);
-    const successful = result.sent === true || result.success === true;
+    const successful = "sent" in result ? result.sent === true : result.success === true;
     const attemptedProvider =
       typeof (result as { provider?: unknown }).provider === "string"
         ? (result as { provider: string }).provider
@@ -888,7 +888,7 @@ export async function retryPersistedCommunicationDelivery(params: {
       definition,
       template,
     );
-    const successful = result.sent === true || result.success === true;
+    const successful = "sent" in result ? result.sent === true : result.success === true;
     const attemptedProvider =
       typeof (result as { provider?: unknown }).provider === "string"
         ? (result as { provider: string }).provider
