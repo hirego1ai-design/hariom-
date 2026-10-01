@@ -678,7 +678,7 @@ export async function handleCompletedWhatsAppAssistant(params: {
       pendingProactiveSetAt: null,
     });
   } else {
-    intent = await resolveCandidateIntent(params.message);
+    intent = await resolveCandidateIntent(params.message, params.sessionId);
   }
 
   switch (intent.type) {
