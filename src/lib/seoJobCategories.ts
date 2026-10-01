@@ -156,6 +156,12 @@ export const SEO_CITY_CATEGORY_PRIORITY: Record<string, string[]> = {
   mumbai: ["finance", "sales", "operations", "digital-marketing", "hr-recruitment", "customer-support"],
   chennai: ["software-development", "customer-support", "engineering", "manufacturing", "finance"],
   ahmedabad: ["sales", "finance", "manufacturing", "software-development", "digital-marketing"],
+  kolkata: ["software-development", "finance", "sales", "operations", "customer-support"],
+  jaipur: ["software-development", "customer-support", "bpo", "sales", "finance"],
+  indore: ["software-development", "customer-support", "manufacturing", "sales", "operations"],
+  kochi: ["software-development", "finance", "operations", "customer-support", "sales"],
+  chandigarh: ["software-development", "sales", "customer-support", "hr-recruitment", "finance"],
+  coimbatore: ["manufacturing", "engineering", "software-development", "customer-support", "operations"],
 };
 
 export function findSeoJobCategory(slug: string) {
