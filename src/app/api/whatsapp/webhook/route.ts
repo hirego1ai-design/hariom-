@@ -197,8 +197,7 @@ async function ingestSingleMessage(message: any): Promise<void> {
 
   // Explicit opt-out commands revoke outbound messaging consent immediately.
   // Receiving any other inbound message never grants opt-in consent.
-  const normalizedCommand = textBody.trim().toLowerCase();
-  if (["stop", "unsubscribe", "opt out", "opt-out"].includes(normalizedCommand)) {
+  if (isWhatsAppOptOutCommand(textBody)) {
     await ensureWhatsAppContact(waId);
     await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");
   }
