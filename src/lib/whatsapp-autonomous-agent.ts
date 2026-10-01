@@ -228,12 +228,50 @@ export async function handleUnlinkedEmployerSalesLead(params: {
   const current = await readSessionData(params.sessionId);
   const lead = current.autonomousSales || {};
   const message = boundedText(params.message, 500);
+  const salesIntent = routeEmployerIntentDeterministically(message);
+
+  const currentQuestion = () => {
+    switch (lead.stage) {
+      case "COMPANY": return "To continue the hiring setup, what is your *company name*?";
+      case "ROLE": return "Which *role* are you hiring for?";
+      case "OPENINGS": return "How many *openings* do you need to fill?";
+      case "LOCATION": return "What is the *hiring location* (or Remote)?";
+      case "TIMELINE": return "What is the target *joining timeline*?";
+      case "EMAIL": return "What *work email* should HireGo use?";
+      default: return "What is your *company name*?";
+    }
+  };
 
   // Do not hijack a new candidate conversation. Once an employer lead has
   // started, however, keep routing subsequent short answers through the same
   // durable session even when those answers do not contain employer keywords.
   if (!lead.stage && classifyWhatsAppAudience(message) !== "EMPLOYER") {
     return null;
+  }
+
+  if (["COPILOT", "PLANS", "MANAGED_HIRING"].includes(salesIntent)) {
+    if (salesIntent === "MANAGED_HIRING") {
+      return [
+        "*HireGo Managed Hiring* is the end-to-end service route for employers who want HireGo to run the hiring operation, especially for urgent or bulk requirements.",
+        "Commercial terms come from the approved agreement flow; I won't invent a fee or discount in WhatsApp.",
+        "",
+        currentQuestion(),
+      ].join("\n");
+    }
+
+    const plans = salesIntent === "PLANS"
+      ? await listPublicCopilotPlans("IN").catch(() => [])
+      : [];
+    const planLines = plans.slice(0, 3).map((plan) =>
+      `• *${plan.name}* — ${money(plan.price.currency, plan.price.totalAmount)}`
+    );
+    return [
+      "*HireGo Copilot* automates repetitive hiring workflow such as screening coordination, workflow progression and interview operations so your team does not need a recruiter for every routine step.",
+      "Consequential hiring decisions remain human-approved.",
+      planLines.length ? "\n*Live plans:*\n" + planLines.join("\n") : "",
+      "",
+      currentQuestion(),
+    ].filter(Boolean).join("\n");
   }
 
   if (!lead.stage) {
@@ -329,6 +367,32 @@ export async function handleUnlinkedEmployerSalesLead(params: {
       "",
       "Reply *Copilot* if you want me to explain the automation before you register.",
     ].join("\n");
+  }
+
+  if (lead.stage === "COMPLETE") {
+    if (salesIntent === "REFERRAL") {
+      return "Once your employer account is verified, I can show your server-confirmed HireGo referral link, eligibility rules and earnings here on WhatsApp.";
+    }
+    if (salesIntent === "COPILOT" || salesIntent === "PLANS") {
+      const plans = await listPublicCopilotPlans("IN").catch(() => []);
+      const planLines = plans.slice(0, 3).map((plan) =>
+        `• *${plan.name}* — ${money(plan.price.currency, plan.price.totalAmount)}`
+      );
+      return [
+        "*HireGo Copilot* can automate repetitive hiring workflow 24×7 while final consequential decisions remain human-approved.",
+        planLines.length ? "\n*Live plans:*\n" + planLines.join("\n") : "",
+        "",
+        `Continue employer setup here: ${appBaseUrl()}/employer/employer-registration-business-model`,
+      ].filter(Boolean).join("\n");
+    }
+    if (salesIntent === "MANAGED_HIRING") {
+      return [
+        "*Managed Hiring* is the service route when you want HireGo to operate the hiring process end-to-end rather than only provide software automation.",
+        "Commercial terms are created through the approved agreement flow after employer verification.",
+        "",
+        `Continue employer setup here: ${appBaseUrl()}/employer/employer-registration-business-model`,
+      ].join("\n");
+    }
   }
 
   return [
