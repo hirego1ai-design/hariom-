@@ -71,6 +71,11 @@ export default function MockInterviewSetupPage() {
 
       const data = await res.json();
 
+      if (res.status === 402) {
+        router.push("/credits?returnTo=mock-interview");
+        return;
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to start mock interview session.");
       }
