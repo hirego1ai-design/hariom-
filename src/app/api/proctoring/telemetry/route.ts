@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
         409,
       );
     }
+    const interviewStartedAtIso = interview.startedAt.toISOString();
 
     const policy = await getLiveInterviewProctoringPolicy();
     if (!policy.enabled) {
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest) {
               severity: event.severity,
               evidenceSource: "CLIENT_REPORTED_UNVERIFIED",
               policyVersion: policy.policyVersion,
-              interviewStartedAt: interview.startedAt.toISOString(),
+              interviewStartedAt: interviewStartedAtIso,
             }),
           },
         });
