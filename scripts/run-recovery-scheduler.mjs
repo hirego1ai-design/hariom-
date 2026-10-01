@@ -1,9 +1,14 @@
+import { createHmac } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const key = process.env.WORKER_RECOVERY_API_KEY?.trim();
+const explicitKey = process.env.WORKER_RECOVERY_API_KEY?.trim();
+const cronSecret = process.env.CRON_SECRET?.trim();
+const key = explicitKey || (cronSecret && cronSecret.length >= 32
+  ? createHmac('sha256', cronSecret).update('hirego:workflow-recovery:v1').digest('base64url')
+  : '');
 const endpoint = new URL('/api/internal/workflows/recover', process.env.APP_URL || '');
 if (!key || key.length < 32) {
-  throw new Error('Configure WORKER_RECOVERY_API_KEY with at least 32 characters.');
+  throw new Error('Configure WORKER_RECOVERY_API_KEY or a CRON_SECRET of at least 32 characters.');
 }
 if (endpoint.username || endpoint.password) throw new Error('APP_URL must not contain credentials.');
 const internalHttp = process.env.ALLOW_INTERNAL_HTTP === '1' && ['app', 'localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
