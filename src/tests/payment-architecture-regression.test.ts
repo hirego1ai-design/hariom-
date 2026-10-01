@@ -335,3 +335,42 @@ test("candidate gateway browser returns never fulfill credits", async () => {
   assert.doesNotMatch(browserReturn, /candidateCreditWallet/);
   assert.doesNotMatch(browserReturn, /paymentTransaction/);
 });
+
+
+test("candidate mock interview is never debited through the generic candidate service endpoint", async () => {
+  const fs = await import("node:fs");
+  const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const genericService = fs.readFileSync(new URL("../app/api/candidate/services/[serviceKey]/request/route.ts", import.meta.url), "utf8");
+  const mockStart = fs.readFileSync(new URL("../app/api/assessment/mock-interview/start/route.ts", import.meta.url), "utf8");
+
+  assert.match(credits, /serviceKey: \{ notIn: \["mock-interview", "mock_interview"\] \}/);
+  assert.match(genericService, /AI Mock Interview is charged only when an actual interview session starts/);
+  assert.match(mockStart, /mock-interview:\$\{candidateProfile\.id\}:\$\{idempotencyKey\}/);
+  assert.match(mockStart, /balance: \{ decrement: mockService\.creditCost \}/);
+});
+
+test("candidate checkout preserves only the allowlisted mock interview return intent", async () => {
+  const fs = await import("node:fs");
+  const checkout = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const browserReturn = fs.readFileSync(new URL("../app/api/candidate/credits/return/route.ts", import.meta.url), "utf8");
+  const setup = fs.readFileSync(new URL("../app/ai/mock-interview/setup/page.tsx", import.meta.url), "utf8");
+  const creditsPage = fs.readFileSync(new URL("../app/credits/page.tsx", import.meta.url), "utf8");
+
+  assert.match(checkout, /returnTo: z\.enum\(\["mock-interview"\]\)\.optional\(\)/);
+  assert.match(browserReturn, /returnTo: z\.enum\(\["mock-interview"\]\)\.optional\(\)/);
+  assert.match(setup, /res\.status === 402/);
+  assert.match(setup, /\/credits\?returnTo=mock-interview/);
+  assert.match(creditsPage, /window\.location\.assign\("\/ai\/mock-interview\/setup"\)/);
+});
+
+test("Stripe checkout fails closed when signed webhook readiness is missing and blocks ambiguous cross-provider failover", async () => {
+  const fs = await import("node:fs");
+  const stripe = fs.readFileSync(new URL("../lib/payments/StripeGateway.ts", import.meta.url), "utf8");
+  const controller = fs.readFileSync(new URL("../lib/payments/PaymentGatewayController.ts", import.meta.url), "utf8");
+
+  assert.match(stripe, /STRIPE_WEBHOOK_SECRET \|\| process\.env\.PAYMENT_WEBHOOK_SECRET/);
+  assert.match(stripe, /AmbiguousPaymentOrderError/);
+  assert.match(stripe, /response\.status >= 500/);
+  assert.match(controller, /err instanceof AmbiguousPaymentOrderError/);
+  assert.match(controller, /Never create a second provider order/);
+});
