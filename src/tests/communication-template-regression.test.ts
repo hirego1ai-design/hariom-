@@ -291,9 +291,10 @@ test("communication retries are integrated into the existing workflow recovery p
   assert(scheduler.includes("/api/internal/workflows/recover"));
   assert(scheduler.includes("WORKER_RECOVERY_API_KEY"));
   assert(scheduler.includes("key.length < 32"));
+  assert(scheduler.includes("createHmac"));
+  assert(scheduler.includes("hirego:workflow-recovery:v1"));
   assert(scheduler.includes("result.report.communicationRetries?.terminal"));
   assert(scheduler.includes("result.report.communicationRetries?.timeBudgetExhausted"));
-  assert(!scheduler.includes("CRON_SECRET"));
   assert(!vercel.includes("/api/cron/communication-retries"));
 });
 
@@ -389,11 +390,14 @@ test("WhatsApp delivery status is monotonic and failed is terminal", () => {
 });
 
 
-test("full recovery endpoint requires a dedicated recovery key and never falls back to cron credentials", () => {
+test("full recovery endpoint uses a dedicated or domain-separated recovery credential", () => {
   const source = fs.readFileSync(new URL("../lib/workflows/RecoveryWorkerState.ts", import.meta.url), "utf8");
 
   assert(source.includes("process.env.WORKER_RECOVERY_API_KEY?.trim()"));
-  assert(!source.includes("process.env.CRON_SECRET?.trim()"));
+  assert(source.includes("process.env.CRON_SECRET?.trim()"));
+  assert(source.includes("createHmac"));
+  assert(source.includes("hirego:workflow-recovery:v1"));
+  assert(source.includes("process.env.NODE_ENV !== 'production'"));
   assert(source.includes("expected.length < 32"));
   assert(source.includes("timingSafeEqual"));
   assert(source.includes("Recovery worker key is not configured."));
