@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!city) return {};
   return marketingMetadata({
     path: `/free-job-posting/${city.slug}`,
-    title: `Free Job Posting & AI Hiring Platform in ${city.name} | HireGo AI`,
+    title: `AI Hiring & Free Job Posting in ${city.name} | HireGo AI`,
     description: `Post jobs in ${city.name}, screen applicants, coordinate assessments and manage interviews with HireGo AI's recruitment and hiring workflow for employers.`,
   });
 }
@@ -174,6 +174,7 @@ export default async function FreeJobPostingCityPage({ params }: Props) {
               "@type": "Organization",
               name: "HireGo AI",
               url: "https://www.hiregoai.com",
+              logo: "https://www.hiregoai.com/marketing/hirego-logo-hd.png",
             },
             areaServed: {
               "@type": "AdministrativeArea",
