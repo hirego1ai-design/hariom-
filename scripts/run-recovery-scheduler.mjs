@@ -31,6 +31,7 @@ while (!stopping) {
     if (!response.ok || !result.success) throw new Error(`Recovery tick failed with HTTP ${response.status}`);
     const attention = result.report && (result.report.pphBilling?.held || result.report.outbox.unhandled || result.report.outbox.failed || result.report.outbox.retried || result.report.failedWorkflowsEnqueued
       || result.report.whatsapp?.failed || result.report.whatsapp?.timeBudgetExhausted
+      || result.report.whatsappEngagement?.failed || result.report.whatsappEngagement?.timeBudgetExhausted
       || result.report.securityAudit?.failed || result.report.securityAudit?.retried || result.report.securityAudit?.unclaimed
       || (result.report.securityAudit?.configured === false && result.report.securityAudit?.pending)
       || result.report.timeBudgetExhausted);
