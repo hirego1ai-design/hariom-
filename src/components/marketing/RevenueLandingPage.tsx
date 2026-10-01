@@ -1,7 +1,7 @@
 import Link from "next/link";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { FAQ, FinalCTA, JsonLd, SectionHeading, breadcrumbSchema, styles } from "@/components/marketing/Editorial";
-import type { RevenueSeoPage } from "@/lib/revenueSeo";
+import { MOCK_INTERVIEW_ROLES, type RevenueSeoPage } from "@/lib/revenueSeo";
 
 export default function RevenueLandingPage({ page }: { page: RevenueSeoPage }) {
   const path = "/" + page.slug;
@@ -78,6 +78,27 @@ export default function RevenueLandingPage({ page }: { page: RevenueSeoPage }) {
             </div>
           </div>
         </section>
+
+        {page.slug === "ai-mock-interview" ? (
+          <section className={styles.section}>
+            <div className={styles.container}>
+              <SectionHeading
+                eyebrow="Practice by role"
+                title="Start with the interview you are actually preparing for."
+                body="Role pages focus the practice around the situations, examples and questions that matter for that job family."
+              />
+              <div className={styles.grid4}>
+                {MOCK_INTERVIEW_ROLES.map((role) => (
+                  <Link key={role.slug} href={"/ai-mock-interview/" + role.slug} className={styles.card}>
+                    <h3>{role.name}</h3>
+                    <p>{role.focusAreas.slice(0, 3).join(" · ")}</p>
+                    <span className={styles.inlineLink}>Practice {role.name} ↗</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <FAQ items={page.faqs} />
         <FinalCTA title={page.title} body={page.lead} primary={page.primaryCta} secondary={page.secondaryCta} />
