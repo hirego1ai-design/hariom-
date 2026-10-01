@@ -160,7 +160,9 @@ export const SEO_JOB_CITIES: SeoJobCity[] = [
     employerIntro: "Hire in Coimbatore with structured screening and interview workflows for manufacturing, engineering, technology, textiles, support and other local teams.",
     candidateIntro: "Browse current Coimbatore jobs across manufacturing, engineering, technology, textiles, support and other functions.",
   },
-];\n\nexport const SEO_JOB_CITY_BY_SLUG = Object.fromEntries(
+];
+
+export const SEO_JOB_CITY_BY_SLUG = Object.fromEntries(
   SEO_JOB_CITIES.map((city) => [city.slug, city]),
 ) as Record<string, SeoJobCity>;
 
