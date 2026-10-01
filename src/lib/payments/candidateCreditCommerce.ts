@@ -3,6 +3,8 @@ import type { PaymentOrder } from "@prisma/client";
 import type { GatewayName, VerifyWebhookResult } from "@/lib/payments/PaymentGatewayInterface";
 import { ApiError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { processPaymentReferralReward } from "@/lib/payment-referral";
+import { ReferralProductType } from "@/types/referral";
 
 export const CANDIDATE_CREDIT_PRODUCT_TYPE = "CANDIDATE_CREDITS";
 export const candidatePaymentSubject = (candidateProfileId: string) => `candidate:${candidateProfileId}`;
@@ -232,6 +234,21 @@ export async function handleCandidateCreditPaymentWebhook(params: {
         reference: `Purchased ${snapshot.name} via ${provider}`,
       },
     });
+
+    // Candidate paid-credit commerce participates in the existing referral
+    // program as a candidate career purchase. Attribution, qualification,
+    // limits, anti-fraud rules and reward amount remain authoritative in the
+    // referral engine. Keep it in this same transaction so payment
+    // fulfillment, wallet credit and any qualifying referral reward commit
+    // together or roll back together.
+    await processPaymentReferralReward({
+      userId: profile.userId,
+      amount: paymentOrder.expectedAmount,
+      provider,
+      transactionId: gatewayTxId,
+      productType: ReferralProductType.CANDIDATE_CAREER_PASS,
+      tx,
+    }, tx);
 
     await tx.auditLog.create({
       data: {
