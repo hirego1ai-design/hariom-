@@ -158,10 +158,7 @@ export async function buildReferralWhatsAppSummary(userId: string): Promise<stri
         ? `eligible employer job transaction: up to ${money("INR", config.employerJobRewardAmount)}`
         : null,
       config.managedHiringRewardAmount > 0
-        ? `eligible Managed Hiring conversion: up to ${money("INR", config.managedHiringRewardAmount)}`
-        : null,
-      config.pphRewardAmount > 0
-        ? `eligible PPH conversion: up to ${money("INR", config.pphRewardAmount)}`
+        ? `eligible Managed Hiring / PPH conversion: up to ${money("INR", config.managedHiringRewardAmount)}`
         : null,
     ].filter(Boolean);
 
@@ -227,10 +224,17 @@ function boundedText(value: string, max: number) {
 export async function handleUnlinkedEmployerSalesLead(params: {
   sessionId: string;
   message: string;
-}): Promise<string> {
+}): Promise<string | null> {
   const current = await readSessionData(params.sessionId);
   const lead = current.autonomousSales || {};
   const message = boundedText(params.message, 500);
+
+  // Do not hijack a new candidate conversation. Once an employer lead has
+  // started, however, keep routing subsequent short answers through the same
+  // durable session even when those answers do not contain employer keywords.
+  if (!lead.stage && classifyWhatsAppAudience(message) !== "EMPLOYER") {
+    return null;
+  }
 
   if (!lead.stage) {
     await writeEmployerLeadState(params.sessionId, {
