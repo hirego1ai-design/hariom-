@@ -22,10 +22,14 @@ export async function fulfillCopilotPayment(params: {
   rawPayload: unknown;
 }) {
   const { paymentOrder, verification, provider, gatewayTxId } = params;
+  const companyId = paymentOrder.companyId;
+  if (!companyId) {
+    throw new ApiError("Company payment order is missing its company binding.", 409);
+  }
   const snapshot = parseCopilotPurchaseSnapshot(paymentOrder.planSnapshot);
 
   if (snapshot.planId !== paymentOrder.planId) throw new ApiError("Copilot payment snapshot does not match the ordered plan.", 409);
-  if (verification.companyId && verification.companyId !== paymentOrder.companyId) throw new ApiError("Gateway company does not match the Copilot order.", 400);
+  if (verification.companyId && verification.companyId !== companyId) throw new ApiError("Gateway company does not match the Copilot order.", 400);
   if (verification.currency && verification.currency !== snapshot.currency) throw new ApiError("Gateway currency does not match the Copilot order.", 400);
   if (verification.amount === undefined || !Number.isFinite(verification.amount) || verification.amount <= 0) {
     throw new ApiError("Gateway payment amount missing or invalid.", 400);
@@ -62,7 +66,7 @@ export async function fulfillCopilotPayment(params: {
       },
       create: {
         gatewayTxId,
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         productType: "COPILOT",
         planId: snapshot.planId,
         amount: expectedAmount,
@@ -73,15 +77,15 @@ export async function fulfillCopilotPayment(params: {
       },
     });
 
-    await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${paymentOrder.companyId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE`;
     const now = new Date();
     await tx.copilotSubscription.updateMany({
-      where: { companyId: paymentOrder.companyId, status: "ACTIVE", endDate: { lte: now } },
+      where: { companyId: companyId, status: "ACTIVE", endDate: { lte: now } },
       data: { status: "EXPIRED" },
     });
 
     const existing = await tx.copilotSubscription.findFirst({
-      where: { companyId: paymentOrder.companyId, status: "ACTIVE", endDate: { gt: now } },
+      where: { companyId: companyId, status: "ACTIVE", endDate: { gt: now } },
       orderBy: { endDate: "desc" },
     });
 
@@ -106,7 +110,7 @@ export async function fulfillCopilotPayment(params: {
       const newEnd = addMonths(now, snapshot.validityMonths);
       subscription = await tx.copilotSubscription.create({
         data: {
-          companyId: paymentOrder.companyId,
+          companyId: companyId,
           planId: snapshot.planId,
           status: "ACTIVE",
           billingCountry: snapshot.billingCountry,
@@ -132,7 +136,7 @@ export async function fulfillCopilotPayment(params: {
     await tx.auditLog.create({
       data: {
         userId: null,
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         action: "COPILOT_SUBSCRIPTION_PAYMENT_COMMITTED",
         resource: `CopilotSubscription:${subscription.id}`,
         details: JSON.stringify({
@@ -151,7 +155,7 @@ export async function fulfillCopilotPayment(params: {
       update: {},
       create: {
         scope: "TENANT",
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         eventType: "COPILOT_SUBSCRIPTION_ACTIVATED",
         correlationId: gatewayTxId,
         idempotencyKey: `copilot_payment_${gatewayTxId}`,
