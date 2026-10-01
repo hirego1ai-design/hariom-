@@ -36,7 +36,6 @@ type PaymentState = "PENDING" | "SUCCESS" | "FAILED" | "REJECTED" | "CANCELLED" 
 
 function PaymentStatusContent() {
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
   const [pollCount, setPollCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [paymentState, setPaymentState] = useState<PaymentState>("PENDING");
@@ -67,13 +66,11 @@ function PaymentStatusContent() {
       if (!orderId && !gatewayOrderId && !txId) {
         setError("Payment reference is missing.");
         setPaymentState("REJECTED");
-        setLoading(false);
         return;
       }
 
       if (currentPollCount >= MAX_POLLS) {
         setPaymentState("UNKNOWN");
-        setLoading(false);
         return;
       }
 
@@ -99,14 +96,12 @@ function PaymentStatusContent() {
         setPaymentState(status);
 
         if (["SUCCESS", "FAILED", "REJECTED"].includes(status)) {
-          setLoading(false);
-          return;
+            return;
         }
 
         if (cancelled && status === "PENDING") {
           setPaymentState("CANCELLED");
-          setLoading(false);
-          return;
+            return;
         }
       } catch (cause) {
         if (mounted) {
