@@ -23,6 +23,15 @@ const ALLOWED_DESTINATIONS: Record<string, string> = {
   dashboard: "/candidate/dashboard",
   jobs: "/candidate/job-search",
   profile: "/candidate/profile",
+  "mock-interview": "/ai/mock-interview/setup",
+  "video-resume": "/profile/video-resume",
+  referrals: "/referrals/dashboard",
+  "employer-dashboard": "/employer/dashboard",
+  "employer-plans": "/employer/employer-subscription-and-plans",
+  "employer-copilot": "/employer/ai-hiring-copilot-hub",
+  "employer-managed-hiring": "/employer/managed-hiring",
+  "employer-jobs": "/employer/job-listings-management",
+  "employer-referrals": "/employer/referrals",
   default: "/candidate/dashboard",
 };
 
