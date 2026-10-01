@@ -75,4 +75,6 @@ jobs:
           BASE_URL=http://127.0.0.1:3000 npm run test:attack-matrix
       - name: Dependency audit (high/critical)
         run: npm audit --audit-level=high
+      - name: Remove dev-server generated Next.js type artifacts
+        run: rm -rf .next .next-audit
       - run: npm run build
