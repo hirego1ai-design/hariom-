@@ -52,8 +52,11 @@ export async function generateMetadata({ params }: Omit<Props, "children">): Pro
   }
 
   const isQaTest = job.aiFocusAreas === "QA_TEST_PUBLIC_JOB";
-  const canonical = `https://hiregoai.com/jobs/${job.id}`;
-  const title = `${job.title} in ${job.location} | ${job.company.name} | HireGo AI`;
+  const canonical = `https://www.hiregoai.com/jobs/${job.id}`;
+  const companyIsHireGo = job.company.name.trim().toLowerCase() === "hirego ai";
+  const title = companyIsHireGo
+    ? `${job.title} in ${job.location} | HireGo AI`
+    : `${job.title} in ${job.location} | ${job.company.name} | HireGo AI`;
   const description = cleanDescription(job.description);
 
   return {
@@ -94,7 +97,7 @@ export default async function JobDetailLayout({ children, params }: Props) {
       ...(job.company.website ? { sameAs: job.company.website } : {}),
       ...(job.company.logoUrl ? { logo: job.company.logoUrl } : {}),
     },
-    url: `https://hiregoai.com/jobs/${job.id}`,
+    url: `https://www.hiregoai.com/jobs/${job.id}`,
     ...(job.expiresAt ? { validThrough: job.expiresAt.toISOString() } : {}),
     ...(remote
       ? {
