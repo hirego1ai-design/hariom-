@@ -267,14 +267,40 @@ test("admin payment routing UI cannot persist fabricated healthy fallbacks", asy
   assert.match(controller, /No enabled payment gateways are available/);
 });
 
-test("candidate credit and job boost purchase endpoints do not self-fulfill payment success", async () => {
+test("candidate credit checkout creates provider-backed orders but never self-fulfills credits", async () => {
   const fs = await import("node:fs");
   const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const fulfillment = fs.readFileSync(new URL("../lib/payments/candidateCreditCommerce.ts", import.meta.url), "utf8");
+  const webhook = fs.readFileSync(new URL("../app/api/payments/webhook/route.ts", import.meta.url), "utf8");
   const boost = fs.readFileSync(new URL("../app/api/employer/jobs/[id]/boost/route.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(credits, /status:\s*["']SUCCESS["']/);
-  assert.doesNotMatch(credits, /balance:\s*\{\s*increment:/);
-  assert.match(credits, /PAYMENT_INTEGRATION_REQUIRED/);
+
+  assert.match(credits, /CANDIDATE_CREDIT_PRODUCT_TYPE/);
+  assert.match(credits, /PaymentGatewayController\.createOrder/);
+  assert.match(credits, /Idempotency-Key/);
+  assert.doesNotMatch(credits, /candidateCreditWallet\.upsert[\s\S]*increment:\s*creditPackage\.credits/);
+
+  assert.match(webhook, /handleCandidateCreditPaymentWebhook/);
+  assert.match(fulfillment, /verification\.status !== "SUCCESS"/);
+  assert.match(fulfillment, /Math\.abs\(verification\.amount - paymentOrder\.expectedAmount\)/);
+  assert.match(fulfillment, /candidate-credit-purchase:\$\{paymentOrder\.orderId\}/);
+  assert.match(fulfillment, /type: "PURCHASE"/);
+  assert.match(fulfillment, /balance: \{ increment: snapshot\.credits \}/);
+
   assert.doesNotMatch(boost, /status:\s*["']SUCCESS["']/);
   assert.doesNotMatch(boost, /isBoosted:\s*true/);
   assert.match(boost, /PAYMENT_INTEGRATION_REQUIRED/);
+});
+
+test("candidate credit commercial values come from the database package catalog", async () => {
+  const fs = await import("node:fs");
+  const route = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/credits/page.tsx", import.meta.url), "utf8");
+
+  assert.match(schema, /model CandidateCreditPackage/);
+  assert.match(route, /candidateCreditPackage\.findMany/);
+  assert.match(route, /candidateCreditPackage\.findUnique/);
+  assert.doesNotMatch(route, /const\s+packages\s*=\s*\[[^\]]+\]/);
+  assert.match(page, /signed gateway webhook/);
+  assert.match(page, /submitPayU/);
 });
