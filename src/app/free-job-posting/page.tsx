@@ -6,8 +6,8 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/free-job-posting",
-  title: "Free Job Posting in India | HireGo AI for Employers",
-  description: "Post jobs on HireGo AI and manage applicants with structured screening, assessments and interview workflows. Explore employer hiring pages for major Indian cities.",
+  title: "Free Job Posting & AI Recruitment Platform in India | HireGo AI",
+  description: "Post jobs across India and manage applicants, screening, assessments and interviews with HireGo AI. Explore employer hiring pages for major Indian cities.",
 });
 
 export default function FreeJobPostingIndiaPage() {
@@ -32,9 +32,12 @@ export default function FreeJobPostingIndiaPage() {
         <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Hire across India</p>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting in India</h1>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting & AI Recruitment Platform in India</h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-300">
-              Create a clear role, publish it for candidates, and manage screening and interview steps in one structured hiring workflow.
+              Create a clear role, publish it for candidates, and manage applicant screening, assessments and interview steps in one structured hiring workflow.
+            </p>
+            <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+              HireGo AI is built for employers searching for a faster recruitment platform, applicant workflow and local hiring support across major Indian cities.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/employer/employer-sign-in" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post a Job</Link>
@@ -59,6 +62,19 @@ export default function FreeJobPostingIndiaPage() {
                 <p className="mt-3 text-sm leading-6 text-slate-400">{copy}</p>
               </article>
             ))}
+          </div>
+
+          <div className="mt-16 rounded-3xl border border-white/10 bg-white/[0.04] p-7 sm:p-9">
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#82b1ff]">AI recruitment workflow</p>
+            <h2 className="mt-3 text-3xl font-bold">One hiring platform from job posting to interview coordination</h2>
+            <p className="mt-4 max-w-4xl leading-7 text-slate-300">
+              HireGo AI connects job publishing, candidate applications, structured screening, configured assessments and interview progression. Employers can use the platform directly or discuss Managed Hiring when they want operational support.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-4 text-sm font-bold">
+              <Link href="/services" className="text-[#82b1ff]">Managed Hiring →</Link>
+              <Link href="/solutions" className="text-[#82b1ff]">Hiring Solutions →</Link>
+              <Link href="/pricing" className="text-[#82b1ff]">Employer Plans →</Link>
+            </div>
           </div>
 
           <div className="mt-16">
@@ -100,7 +116,26 @@ export default function FreeJobPostingIndiaPage() {
               name: item.question,
               acceptedAnswer: { "@type": "Answer", text: item.answer },
             })),
-          }) }}
+          }).replace(/</g, "\\u003c") }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Service",
+            name: "HireGo AI recruitment and hiring platform in India",
+            serviceType: "Recruitment software, job posting and hiring workflow",
+            provider: {
+              "@type": "Organization",
+              name: "HireGo AI",
+              url: "https://www.hiregoai.com",
+            },
+            areaServed: {
+              "@type": "Country",
+              name: "India",
+            },
+            url: "https://www.hiregoai.com/free-job-posting",
+          }).replace(/</g, "\\u003c") }}
         />
       </main>
     </MarketingShell>
