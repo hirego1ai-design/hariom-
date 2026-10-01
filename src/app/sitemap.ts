@@ -4,7 +4,7 @@ import { effectivePublishedWhere, editorialPublicPath } from "@/lib/contentCms";
 import { SEO_JOB_CITIES, matchesSeoCity } from "@/lib/seoJobCities";
 import { categoriesForCity, matchesSeoCategory } from "@/lib/seoJobCategories";
 
-const base = "https://hiregoai.com";
+const base = "https://www.hiregoai.com";
 export const revalidate = 3600;
 
 // Only public, indexable pages belong in the sitemap. Account, employer,
