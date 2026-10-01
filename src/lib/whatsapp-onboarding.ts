@@ -32,6 +32,7 @@ import {
   linkContactToUser,
   waIdToE164,
 } from "./whatsapp-identity";
+import { handleCompletedWhatsAppAssistant } from "./whatsapp-candidate-assistant";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,10 @@ export interface ProcessResult {
   sessionComplete: boolean;
   handoffToken?: string;            // Present on COMPLETE for new accounts
   userId?: string;
+}
+
+export interface WhatsAppProcessContext {
+  campaignMeta?: Record<string, unknown>;
 }
 
 // ─── Session helpers ──────────────────────────────────────────────────────────
@@ -333,7 +338,8 @@ async function createAccountTransaction(
  */
 export async function processWhatsAppMessage(
   waId: string,
-  rawMessage: string
+  rawMessage: string,
+  context: WhatsAppProcessContext = {}
 ): Promise<ProcessResult> {
   const msg = rawMessage.trim();
 
@@ -342,6 +348,19 @@ export async function processWhatsAppMessage(
 
   // Get or create session
   const session = await getOrCreateSession(waId, contact.id);
+
+  // Click-to-WhatsApp referral metadata is accepted only from the signed Meta
+  // webhook path and is first-touch attributed. Later messages cannot overwrite it.
+  if (context.campaignMeta && !session.campaignMeta) {
+    await prisma.whatsAppOnboardingSession.update({
+      where: { id: session.id },
+      data: {
+        campaignMeta: context.campaignMeta as any,
+        attributionSource: "meta_click_to_whatsapp",
+      },
+    });
+  }
+
   const currentStep = session.currentStep as OnboardingStep;
   const data = (session.collectedData ?? {}) as CollectedData;
 
@@ -355,15 +374,18 @@ export async function processWhatsAppMessage(
     };
   }
 
-  // ── Completed session ──────────────────────────────────────────────────────
+  // ── Completed session / autonomous candidate assistant ─────────────────────
   if (currentStep === "COMPLETE" || session.status === "COMPLETE") {
     const userId = session.userId;
     if (userId) {
+      const reply = await handleCompletedWhatsAppAssistant({
+        waId,
+        userId,
+        sessionId: session.id,
+        message: msg,
+      });
       return {
-        reply:
-          `Welcome back to HireGo AI! 👋\n\nYour account is already set up.\n\n` +
-          `What would you like to do?\n\n` +
-          `1️⃣ Find Jobs\n2️⃣ My Applications\n3️⃣ Application Status\n4️⃣ Complete Profile\n🔟 Open Dashboard\n0️⃣ Support`,
+        reply,
         nextStep: "COMPLETE",
         sessionComplete: true,
         userId,
@@ -376,13 +398,26 @@ export async function processWhatsAppMessage(
     const identity = await resolveWhatsAppIdentity(waId);
 
     if (identity.status === "existing_contact") {
-      // Already linked — skip onboarding
-      await saveStep(session.id, "COMPLETE");
+      // Already linked — bind this onboarding session to the canonical user so
+      // every later WhatsApp message can use the autonomous assistant.
+      await prisma.whatsAppOnboardingSession.update({
+        where: { id: session.id },
+        data: {
+          status: "COMPLETE",
+          currentStep: "COMPLETE",
+          userId: identity.user!.id,
+          candidateId: identity.candidateProfileId,
+          completedAt: session.completedAt ?? new Date(),
+        },
+      });
+      const reply = await handleCompletedWhatsAppAssistant({
+        waId,
+        userId: identity.user!.id,
+        sessionId: session.id,
+        message: msg,
+      });
       return {
-        reply:
-          `Welcome back to HireGo AI, ${identity.user!.name}! 👋\n\n` +
-          `Your account is ready.\n\n` +
-          `1️⃣ Find Jobs\n2️⃣ My Applications\n4️⃣ Complete Profile\n🔟 Open Dashboard`,
+        reply,
         nextStep: "COMPLETE",
         sessionComplete: true,
         userId: identity.user!.id,
