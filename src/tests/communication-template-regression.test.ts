@@ -143,7 +143,8 @@ test("consequential deliveries are never marked automatically retryable", () => 
   assert(source.includes("failure.retryable"));
   assert(source.includes("definition.consequential)"));
   assert(source.includes("RETRY_NOT_ALLOWED"));
-  assert(source.includes('lastErrorCode: "AMBIGUOUS_PROVIDER_ERROR"'));
+  assert(source.includes('"AMBIGUOUS_PROVIDER_ERROR"'));
+  assert(source.includes('lastErrorCode: retryable ? failure.code : "AMBIGUOUS_PROVIDER_ERROR"'));
 });
 
 
