@@ -20,10 +20,10 @@ import { enforceRateLimit } from "@/lib/apiSecurity";
 // Approved redirect destinations — prevents open redirect. Assessment
 // destinations are built only from validated UUID query parameters.
 const ALLOWED_DESTINATIONS: Record<string, string> = {
-  dashboard: "/dashboard",
-  jobs: "/jobs",
+  dashboard: "/candidate/dashboard",
+  jobs: "/candidate/job-search",
   profile: "/candidate/profile",
-  default: "/dashboard",
+  default: "/candidate/dashboard",
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
