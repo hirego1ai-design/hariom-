@@ -5,7 +5,7 @@ import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { authorizeBilling, confirmPphJoining, joiningSchema } from "@/lib/pph-billing";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 async function actorFor(request: Request) {
   const session = await requireAuthenticatedSession(request);
@@ -20,25 +20,8 @@ export async function POST(request: Request) {
     const actor = await actorFor(request);
     await enforceRateLimit(request, "employer_managed_hiring_join", 10, 60000);
     const input = await readValidatedJson(request, joiningSchema);
-    const acceptedOffer = await prisma.offer.findFirst({
-      where: { applicationId: input.applicationId, status: "ACCEPTED" },
-      orderBy: { acceptedAt: "desc" },
-      select: { id: true, companyId: true, compensationAmount: true, currency: true, acceptedAt: true },
-    });
-    if (!acceptedOffer) throw new ApiError("Candidate acceptance of a persisted offer is required before joining can be confirmed.", 409);
-    if (actor.role !== "ADMIN" && acceptedOffer.companyId !== actor.companyId) throw new ApiError("Accepted offer belongs to a different company.", 403);
-    if (acceptedOffer.compensationAmount && Math.abs(Number(acceptedOffer.compensationAmount) - input.annualCtc) > 0.009) {
-      throw new ApiError("Joining CTC must match the candidate-accepted offer. Amend and re-accept the offer before joining.", 409);
-    }
     const result = await confirmPphJoining(input, actor);
     if (!result.duplicate) {
-      await logAuditEvent({
-        userId: actor.id,
-        companyId: result.placement.companyId,
-        action: "PPH_JOINING_RECORDED",
-        resource: `PphPlacement:${result.placement.id}`,
-        details: `Application ${input.applicationId} marked HIRED after accepted offer ${acceptedOffer.id}; CTC: ${input.annualCtc}; Joined: ${input.joinedAt}`,
-      });
       const application = await prisma.application.findUnique({ where: { id: input.applicationId }, include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
       const candidate = application?.candidateProfile.user;
       if (application && candidate) {
@@ -58,12 +41,62 @@ export async function GET(request: Request) {
     const actor = await actorFor(request);
     await enforceRateLimit(request, "employer_managed_hiring_join_get", 60, 60000);
     const applicationId = new URL(request.url).searchParams.get("applicationId");
+    let requiredAgreementId: string | null = null;
+    let acceptedOffer: {
+      id: string;
+      compensationAmount: string | null;
+      currency: string;
+      acceptedAt: string;
+      startDate: string | null;
+    } | null = null;
+    if (applicationId) {
+      const application = await prisma.application.findUnique({
+        where: { id: applicationId },
+        select: {
+          status: true,
+          job: {
+            select: {
+              companyId: true,
+              managedAgreementId: true,
+            },
+          },
+          offers: {
+            where: { status: "ACCEPTED" },
+            orderBy: { acceptedAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              compensationAmount: true,
+              currency: true,
+              acceptedAt: true,
+              startDate: true,
+            },
+          },
+        },
+      });
+      if (!application) throw new ApiError("Application not found.", 404);
+      authorizeBilling(actor, application.job.companyId);
+      requiredAgreementId = application.job.managedAgreementId;
+      const offer = application.offers[0];
+      acceptedOffer = offer?.acceptedAt
+        ? {
+            id: offer.id,
+            compensationAmount: offer.compensationAmount?.toString() ?? null,
+            currency: offer.currency,
+            acceptedAt: offer.acceptedAt.toISOString(),
+            startDate: offer.startDate?.toISOString() ?? null,
+          }
+        : null;
+    }
     const placements = await prisma.pphPlacement.findMany({
       where: { ...(actor.role === "ADMIN" ? {} : { companyId: actor.companyId }), ...(applicationId ? { applicationId } : {}) },
       orderBy: { createdAt: "desc" }, take: 50,
       include: { invoice: { select: { invoiceNumber: true, status: true } } },
     });
-    return NextResponse.json({ success: true, placements }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { success: true, placements, requiredAgreementId, acceptedOffer },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) { return handleApiError(error); }
 }
 
@@ -87,14 +120,22 @@ export async function PATCH(request: Request) {
       } });
       await tx.agreementEvent.create({ data: { agreementId: row.agreementId, performedBy: actor.id,
         eventType: `PPH_${body.action}`, notes: `Placement ${row.id}: ${body.reason}` } });
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: actor.id,
+          companyId: row.companyId,
+          action: `PPH_PLACEMENT_${body.action}`,
+          resource: `PphPlacement:${row.id}`,
+          details: JSON.stringify({
+            action: body.action,
+            reason: body.reason,
+            previousStatus: row.status,
+            nextStatus: updated.status,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, actor.id);
       return updated;
-    });
-    await logAuditEvent({
-      userId: actor.id,
-      companyId: placement.companyId,
-      action: `PPH_PLACEMENT_${body.action}`,
-      resource: `PphPlacement:${placement.id}`,
-      details: `Action: ${body.action}; Reason: ${body.reason}`,
     });
     return NextResponse.json({ success: true, placement });
   } catch (error) { return handleApiError(error); }

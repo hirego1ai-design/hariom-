@@ -4,7 +4,7 @@ import { KillSwitchManager } from '../security/KillSwitchManager';
 import { BudgetManager } from '../governance/BudgetManager';
 import { ExecutionLoop } from '../agents/ExecutionLoop';
 import { OutboxPublisher } from '../events/Outbox';
-import { ApplicationGateType, ApplicationGateStatus, JobStatus, Role, KillSwitchType } from '@prisma/client';
+import { ApplicationGateType, ApplicationGateStatus, JobStatus, Prisma, Role, KillSwitchType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { computeMatchScore, evaluateCandidateScreening } from '@/lib/matching/JobMatchingEngine';
@@ -43,6 +43,7 @@ export interface DispatchApplicationParams {
   jobId: string;
   candidateProfileId: string;
   companyId: string;
+  screeningAnswers?: Prisma.InputJsonValue;
 }
 
 export class DuplicateApplicationError extends Error {
@@ -145,10 +146,16 @@ export class RosGateway {
       throw new Error("Candidate profile ownership could not be verified.");
     }
 
-    const job = await prisma.jobListing.findUnique({
-      where: { id: params.jobId },
+    const job = await prisma.jobListing.findFirst({
+      where: {
+        id: params.jobId,
+        companyId: params.companyId,
+        status: "ACTIVE",
+        publishedAt: { not: null },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
     });
-    if (!job || job.companyId !== params.companyId || job.status !== "ACTIVE") {
+    if (!job) {
       throw new Error("Job is unavailable for application.");
     }
     return { candidate, job };
@@ -234,6 +241,9 @@ export class RosGateway {
             status: "ASSESSMENT",
             matchScore: 0,
             aiSummary: null,
+            ...(params.screeningAnswers !== undefined
+              ? { screeningAnswers: params.screeningAnswers }
+              : {}),
           },
           select: {
             id: true,
@@ -436,6 +446,9 @@ export class RosGateway {
             status: jobSpecificAssessment ? "ASSESSMENT" : "SCREENING",
             matchScore: match.matchScore,
             aiSummary: match.summary,
+            ...(params.screeningAnswers !== undefined
+              ? { screeningAnswers: params.screeningAnswers }
+              : {}),
             ...(jobSpecificAssessment
               ? {
                   gates: {

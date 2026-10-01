@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
+type EmailProvider = "ZEPTOMAIL" | "SENDGRID";
+
 type EventDef = {
   eventKey: string;
   label: string;
@@ -35,11 +37,32 @@ type Delivery = {
   status: string;
   provider?: string;
   attemptCount: number;
+  maxAttempts: number;
+  retryable: boolean;
+  nextAttemptAt?: string | null;
+  retryLeasedUntil?: string | null;
+  replayExpiresAt?: string | null;
+  lastErrorCode?: string | null;
   lastError?: string | null;
   createdAt: string;
 };
 
 const DELIVERY_PAGE_SIZE = 25;
+
+function retryStateLabel(delivery: Delivery) {
+  if (delivery.status === "PROCESSING" && delivery.retryLeasedUntil) {
+    return `Retry in progress · lease until ${new Date(delivery.retryLeasedUntil).toLocaleTimeString()}`;
+  }
+  if (delivery.retryable && delivery.nextAttemptAt) {
+    return `Retry scheduled · ${new Date(delivery.nextAttemptAt).toLocaleTimeString()}`;
+  }
+  if (delivery.status === "FAILED") {
+    return delivery.lastErrorCode?.startsWith("AMBIGUOUS_")
+      ? "Terminal · ambiguous outcome"
+      : "Terminal · operator review";
+  }
+  return "—";
+}
 
 export default function CommunicationsPage() {
   const [events, setEvents] = useState<EventDef[]>([]);
@@ -64,6 +87,7 @@ export default function CommunicationsPage() {
   const [body, setBody] = useState("");
   const [subject, setSubject] = useState("");
   const [parameterOrder, setParameterOrder] = useState("");
+  const [emailProvider, setEmailProvider] = useState<EmailProvider>("ZEPTOMAIL");
 
   const [toggleTarget, setToggleTarget] = useState<{ template: Template; nextEnabled: boolean } | null>(null);
   const [toggleReason, setToggleReason] = useState("");
@@ -127,6 +151,22 @@ export default function CommunicationsPage() {
     void load(1);
     // Initial authoritative load only. Filters are applied deliberately below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadConfiguredEmailProvider = async () => {
+      try {
+        const response = await fetch("/api/admin/email-delivery/config", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        const primaryProvider = payload?.config?.primaryProvider;
+        if (response.ok && payload?.success && (primaryProvider === "ZEPTOMAIL" || primaryProvider === "SENDGRID")) {
+          setEmailProvider(primaryProvider);
+        }
+      } catch {
+        // Keep the production default (ZeptoMail) if the config panel is temporarily unavailable.
+      }
+    };
+    void loadConfiguredEmailProvider();
   }, []);
 
   const def = useMemo(
@@ -209,7 +249,7 @@ export default function CommunicationsPage() {
 
     setCreating(true);
     try {
-      const provider = channel === "WHATSAPP" ? "META" : "ZEPTOMAIL";
+      const provider = channel === "WHATSAPP" ? "META" : emailProvider;
       const response = await fetch("/api/admin/communications/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -369,6 +409,7 @@ export default function CommunicationsPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs">{template.channel}</span>
+                      <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs">{template.provider || "No provider"}</span>
                       <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs">{template.status}</span>
                       <button
                         type="button"
@@ -422,10 +463,29 @@ export default function CommunicationsPage() {
                   <input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3" />
                 </label>
 
-                <label className="block text-sm">
-                  Provider alias / Meta template name
-                  <input value={alias} onChange={(event) => setAlias(event.target.value)} maxLength={512} className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3" />
-                </label>
+                {channel === "EMAIL" && (
+                  <label className="block text-sm">
+                    Email template mode
+                    <select
+                      value={emailProvider}
+                      onChange={(event) => setEmailProvider(event.target.value as EmailProvider)}
+                      className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3"
+                    >
+                      <option value="ZEPTOMAIL">Zoho / ZeptoMail stored template</option>
+                      <option value="SENDGRID">Provider-neutral email body</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      Delivery order is controlled globally by Email Delivery settings (Zoho / ZeptoMail primary, SendGrid fallback). This choice controls stored-template mapping, not provider routing.
+                    </span>
+                  </label>
+                )}
+
+                {(channel === "WHATSAPP" || emailProvider === "ZEPTOMAIL") && (
+                  <label className="block text-sm">
+                    {channel === "WHATSAPP" ? "Meta template name" : "Zoho / ZeptoMail template alias"}
+                    <input value={alias} onChange={(event) => setAlias(event.target.value)} maxLength={512} className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3" />
+                  </label>
+                )}
 
                 {channel === "EMAIL" && (
                   <label className="block text-sm">
@@ -550,7 +610,7 @@ export default function CommunicationsPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[1200px] text-sm">
                 <thead className="text-zinc-500">
                   <tr>
                     <th className="p-4 text-left">Event</th>
@@ -558,21 +618,29 @@ export default function CommunicationsPage() {
                     <th>Status</th>
                     <th>Provider</th>
                     <th>Attempts</th>
+                    <th>Retry state</th>
+                    <th>Last error</th>
                     <th>Created</th>
                   </tr>
                 </thead>
                 <tbody>
                   {deliveries.length ? deliveries.map((delivery) => (
-                    <tr key={delivery.id} className="border-t border-zinc-900">
+                    <tr key={delivery.id} className="border-t border-zinc-900 align-top">
                       <td className="p-4">{delivery.eventKey}</td>
-                      <td className="text-center">{delivery.channel}</td>
-                      <td className="text-center">{delivery.status}</td>
-                      <td className="text-center">{delivery.provider || "Not assigned"}</td>
-                      <td className="text-center">{delivery.attemptCount}</td>
-                      <td className="text-center text-zinc-500">{new Date(delivery.createdAt).toLocaleString()}</td>
+                      <td className="pt-4 text-center">{delivery.channel}</td>
+                      <td className="pt-4 text-center">{delivery.status}</td>
+                      <td className="pt-4 text-center">{delivery.provider || "Not assigned"}</td>
+                      <td className="pt-4 text-center">{delivery.attemptCount}/{delivery.maxAttempts}</td>
+                      <td className="max-w-[240px] px-3 pt-4 text-center text-xs text-zinc-400">
+                        {retryStateLabel(delivery)}
+                      </td>
+                      <td className="max-w-[300px] px-3 pt-4 text-xs text-zinc-400" title={delivery.lastError || undefined}>
+                        {delivery.lastErrorCode || "—"}
+                      </td>
+                      <td className="pt-4 text-center text-zinc-500">{new Date(delivery.createdAt).toLocaleString()}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={6} className="p-10 text-center text-zinc-500">No delivery operations match the current filters.</td></tr>
+                    <tr><td colSpan={8} className="p-10 text-center text-zinc-500">No delivery operations match the current filters.</td></tr>
                   )}
                 </tbody>
               </table>

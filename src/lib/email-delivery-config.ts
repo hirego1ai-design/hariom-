@@ -24,6 +24,8 @@ export type EmailDeliverySettings = {
 };
 
 const CONFIG_ID = "global-email-delivery";
+const DEFAULT_PRIMARY_EMAIL_PROVIDER: EmailProvider = "ZEPTOMAIL";
+const DEFAULT_FALLBACK_EMAIL_PROVIDER: EmailProvider = "SENDGRID";
 
 function providerFrom(value: string | null | undefined, fallback: EmailProvider): EmailProvider {
   return value === "ZEPTOMAIL" || value === "SENDGRID" ? value : fallback;
@@ -110,8 +112,8 @@ function presentEmailDeliverySettings(
   const sendgridFromEmail = stored?.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL || "";
   const zeptoMailFromEmail = stored?.zeptoMailFromEmail || process.env.ZOHO_CPAAS_FROM_EMAIL || process.env.ZEPTOMAIL_FROM_EMAIL || "";
   return {
-    primaryProvider: providerFrom(stored?.primaryProvider, "SENDGRID"),
-    fallbackProvider: providerFrom(stored?.fallbackProvider, "ZEPTOMAIL"),
+    primaryProvider: providerFrom(stored?.primaryProvider, DEFAULT_PRIMARY_EMAIL_PROVIDER),
+    fallbackProvider: providerFrom(stored?.fallbackProvider, DEFAULT_FALLBACK_EMAIL_PROVIDER),
     autoFailover: stored?.autoFailover ?? true,
     sendgridEnabled: stored?.sendgridEnabled ?? Boolean(environmentConfig("SENDGRID")),
     zeptoMailEnabled: stored?.zeptoMailEnabled ?? Boolean(environmentConfig("ZEPTOMAIL")),
@@ -133,8 +135,8 @@ export async function getEmailDeliverySettingsStrict(): Promise<EmailDeliverySet
 
 export async function getConfiguredEmailProviders(): Promise<EmailProviderRuntimeConfig[]> {
   const stored = await databaseConfig();
-  const primaryProvider = providerFrom(stored?.primaryProvider, "SENDGRID");
-  const fallbackProvider = providerFrom(stored?.fallbackProvider, "ZEPTOMAIL");
+  const primaryProvider = providerFrom(stored?.primaryProvider, DEFAULT_PRIMARY_EMAIL_PROVIDER);
+  const fallbackProvider = providerFrom(stored?.fallbackProvider, DEFAULT_FALLBACK_EMAIL_PROVIDER);
   const primary = resolveProviderConfig(primaryProvider, stored);
   const fallback = stored?.autoFailover ?? true
     ? resolveProviderConfig(fallbackProvider, stored)

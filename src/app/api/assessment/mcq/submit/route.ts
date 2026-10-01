@@ -271,10 +271,48 @@ export async function POST(req: NextRequest) {
 
       for (const gate of gates) {
         const completed = await prisma.$transaction(async (tx) => {
+          // Match application withdrawal/start lock order: Application -> Gate.
+          await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${gate.applicationId} FOR UPDATE`;
+          const lockedApplication = await tx.application.findUnique({
+            where: { id: gate.applicationId },
+            select: { status: true, candidateProfileId: true },
+          });
+          if (
+            !lockedApplication ||
+            lockedApplication.candidateProfileId !== candidateProfile.id ||
+            lockedApplication.status !== "ASSESSMENT"
+          ) {
+            throw new ApiError(
+              "Application left the assessment stage before the completed assessment could enter screening.",
+              409,
+            );
+          }
+
           await tx.$queryRaw`SELECT id FROM "ApplicationGate" WHERE id = ${gate.id} FOR UPDATE`;
+          const lockedGate = await tx.applicationGate.findUnique({
+            where: { id: gate.id },
+            select: {
+              applicationId: true,
+              assessmentId: true,
+              type: true,
+              status: true,
+            },
+          });
+          if (
+            !lockedGate ||
+            lockedGate.applicationId !== gate.applicationId ||
+            lockedGate.type !== ApplicationGateType.JOB_SPECIFIC_ASSESSMENT ||
+            lockedGate.assessmentId !== assessment.id ||
+            (lockedGate.status !== ApplicationGateStatus.REQUIRED &&
+              lockedGate.status !== ApplicationGateStatus.IN_PROGRESS)
+          ) {
+            return false;
+          }
+
           const claim = await tx.applicationGate.updateMany({
             where: {
               id: gate.id,
+              assessmentId: assessment.id,
               status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
             },
             data: {

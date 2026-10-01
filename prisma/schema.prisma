@@ -847,10 +847,12 @@ model ProctoringTelemetry {
   interview     Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   candidateId   String
   candidate     User      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  clientEventId String?
   violationType String
   severity      String
   createdAt     DateTime  @default(now())
 
+  @@unique([interviewId, candidateId, clientEventId])
   @@index([interviewId, createdAt])
   @@index([candidateId, createdAt])
 }
@@ -1218,11 +1220,11 @@ model PaymentGatewayConfig {
 // before storage and are never returned by the admin API.
 model EmailDeliveryConfig {
   id                       String   @id @default("global-email-delivery")
-  primaryProvider          String   @default("SENDGRID")
-  fallbackProvider         String   @default("ZEPTOMAIL")
+  primaryProvider          String   @default("ZEPTOMAIL")
+  fallbackProvider         String   @default("SENDGRID")
   autoFailover             Boolean  @default(true)
   sendgridEnabled          Boolean  @default(true)
-  zeptoMailEnabled         Boolean  @default(false)
+  zeptoMailEnabled         Boolean  @default(true)
   sendgridFromEmail        String?
   zeptoMailFromEmail       String?
   sendgridApiKeyEncrypted  String?
@@ -1278,6 +1280,11 @@ model CommunicationDelivery {
   nextAttemptAt        DateTime?
   maxAttempts          Int                    @default(3)
   retryable            Boolean                @default(false)
+  replayEnvelopeEncrypted String?
+  replayEnvelopeVersion   Int?
+  replayExpiresAt         DateTime?
+  retryLeaseId            String?
+  retryLeasedUntil        DateTime?
   lastErrorCode        String?
   lastError            String?
   acceptedAt           DateTime?
@@ -1290,6 +1297,7 @@ model CommunicationDelivery {
   @@index([eventKey, channel, createdAt])
   @@index([status, createdAt])
   @@index([status, retryable, nextAttemptAt])
+  @@index([status, retryLeasedUntil])
   @@index([providerMessageId])
   @@index([templateId])
 }

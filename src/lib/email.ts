@@ -147,6 +147,8 @@ export async function sendEmail(
   const normalizedMessage = withTransactionalFooter(message);
   const isProduction = process.env.NODE_ENV === "production";
   let providers: EmailProviderRuntimeConfig[];
+  let lastProvider: EmailProvider | undefined;
+  let lastReason: string | undefined;
   try {
     providers = options?.provider
       ? [await getConfiguredEmailProvider(options.provider)].filter((provider): provider is EmailProviderRuntimeConfig => Boolean(provider))
@@ -158,21 +160,33 @@ export async function sendEmail(
 
   for (const provider of providers) {
     try {
+      lastProvider = provider.provider;
       if (provider.provider === "SENDGRID") {
         return await sendWithSendGrid(normalizedMessage, provider.apiKey, provider.fromEmail, messageId);
       }
       return await sendWithZeptoMail(normalizedMessage, provider.apiKey, provider.fromEmail, messageId);
     } catch (error) {
       console.error(`[Email Dispatch] ${provider.provider} delivery failed`, error);
-      // Never retry on an uncertain network/5xx result: the first provider may
-      // have already accepted the OTP. Fall back only after a definitive 4xx rejection.
-      if (options?.provider || options?.allowFallback === false || !(error instanceof EmailProviderDispatchError && error.canFailover)) break;
+      lastReason =
+        error instanceof EmailProviderDispatchError
+          ? error.message
+          : `${provider.provider} delivery failed with an ambiguous provider error.`;
+      // Never fall back on an uncertain network/5xx result: the first provider
+      // may already have accepted the message. A caller that explicitly pins a
+      // provider never fails over to a different provider.
+      if (
+        options?.provider ||
+        options?.allowFallback === false ||
+        !(error instanceof EmailProviderDispatchError && error.canFailover)
+      ) {
+        break;
+      }
     }
   }
 
   if (isProduction) {
     console.error("[Email Dispatch] No usable production email provider is configured.");
-    return { success: false, messageId };
+    return { success: false, messageId, provider: lastProvider, reason: lastReason };
   }
 
   console.log(`[Email Dispatch] Development-only message to: ${message.to} | Subject: "${message.subject}" | ID: ${messageId}`);

@@ -43,6 +43,18 @@ test('invalid dedicated key is rejected before invoking the worker', async (t) =
   assert.equal((await POST(request('wrong-key'))).status, 401);
 });
 
+test('generic CRON_SECRET cannot authorize the recovery worker', async (t) => {
+  envKey(t, '');
+  const previousCronSecret = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = workerKey;
+  t.after(() => {
+    if (previousCronSecret === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previousCronSecret;
+  });
+  t.mock.method(FailureRecoveryRunner, 'runRecoveryPass', async () => { throw new Error('must not run'); });
+  assert.equal((await POST(request(workerKey))).status, 503);
+});
+
 test('overlapping scheduler tick does not invoke another recovery pass', async (t) => {
   envKey(t);
   t.mock.method(RecoveryWorkerState, 'claim', async () => null);
@@ -89,6 +101,10 @@ test('integrated queue failures and undeliverable audit backlog require attentio
     ...report,
     securityAudit: { configured: false, pending: 2, delivered: 0, retried: 0, failed: 0, unclaimed: 0 },
   }), true);
+  assert.equal(recoveryReportNeedsAttention({
+    ...report,
+    communicationRetries: { eligible: 0, exhausted: 1, accepted: 0, rescheduled: 0, terminal: 1, claimConflicts: 0, workerErrors: 0, timeBudgetExhausted: false },
+  }), true);
 });
 
 test('recovery scans are bounded and a concurrently advanced workflow is not failed', async (t) => {
@@ -116,6 +132,8 @@ test('recovery scans are bounded and a concurrently advanced workflow is not fai
     return { count: 0 };
   });
   stubMethod(t, prisma.deadLetterJob, 'create', async () => { throw new Error('must not dead-letter a changed workflow'); });
+  stubMethod(t, prisma.communicationDelivery, 'updateMany', async () => ({ count: 0 }));
+  stubMethod(t, prisma.communicationDelivery, 'findMany', async () => []);
   stubMethod(t, prisma.videoAnalysisJob, 'findMany', async () => []);
   stubMethod(t, prisma, '$transaction', async (run: any) => run(prisma));
   const result = await FailureRecoveryRunner.runRecoveryPass();
@@ -123,6 +141,7 @@ test('recovery scans are bounded and a concurrently advanced workflow is not fai
   assert.equal(result.reclaimedOutboxEntries, 1);
   assert.equal(result.whatsapp?.scheduled, 1);
   assert.equal(result.securityAudit?.delivered, 1);
+  assert.deepEqual(result.communicationRetries, { eligible: 0, exhausted: 0, accepted: 0, rescheduled: 0, terminal: 0, claimConflicts: 0, workerErrors: 0, timeBudgetExhausted: false });
 });
 
 test('reservation recovery is bounded and conservatively accounts for uncertain provider spend', async (t) => {

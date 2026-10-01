@@ -2,7 +2,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const key = process.env.WORKER_RECOVERY_API_KEY?.trim();
 const endpoint = new URL('/api/internal/workflows/recover', process.env.APP_URL || '');
-if (!key || key.length < 32) throw new Error('Configure a dedicated WORKER_RECOVERY_API_KEY of at least 32 characters.');
+if (!key || key.length < 32) {
+  throw new Error('Configure WORKER_RECOVERY_API_KEY with at least 32 characters.');
+}
 if (endpoint.username || endpoint.password) throw new Error('APP_URL must not contain credentials.');
 const internalHttp = process.env.ALLOW_INTERNAL_HTTP === '1' && ['app', 'localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
 if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && internalHttp)) throw new Error('APP_URL must use HTTPS outside the private local app network.');
@@ -33,6 +35,8 @@ while (!stopping) {
       || result.report.whatsapp?.failed || result.report.whatsapp?.timeBudgetExhausted
       || result.report.securityAudit?.failed || result.report.securityAudit?.retried || result.report.securityAudit?.unclaimed
       || (result.report.securityAudit?.configured === false && result.report.securityAudit?.pending)
+      || result.report.communicationRetries?.terminal || result.report.communicationRetries?.workerErrors
+      || result.report.communicationRetries?.timeBudgetExhausted
       || result.report.timeBudgetExhausted);
     console.log(JSON.stringify({ worker: 'workflow-recovery', at: new Date().toISOString(), status: attention ? 'attention' : result.skipped || 'completed', report: result.report }));
   } catch (error) {

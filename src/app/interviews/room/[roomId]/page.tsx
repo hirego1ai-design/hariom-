@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import WebRTCInterviewRoom from "@/components/interview/WebRTCInterviewRoom";
 import ProctoringEngine, { type LiveProctoringClientPolicy } from "@/components/proctoring/ProctoringEngine";
 
-type RoomInfo = { interviewId: string; status: string };
+type RoomInfo = { interviewId: string; status: string; lifecycleStatus: string };
 
 export default function CandidateInterviewRoomPage() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export default function CandidateInterviewRoomPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submittingConsent, setSubmittingConsent] = useState(false);
+  const [lifecycleStatus, setLifecycleStatus] = useState<string>("SCHEDULED");
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +35,7 @@ export default function CandidateInterviewRoomPage() {
     ]).then(([roomInfo, currentPolicy]) => {
       if (cancelled) return;
       setRoom(roomInfo);
+      setLifecycleStatus(roomInfo.lifecycleStatus);
       setPolicy(currentPolicy);
       if (!currentPolicy.enabled) setConsented(true);
     }).catch((cause) => {
@@ -104,9 +106,20 @@ export default function CandidateInterviewRoomPage() {
           <p className="text-xs text-primary font-bold uppercase tracking-[0.2em]">HireGo AI secure interview portal</p>
           <h1 className="text-lg text-text-primary font-bold">Candidate interview room</h1>
         </div>
-        {policy.enabled && <ProctoringEngine interviewId={room.interviewId} policy={policy} />}
+        {policy.enabled && lifecycleStatus === "LIVE" && (
+          <ProctoringEngine interviewId={room.interviewId} policy={policy} />
+        )}
+        {policy.enabled && lifecycleStatus !== "LIVE" && (
+          <p className="text-xs text-text-muted">
+            Browser monitoring begins only after an assigned interviewer starts the live interview.
+          </p>
+        )}
         <div className="min-h-0 flex-1">
-          <WebRTCInterviewRoom roomId={roomId} onComplete={() => router.push("/interviews")} />
+          <WebRTCInterviewRoom
+            roomId={roomId}
+            onLifecycleStatusChange={setLifecycleStatus}
+            onComplete={() => router.push("/interviews")}
+          />
         </div>
       </div>
     </main>

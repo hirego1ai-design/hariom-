@@ -162,3 +162,13 @@ test("universal validation has a canonical bootstrap fallback when role mappings
   }
 });
 
+
+test("universal validation has a canonical bootstrap fallback when role mappings are not seeded", () => {
+  const authoring = read("src/lib/universalSkillValidation.ts");
+  const master = read("src/lib/skill-master.ts");
+  assert.ok(authoring.includes("getRoleSkillSuggestions"), "assessment authoring must fall back to the canonical role catalog");
+  for (const alias of ["Full Stack Developer", "Backend Node.js Engineer", "B2B Sales Executive", "Digital Marketing Executive", "Accounts Executive"]) {
+    assert.ok(master.includes(alias), `canonical role catalog must recognize ${alias}`);
+  }
+});
+

@@ -25,8 +25,8 @@ type FormConfig = EmailDeliveryConfig & {
 };
 
 const initialConfig: FormConfig = {
-  primaryProvider: "SENDGRID",
-  fallbackProvider: "ZEPTOMAIL",
+  primaryProvider: "ZEPTOMAIL",
+  fallbackProvider: "SENDGRID",
   autoFailover: true,
   sendgridEnabled: false,
   zeptoMailEnabled: false,
@@ -41,7 +41,7 @@ const initialConfig: FormConfig = {
 
 const providerInfo: Record<Provider, { name: string; apiKeyName: string }> = {
   SENDGRID: { name: "SendGrid", apiKeyName: "SendGrid API key" },
-  ZEPTOMAIL: { name: "ZeptoMail", apiKeyName: "ZeptoMail API key" },
+  ZEPTOMAIL: { name: "Zoho / ZeptoMail", apiKeyName: "Zoho CPaaS send-mail token" },
 };
 
 export default function SmtpConfigurationPage({ embedded = false }: { embedded?: boolean }) {
@@ -180,7 +180,7 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
               Transactional email
             </div>
             <h1 className="font-display-lg text-display-lg text-white">Email delivery configuration</h1>
-            <p className="mt-2 max-w-2xl text-sm text-text-muted">Configure SendGrid and ZeptoMail for OTPs, password resets, invitations, and system notifications.</p>
+            <p className="mt-2 max-w-2xl text-sm text-text-muted">Zoho / ZeptoMail is the production primary and SendGrid is the fallback for OTPs, password resets, invitations, and system notifications. Routing remains admin-controlled.</p>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
             <span className="material-symbols-outlined text-[17px]">shield_lock</span>
@@ -249,7 +249,7 @@ export default function SmtpConfigurationPage({ embedded = false }: { embedded?:
                       {config.primaryProvider === provider && <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">Primary</span>}
                       {config.fallbackProvider === provider && <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-secondary">Fallback</span>}
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-text-muted">{isSendGrid ? "Use SendGrid as a scalable transactional email provider." : "Use ZeptoMail as an independently configured delivery fallback."}</p>
+                    <p className="mt-2 text-xs leading-5 text-text-muted">{isSendGrid ? "Use SendGrid as the configured transactional fallback when failover is enabled." : "Use Zoho / ZeptoMail as HireGo's primary transactional email provider."}</p>
                   </div>
                   <button type="button" role="switch" aria-checked={isEnabled} onClick={() => updateConfig(enabledKey, !isEnabled)} disabled={isLoading} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${isEnabled ? "bg-primary" : "bg-white/15"}`}>
                     <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${isEnabled ? "translate-x-6" : "translate-x-1"}`} />

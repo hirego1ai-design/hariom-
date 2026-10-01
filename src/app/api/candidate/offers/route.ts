@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, jsonError } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { reconcileExpiredOffers } from "@/lib/offerLifecycle";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,9 +13,9 @@ export async function GET(request: NextRequest) {
     const profile = await prisma.candidateProfile.findUnique({ where: { userId: session.id }, select: { id: true } });
     if (!profile) return NextResponse.json({ success: true, offers: [] });
 
-    await prisma.offer.updateMany({
-      where: { application: { candidateProfileId: profile.id }, status: "SENT", expiresAt: { lte: new Date() } },
-      data: { status: "EXPIRED" },
+    await reconcileExpiredOffers({
+      candidateProfileId: profile.id,
+      limit: 100,
     });
 
     const offers = await prisma.offer.findMany({
@@ -32,7 +33,19 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ success: true, offers }, { headers: { "Cache-Control": "no-store" } });
+    const candidateVisibleOffers = offers.map((offer) => ({
+      ...offer,
+      documentFile:
+        ["SENT", "ACCEPTED"].includes(offer.status) &&
+        offer.documentFile?.scanStatus === "CLEAN"
+          ? offer.documentFile
+          : null,
+    }));
+
+    return NextResponse.json(
+      { success: true, offers: candidateVisibleOffers },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return handleApiError(error);
   }

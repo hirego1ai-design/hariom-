@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { logAuditEvent } from "@/lib/auditLogger";
+import { reconcileExpiredOffers } from "@/lib/offerLifecycle";
 
 const createSchema = z.object({
   applicationId: z.string().uuid(),
@@ -39,6 +40,11 @@ export async function GET(request: NextRequest) {
   try {
     const { session, companyId } = await actor(request);
     await enforceRateLimit(request, "employer_offers_read", 60, 60_000);
+    await reconcileExpiredOffers({
+      ...(session.role === "ADMIN" ? {} : { companyId: companyId! }),
+      limit: 100,
+    });
+
     const { searchParams } = new URL(request.url);
     const applicationId = searchParams.get("applicationId");
     const requestedLimit = searchParams.get("limit");
@@ -64,7 +70,14 @@ export async function GET(request: NextRequest) {
         application: {
           select: {
             status: true,
-            job: { select: { title: true, company: { select: { name: true } } } },
+            job: {
+              select: {
+                title: true,
+                managedAgreementId: true,
+                managedRequirementId: true,
+                company: { select: { name: true } },
+              },
+            },
             candidateProfile: { select: { user: { select: { name: true, email: true } } } },
           },
         },

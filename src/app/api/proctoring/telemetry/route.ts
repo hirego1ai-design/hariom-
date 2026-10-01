@@ -3,6 +3,9 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, jsonError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { getLiveInterviewProctoringPolicy } from "@/lib/proctoringPolicy";
+import { hasCurrentLiveProctoringConsent } from "@/lib/proctoringConsent";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const violationTypeSchema = z.enum([
   "TAB_SWITCH",
@@ -16,6 +19,7 @@ const violationTypeSchema = z.enum([
 
 const telemetrySchema = z.object({
   interviewId: z.string().uuid("Invalid interview ID."),
+  clientEventId: z.string().uuid("Invalid proctoring event ID."),
   // The browser reports a raw event only. Severity is an authoritative server
   // policy decision, never a candidate-controlled input.
   violationType: violationTypeSchema,
@@ -108,6 +112,7 @@ export async function GET(request: NextRequest) {
         id: true,
         interviewId: true,
         candidateId: true,
+        clientEventId: true,
         violationType: true,
         severity: true,
         createdAt: true,
@@ -151,58 +156,183 @@ export async function POST(request: NextRequest) {
 
     await enforceRateLimit(request, "proctoring_telemetry_write", 120, 60_000);
     const body = await readValidatedJson(request, telemetrySchema);
-    await assertInterviewAccess(session, body.interviewId, "write");
+    const interview = await assertInterviewAccess(session, body.interviewId, "write");
+    if (
+      interview.status !== "LIVE" ||
+      !interview.startedAt ||
+      interview.completedAt
+    ) {
+      throw new ApiError(
+        "Proctoring telemetry is accepted only while the interview is live and has actually started.",
+        409,
+      );
+    }
+
+    const policy = await getLiveInterviewProctoringPolicy();
+    if (!policy.enabled) {
+      throw new ApiError("Live interview browser monitoring is not enabled.", 409);
+    }
+    const consented = await hasCurrentLiveProctoringConsent({
+      candidateUserId: session.id,
+      interviewId: body.interviewId,
+      policyVersion: policy.policyVersion,
+    });
+    if (!consented) {
+      throw new ApiError(
+        "Current interview monitoring consent is required before telemetry can be recorded.",
+        409,
+      );
+    }
+
+    const signalEnabled =
+      (body.violationType === "TAB_SWITCH" && policy.trackTabSwitch) ||
+      (body.violationType === "COPY_PASTE_DETECTED" && policy.trackClipboard) ||
+      (body.violationType === "BROWSER_UNFOCUSED" && policy.trackContextMenu);
+    if (!signalEnabled) {
+      throw new ApiError(
+        "This browser observation is not enabled by the current monitoring policy.",
+        422,
+      );
+    }
+
     const severity = severityForProctoringEvent(body.violationType);
 
-    // Do not let a client inflate the advisory score by replaying the same
-    // browser event in a tight loop. This is deliberately per event type so
-    // distinct raw observations remain available to the reviewer.
-    const duplicateSince = new Date(Date.now() - 3_000);
-    const duplicate = await prisma.proctoringTelemetry.findFirst({
-      where: {
-        interviewId: body.interviewId,
-        candidateId: session.id,
-        violationType: body.violationType,
-        createdAt: { gte: duplicateSince },
-      },
-      select: { id: true },
-    });
-    if (duplicate) throw new ApiError("Duplicate proctoring event ignored.", 429, 3);
+    let recorded:
+      | {
+          event: {
+            id: string;
+            interviewId: string;
+            candidateId: string;
+            clientEventId: string | null;
+            violationType: string;
+            severity: string;
+            createdAt: Date;
+          };
+          duplicate: boolean;
+        }
+      | null = null;
 
-    const event = await prisma.proctoringTelemetry.create({
-      data: {
-        interviewId: body.interviewId,
-        candidateId: session.id,
-        violationType: body.violationType,
-        severity,
-      },
-      select: {
-        id: true,
-        interviewId: true,
-        candidateId: true,
-        violationType: true,
-        severity: true,
-        createdAt: true,
-      },
-    });
+    try {
+      recorded = await prisma.$transaction(async (tx) => {
+        const existing = await tx.proctoringTelemetry.findFirst({
+          where: {
+            interviewId: body.interviewId,
+            candidateId: session.id,
+            clientEventId: body.clientEventId,
+          },
+          select: {
+            id: true,
+            interviewId: true,
+            candidateId: true,
+            clientEventId: true,
+            violationType: true,
+            severity: true,
+            createdAt: true,
+          },
+        });
+        if (existing) return { event: existing, duplicate: true };
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.id,
-        action: "PROCTORING_VIOLATION",
-        resource: `interview:${event.interviewId}`,
-        details: JSON.stringify({
-          violationType: event.violationType,
-          severity: event.severity,
-          evidenceSource: "CLIENT_REPORTED_UNVERIFIED",
-        }),
-      },
-    });
+        // Separate observations of the same type are rate-limited briefly, but
+        // retries of the exact same browser observation are handled by the
+        // durable clientEventId uniqueness above and return the stored event.
+        const duplicateSince = new Date(Date.now() - 3_000);
+        const tooFrequent = await tx.proctoringTelemetry.findFirst({
+          where: {
+            interviewId: body.interviewId,
+            candidateId: session.id,
+            violationType: body.violationType,
+            createdAt: { gte: duplicateSince },
+          },
+          select: { id: true },
+        });
+        if (tooFrequent) {
+          throw new ApiError("Proctoring event frequency limit.", 429, 3);
+        }
+
+        const event = await tx.proctoringTelemetry.create({
+          data: {
+            interviewId: body.interviewId,
+            candidateId: session.id,
+            clientEventId: body.clientEventId,
+            violationType: body.violationType,
+            severity,
+          },
+          select: {
+            id: true,
+            interviewId: true,
+            candidateId: true,
+            clientEventId: true,
+            violationType: true,
+            severity: true,
+            createdAt: true,
+          },
+        });
+
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            companyId: interview.application.job.companyId,
+            action: "PROCTORING_VIOLATION",
+            resource: `Interview:${event.interviewId}`,
+            details: JSON.stringify({
+              telemetryEventId: event.id,
+              clientEventId: body.clientEventId,
+              violationType: event.violationType,
+              severity: event.severity,
+              evidenceSource: "CLIENT_REPORTED_UNVERIFIED",
+              policyVersion: policy.policyVersion,
+              interviewStartedAt: interview.startedAt.toISOString(),
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+
+        return { event, duplicate: false };
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        const existing = await prisma.proctoringTelemetry.findFirst({
+          where: {
+            interviewId: body.interviewId,
+            candidateId: session.id,
+            clientEventId: body.clientEventId,
+          },
+          select: {
+            id: true,
+            interviewId: true,
+            candidateId: true,
+            clientEventId: true,
+            violationType: true,
+            severity: true,
+            createdAt: true,
+          },
+        });
+        if (existing) recorded = { event: existing, duplicate: true };
+        else throw error;
+      } else {
+        throw error;
+      }
+    }
+
+    if (!recorded) {
+      throw new ApiError("Proctoring event could not be persisted.", 500);
+    }
 
     return NextResponse.json({
       success: true,
-      event: { ...event, timestamp: event.createdAt.toISOString() },
-      message: "Client-reported proctoring event recorded for human review.",
+      duplicate: recorded.duplicate,
+      event: {
+        ...recorded.event,
+        timestamp: recorded.event.createdAt.toISOString(),
+      },
+      message: recorded.duplicate
+        ? "Client-reported proctoring event was already recorded."
+        : "Client-reported proctoring event recorded for human review.",
     });
   } catch (error) {
     return handleApiError(error);

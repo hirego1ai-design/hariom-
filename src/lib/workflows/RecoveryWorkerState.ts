@@ -18,7 +18,9 @@ function redis() {
 
 export function requireRecoveryWorkerKey(request: Request) {
   const expected = process.env.WORKER_RECOVERY_API_KEY?.trim();
-  if (!expected || expected.length < 32) throw new ApiError('Recovery worker key is not configured.', 503);
+  if (!expected || expected.length < 32) {
+    throw new ApiError('Recovery worker key is not configured.', 503);
+  }
   const supplied = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
   const actualBytes = Buffer.from(supplied);
   const expectedBytes = Buffer.from(expected);
@@ -47,6 +49,9 @@ export function recoveryReportNeedsAttention(report: RecoveryReport): boolean {
     || (report.securityAudit?.retried ?? 0) > 0
     || (report.securityAudit?.unclaimed ?? 0) > 0
     || (report.securityAudit?.configured === false && (report.securityAudit?.pending ?? 0) > 0)
+    || (report.communicationRetries?.terminal ?? 0) > 0
+    || (report.communicationRetries?.workerErrors ?? 0) > 0
+    || Boolean(report.communicationRetries?.timeBudgetExhausted)
     || report.timeBudgetExhausted;
 }
 

@@ -4,6 +4,8 @@ import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
 import { getLiveInterviewProctoringPolicy } from "@/lib/proctoringPolicy";
+import { hasCurrentLiveProctoringConsent } from "@/lib/proctoringConsent";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const schema = z.object({
   interviewId: z.string().uuid(),
@@ -28,23 +30,45 @@ export async function POST(request: NextRequest) {
     if (body.policyVersion !== policy.policyVersion) throw new ApiError("Proctoring policy changed. Review the current disclosure before continuing.", 409);
     if (["COMPLETED", "CANCELLED"].includes(interview.status)) throw new ApiError("Interview room is closed.", 409);
 
-    await prisma.auditLog.create({
-      data: {
-        userId: session.id,
-        action: "LIVE_INTERVIEW_PROCTORING_CONSENT",
-        resource: `Interview:${interview.id}`,
-        details: JSON.stringify({
-          policyVersion: policy.policyVersion,
-          enabledSignals: {
-            tabSwitch: policy.trackTabSwitch,
-            clipboard: policy.trackClipboard,
-            contextMenu: policy.trackContextMenu,
-          },
-          consentedAt: new Date().toISOString(),
-        }),
-      },
+    const alreadyConsented = await hasCurrentLiveProctoringConsent({
+      candidateUserId: session.id,
+      interviewId: interview.id,
+      policyVersion: policy.policyVersion,
     });
-    return NextResponse.json({ success: true, interviewId: interview.id, policyVersion: policy.policyVersion });
+    if (alreadyConsented) {
+      return NextResponse.json({
+        success: true,
+        interviewId: interview.id,
+        policyVersion: policy.policyVersion,
+        idempotent: true,
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          action: "LIVE_INTERVIEW_PROCTORING_CONSENT",
+          resource: `Interview:${interview.id}`,
+          details: JSON.stringify({
+            policyVersion: policy.policyVersion,
+            enabledSignals: {
+              tabSwitch: policy.trackTabSwitch,
+              clipboard: policy.trackClipboard,
+              contextMenu: policy.trackContextMenu,
+            },
+            consentedAt: new Date().toISOString(),
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+    });
+    return NextResponse.json({
+      success: true,
+      interviewId: interview.id,
+      policyVersion: policy.policyVersion,
+      idempotent: false,
+    });
   } catch (error) {
     return handleApiError(error);
   }

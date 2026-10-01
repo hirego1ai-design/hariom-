@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import {
   reconcileCopilotReservation,
   releaseCopilotReservation,
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     const applications = await prisma.application.findMany({
       where: {
         ...(requestedApplicationId ? { id: requestedApplicationId } : {}),
-        status: { notIn: ["HIRED", "REJECTED", "WITHDRAWN"] },
+        status: { in: ["SCREENING", "AI_INTERVIEW"] },
         gates: { none: { status: { in: ["REQUIRED", "IN_PROGRESS"] } } },
         job: companyId ? { companyId } : undefined,
         ...(searchQuery
@@ -238,6 +238,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let copilotSchedulingReservationId: string | null = null;
+  let schedulePersisted = false;
   try {
     await enforceRateLimit(request, "employer_interview_schedule", 20, 60_000);
     const session = await getCurrentSession(request.headers);
@@ -258,6 +259,7 @@ export async function POST(request: NextRequest) {
           instructions: body.instructions || null,
           notifyEmail: body.notifyEmail,
           notifyWhatsapp: body.notifyWhatsapp,
+          copilotManaged: body.copilotManaged,
         })).digest("hex");
     const copilotRequestDigest = body.copilotManaged ? scheduleRequestDigest : null;
     {
@@ -268,8 +270,12 @@ export async function POST(request: NextRequest) {
     }
     const application = await prisma.application.findUnique({ include: { candidateProfile: { include: { user: true } }, job: { include: { company: true } }, gates: { select: { type: true, status: true } } }, where: { id: body.applicationId } });
     if (!application) return NextResponse.json({ success: false, error: "Application not found." }, { status: 404 });
-    if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
-      return NextResponse.json({ success: false, error: "Interviews cannot be scheduled for an application in a terminal state." }, { status: 409 });
+    if (!["SCREENING", "AI_INTERVIEW"].includes(application.status)) {
+      return NextResponse.json({
+        success: false,
+        error:
+          "Interview scheduling requires the application to complete assessment gates and enter Screening first.",
+      }, { status: 409 });
     }
     if (application.gates.some((gate) => ["REQUIRED", "IN_PROGRESS"].includes(gate.status))) {
       return NextResponse.json({
@@ -320,6 +326,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: "This round is already scheduled with a different request." }, { status: 409 });
       }
       idempotentExistingInterview = existingInterview;
+      schedulePersisted = true;
     }
     if (round.sequence > 1) {
       const previous = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: round.processId, sequence: round.sequence - 1 } } });
@@ -338,7 +345,7 @@ export async function POST(request: NextRequest) {
         companyId: application.job.companyId,
         actionKey: "INTERVIEW_SCHEDULING",
         quantity: 1,
-        idempotencyKey: `copilot-schedule:${crypto.createHash("sha256").update(requestIdempotencyKey).digest("hex")}`,
+        idempotencyKey: `copilot-schedule:${scheduleRequestDigest}`,
         reference: {
           jobId: application.jobId,
           applicationId: application.id,
@@ -394,7 +401,10 @@ export async function POST(request: NextRequest) {
           },
         },
       });
-      if (!lockedApplication || ["HIRED", "REJECTED", "WITHDRAWN"].includes(lockedApplication.status)) {
+      if (
+        !lockedApplication ||
+        !["SCREENING", "AI_INTERVIEW"].includes(lockedApplication.status)
+      ) {
         throw new Error("APPLICATION_NOT_SCHEDULABLE");
       }
       if (lockedApplication.gates.length > 0) {
@@ -466,8 +476,30 @@ export async function POST(request: NextRequest) {
       if (advanced.count !== 1) {
         throw new Error("APPLICATION_STAGE_CHANGED");
       }
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: application.job.companyId,
+          action: "INTERVIEW_SCHEDULED",
+          resource: `Interview:${created.id}`,
+          ipAddress: request.headers.get("x-forwarded-for") || undefined,
+          details: JSON.stringify({
+            applicationId: application.id,
+            roundId: round.id,
+            roundName: round.name,
+            scheduledAt: created.scheduledAt.toISOString(),
+            durationMins: created.durationMins,
+            mode,
+            copilotManaged: body.copilotManaged,
+            scheduleRequestDigest,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
       return created;
     });
+    schedulePersisted = true;
 
     if (copilotSchedulingReservationId) {
       await reconcileCopilotReservation({
@@ -556,17 +588,6 @@ export async function POST(request: NextRequest) {
             } : undefined,
           }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "WhatsApp dispatch failed." }));
 
-    if (!idempotentExistingInterview) {
-      await logAuditEvent({
-        userId: session.id,
-        companyId: application.job.companyId,
-        action: "INTERVIEW_SCHEDULED",
-        resource: `Interview:${interview.id}`,
-        ipAddress: request.headers.get("x-forwarded-for") || undefined,
-        details: `Scheduled ${round.name} at ${interview.scheduledAt.toISOString()} in ${mode} mode.`,
-      });
-    }
-
     return NextResponse.json({
       success: true,
       interviewId: interview.id,
@@ -574,18 +595,29 @@ export async function POST(request: NextRequest) {
       mode,
       scheduledAt: interview.scheduledAt,
       notifications: { app: appNotification, email, whatsapp },
-      copilotManaged: body.copilotManaged,
+      copilotManaged: idempotentExistingInterview
+        ? (() => {
+            try {
+              const existingMetadata = idempotentExistingInterview.aiFeedback
+                ? JSON.parse(idempotentExistingInterview.aiFeedback) as Record<string, unknown>
+                : {};
+              return existingMetadata.copilotManaged === true;
+            } catch {
+              return false;
+            }
+          })()
+        : body.copilotManaged,
       idempotent: Boolean(idempotentExistingInterview),
       message: "Interview scheduled. Notification results are reported separately.",
     }, { status: idempotentExistingInterview ? 200 : 201 });
   } catch (error) {
-    if (copilotSchedulingReservationId) {
+    if (copilotSchedulingReservationId && !schedulePersisted) {
       await releaseCopilotReservation(copilotSchedulingReservationId).catch(() => undefined);
     }
     if (error instanceof Error && error.message === "COPILOT_IDEMPOTENCY_MISMATCH") return NextResponse.json({ success: false, error: "Idempotency key was already used for a different Copilot scheduling request." }, { status: 409 });
     if (error instanceof Error && error.message === "PREVIOUS_INTERVIEW_ROUND_INCOMPLETE") return NextResponse.json({ success: false, error: "The previous interview round must be completed before scheduling this round." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_ROUND_ALREADY_SCHEDULED") return NextResponse.json({ success: false, error: "This round is already scheduled for the candidate." }, { status: 409 });
-    if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application entered a terminal state before the interview could be scheduled." }, { status: 409 });
+    if (error instanceof Error && error.message === "APPLICATION_NOT_SCHEDULABLE") return NextResponse.json({ success: false, error: "The application must complete assessment gates and be in Screening or an active interview workflow before scheduling." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_ASSESSMENT_GATE_PENDING") return NextResponse.json({ success: false, error: "Complete the candidate's required assessment/validation gates before scheduling an interview." }, { status: 409 });
     if (error instanceof Error && error.message === "APPLICATION_STAGE_CHANGED") return NextResponse.json({ success: false, error: "Application stage changed while the interview was being scheduled. Refresh and try again." }, { status: 409 });
     if (error instanceof Error && error.message === "INTERVIEW_TIME_CONFLICT") return NextResponse.json({ success: false, error: "The candidate or an assigned interviewer already has an overlapping interview." }, { status: 409 });

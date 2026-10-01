@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
-import { logAuditEvent } from "@/lib/auditLogger";
-import { dispatchCommunication } from "@/lib/communications/dispatcher";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import {
+  dispatchCommunication,
+  dispatchDecisionCommunication,
+} from "@/lib/communications/dispatcher";
 import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
 import { createTenantContext } from "@/lib/security/TenantContext";
 import { Role } from "@prisma/client";
@@ -37,31 +40,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const copilotManagedForInterview = interviewMetadata.copilotManaged === true;
 
     const tenantContext = createTenantContext(session.role === "ADMIN" ? null : interview.application.job.companyId, session.id, session.role as Role);
-    let rejectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "REJECT" } } | null = null;
-    let selectionAuthorization: { workflowId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "SELECT" } } | null = null;
+    let rejectionAuthorization: { workflowId: string; approvalId: string; approvedByUserId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "REJECT" } } | null = null;
+    let selectionAuthorization: { workflowId: string; approvalId: string; approvedByUserId: string; stepName: string; expectedAction: { interviewId: string; applicationId: string; action: "SELECT" } } | null = null;
 
     if (["TRANSFERRED", "FINAL_ROUND_COMPLETE"].includes(interview.roundProgress.status) && body.action === "PROCEED") {
       const nextRound = await prisma.interviewRound.findUnique({ where: { processId_sequence: { processId: interview.roundProgress.round.processId, sequence: interview.roundProgress.round.sequence + 1 } }, include: { interviewers: { include: { user: { select: { id: true, name: true, email: true } } } } } });
       return NextResponse.json({ success: true, action: nextRound ? "PROCEED" : "FINAL_ROUND_COMPLETE", nextRound: nextRound ? { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } : null, applicationId: interview.applicationId, idempotent: true });
     }
+    if (
+      interview.roundProgress.status === "TRANSFERRED" &&
+      body.action === "REJECT" &&
+      interview.application.status === "REJECTED"
+    ) {
+      return NextResponse.json({
+        success: true,
+        action: "REJECT",
+        applicationId: interview.applicationId,
+        idempotent: true,
+        message: "Candidate rejection was already completed.",
+      });
+    }
     if (interview.roundProgress.status === "ON_HOLD" && body.action === "HOLD") {
       return NextResponse.json({ success: true, action: "HOLD", applicationId: interview.applicationId, idempotent: true, message: "Candidate is already on hold after this round." });
+    }
+    if (interview.application.status !== "AI_INTERVIEW") {
+      throw new ApiError(
+        "This application is no longer in the active interview workflow. Reconcile withdrawal, rejection, selection, or joining state before another round decision.",
+        409,
+      );
     }
     if (!["ROUND_COMPLETE", "ON_HOLD"].includes(interview.roundProgress.status)) throw new ApiError("All required interviewer feedback must be finalized before a round decision.", 409);
     const requiredFeedbackMissing = await prisma.interviewRoundInterviewer.count({
       where: { roundId: interview.roundProgress.roundId, required: true, user: { interviewFeedbacks: { none: { interviewId: id, finalizedAt: { not: null } } } } },
     });
     if (requiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
-
-    if (body.action === "HOLD") {
-      const held = await prisma.interviewRoundProgress.updateMany({
-        where: { id: interview.roundProgress.id, status: "ROUND_COMPLETE" },
-        data: { status: "ON_HOLD" },
-      });
-      if (held.count !== 1) throw new ApiError("This interview round decision changed before HOLD could be saved.", 409);
-      await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: "Round decision: HOLD (persisted)" });
-      return NextResponse.json({ success: true, action: "HOLD", applicationId: interview.applicationId, message: "Candidate is on hold after this round. Proceed or reject later to resume the workflow." });
-    }
 
     if (body.action === "PROCEED") {
       const nextRoundPreview = await prisma.interviewRound.findUnique({
@@ -150,8 +162,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           });
           approval = await WorkflowEngine.getApprovalDetails({ approvalId: approval.id, context: tenantContext });
         }
-        if (approval.decision !== "APPROVED") throw new ApiError("Candidate selection approval is not approved.", 409);
-        selectionAuthorization = { workflowId: workflow.id, stepName: approval.stepName, expectedAction };
+        if (approval.decision !== "APPROVED" || !approval.decidedBy) throw new ApiError("Candidate selection approval is not approved.", 409);
+        selectionAuthorization = {
+          workflowId: workflow.id,
+          approvalId: approval.id,
+          approvedByUserId: approval.decidedBy,
+          stepName: approval.stepName,
+          expectedAction,
+        };
       }
     }
 
@@ -217,12 +235,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await WorkflowEngine.decideApproval({ approvalId: body.approvalId, decision: "APPROVED", notes: "Confirmed from interview round decision UI.", context: tenantContext });
         approval = await WorkflowEngine.getApprovalDetails({ approvalId: body.approvalId, context: tenantContext });
       }
-      if (approval.decision !== "APPROVED") throw new ApiError("Candidate rejection approval is not approved.", 409);
-      rejectionAuthorization = { workflowId: body.workflowId, stepName: approval.stepName, expectedAction };
+      if (approval.decision !== "APPROVED" || !approval.decidedBy) throw new ApiError("Candidate rejection approval is not approved.", 409);
+      rejectionAuthorization = {
+        workflowId: body.workflowId,
+        approvalId: approval.id,
+        approvedByUserId: approval.decidedBy,
+        stepName: approval.stepName,
+        expectedAction,
+      };
     }
 
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
+      // Keep lifecycle lock order aligned with withdrawal and offer flows:
+      // Application first, then round progress.
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${interview.applicationId} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: interview.applicationId },
+        select: { status: true },
+      });
+      if (!lockedApplication || lockedApplication.status !== "AI_INTERVIEW") {
+        throw new ApiError(
+          "Application left the active interview workflow before this round decision could be executed.",
+          409,
+        );
+      }
+
       await tx.$queryRaw`SELECT id FROM "InterviewRoundProgress" WHERE id = ${interview.roundProgress!.id} FOR UPDATE`;
       const lockedProgress = await tx.interviewRoundProgress.findUnique({
         where: { id: interview.roundProgress!.id },
@@ -239,6 +277,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       });
       if (lockedRequiredFeedbackMissing > 0) throw new ApiError("Required panel feedback is incomplete.", 409);
+
+      const persistDecisionAudit = async (
+        decision: "HOLD" | "REJECT" | "PROCEED" | "FINAL_ROUND_COMPLETE",
+        nextRoundName: string | null = null,
+      ) => {
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            companyId: interview.application.job.companyId,
+            action: "INTERVIEW_ROUND_DECISION",
+            resource: `Interview:${id}`,
+            details: JSON.stringify({
+              applicationId: interview.applicationId,
+              roundId: lockedProgress.roundId,
+              decision,
+              nextRoundName,
+              selectionWorkflowId: selectionAuthorization?.workflowId || null,
+              rejectionWorkflowId: rejectionAuthorization?.workflowId || null,
+              decidedAt: now.toISOString(),
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+      };
+
+      if (body.action === "HOLD") {
+        if (lockedProgress.status === "ON_HOLD") {
+          return { action: "HOLD" as const, nextRound: null, idempotent: true };
+        }
+        const held = await tx.interviewRoundProgress.updateMany({
+          where: { id: interview.roundProgress!.id, status: "ROUND_COMPLETE" },
+          data: { status: "ON_HOLD" },
+        });
+        if (held.count !== 1) {
+          throw new ApiError("This interview round decision changed before HOLD could be saved.", 409);
+        }
+        await persistDecisionAudit("HOLD");
+        return { action: "HOLD" as const, nextRound: null, idempotent: false };
+      }
 
       if (body.action === "REJECT") {
         if (!rejectionAuthorization) throw new ApiError("Approved rejection authorization is required.", 409);
@@ -258,7 +335,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: "REJECTED" },
         });
         if (rejected.count !== 1) throw new ApiError("Application is already in a terminal state and cannot be rejected from this interview round.", 409);
-        return { action: "REJECT" as const, nextRound: null };
+        const completedWorkflow = await tx.workflowInstance.updateMany({
+          where: { id: rejectionAuthorization.workflowId, status: "RUNNING" },
+          data: {
+            status: "COMPLETED",
+            currentStep: "CANDIDATE_REJECTED",
+            updatedAt: now,
+          },
+        });
+        if (completedWorkflow.count !== 1) {
+          throw new ApiError("Candidate-rejection workflow did not reach a terminal state.", 409);
+        }
+        await persistDecisionAudit("REJECT");
+        return { action: "REJECT" as const, nextRound: null, idempotent: false };
       }
       const nextRound = await tx.interviewRound.findUnique({
         where: { processId_sequence: { processId: interview.roundProgress!.round.processId, sequence: interview.roundProgress!.round.sequence + 1 } },
@@ -282,7 +371,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: "SHORTLISTED" },
         });
         if (selected.count !== 1) throw new ApiError("Application is already in a terminal state and cannot be selected.", 409);
-        return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null };
+        const completedWorkflow = await tx.workflowInstance.updateMany({
+          where: { id: selectionAuthorization.workflowId, status: "RUNNING" },
+          data: {
+            status: "COMPLETED",
+            currentStep: "CANDIDATE_SELECTED",
+            updatedAt: now,
+          },
+        });
+        if (completedWorkflow.count !== 1) {
+          throw new ApiError("Candidate-selection workflow did not reach a terminal state.", 409);
+        }
+        await persistDecisionAudit("FINAL_ROUND_COMPLETE");
+        return { action: "FINAL_ROUND_COMPLETE" as const, nextRound: null, idempotent: false };
       }
       const claimed = await tx.interviewRoundProgress.updateMany({
         where: { id: interview.roundProgress!.id, status: { in: ["ROUND_COMPLETE", "ON_HOLD"] } },
@@ -294,11 +395,129 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         update: {},
         create: { applicationId: interview.applicationId, roundId: nextRound.id, status: "PENDING" },
       });
-      return { action: "PROCEED" as const, nextRound: { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) } };
+      await persistDecisionAudit("PROCEED", nextRound.name);
+      return { action: "PROCEED" as const, nextRound: { id: nextRound.id, name: nextRound.name, sequence: nextRound.sequence, department: nextRound.department, interviewers: nextRound.interviewers.map(i => ({ userId: i.userId, name: i.user.name, email: i.user.email })) }, idempotent: false };
     });
-    await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_ROUND_DECISION", resource: `Interview:${id}`, details: `Round decision: ${result.action}${result.nextRound ? `; next=${result.nextRound.name}` : ""}` });
     const candidate = interview.application.candidateProfile.user;
     const variables = { candidate_name: candidate.name || "Candidate", company_name: interview.application.job.company.name, job_title: interview.application.job.title };
+
+    if (
+      result.action === "FINAL_ROUND_COMPLETE" &&
+      selectionAuthorization
+    ) {
+      const authorizationProof = {
+        workflowId: selectionAuthorization.workflowId,
+        approvalId: selectionAuthorization.approvalId,
+        approvedByUserId: selectionAuthorization.approvedByUserId,
+      };
+      if (candidate.email) {
+        await dispatchDecisionCommunication({
+          eventKey: "CANDIDATE_SELECTED",
+          channel: "EMAIL",
+          audience: "CANDIDATE",
+          recipient: candidate.email,
+          variables: {
+            ...variables,
+            next_step: "The employer will follow up with the offer-stage next steps.",
+          },
+          idempotencyKey: `interview:${id}:final-selection:candidate:email`,
+          correlationId: interview.applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+          copilotMetering: copilotManagedForInterview ? {
+            companyId: interview.application.job.companyId,
+            idempotencyKey: `copilot-communication:${id}:final-selection:email`,
+            reference: {
+              jobId: interview.application.jobId,
+              applicationId: interview.applicationId,
+              candidateId: interview.application.candidateProfileId,
+              interviewId: id,
+            },
+          } : undefined,
+        }).catch(() => null);
+      }
+      if (candidate.phoneNumber) {
+        await dispatchDecisionCommunication({
+          eventKey: "CANDIDATE_SELECTED",
+          channel: "WHATSAPP",
+          audience: "CANDIDATE",
+          recipient: candidate.phoneNumber,
+          variables: {
+            ...variables,
+            next_step: "The employer will follow up with the offer-stage next steps.",
+          },
+          idempotencyKey: `interview:${id}:final-selection:candidate:whatsapp`,
+          correlationId: interview.applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+          copilotMetering: copilotManagedForInterview ? {
+            companyId: interview.application.job.companyId,
+            idempotencyKey: `copilot-communication:${id}:final-selection:whatsapp`,
+            reference: {
+              jobId: interview.application.jobId,
+              applicationId: interview.applicationId,
+              candidateId: interview.application.candidateProfileId,
+              interviewId: id,
+            },
+          } : undefined,
+        }).catch(() => null);
+      }
+    }
+
+    if (result.action === "REJECT" && rejectionAuthorization) {
+      const authorizationProof = {
+        workflowId: rejectionAuthorization.workflowId,
+        approvalId: rejectionAuthorization.approvalId,
+        approvedByUserId: rejectionAuthorization.approvedByUserId,
+      };
+      if (candidate.email) {
+        await dispatchDecisionCommunication({
+          eventKey: "APPLICATION_REJECTED",
+          channel: "EMAIL",
+          audience: "CANDIDATE",
+          recipient: candidate.email,
+          variables,
+          idempotencyKey: `interview:${id}:rejection:candidate:email`,
+          correlationId: interview.applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+          copilotMetering: copilotManagedForInterview ? {
+            companyId: interview.application.job.companyId,
+            idempotencyKey: `copilot-communication:${id}:rejection:email`,
+            reference: {
+              jobId: interview.application.jobId,
+              applicationId: interview.applicationId,
+              candidateId: interview.application.candidateProfileId,
+              interviewId: id,
+            },
+          } : undefined,
+        }).catch(() => null);
+      }
+      if (candidate.phoneNumber) {
+        await dispatchDecisionCommunication({
+          eventKey: "APPLICATION_REJECTED",
+          channel: "WHATSAPP",
+          audience: "CANDIDATE",
+          recipient: candidate.phoneNumber,
+          variables,
+          idempotencyKey: `interview:${id}:rejection:candidate:whatsapp`,
+          correlationId: interview.applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+          copilotMetering: copilotManagedForInterview ? {
+            companyId: interview.application.job.companyId,
+            idempotencyKey: `copilot-communication:${id}:rejection:whatsapp`,
+            reference: {
+              jobId: interview.application.jobId,
+              applicationId: interview.applicationId,
+              candidateId: interview.application.candidateProfileId,
+              interviewId: id,
+            },
+          } : undefined,
+        }).catch(() => null);
+      }
+    }
+
     const eventKey = result.action === "PROCEED" ? "INTERVIEW_NEXT_ROUND" : null;
     if (eventKey && candidate.email) await dispatchCommunication({
       eventKey,
@@ -340,6 +559,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       } : undefined,
     }).catch(() => null);
-    return NextResponse.json({ success: true, ...result, applicationId: interview.applicationId });
+    return NextResponse.json({
+      success: true,
+      ...result,
+      applicationId: interview.applicationId,
+      ...(result.action === "HOLD"
+        ? { message: "Candidate is on hold after this round. Proceed or reject later to resume the workflow." }
+        : {}),
+    });
   } catch (e) { return handleApiError(e); }
 }

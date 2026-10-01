@@ -38,7 +38,6 @@ export default function JobDetailPage() {
   const [isApplied, setIsApplied] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<"success" | "error">("success");
-  const [isApplying, setIsApplying] = useState(false);
   const [candidateAuthenticated, setCandidateAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -109,45 +108,14 @@ export default function JobDetailPage() {
       });
   }, [jobId]);
 
-  const handleApply = async () => {
-    if (!jobId || isApplied || isApplying) return;
-    setIsApplying(true);
-    setFeedbackMessage(null);
-    setFeedbackType("success");
-    try {
-      const response = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (response.status === 401) {
-        router.push(`/login?redirect=${encodeURIComponent(`/jobs/${jobId}`)}`);
-        return;
-      }
-
-      if (response.status === 202 && data.success && data.assessmentRequired && data.noticeUrl) {
-        router.push(data.noticeUrl);
-        return;
-      }
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Application could not be submitted.");
-      }
-
-      setIsApplied(true);
-      if (data.assessmentRequired && data.assessmentType === "JOB_SPECIFIC_ASSESSMENT" && data.assessmentUrl) {
-        router.push(data.assessmentUrl);
-        return;
-      }
-      setFeedbackType("success");
-      setFeedbackMessage("Application submitted successfully.");
-    } catch (cause) {
-      setFeedbackType("error");
-      setFeedbackMessage(cause instanceof Error ? cause.message : "Application could not be submitted.");
-      setIsApplying(false);
-    }
+  const handleApply = () => {
+    if (!jobId || isApplied) return;
+    const destination = `/jobs/${jobId}/apply`;
+    router.push(
+      candidateAuthenticated
+        ? destination
+        : `/login?redirect=${encodeURIComponent(destination)}`,
+    );
   };
 
   const handleToggleSave = async () => {
@@ -331,7 +299,7 @@ export default function JobDetailPage() {
             <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3 shadow-xl">
               <button
                 onClick={handleApply}
-                disabled={isApplied || isApplying}
+                disabled={isApplied || candidateAuthenticated === null}
                 className={`w-full h-12 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                   isApplied
                     ? "bg-green-500/20 text-green-400 border border-green-500/30"
@@ -343,10 +311,10 @@ export default function JobDetailPage() {
                     <span className="material-symbols-outlined text-[18px]">check</span>
                     <span>Application Submitted</span>
                   </>
-                ) : isApplying ? (
+                ) : candidateAuthenticated === null ? (
                   <>
                     <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                    <span>Checking requirements…</span>
+                    <span>Checking account…</span>
                   </>
                 ) : (
                   <>

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { requireAuthenticatedSession } from "@/lib/routeAuthorization";
 import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
 import { createTenantContext } from "@/lib/security/TenantContext";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { expireOfferIfDue } from "@/lib/offerLifecycle";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const actionSchema = z.object({
   action: z.enum(["SEND", "WITHDRAW"]),
@@ -49,10 +50,75 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (body.action === "WITHDRAW") {
       if (!["DRAFT", "SENT"].includes(offer.status)) throw new ApiError("Only a draft or sent offer can be withdrawn.", 409);
-      const updated = await prisma.offer.update({
-        where: { id: offer.id },
-        data: { status: "WITHDRAWN", withdrawnAt: new Date() },
+      const withdrawnAt = new Date();
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${offer.applicationId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM "Offer" WHERE id = ${offer.id} FOR UPDATE`;
+        const locked = await tx.offer.findUnique({ where: { id: offer.id } });
+        if (!locked || !["DRAFT", "SENT"].includes(locked.status)) {
+          throw new ApiError("Offer state changed before withdrawal.", 409);
+        }
+
+        const row = await tx.offer.update({
+          where: { id: offer.id },
+          data: { status: "WITHDRAWN", withdrawnAt },
+        });
+
+        const workflow = await tx.workflowInstance.findUnique({
+          where: { correlationId: `offer-send:${offer.id}` },
+          select: { id: true, status: true, checkpointState: true },
+        });
+        if (workflow && ["RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"].includes(workflow.status)) {
+          await tx.workflowApproval.updateMany({
+            where: {
+              workflowInstanceId: workflow.id,
+              consumedAt: null,
+              revokedAt: null,
+            },
+            data: {
+              revokedAt: withdrawnAt,
+              revokedBy: session.id,
+              revocationReason: body.reason || "Offer withdrawn by authorized employer/admin.",
+            },
+          });
+          const checkpoint =
+            workflow.checkpointState &&
+            typeof workflow.checkpointState === "object" &&
+            !Array.isArray(workflow.checkpointState)
+              ? workflow.checkpointState as Record<string, unknown>
+              : {};
+          await tx.workflowInstance.update({
+            where: { id: workflow.id },
+            data: {
+              status: "CANCELLED",
+              currentStep: "OFFER_WITHDRAWN",
+              checkpointState: {
+                ...checkpoint,
+                offerId: offer.id,
+                withdrawnAt: withdrawnAt.toISOString(),
+                withdrawnBy: session.id,
+                withdrawalReason: body.reason || null,
+              } as Prisma.InputJsonValue,
+            },
+          });
+        }
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: session.id,
+            companyId: offer.companyId,
+            action: "OFFER_WITHDRAWN",
+            resource: `Offer:${offer.id}`,
+            details: JSON.stringify({
+              applicationId: offer.applicationId,
+              reason: body.reason || null,
+              withdrawnAt: withdrawnAt.toISOString(),
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+        return row;
       });
+
       if (offer.status === "SENT") {
         await prisma.notification.create({
           data: {
@@ -63,13 +129,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           },
         }).catch(() => undefined);
       }
-      await logAuditEvent({
-        userId: session.id,
-        companyId: offer.companyId,
-        action: "OFFER_WITHDRAWN",
-        resource: `Offer:${offer.id}`,
-        details: body.reason || "Offer withdrawn by authorized employer/admin.",
-      });
       return NextResponse.json({ success: true, offer: updated });
     }
 
@@ -78,8 +137,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (offer.status !== "DRAFT") throw new ApiError("Only a draft offer can be sent.", 409);
     if (offer.expiresAt.getTime() <= Date.now()) {
-      await prisma.offer.updateMany({ where: { id: offer.id, status: "DRAFT" }, data: { status: "EXPIRED" } });
+      await expireOfferIfDue(offer.id);
       throw new ApiError("This offer has expired and cannot be sent.", 409);
+    }
+    if (offer.application.status !== "SHORTLISTED") {
+      throw new ApiError("The candidate application is no longer eligible for this offer.", 409);
     }
 
     const tenantContext = createTenantContext(session.role === "ADMIN" ? null : offer.companyId, session.id, session.role as Role);
@@ -158,6 +220,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const sentAt = new Date();
     const updated = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${offer.applicationId} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: offer.applicationId },
+        select: { status: true },
+      });
+      if (!lockedApplication || lockedApplication.status !== "SHORTLISTED") {
+        throw new ApiError("The candidate application changed before the offer could be sent.", 409);
+      }
+
       await tx.$queryRaw`SELECT id FROM "Offer" WHERE id = ${offer.id} FOR UPDATE`;
       const locked = await tx.offer.findUnique({ where: { id: offer.id } });
       if (!locked || locked.status !== "DRAFT") throw new ApiError("Offer state changed before send.", 409);
@@ -180,16 +251,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           type: "OFFER",
         },
       });
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: offer.companyId,
+          action: "OFFER_SENT",
+          resource: `Offer:${offer.id}`,
+          details: JSON.stringify({
+            applicationId: offer.applicationId,
+            approvalId: approval.id,
+            workflowId: workflow!.id,
+            sentAt: sentAt.toISOString(),
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
       return row;
     });
 
-    await logAuditEvent({
-      userId: session.id,
-      companyId: offer.companyId,
-      action: "OFFER_SENT",
-      resource: `Offer:${offer.id}`,
-      details: `Application ${offer.applicationId}; approval ${approval.id}`,
-    });
     return NextResponse.json({ success: true, offer: updated, candidateOffersUrl: "/offers" });
   } catch (error) {
     return handleApiError(error);

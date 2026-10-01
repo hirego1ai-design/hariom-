@@ -243,17 +243,39 @@ async function reconcileOutboundStatus(status: any): Promise<void> {
   });
   if (!existing) return;
 
-  const rank: Record<string, number> = { PROCESSING: 0, ACCEPTED: 1, DELIVERED: 2, READ: 3 };
+  const rank: Record<string, number> = {
+    PROCESSING: 0,
+    ACCEPTED: 1,
+    DELIVERED: 2,
+    READ: 3,
+  };
+  if (existing.status === "FAILED") return;
   const currentRank = rank[existing.status] ?? -1;
   const now = new Date();
   let data: Record<string, unknown> | null = null;
 
   if (providerStatus === "read" && currentRank < rank.READ) {
-    data = { status: "READ", readAt: now, deliveredAt: now };
+    data = {
+      status: "READ",
+      readAt: now,
+      deliveredAt: now,
+      retryable: false,
+      nextAttemptAt: null,
+    };
   } else if (providerStatus === "delivered" && currentRank < rank.DELIVERED) {
-    data = { status: "DELIVERED", deliveredAt: now };
+    data = {
+      status: "DELIVERED",
+      deliveredAt: now,
+      retryable: false,
+      nextAttemptAt: null,
+    };
   } else if (providerStatus === "sent" && currentRank < rank.ACCEPTED) {
-    data = { status: "ACCEPTED", acceptedAt: now };
+    data = {
+      status: "ACCEPTED",
+      acceptedAt: now,
+      retryable: false,
+      nextAttemptAt: null,
+    };
   } else if (providerStatus === "failed" && currentRank < rank.DELIVERED) {
     const rawError = String(status?.errors?.[0]?.title ?? "Meta reported delivery failure.");
     const safeError = rawError
@@ -263,6 +285,13 @@ async function reconcileOutboundStatus(status: any): Promise<void> {
     data = {
       status: "FAILED",
       failedAt: now,
+      retryable: false,
+      nextAttemptAt: null,
+      retryLeaseId: null,
+      retryLeasedUntil: null,
+      replayEnvelopeEncrypted: null,
+      replayEnvelopeVersion: null,
+      replayExpiresAt: null,
       lastErrorCode: String(status?.errors?.[0]?.code ?? "META_DELIVERY_FAILED").slice(0, 100),
       lastError: safeError,
     };

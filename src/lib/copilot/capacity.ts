@@ -134,15 +134,30 @@ export async function reserveCopilotCapacity(params: {
   }
 
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.copilotUsageReservation.findUnique({ where: { idempotencyKey: params.idempotencyKey } });
+    const now = new Date();
+    const existing = await tx.copilotUsageReservation.findUnique({
+      where: { idempotencyKey: params.idempotencyKey },
+    });
     if (existing) {
-      if (existing.companyId !== params.companyId || existing.actionKey !== params.actionKey || existing.quantity !== quantity) {
-        throw new ApiError("Copilot idempotency key was already used for a different operation.", 409);
+      if (
+        existing.companyId !== params.companyId ||
+        existing.actionKey !== params.actionKey ||
+        existing.quantity !== quantity
+      ) {
+        throw new ApiError(
+          "Copilot idempotency key was already used for a different operation.",
+          409,
+        );
       }
-      return existing;
+      if (existing.status === "CONSUMED") return existing;
+      if (existing.status === "RESERVED" && existing.expiresAt > now) {
+        return existing;
+      }
+      // RELEASED/EXPIRED reservations represent an operation that never
+      // consumed capacity. They may be re-acquired under the same durable
+      // idempotency key after a transient start failure.
     }
 
-    const now = new Date();
     const subscription = await activeSubscription(tx, params.companyId, now);
     if (!subscription) throw new ApiError("An active HireGo Copilot subscription is required.", 402);
 
@@ -153,6 +168,51 @@ export async function reserveCopilotCapacity(params: {
     await expireReservedCapacityLocked(tx, cycle.id, now);
     const lockedCycle = await tx.copilotBillingCycle.findUnique({ where: { id: cycle.id } });
     if (!lockedCycle) throw new ApiError("Copilot billing cycle is unavailable.", 503);
+
+    // Another retry may have re-acquired the same key while this request was
+    // waiting for the billing-cycle lock. Re-read before charging capacity.
+    const currentExisting = await tx.copilotUsageReservation.findUnique({
+      where: { idempotencyKey: params.idempotencyKey },
+    });
+    if (currentExisting) {
+      if (
+        currentExisting.companyId !== params.companyId ||
+        currentExisting.actionKey !== params.actionKey ||
+        currentExisting.quantity !== quantity
+      ) {
+        throw new ApiError(
+          "Copilot idempotency key was already used for a different operation.",
+          409,
+        );
+      }
+      if (currentExisting.status === "CONSUMED") return currentExisting;
+      if (
+        currentExisting.status === "RESERVED" &&
+        currentExisting.expiresAt > now
+      ) {
+        return currentExisting;
+      }
+      if (currentExisting.status === "RESERVED") {
+        // An expired reservation from a prior cycle should be reconciled by
+        // capacity cleanup before this operation is retried.
+        throw new ApiError(
+          "Previous Copilot reservation requires capacity reconciliation before retry.",
+          409,
+        );
+      }
+      const removed = await tx.copilotUsageReservation.deleteMany({
+        where: {
+          id: currentExisting.id,
+          status: { in: ["RELEASED", "EXPIRED"] },
+        },
+      });
+      if (removed.count !== 1) {
+        throw new ApiError(
+          "Copilot reservation state changed while retrying the operation.",
+          409,
+        );
+      }
+    }
 
     const rule = await tx.copilotUsageRule.findUnique({ where: { actionKey: params.actionKey } });
     if (!rule || !rule.active) throw new ApiError("This Copilot capability is not currently enabled.", 409);

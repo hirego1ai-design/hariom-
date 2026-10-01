@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "./prisma";
 import { ApiError } from "./apiSecurity";
+import { enqueueSecurityAuditEvent } from "./securityAuditOutbox";
 
 export const PPH_RULE = "DAY_25";
 export const joiningSchema = z.object({
@@ -60,15 +61,110 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
       include: { job: { include: { company: true } }, candidateProfile: { include: { user: true } } } });
     if (!app) throw new ApiError("Application not found.", 404);
     authorizeBilling(actor, app.job.companyId);
+
+    // Joining and candidate offer response share the canonical lifecycle lock
+    // order Application -> Offer. Re-verify the accepted offer inside this
+    // transaction so billing never relies on a stale route-level preflight.
+    await tx.$queryRaw`SELECT id FROM "Offer" WHERE "applicationId" = ${app.id} FOR UPDATE`;
+    const acceptedOffer = await tx.offer.findFirst({
+      where: { applicationId: app.id, status: "ACCEPTED" },
+      orderBy: { acceptedAt: "desc" },
+      select: {
+        id: true,
+        companyId: true,
+        createdById: true,
+        compensationAmount: true,
+        currency: true,
+        acceptedAt: true,
+      },
+    });
+    if (!acceptedOffer?.acceptedAt) {
+      throw new ApiError(
+        "Candidate acceptance of a persisted offer is required before managed-hiring joining can be confirmed.",
+        409,
+      );
+    }
+    if (acceptedOffer.companyId !== app.job.companyId) {
+      throw new ApiError("Accepted offer does not belong to this application company.", 409);
+    }
+    if (joinedAt < acceptedOffer.acceptedAt) {
+      throw new ApiError("Confirmed joining cannot predate candidate offer acceptance.", 422);
+    }
+    if (!acceptedOffer.compensationAmount) {
+      throw new ApiError(
+        "Managed-hiring joining requires compensation to be stated in the candidate-accepted offer. Amend and re-accept the offer before joining.",
+        409,
+      );
+    }
+    if (!new Prisma.Decimal(acceptedOffer.compensationAmount).eq(annualCtc)) {
+      throw new ApiError(
+        "Joining CTC must match the candidate-accepted offer. Amend and re-accept the offer before joining.",
+        409,
+      );
+    }
+    if (acceptedOffer.currency !== "INR") {
+      throw new ApiError(
+        "Managed-hiring billing currently requires an INR accepted offer because commercial agreement currency is not yet explicitly modeled.",
+        409,
+      );
+    }
+
     const existing = await tx.pphPlacement.findUnique({ where: { applicationId: app.id } });
     if (existing) {
       if (existing.requestHash !== requestHash) throw new ApiError("Joining already recorded with different terms. Contact HireGo for reconciliation.", 409);
-      return { duplicate: true, placement: existing };
+      return { duplicate: true, placement: existing, acceptedOfferId: acceptedOffer.id };
     }
     if (app.status !== "SHORTLISTED") throw new ApiError("Only a shortlisted application can enter this joining flow. Existing hires require billing reconciliation.", 409);
+
+    const joiningCorrelationId = `offer-send:${acceptedOffer.id}`;
+    await tx.$queryRaw`SELECT id FROM "WorkflowInstance" WHERE "correlationId" = ${joiningCorrelationId} FOR UPDATE`;
+    let joiningWorkflow = await tx.workflowInstance.findUnique({
+      where: { correlationId: joiningCorrelationId },
+    });
+    if (!joiningWorkflow) {
+      joiningWorkflow = await tx.workflowInstance.create({
+        data: {
+          companyId: app.job.companyId,
+          jobId: app.jobId,
+          candidateId: app.candidateProfileId,
+          applicationId: app.id,
+          workflowType: "JOINING_ONBOARDING",
+          status: "RUNNING",
+          currentStep: "OFFER_ACCEPTED",
+          correlationId: joiningCorrelationId,
+          initiatedBy: acceptedOffer.createdById,
+          checkpointState: {
+            offerId: acceptedOffer.id,
+            source: "managed-hiring-joining-recovery",
+            candidateAccepted: true,
+            acceptedAt: acceptedOffer.acceptedAt.toISOString(),
+          },
+        },
+      });
+    }
+    if (
+      joiningWorkflow.workflowType !== "JOINING_ONBOARDING" ||
+      joiningWorkflow.applicationId !== app.id ||
+      joiningWorkflow.companyId !== app.job.companyId
+    ) {
+      throw new ApiError("Managed-hiring joining workflow does not match the accepted offer/application.", 409);
+    }
+    if (
+      joiningWorkflow.status !== "RUNNING" ||
+      joiningWorkflow.currentStep !== "OFFER_ACCEPTED"
+    ) {
+      throw new ApiError("Managed-hiring joining workflow requires reconciliation before confirmation.", 409);
+    }
+
     await tx.$queryRaw`SELECT id FROM "CommercialAgreement" WHERE id = ${body.agreementId} FOR SHARE`;
     const agreement = await tx.commercialAgreement.findUnique({ where: { id: body.agreementId } });
     if (!agreement || agreement.companyId !== app.job.companyId) throw new ApiError("Agreement does not belong to this company.", 403);
+    if (!app.job.managedAgreementId) {
+      throw new ApiError("This job is not linked to an approved managed-hiring agreement.", 409);
+    }
+    if (app.job.managedAgreementId !== agreement.id) {
+      throw new ApiError("Joining must use the managed-hiring agreement linked to this job.", 409);
+    }
     if (agreement.status !== "ACTIVE" || !agreement.signedAt || agreement.invoiceRule !== PPH_RULE) {
       throw new ApiError("A signed active agreement with the DAY_25 invoice rule is required. Existing agreements must be amended and accepted first.", 409);
     }
@@ -82,6 +178,7 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
     const placement = await tx.pphPlacement.create({ data: {
       applicationId: app.id, agreementId: agreement.id, companyId: app.job.companyId,
       joinedAt, invoiceEligibleAt: eligibleAt, annualCtc, ...amounts,
+      currency: acceptedOffer.currency,
       creditDays: agreement.creditDays, approvedBy: actor.id, approvedRole: actor.role, requestHash,
       termsSnapshot: { version: 1, invoiceRule: PPH_RULE, agreementNumber: agreement.agreementNumber,
         agreementUpdatedAt: agreement.updatedAt.toISOString(), signedAt: agreement.signedAt.toISOString(),
@@ -91,9 +188,64 @@ export async function confirmPphJoining(input: z.infer<typeof joiningSchema>, ac
         companyName: app.job.company.name, candidateName: app.candidateProfile.user.name, jobTitle: app.job.title },
     } });
     await tx.application.update({ where: { id: app.id }, data: { annualCtc: annualCtc.toNumber(), status: "HIRED" } });
+    await tx.candidateProfile.update({
+      where: { id: app.candidateProfileId },
+      data: {
+        availabilityStatus: "JOINED",
+        lastAvailabilityConfirmedAt: joinedAt,
+        availabilitySource: "EMPLOYER_JOINING_CONFIRMATION",
+        availabilityNote: "Actual joining confirmed through managed hiring.",
+      },
+    });
+    const joiningCheckpoint =
+      joiningWorkflow.checkpointState &&
+      typeof joiningWorkflow.checkpointState === "object" &&
+      !Array.isArray(joiningWorkflow.checkpointState)
+        ? joiningWorkflow.checkpointState as Record<string, unknown>
+        : {};
+    await tx.workflowInstance.update({
+      where: { id: joiningWorkflow.id },
+      data: {
+        status: "COMPLETED",
+        currentStep: "JOINING_CONFIRMED",
+        checkpointState: {
+          ...joiningCheckpoint,
+          offerId: acceptedOffer.id,
+          managedHiring: true,
+          placementId: placement.id,
+          joinedAt: joinedAt.toISOString(),
+          joiningConfirmedAt: now.toISOString(),
+          joiningConfirmedBy: actor.id,
+          joiningConfirmedByRole: actor.role,
+        } as Prisma.InputJsonValue,
+      },
+    });
     await tx.agreementEvent.create({ data: { agreementId: agreement.id, eventType: "PPH_JOINING_APPROVED",
       performedBy: actor.id, notes: `Placement ${placement.id}; approved role ${actor.role}; invoice eligible ${eligibleAt.toISOString()}` } });
-    return { duplicate: false, placement };
+    const auditLog = await tx.auditLog.create({
+      data: {
+        userId: actor.id,
+        companyId: app.job.companyId,
+        action: "PPH_JOINING_CONFIRMED",
+        resource: `Application:${app.id}`,
+        details: JSON.stringify({
+          placementId: placement.id,
+          agreementId: agreement.id,
+          acceptedOfferId: acceptedOffer.id,
+          acceptedAt: acceptedOffer.acceptedAt.toISOString(),
+          joiningWorkflowId: joiningWorkflow.id,
+          joinedAt: joinedAt.toISOString(),
+          invoiceEligibleAt: eligibleAt.toISOString(),
+        }),
+      },
+    });
+    await enqueueSecurityAuditEvent(tx, auditLog, actor.id);
+    return {
+      duplicate: false,
+      placement,
+      acceptedOfferId: acceptedOffer.id,
+      joiningWorkflowId: joiningWorkflow.id,
+    };
   }, { maxWait: 5000, timeout: 10000 });
 }
 
@@ -113,7 +265,29 @@ export class PphBillingWorker {
         if (placement.invoiceId || placement.status !== "SCHEDULED" || placement.invoiceEligibleAt > now) return "empty";
         if (placement.agreement.status !== "ACTIVE" || placement.application.status !== "HIRED" ||
             placement.agreement.companyId !== placement.companyId) {
-          await tx.pphPlacement.update({ where: { id: placement.id }, data: { status: "HOLD", holdReason: "Agreement or hiring status requires reconciliation." } });
+          const holdReason = "Agreement or hiring status requires reconciliation.";
+          await tx.pphPlacement.update({ where: { id: placement.id }, data: { status: "HOLD", holdReason } });
+          await tx.agreementEvent.create({ data: {
+            agreementId: placement.agreementId,
+            performedBy: "SYSTEM_PPH_BILLING",
+            eventType: "PPH_BILLING_HELD",
+            notes: `Placement ${placement.id}: ${holdReason}`,
+          } });
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: null,
+              companyId: placement.companyId,
+              action: "PPH_BILLING_HELD",
+              resource: `PphPlacement:${placement.id}`,
+              details: JSON.stringify({
+                agreementId: placement.agreementId,
+                applicationId: placement.applicationId,
+                holdReason,
+                invoiceEligibleAt: placement.invoiceEligibleAt.toISOString(),
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog);
           return "held";
         }
         const snapshotResult = z.object({ companyName: z.string(), candidateName: z.string().nullable(), jobTitle: z.string() }).safeParse(placement.termsSnapshot);
@@ -127,6 +301,21 @@ export class PphBillingWorker {
           await tx.agreementEvent.create({ data: { agreementId: placement.agreementId,
             performedBy: "SYSTEM_PPH_BILLING", eventType: "PPH_BILLING_HELD",
             notes: `Placement ${placement.id}: invalid approved terms snapshot; no invoice created.` } });
+          const auditLog = await tx.auditLog.create({
+            data: {
+              userId: null,
+              companyId: placement.companyId,
+              action: "PPH_BILLING_HELD",
+              resource: `PphPlacement:${placement.id}`,
+              details: JSON.stringify({
+                agreementId: placement.agreementId,
+                applicationId: placement.applicationId,
+                holdReason: "INVALID_TERMS_SNAPSHOT",
+                invoiceEligibleAt: placement.invoiceEligibleAt.toISOString(),
+              }),
+            },
+          });
+          await enqueueSecurityAuditEvent(tx, auditLog);
           return "held";
         }
         const snapshot = snapshotResult.data;
@@ -140,6 +329,25 @@ export class PphBillingWorker {
         await tx.pphPlacement.update({ where: { id: placement.id }, data: { status: "INVOICED", invoiceId: invoice.id } });
         await tx.agreementEvent.create({ data: { agreementId: placement.agreementId, performedBy: "SYSTEM_PPH_BILLING",
           eventType: "PPH_INVOICE_CREATED", notes: `Placement ${placement.id}; invoice ${invoice.invoiceNumber}` } });
+        const auditLog = await tx.auditLog.create({
+          data: {
+            userId: null,
+            companyId: placement.companyId,
+            action: "PPH_INVOICE_CREATED",
+            resource: `Invoice:${invoice.id}`,
+            details: JSON.stringify({
+              placementId: placement.id,
+              agreementId: placement.agreementId,
+              applicationId: placement.applicationId,
+              invoiceNumber: invoice.invoiceNumber,
+              totalAmount: invoice.totalAmount.toString(),
+              currency: invoice.currency,
+              invoiceEligibleAt: placement.invoiceEligibleAt.toISOString(),
+              dueDate: invoice.dueDate,
+            }),
+          },
+        });
+        await enqueueSecurityAuditEvent(tx, auditLog);
         return "invoiced";
       }, { maxWait: 2000, timeout: 5000 });
       if (result === "empty") break;

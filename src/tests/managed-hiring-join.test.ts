@@ -70,6 +70,7 @@ export async function runManagedHiringJoinTests(): Promise<{
     let application: any = null;
     let agreementA: any = null;
     let agreementB: any = null;
+    let agreementAlt: any = null;
 
     try {
       // Setup Companies
@@ -193,6 +194,31 @@ export async function runManagedHiringJoinTests(): Promise<{
         },
       });
 
+      agreementAlt = await prisma.commercialAgreement.create({
+        data: {
+          agreementNumber: `AGR-ALT-${testId}`,
+          companyId: companyA.id,
+          companyName: companyA.name,
+          clientLegalName: companyA.name,
+          contactPerson: "Contact Alt",
+          clientEmail: "alt@hirego.test",
+          clientPhone: "12345",
+          feeType: "PERCENTAGE",
+          feeValue: 9.5,
+          taxRatePct: 18.0,
+          invoiceRule: "DAY_25",
+          signedAt: new Date(Date.now() - 2 * 86400000),
+          validityStartDate: new Date(Date.now() - 30 * 86400000),
+          status: "ACTIVE",
+          validityEndDate: new Date(Date.now() + 365 * 86400000),
+        },
+      });
+
+      await prisma.jobListing.update({
+        where: { id: jobListing.id },
+        data: { managedAgreementId: agreementA.id },
+      });
+
       const tokenEmployer = createSessionToken({
         id: employerA.id,
         email: employerA.email,
@@ -236,6 +262,72 @@ export async function runManagedHiringJoinTests(): Promise<{
         "Request correctly rejected when using agreement belonging to Company B"
       );
 
+      const resWrongLinked = await callJoinApi(tokenEmployer, {
+        applicationId: application.id,
+        agreementId: agreementAlt.id,
+        ...joiningFields,
+      });
+      assert(
+        "PPH joining must use the agreement explicitly linked to the job",
+        resWrongLinked.status === 409 &&
+          resWrongLinked.json.error.includes("linked to this job"),
+        "Same-company commercial terms cannot be substituted for the job-linked agreement"
+      );
+
+      const joinedBeforeAcceptance = await callJoinApi(tokenEmployer, {
+        applicationId: application.id,
+        agreementId: agreementA.id,
+        annualCtc: 2000000,
+        joinedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+        termsAccepted: true,
+      });
+      assert(
+        "Managed-hiring joining cannot predate candidate offer acceptance",
+        joinedBeforeAcceptance.status === 422 &&
+          joinedBeforeAcceptance.json.error.includes("cannot predate candidate offer acceptance"),
+        "DAY_25 billing clock cannot start before the persisted offer was accepted.",
+      );
+
+      await prisma.offer.updateMany({
+        where: { applicationId: application.id, status: "ACCEPTED" },
+        data: { compensationAmount: null },
+      });
+      const missingAcceptedCompensation = await callJoinApi(tokenEmployer, {
+        applicationId: application.id,
+        agreementId: agreementA.id,
+        ...joiningFields,
+      });
+      assert(
+        "Managed-hiring billing requires compensation stated in the accepted offer",
+        missingAcceptedCompensation.status === 409 &&
+          missingAcceptedCompensation.json.error.includes("requires compensation to be stated"),
+        "PPH fee basis cannot be supplied only by the employer after candidate acceptance.",
+      );
+      await prisma.offer.updateMany({
+        where: { applicationId: application.id, status: "ACCEPTED" },
+        data: { compensationAmount: 2000000 },
+      });
+
+      await prisma.offer.updateMany({
+        where: { applicationId: application.id, status: "ACCEPTED" },
+        data: { currency: "USD" },
+      });
+      const nonInrOfferJoin = await callJoinApi(tokenEmployer, {
+        applicationId: application.id,
+        agreementId: agreementA.id,
+        ...joiningFields,
+      });
+      assert(
+        "Managed-hiring joining fails closed for offer currency not modeled by the agreement",
+        nonInrOfferJoin.status === 409 &&
+          nonInrOfferJoin.json.error.includes("requires an INR accepted offer"),
+        "PPH placement must not silently reinterpret a non-INR offer as INR billing.",
+      );
+      await prisma.offer.updateMany({
+        where: { applicationId: application.id, status: "ACCEPTED" },
+        data: { currency: "INR" },
+      });
+
       // --- 3. Test Secure Financial Calculation and Idempotency ---
       const res3 = await callJoinApi(tokenEmployer, {
         applicationId: application.id,
@@ -252,6 +344,32 @@ export async function runManagedHiringJoinTests(): Promise<{
         Number(placement.taxAmount) === 36000 && 
         Number(placement.totalAmount) === 236000,
         "Server computed invoice details securely from database records"
+      );
+
+      const persistedAcceptedOffer = await prisma.offer.findFirst({
+        where: { applicationId: application.id, status: "ACCEPTED" },
+        select: { id: true },
+      });
+      const completedJoiningWorkflow = persistedAcceptedOffer
+        ? await prisma.workflowInstance.findUnique({
+            where: { correlationId: `offer-send:${persistedAcceptedOffer.id}` },
+          })
+        : null;
+      assert(
+        "Managed-hiring joining completes the durable joining workflow",
+        completedJoiningWorkflow?.status === "COMPLETED" &&
+          completedJoiningWorkflow.currentStep === "JOINING_CONFIRMED",
+        "PPH joining must not leave the offer/joining workflow running after the application becomes HIRED.",
+      );
+
+      const joinedCandidate = await prisma.candidateProfile.findUnique({
+        where: { id: candidateProfile.id },
+        select: { availabilityStatus: true, lastAvailabilityConfirmedAt: true },
+      });
+      assert(
+        "Managed-hiring joining updates authoritative candidate availability",
+        joinedCandidate?.availabilityStatus === "JOINED" && Boolean(joinedCandidate.lastAvailabilityConfirmedAt),
+        "Confirmed joining marks the candidate JOINED in the same transaction.",
       );
 
       // Replay identical request with same idempotency key
@@ -364,9 +482,25 @@ export async function runManagedHiringJoinTests(): Promise<{
       );
 
       // Cleanup
+      const applicationResources = [application.id, application2.id].map((id) => `Application:${id}`);
+      const joiningAudits = await prisma.auditLog.findMany({
+        where: { resource: { in: applicationResources }, action: "PPH_JOINING_CONFIRMED" },
+        select: { id: true },
+      }).catch(() => []);
+      if (joiningAudits.length) {
+        await prisma.securityAuditOutboxEvent.deleteMany({
+          where: { auditLogId: { in: joiningAudits.map((audit) => audit.id) } },
+        }).catch(() => undefined);
+      }
+      await prisma.auditLog.deleteMany({
+        where: { resource: { in: applicationResources }, action: "PPH_JOINING_CONFIRMED" },
+      }).catch(() => undefined);
       await prisma.pphPlacement.deleteMany({ where: { companyId: companyA.id } }).catch(() => undefined);
+      await prisma.workflowInstance.deleteMany({
+        where: { applicationId: { in: [application.id, application2.id] } },
+      }).catch(() => undefined);
       await prisma.invoice.deleteMany({ where: { agreementId: { in: [agreementA.id, agreementB.id] } } }).catch(() => undefined);
-      await prisma.commercialAgreement.deleteMany({ where: { id: { in: [agreementA.id, agreementB.id] } } }).catch(() => undefined);
+      await prisma.commercialAgreement.deleteMany({ where: { id: { in: [agreementA.id, agreementB.id, agreementAlt.id] } } }).catch(() => undefined);
       await prisma.application.deleteMany({ where: { id: { in: [application.id, application2.id] } } }).catch(() => undefined);
       await prisma.jobListing.delete({ where: { id: jobListing.id } }).catch(() => undefined);
       await prisma.employerProfile.deleteMany({ where: { userId: { in: [employerA.id, recruiterA.id] } } }).catch(() => undefined);

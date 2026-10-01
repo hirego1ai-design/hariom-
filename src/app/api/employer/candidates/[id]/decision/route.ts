@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -14,6 +14,8 @@ import {
 } from "@/lib/routeAuthorization";
 import { createTenantContext } from "@/lib/security/TenantContext";
 import { WorkflowEngine } from "@/lib/workflows/WorkflowEngine";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { dispatchDecisionCommunication } from "@/lib/communications/dispatcher";
 
 const schema = z.object({
   action: z.literal("REJECT"),
@@ -42,8 +44,22 @@ export async function POST(
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
       include: {
-        job: { select: { id: true, companyId: true, title: true } },
-        candidateProfile: { select: { id: true } },
+        job: {
+          select: {
+            id: true,
+            companyId: true,
+            title: true,
+            company: { select: { name: true } },
+          },
+        },
+        candidateProfile: {
+          select: {
+            id: true,
+            user: {
+              select: { id: true, name: true, email: true, phoneNumber: true },
+            },
+          },
+        },
         gates: {
           select: { type: true, status: true, assessmentId: true },
         },
@@ -69,6 +85,12 @@ export async function POST(
     if (["HIRED", "WITHDRAWN"].includes(application.status)) {
       throw new ApiError(
         "This application is already in a terminal state and cannot be rejected.",
+        409,
+      );
+    }
+    if (!["APPLIED", "SCREENING"].includes(application.status)) {
+      throw new ApiError(
+        "This rejection endpoint is limited to pre-interview screening. Use the dedicated interview decision or offer reconciliation workflow for later stages.",
         409,
       );
     }
@@ -248,7 +270,7 @@ export async function POST(
         context: tenantContext,
       });
     }
-    if (approval.decision !== "APPROVED") {
+    if (approval.decision !== "APPROVED" || !approval.decidedBy) {
       throw new ApiError("Candidate rejection approval is not approved.", 409);
     }
 
@@ -267,6 +289,101 @@ export async function POST(
           "Application entered a terminal state before rejection was executed.",
           409,
         );
+      }
+      if (!["APPLIED", "SCREENING"].includes(lockedApplication.status)) {
+        throw new ApiError(
+          "Application advanced beyond screening before rejection was executed. Use the dedicated later-stage workflow.",
+          409,
+        );
+      }
+
+      // Serialize rejection against offer send/accept on the same application.
+      // Existing offer mutations also lock the Offer row, so this closes the
+      // race where an application could become REJECTED while an offer is
+      // simultaneously SENT or ACCEPTED.
+      await tx.$queryRaw`SELECT id FROM "Offer" WHERE "applicationId" = ${applicationId} FOR UPDATE`;
+      const activeOffers = await tx.offer.findMany({
+        where: {
+          applicationId,
+          status: { in: ["DRAFT", "SENT", "ACCEPTED"] },
+        },
+        select: { id: true, status: true },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const acceptedOffer = activeOffers.find((offer) => offer.status === "ACCEPTED");
+      if (acceptedOffer) {
+        throw new ApiError(
+          "This candidate already accepted an offer. Reconcile the accepted offer or joining workflow before rejecting the application.",
+          409,
+        );
+      }
+      const sentOffer = activeOffers.find((offer) => offer.status === "SENT");
+      if (sentOffer) {
+        throw new ApiError(
+          "A sent offer is awaiting the candidate response. Withdraw or reconcile the offer before rejecting the application.",
+          409,
+        );
+      }
+
+      const invalidatedDraftOfferIds: string[] = [];
+      for (const offer of activeOffers.filter((item) => item.status === "DRAFT")) {
+        const withdrawnAt = new Date();
+        const withdrawn = await tx.offer.updateMany({
+          where: { id: offer.id, status: "DRAFT", applicationId },
+          data: { status: "WITHDRAWN", withdrawnAt },
+        });
+        if (withdrawn.count !== 1) {
+          throw new ApiError(
+            "Offer state changed while candidate rejection was being executed.",
+            409,
+          );
+        }
+        invalidatedDraftOfferIds.push(offer.id);
+
+        const offerWorkflow = await tx.workflowInstance.findUnique({
+          where: { correlationId: `offer-send:${offer.id}` },
+          select: { id: true, status: true, checkpointState: true },
+        });
+        if (
+          offerWorkflow &&
+          ["RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"].includes(offerWorkflow.status)
+        ) {
+          await tx.workflowApproval.updateMany({
+            where: {
+              workflowInstanceId: offerWorkflow.id,
+              consumedAt: null,
+              revokedAt: null,
+            },
+            data: {
+              revokedAt: withdrawnAt,
+              revokedBy: session.id,
+              revocationReason:
+                "Employer rejected the application before the draft offer was sent.",
+            },
+          });
+          const checkpoint =
+            offerWorkflow.checkpointState &&
+            typeof offerWorkflow.checkpointState === "object" &&
+            !Array.isArray(offerWorkflow.checkpointState)
+              ? (offerWorkflow.checkpointState as Record<string, unknown>)
+              : {};
+          await tx.workflowInstance.update({
+            where: { id: offerWorkflow.id },
+            data: {
+              status: "CANCELLED",
+              currentStep: "APPLICATION_REJECTED",
+              checkpointState: {
+                ...checkpoint,
+                offerId: offer.id,
+                cancelledAt: withdrawnAt.toISOString(),
+                cancelledBy: session.id,
+                cancellationReason:
+                  "Employer rejected the application before the draft offer was sent.",
+              } as Prisma.InputJsonValue,
+            },
+          });
+        }
       }
 
       await WorkflowEngine.consumeApprovedActionInTransaction(tx, {
@@ -290,15 +407,21 @@ export async function POST(
         );
       }
 
-      await tx.auditLog.create({
+      const auditLog = await tx.auditLog.create({
         data: {
           userId: session.id,
           companyId: application.job.companyId,
           action: "CANDIDATE_REJECTED",
           resource: `Application:${applicationId}`,
-          details: body.reason,
+          details: JSON.stringify({
+            reason: body.reason,
+            invalidatedDraftOfferIds,
+            workflowId: workflow.id,
+            approvalId: approval.id,
+          }),
         },
       });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
 
       const completed = await tx.workflowInstance.updateMany({
         where: { id: workflow.id, status: "RUNNING" },
@@ -317,6 +440,46 @@ export async function POST(
 
       return { idempotent: false };
     });
+
+    if (!result.idempotent) {
+      const candidate = application.candidateProfile.user;
+      const authorizationProof = {
+        workflowId: workflow.id,
+        approvalId: approval.id,
+        approvedByUserId: approval.decidedBy,
+      };
+      const variables = {
+        candidate_name: candidate.name || "Candidate",
+        company_name: application.job.company.name,
+        job_title: application.job.title,
+      };
+      if (candidate.email) {
+        await dispatchDecisionCommunication({
+          eventKey: "APPLICATION_REJECTED",
+          channel: "EMAIL",
+          audience: "CANDIDATE",
+          recipient: candidate.email,
+          variables,
+          idempotencyKey: `application:${applicationId}:screening-rejection:candidate:email`,
+          correlationId: applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+        }).catch(() => null);
+      }
+      if (candidate.phoneNumber) {
+        await dispatchDecisionCommunication({
+          eventKey: "APPLICATION_REJECTED",
+          channel: "WHATSAPP",
+          audience: "CANDIDATE",
+          recipient: candidate.phoneNumber,
+          variables,
+          idempotencyKey: `application:${applicationId}:screening-rejection:candidate:whatsapp`,
+          correlationId: applicationId,
+          recipientRef: candidate.id,
+          authorizationProof,
+        }).catch(() => null);
+      }
+    }
 
     return NextResponse.json({
       success: true,

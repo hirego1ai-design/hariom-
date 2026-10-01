@@ -3,8 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { dispatchCommunication } from "@/lib/communications/dispatcher";
-import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { reconcileCopilotReservation } from "@/lib/copilot/capacity";
 
 const changeSchema = z.object({ action: z.enum(["CANCEL", "RESCHEDULE"]), scheduledAt: z.string().datetime().optional(), reason: z.string().max(500).optional() });
 
@@ -81,8 +82,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.action === "RESCHEDULE" && new Date(body.scheduledAt!).getTime() <= Date.now()) {
       return NextResponse.json({ success: false, error: "New interview date and time must be in the future." }, { status: 400 });
     }
+    if (interview.application.status !== "AI_INTERVIEW") {
+      return NextResponse.json(
+        { success: false, error: "This application is no longer in the active interview workflow." },
+        { status: 409 },
+      );
+    }
     if (["COMPLETED", "FEEDBACK_SUBMITTED"].includes(interview.status)) {
       return NextResponse.json({ success: false, error: "A completed interview cannot be cancelled or rescheduled." }, { status: 409 });
+    }
+    if (interview.status === "LIVE" && body.action === "RESCHEDULE") {
+      return NextResponse.json(
+        { success: false, error: "A live interview cannot be rescheduled. End or cancel the active room first." },
+        { status: 409 },
+      );
     }
     if (interview.status === "CANCELLED" && body.action === "CANCEL") {
       return NextResponse.json({ success: true, interview: { id: interview.id, status: interview.status, scheduledAt: interview.scheduledAt }, idempotent: true });
@@ -94,8 +107,48 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const nextStatus = body.action === "CANCEL" ? "CANCELLED" : "RESCHEDULED";
     const nextScheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : interview.scheduledAt;
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const changeResult = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${interview.applicationId} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: interview.applicationId },
+        select: { status: true },
+      });
+      if (!lockedApplication || lockedApplication.status !== "AI_INTERVIEW") {
+        throw new ApiError(
+          "Application left the active interview workflow before this change could be saved.",
+          409,
+        );
+      }
+
       await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${interview.id} FOR UPDATE`;
+      const lockedInterview = await tx.interview.findUnique({
+        where: { id: interview.id },
+        select: { status: true, scheduledAt: true },
+      });
+      if (!lockedInterview) throw new ApiError("Interview not found.", 404);
+      if (["COMPLETED", "FEEDBACK_SUBMITTED"].includes(lockedInterview.status)) {
+        throw new ApiError(
+          "Interview completed before this change could be saved.",
+          409,
+        );
+      }
+      if (lockedInterview.status === "CANCELLED") {
+        if (body.action === "CANCEL") {
+          const row = await tx.interview.findUniqueOrThrow({ where: { id: interview.id } });
+          return { interview: row, changed: false };
+        }
+        throw new ApiError(
+          "A cancelled interview must be scheduled as a new interview.",
+          409,
+        );
+      }
+      if (lockedInterview.status === "LIVE" && body.action === "RESCHEDULE") {
+        throw new ApiError(
+          "A live interview cannot be rescheduled. End or cancel the active room first.",
+          409,
+        );
+      }
+
       if (body.action === "RESCHEDULE") {
         const participantIds = [
           interview.application.candidateProfile.userId,
@@ -137,13 +190,102 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
       });
       if (body.action === "CANCEL" && interview.roundProgress) {
-        await tx.interviewRoundProgress.update({
-          where: { id: interview.roundProgress.id },
+        const cancelledProgress = await tx.interviewRoundProgress.updateMany({
+          where: {
+            id: interview.roundProgress.id,
+            interviewId: interview.id,
+            status: { in: ["PENDING", "SCHEDULED", "LIVE", "ON_HOLD"] },
+          },
           data: { status: "CANCELLED", interviewId: null },
         });
+        if (cancelledProgress.count !== 1) {
+          throw new ApiError(
+            "Interview round state changed before cancellation could be saved.",
+            409,
+          );
+        }
       }
-      return row;
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: interview.application.job.companyId,
+          action: body.action === "CANCEL" ? "INTERVIEW_CANCELLED" : "INTERVIEW_RESCHEDULED",
+          resource: `Interview:${interview.id}`,
+          ipAddress: req.headers.get("x-forwarded-for") || undefined,
+          details: JSON.stringify({
+            applicationId: interview.applicationId,
+            previousStatus: lockedInterview.status,
+            nextStatus: row.status,
+            previousScheduledAt: lockedInterview.scheduledAt.toISOString(),
+            scheduledAt: row.scheduledAt.toISOString(),
+            reason: body.reason || null,
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
+      return { interview: row, changed: true };
     });
+
+    const updated = changeResult.interview;
+    if (!changeResult.changed) {
+      return NextResponse.json({
+        success: true,
+        interview: { id: updated.id, status: updated.status, scheduledAt: updated.scheduledAt },
+        idempotent: true,
+        message: "Interview was already cancelled.",
+      });
+    }
+
+    if (body.action === "CANCEL" && updated.startedAt) {
+      const cancelledAt = new Date();
+      const actualMinutes = Math.max(
+        1,
+        Math.ceil((cancelledAt.getTime() - updated.startedAt.getTime()) / 60_000),
+      );
+      const reservations = await prisma.copilotUsageReservation.findMany({
+        where: {
+          companyId: interview.application.job.companyId,
+          interviewId: interview.id,
+          idempotencyKey: {
+            in: [
+              `live-interview:${interview.id}:video`,
+              `live-interview:${interview.id}:proctoring`,
+            ],
+          },
+        },
+      });
+      for (const reservation of reservations) {
+        try {
+          await reconcileCopilotReservation({
+            reservationId: reservation.id,
+            actualQuantity:
+              reservation.actionKey === "VIDEO_INTERVIEW_MINUTE"
+                ? actualMinutes
+                : 1,
+            allowOverage: true,
+            metadata: {
+              scheduledDurationMins: interview.durationMins,
+              actualDurationMins: actualMinutes,
+              cancelledAt: cancelledAt.toISOString(),
+              lifecycleOutcome: "INTERVIEW_CANCELLED",
+            },
+          });
+        } catch (meterError) {
+          await prisma.auditLog.create({
+            data: {
+              companyId: interview.application.job.companyId,
+              action: "COPILOT_USAGE_RECONCILIATION_FAILED",
+              resource: `Interview:${interview.id}`,
+              details:
+                meterError instanceof Error
+                  ? meterError.message.slice(0, 500)
+                  : "Unknown metering reconciliation failure after cancellation",
+            },
+          }).catch(() => undefined);
+        }
+      }
+    }
 
     const candidate = interview.application.candidateProfile.user;
     const eventKey = body.action === "CANCEL" ? "INTERVIEW_CANCELLED" : "INTERVIEW_RESCHEDULED";
@@ -173,17 +315,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           correlationId: interview.id,
           recipientRef: interview.application.candidateProfile.userId,
         }).then((delivery) => ({ status: delivery.status, deliveryId: delivery.id })).catch((error) => ({ status: "FAILED", error: error instanceof Error ? error.message : "Email dispatch failed." }));
-
-    await logAuditEvent({
-      userId: session.id,
-      companyId: interview.application.job.companyId,
-      action: body.action === "CANCEL" ? "INTERVIEW_CANCELLED" : "INTERVIEW_RESCHEDULED",
-      resource: `Interview:${interview.id}`,
-      ipAddress: req.headers.get("x-forwarded-for") || undefined,
-      details: body.action === "CANCEL"
-        ? `Cancelled interview; reason=${body.reason || "not provided"}`
-        : `Rescheduled interview to ${nextScheduledAt.toISOString()}; reason=${body.reason || "not provided"}`,
-    });
 
     return NextResponse.json({
       success: true,
