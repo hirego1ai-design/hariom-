@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!city) return {};
   return marketingMetadata({
     path: `/free-job-posting/${city.slug}`,
-    title: `AI Hiring & Free Job Posting in ${city.name} | HireGo AI`,
+    title: `Free Job Posting in ${city.name} for Employers | HireGo AI`,
     description: `Post jobs in ${city.name}, screen applicants, coordinate assessments and manage interviews with HireGo AI's recruitment and hiring workflow for employers.`,
   });
 }
@@ -54,7 +54,7 @@ export default async function FreeJobPostingCityPage({ params }: Props) {
         <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Employers · {city.regionLabel}</p>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting & AI Hiring Platform in {city.name}</h1>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting in {city.name}</h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-300">{city.employerIntro}</p>
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-400">
               HireGo AI brings job posting, applicant tracking, structured screening, assessments and interview coordination into one employer workflow for teams hiring in {city.name}.
