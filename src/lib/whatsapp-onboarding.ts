@@ -445,7 +445,7 @@ export async function processWhatsAppMessage(
       return {
         reply:
           `Welcome to HireGo AI.\n\nWe found multiple accounts associated with this number. ` +
-          `Please contact support at support@hirego.ai to verify your identity.`,
+          `Please contact support at support@hiregoai.com to verify your identity.`,
         nextStep: "START",
         sessionComplete: false,
       };
@@ -650,7 +650,7 @@ export async function processWhatsAppMessage(
         return {
           reply:
             `An account with that email already exists.\n\nIf this is your account, please reply *cancel* ` +
-            `and contact support@hirego.ai, or use a different email address.`,
+            `and contact support@hiregoai.com, or use a different email address.`,
           nextStep: "EMAIL",
           sessionComplete: false,
         };
