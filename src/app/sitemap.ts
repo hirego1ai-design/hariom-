@@ -12,7 +12,7 @@ export const revalidate = 3600;
 // candidate, admin and API routes are intentionally excluded.
 const publicPaths = [
   "/", "/features", "/services", "/solutions", "/video-resume",
-  "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hiring-in",
+  "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hire-talent-in-india", "/hiring-in",
   "/pricing", "/about", "/company", "/enterprise", "/contact",
   "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources",
   "/ai-features", "/certifications", "/post-job-public", "/jobs", "/jobs-in", "/free-job-posting",
@@ -23,7 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = publicPaths.map((path) => ({
     url: `${base}${path === "/" ? "" : path}`,
     changeFrequency: path === "/" ? "weekly" : path === "/jobs" ? "daily" : "monthly",
-    priority: path === "/" ? 1 : ["/services", "/solutions", "/video-resume", "/about", "/resources", "/jobs", "/free-job-posting"].includes(path) ? .8 : .6,
+    priority: path === "/" ? 1 : ["/services", "/solutions", "/video-resume", "/hire-talent-in-india", "/about", "/resources", "/jobs", "/free-job-posting"].includes(path) ? .8 : .6,
   }));
 
   const hiringCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({

@@ -32,6 +32,7 @@ export default function HiringInIndiaPage() {
             <div className={styles.actions}>
               <Link className={styles.button} href="/pay-per-hire">Explore Pay Per Hire ↗</Link>
               <Link className={styles.buttonOutline} href="/register?type=employer">Start as an employer</Link>
+              <Link className={styles.buttonOutline} href="/hire-talent-in-india">Hire Indian talent globally</Link>
             </div>
           </div>
         </section>
