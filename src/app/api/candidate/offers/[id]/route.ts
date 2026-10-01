@@ -181,7 +181,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
 
 
-    if (result.notifyUserId !== session.id) {
+    if (result.notifyUserId && result.notifyUserId !== session.id) {
       await prisma.notification.create({
         data: {
           userId: result.notifyUserId,
