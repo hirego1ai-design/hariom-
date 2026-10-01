@@ -16,6 +16,7 @@ import {
 const checkoutSchema = z.object({
   packageId: z.string().uuid(),
   paymentMethod: z.enum(["AUTO", "STRIPE", "PAYU"]).optional().default("AUTO"),
+  returnTo: z.enum(["mock-interview"]).optional(),
 }).strict();
 
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/;
@@ -92,7 +93,13 @@ export async function GET(request: NextRequest) {
         take: 100,
       }),
       prisma.candidateServiceCatalog.findMany({
-        where: { isActive: true },
+        // Mock Interview debits atomically when a real session starts. Never
+        // expose it through the generic service-request debit path as that
+        // would charge the candidate twice.
+        where: {
+          isActive: true,
+          serviceKey: { notIn: ["mock-interview", "mock_interview"] },
+        },
         select: { serviceKey: true, name: true, description: true, creditCost: true },
         orderBy: { name: "asc" },
       }),
@@ -181,7 +188,9 @@ export async function POST(request: NextRequest) {
     }
 
     const returnBase = appBaseUrl();
-    const returnPath = `/api/candidate/credits/return?orderId=${encodeURIComponent(orderId)}`;
+    const returnPath =
+      `/api/candidate/credits/return?orderId=${encodeURIComponent(orderId)}` +
+      (input.returnTo === "mock-interview" ? "&returnTo=mock-interview" : "");
     let gatewayResult;
     try {
       gatewayResult = await PaymentGatewayController.createOrder({
