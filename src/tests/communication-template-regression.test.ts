@@ -389,14 +389,14 @@ test("WhatsApp delivery status is monotonic and failed is terminal", () => {
 });
 
 
-test("full recovery endpoint prefers a dedicated key with secure cron fallback", () => {
+test("full recovery endpoint requires a dedicated recovery key and never falls back to cron credentials", () => {
   const source = fs.readFileSync(new URL("../lib/workflows/RecoveryWorkerState.ts", import.meta.url), "utf8");
 
   assert(source.includes("process.env.WORKER_RECOVERY_API_KEY?.trim()"));
-  assert(source.includes("process.env.CRON_SECRET?.trim()"));
-  assert(source.indexOf("WORKER_RECOVERY_API_KEY") < source.indexOf("CRON_SECRET"));
+  assert(!source.includes("process.env.CRON_SECRET?.trim()"));
   assert(source.includes("expected.length < 32"));
   assert(source.includes("timingSafeEqual"));
+  assert(source.includes("Recovery worker key is not configured."));
 });
 
 
