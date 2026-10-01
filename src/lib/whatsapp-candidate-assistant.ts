@@ -139,7 +139,17 @@ async function classifyCandidateIntentWithAi(raw: string): Promise<CandidateInte
   }
 }
 
-async function resolveCandidateIntent(raw: string): Promise<CandidateIntent> {
+async function resolveCandidateIntent(raw: string, sessionId: string): Promise<CandidateIntent> {
+  const text = normalizedText(raw);
+  if (["yes", "y", "haan", "ha", "sure", "okay", "ok"].includes(text)) {
+    const memory = await readMemory(sessionId);
+    if (memory.assistant?.lastOfferKey === "MOCK_INTERVIEW_UPCOMING") return { type: "MOCK_INTERVIEW" };
+    if (memory.assistant?.lastOfferKey === "VIDEO_RESUME_DISCOVERY") return { type: "VIDEO_RESUME" };
+    if (memory.assistant?.lastOfferKey === "REFERRAL_DISCOVERY" || memory.assistant?.lastOfferKey === "REFERRAL_EXPLAIN_MORE") {
+      return { type: "REFERRAL" };
+    }
+  }
+
   const deterministic = routeWhatsAppCandidateIntent(raw);
   if (deterministic.type !== "UNKNOWN") return deterministic;
   return classifyCandidateIntentWithAi(raw);
@@ -315,6 +325,62 @@ async function maybeInterviewPracticeOffer(userId: string, sessionId: string): P
   );
 }
 
+async function candidateGreeting(userId: string, sessionId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      videoResumes: { select: { id: true }, take: 1 },
+    },
+  });
+  if (!candidate) {
+    return "Your HireGo account is connected, but your candidate profile still needs attention. Reply *profile* and I’ll open the secure profile step.";
+  }
+
+  const pendingGate = await prisma.applicationGate.findFirst({
+    where: {
+      application: { candidateProfileId: candidate.id },
+      status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+    },
+    include: { application: { include: { job: { select: { title: true } } } } },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (pendingGate) {
+    return (
+      "Welcome back. You have a required step pending for *" +
+      compact(pendingGate.application.job.title, 70) +
+      "*. Reply *application status* and I’ll take you to the correct secure action."
+    );
+  }
+
+  const practiceOffer = await maybeInterviewPracticeOffer(userId, sessionId);
+  if (practiceOffer) {
+    return "Welcome back. 👋" + practiceOffer;
+  }
+
+  const memory = await readMemory(sessionId);
+  const lastOfferAt = memory.assistant?.lastOfferAt ? Date.parse(memory.assistant.lastOfferAt) : 0;
+  const offerCoolingDown = Number.isFinite(lastOfferAt) && Date.now() - lastOfferAt < 30 * 24 * 60 * 60 * 1000;
+
+  if (!candidate.videoResumes.length && !offerCoolingDown) {
+    await writeMemory(sessionId, {
+      lastOfferKey: "VIDEO_RESUME_DISCOVERY",
+      lastOfferAt: new Date().toISOString(),
+    });
+    return "Your core HireGo profile is ready. Want to add a *Video Resume* so employers can review richer evidence? Reply *yes* or *video resume*.";
+  }
+
+  if (!offerCoolingDown) {
+    await writeMemory(sessionId, {
+      lastOfferKey: "REFERRAL_DISCOVERY",
+      lastOfferAt: new Date().toISOString(),
+    });
+    return "Welcome back. 👋 Did you know HireGo also has a referral program where eligible qualifying referrals can earn rewards? Reply *yes* or *referral* and I’ll show your real current rules and link.";
+  }
+
+  return "Welcome back. Tell me the outcome you want in normal language — jobs, application status, interview practice, Video Resume, referrals, profile or support.";
+}
+
 async function listApplications(userId: string, sessionId: string, statusOnly = false) {
   const candidate = await prisma.candidateProfile.findUnique({
     where: { userId },
@@ -355,8 +421,23 @@ async function listApplications(userId: string, sessionId: string, statusOnly = 
     return `*${index + 1}. ${compact(application.job.title, 65)}*${company}\nStatus: ${application.status.replace(/_/g, " ")}${gate}${offer}`;
   });
 
+  let pendingAction = "";
+  const actionable = applications.find((application) => application.gates[0]?.assessmentId);
+  if (actionable?.gates[0]?.assessmentId) {
+    const gate = actionable.gates[0];
+    const link = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+      ? await makeHandoffLink(userId, sessionId, "skill-validation", {
+          assessmentId: gate.assessmentId,
+          applicationId: actionable.id,
+        })
+      : await makeHandoffLink(userId, sessionId, "job-assessment", {
+          assessmentId: gate.assessmentId,
+        });
+    pendingAction = `\n\nContinue your pending assessment securely:\n${link}`;
+  }
+
   const practiceOffer = await maybeInterviewPracticeOffer(userId, sessionId);
-  return `${statusOnly ? "Your latest application status:" : "Your recent applications:"}\n\n${lines.join("\n\n")}\n\nReply *1* to find more jobs.${practiceOffer}`;
+  return `${statusOnly ? "Your latest application status:" : "Your recent applications:"}\n\n${lines.join("\n\n")}\n\nReply *1* to find more jobs.${pendingAction}${practiceOffer}`;
 }
 
 async function applyToRememberedJob(userId: string, sessionId: string, index: number) {
@@ -551,6 +632,10 @@ async function videoResumeHandoff(userId: string, sessionId: string) {
 }
 
 async function referralHandoff(userId: string, sessionId: string) {
+  await writeMemory(sessionId, {
+    lastOfferKey: "REFERRAL_EXPLAIN_MORE",
+    lastOfferAt: new Date().toISOString(),
+  });
   const [summary, link] = await Promise.all([
     buildReferralWhatsAppSummary(userId),
     makeHandoffLink(userId, sessionId, "referrals"),
@@ -595,7 +680,7 @@ export async function handleCompletedWhatsAppAssistant(params: {
 
   switch (intent.type) {
     case "MENU":
-      return MENU;
+      return candidateGreeting(params.userId, params.sessionId);
     case "FIND_JOBS":
       return findRecommendedJobs(params.userId, params.sessionId);
     case "APPLICATIONS":
