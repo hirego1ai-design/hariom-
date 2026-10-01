@@ -154,6 +154,15 @@ async function reactivateSession(sessionId: string): Promise<void> {
 const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ' .-]{2,60}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+export function extractWhatsAppReferralCode(raw: string): string | null {
+  const bounded = raw.trim().slice(0, 2_000);
+  const match =
+    bounded.match(/[?&]ref=([A-Za-z0-9_-]{4,64})(?:[&#\s]|$)/i) ||
+    bounded.match(/(?:^|\s)(?:ref|referral)\s*[:=\-]?\s*([A-Za-z0-9_-]{4,64})(?:\s|$)/i);
+  return match?.[1] ? match[1].toUpperCase() : null;
+}
+
+
 function validateName(raw: string): { valid: boolean; value?: string; error?: string } {
   const v = raw.trim();
   if (!NAME_RE.test(v)) return { valid: false, error: "Please enter a valid full name (2–60 letters)." };
