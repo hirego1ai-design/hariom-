@@ -63,7 +63,14 @@ export async function POST(request: Request) {
       },
     });
 
-    if (mockService && mockService.creditCost > 0) {
+    if (!mockService) {
+      throw new ApiError(
+        "AI Mock Interview is temporarily unavailable because its candidate credit configuration is not published.",
+        503,
+      );
+    }
+
+    if (mockService.creditCost > 0) {
       const wallet = await prisma.candidateCreditWallet.upsert({
         where: { candidateProfileId: candidateProfile.id },
         create: { candidateProfileId: candidateProfile.id, balance: 0 },
@@ -104,7 +111,7 @@ export async function POST(request: Request) {
     let interviewSession;
     try {
       interviewSession = await prisma.$transaction(async (tx) => {
-      if (mockService && mockService.creditCost > 0) {
+      if (mockService.creditCost > 0) {
         const debit = await tx.candidateCreditWallet.updateMany({
           where: {
             candidateProfileId: candidateProfile.id,
