@@ -407,7 +407,25 @@ export async function processWhatsAppMessage(
   }
 
   const currentStep = session.currentStep as OnboardingStep;
-  const data = (session.collectedData ?? {}) as CollectedData;
+  let data = (session.collectedData ?? {}) as CollectedData;
+
+  // QR/share/referral links can pre-fill a referral code in the first message.
+  // Capture it once; never let a later message overwrite first-touch attribution.
+  const inboundReferralCode = extractWhatsAppReferralCode(msg);
+  if (inboundReferralCode && !data.referralCode && session.status !== "COMPLETE") {
+    data = { ...data, referralCode: inboundReferralCode };
+    await prisma.whatsAppOnboardingSession.update({
+      where: { id: session.id },
+      data: {
+        collectedData: data as any,
+        referralCode: inboundReferralCode,
+        attributionSource:
+          session.attributionSource && session.attributionSource !== "whatsapp"
+            ? session.attributionSource
+            : "whatsapp_referral",
+      },
+    });
+  }
 
   // ── Expired/cancelled session recovery ────────────────────────────────────
   if (currentStep === "EXPIRED" || session.status === "EXPIRED") {
@@ -436,18 +454,20 @@ export async function processWhatsAppMessage(
         where: { id: userId },
         select: { role: true },
       });
-      const reply = user && user.role !== "CANDIDATE"
-        ? await handleLinkedEmployerWhatsApp({
-            userId,
-            sessionId: session.id,
-            message: msg,
-          })
-        : await handleCompletedWhatsAppAssistant({
+      const reply = user?.role === "CANDIDATE"
+        ? await handleCompletedWhatsAppAssistant({
             waId,
             userId,
             sessionId: session.id,
             message: msg,
-          });
+          })
+        : user && ["EMPLOYER", "RECRUITER"].includes(user.role)
+          ? await handleLinkedEmployerWhatsApp({
+              userId,
+              sessionId: session.id,
+              message: msg,
+            })
+          : "Admin operations remain in the secured HireGo admin portal.";
       return {
         reply,
         nextStep: "COMPLETE",
@@ -481,11 +501,13 @@ export async function processWhatsAppMessage(
             sessionId: session.id,
             message: msg,
           })
-        : await handleLinkedEmployerWhatsApp({
-            userId: identity.user!.id,
-            sessionId: session.id,
-            message: msg,
-          });
+        : ["EMPLOYER", "RECRUITER"].includes(identity.user!.role)
+          ? await handleLinkedEmployerWhatsApp({
+              userId: identity.user!.id,
+              sessionId: session.id,
+              message: msg,
+            })
+          : "Admin operations remain in the secured HireGo admin portal.";
       return {
         reply,
         nextStep: "COMPLETE",
