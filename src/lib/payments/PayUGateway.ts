@@ -182,6 +182,7 @@ export class PayUGateway implements PaymentGateway {
       isValid: true,
       gatewayTxId,
       gatewayOrderId,
+      orderId: udf1 || undefined,
       companyId: udf2 || undefined,
       planId: udf3 || undefined,
       amount: amount ? parseFloat(amount) : undefined,
