@@ -46,7 +46,13 @@ export async function POST(request: Request) {
     if (!event) return NextResponse.json({ success: true, skipped: true });
 
     try {
-      const result = await processWhatsAppMessage(event.waId, event.messageText || "");
+      const rawPayload = event.rawPayload && typeof event.rawPayload === "object"
+        ? event.rawPayload as Record<string, unknown>
+        : {};
+      const campaignMeta = rawPayload.referral && typeof rawPayload.referral === "object"
+        ? rawPayload.referral as Record<string, unknown>
+        : undefined;
+      const result = await processWhatsAppMessage(event.waId, event.messageText || "", { campaignMeta });
       const sent = await sendWhatsAppTextMessage(event.waId, result.reply);
       if (!sent.sent) {
         const retryable = isTransientFailure(sent.reason);
