@@ -544,7 +544,7 @@ export async function processWhatsAppMessage(
         message: msg,
       });
       return {
-        reply,
+        reply: reply ?? "Tell me whether you are hiring people or looking for a job.",
         nextStep: "EMPLOYER_LEAD",
         sessionComplete: false,
       };
@@ -638,7 +638,7 @@ export async function processWhatsAppMessage(
     if (audience === "EMPLOYER") {
       await saveStep(session.id, "EMPLOYER_LEAD", data);
       const reply = await handleUnlinkedEmployerSalesLead({ sessionId: session.id, message: msg });
-      return { reply, nextStep: "EMPLOYER_LEAD", sessionComplete: false };
+      return { reply: reply ?? "Tell me the hiring outcome you need.", nextStep: "EMPLOYER_LEAD", sessionComplete: false };
     }
     if (audience === "CANDIDATE") {
       await saveStep(session.id, "NAME", {});
@@ -672,7 +672,7 @@ export async function processWhatsAppMessage(
       return { reply: "Conversation paused. Send *Hi* whenever you want to continue.", nextStep: "CANCELLED", sessionComplete: false };
     }
     const reply = await handleUnlinkedEmployerSalesLead({ sessionId: session.id, message: msg });
-    return { reply, nextStep: "EMPLOYER_LEAD", sessionComplete: false };
+    return { reply: reply ?? "Tell me the hiring outcome you need.", nextStep: "EMPLOYER_LEAD", sessionComplete: false };
   }
 
   // ── Command handling (any active step) ────────────────────────────────────
