@@ -12,12 +12,16 @@ export async function fulfillCopilotCapacityAddon(params: {
   rawPayload: unknown;
 }) {
   const { paymentOrder, verification, provider, gatewayTxId } = params;
+  const companyId = paymentOrder.companyId;
+  if (!companyId) {
+    throw new ApiError("Company payment order is missing its company binding.", 409);
+  }
   const snapshot = parseCopilotCapacityAddonSnapshot(paymentOrder.planSnapshot);
   const expectedAmount = snapshot.amountMinor / 100;
 
   if (paymentOrder.planId !== snapshot.offerId) throw new ApiError("Copilot add-capacity snapshot does not match the order.", 409);
   if (paymentOrder.billingCountry !== snapshot.billingCountry) throw new ApiError("Copilot add-capacity billing country mismatch.", 409);
-  if (verification.companyId && verification.companyId !== paymentOrder.companyId) throw new ApiError("Gateway company does not match the add-capacity order.", 400);
+  if (verification.companyId && verification.companyId !== companyId) throw new ApiError("Gateway company does not match the add-capacity order.", 400);
   if (verification.currency && verification.currency !== snapshot.currency) throw new ApiError("Gateway currency does not match the add-capacity order.", 400);
   if (verification.amount === undefined || !Number.isFinite(verification.amount) || verification.amount <= 0) {
     throw new ApiError("Gateway payment amount missing or invalid.", 400);
@@ -50,7 +54,7 @@ export async function fulfillCopilotCapacityAddon(params: {
       },
       create: {
         gatewayTxId,
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         productType: "COPILOT_ADDON",
         planId: snapshot.offerId,
         amount: expectedAmount,
@@ -70,7 +74,7 @@ export async function fulfillCopilotCapacityAddon(params: {
     if (
       !cycle ||
       cycle.subscriptionId !== snapshot.subscriptionId ||
-      cycle.subscription.companyId !== paymentOrder.companyId ||
+      cycle.subscription.companyId !== companyId ||
       cycle.status !== "ACTIVE" ||
       cycle.startsAt > now ||
       cycle.endsAt <= now ||
@@ -86,7 +90,7 @@ export async function fulfillCopilotCapacityAddon(params: {
       data: {
         subscriptionId: snapshot.subscriptionId,
         billingCycleId: snapshot.billingCycleId,
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         capacityUnits: snapshot.capacityUnits,
         amountMinor: snapshot.amountMinor,
         currency: snapshot.currency,
@@ -101,7 +105,7 @@ export async function fulfillCopilotCapacityAddon(params: {
 
     await tx.auditLog.create({
       data: {
-        companyId: paymentOrder.companyId,
+        companyId: companyId,
         action: "COPILOT_CAPACITY_ADDED",
         resource: `CopilotBillingCycle:${cycle.id}`,
         details: JSON.stringify({
