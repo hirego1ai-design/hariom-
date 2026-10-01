@@ -6,11 +6,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import AdminLoginPage from "@/app/admin/login/page";
+import { POST_AUTH_REDIRECT_STORAGE_KEY, safeInternalRedirect } from "@/lib/clientRedirect";
 
 function CandidateLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roleParam = searchParams.get("role");
+  const requestedRedirect = safeInternalRedirect(searchParams.get("redirect"), "/dashboard");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -47,6 +49,9 @@ function CandidateLoginContent() {
       if (!response.ok || !result.success) {
         if (result.requiresEmailVerification) {
           sessionStorage.setItem("pending_otp_email", email);
+          if (requestedRedirect !== "/dashboard") {
+            sessionStorage.setItem(POST_AUTH_REDIRECT_STORAGE_KEY, requestedRedirect);
+          }
           router.push("/otp");
           return;
         }
@@ -55,7 +60,10 @@ function CandidateLoginContent() {
         return;
       }
 
-      router.replace("/dashboard");
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+      }
+      router.replace(requestedRedirect);
       router.refresh();
     } catch (error: unknown) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to sign in. Please try again.");
@@ -218,18 +226,6 @@ function CandidateLoginContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between px-1 pt-0.5">
-                <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
-                  />
-                  <span className="text-[11px] text-text-secondary font-medium">
-                    Keep me signed in
-                  </span>
-                </label>
-              </div>
-
               <div className="pt-1">
                 <button
                   className="btn-3d-red w-full h-11 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 group shadow-md disabled:opacity-50"
@@ -252,7 +248,12 @@ function CandidateLoginContent() {
 
               <p className="text-center font-body-md text-[11px] text-text-secondary mt-2">
                 Don't have an account?{" "}
-                <Link href="/register" className="text-primary hover:underline font-bold">
+                <Link
+                  href={requestedRedirect !== "/dashboard"
+                    ? `/register?redirect=${encodeURIComponent(requestedRedirect)}`
+                    : "/register"}
+                  className="text-primary hover:underline font-bold"
+                >
                   Create Account
                 </Link>
               </p>

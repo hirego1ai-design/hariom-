@@ -3,9 +3,20 @@
 import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { POST_AUTH_REDIRECT_STORAGE_KEY, safeInternalRedirect } from "@/lib/clientRedirect";
 
 export default function OnboardingCompletePage() {
+  const router = useRouter();
+  const [postAuthRedirect, setPostAuthRedirect] = useState("");
   const [assessmentState, setAssessmentState] = useState<{ loading: boolean; assessmentId?: string; noticeUrl?: string; alreadyCurrent?: boolean; error?: string }>({ loading: true });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+      setPostAuthRedirect(safeInternalRedirect(stored, ""));
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,12 +88,25 @@ export default function OnboardingCompletePage() {
                   Skill Validation unavailable — review later
                 </Link>
               )}
-              <Link
-                href="/dashboard"
-                className="w-full sm:w-auto px-8 py-3 rounded-full bg-yellow text-bg-page font-bold text-xs shadow-[0_0_20px_rgba(255,200,0,0.35)] hover:scale-105 transition-all"
-              >
-                Go to Candidate Dashboard
-              </Link>
+              {postAuthRedirect ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.removeItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+                    router.push(postAuthRedirect);
+                  }}
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-yellow text-bg-page font-bold text-xs shadow-[0_0_20px_rgba(255,200,0,0.35)] hover:scale-105 transition-all"
+                >
+                  Continue to selected job
+                </button>
+              ) : (
+                <Link
+                  href="/dashboard"
+                  className="w-full sm:w-auto px-8 py-3 rounded-full bg-yellow text-bg-page font-bold text-xs shadow-[0_0_20px_rgba(255,200,0,0.35)] hover:scale-105 transition-all"
+                >
+                  Go to Candidate Dashboard
+                </Link>
+              )}
               <Link
                 href="/jobs"
                 className="w-full sm:w-auto px-8 py-3 rounded-full bg-surface-container border border-outline text-text-primary font-bold text-xs hover:bg-white/10 transition-all"

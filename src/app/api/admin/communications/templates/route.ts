@@ -18,7 +18,7 @@ const createSchema = z.object({
   audience: z.enum(COMMUNICATION_AUDIENCES),
   name: z.string().trim().min(3).max(120),
   locale: z.string().regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/).default("en"),
-  provider: z.enum(["ZEPTOMAIL", "META"]).optional(),
+  provider: z.enum(["ZEPTOMAIL", "SENDGRID", "META"]).optional(),
   providerTemplateId: z.string().trim().max(512).optional(),
   providerAlias: z.string().trim().max(512).optional(),
   subject: z.string().trim().max(200).optional(),
@@ -90,8 +90,13 @@ export async function POST(request: Request) {
       }
     }
 
-    if (body.channel === "EMAIL" && body.provider !== "ZEPTOMAIL") {
-      throw new ApiError("Stored email templates must use ZEPTOMAIL.", 422);
+    if (body.channel === "EMAIL") {
+      if (body.provider !== "ZEPTOMAIL" && body.provider !== "SENDGRID") {
+        throw new ApiError("Email templates must use ZEPTOMAIL or SENDGRID.", 422);
+      }
+      if (!body.subject?.trim()) {
+        throw new ApiError("Email templates require a subject for provider routing and fallback.", 422);
+      }
     }
 
     const template = await prisma.$transaction(async (tx) => {

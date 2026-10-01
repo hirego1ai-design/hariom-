@@ -210,42 +210,14 @@ export default function JobsClient({
     }
   };
 
-  const apply = async (job: Job) => {
-    if (appliedJobs.includes(job.id)) return;
-    setNotice("");
-    setError("");
-
-    try {
-      const response = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: job.id }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (response.status === 401) {
-        router.push(`/login?redirect=${encodeURIComponent("/jobs")}`);
-        return;
-      }
-      if (response.status === 202 && data.success && data.assessmentRequired && data.noticeUrl) {
-        router.push(data.noticeUrl);
-        return;
-      }
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Application could not be submitted.");
-      }
-
-      setAppliedJobs((current) => current.includes(job.id) ? current : [...current, job.id]);
-
-      if (data.assessmentRequired && data.assessmentType === "JOB_SPECIFIC_ASSESSMENT" && data.assessmentUrl) {
-        router.push(data.assessmentUrl);
-        return;
-      }
-
-      setNotice(`Application submitted for ${job.title}.`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Application could not be submitted.");
-    }
+  const apply = (job: Job) => {
+    if (appliedJobs.includes(job.id) || candidateStateLoading) return;
+    const destination = `/jobs/${job.id}/apply`;
+    router.push(
+      candidateAuthenticated
+        ? destination
+        : `/login?redirect=${encodeURIComponent(destination)}`,
+    );
   };
 
   const toggleSaved = async (jobId: string) => {
@@ -265,7 +237,7 @@ export default function JobsClient({
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 401) {
-        router.push(`/login?redirect=${encodeURIComponent("/jobs")}`);
+        router.push(`/login?redirect=${encodeURIComponent(`/jobs/${jobId}`)}`);
         return;
       }
       if (!response.ok || !data.success) {
@@ -329,7 +301,7 @@ export default function JobsClient({
                   <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
                     <strong className="text-text-primary">See how well this job matches you</strong>
                     <p className="mt-1 text-text-muted">Create your candidate profile to get an evidence-based match score from your skills and experience.</p>
-                    <Link href="/register?redirect=%2Fjobs" prefetch={false} className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary hover:bg-primary/10">
+                    <Link href={`/register?redirect=${encodeURIComponent(`/jobs/${job.id}`)}`} prefetch={false} className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary hover:bg-primary/10">
                       Check My Match
                     </Link>
                   </div>
@@ -362,7 +334,7 @@ export default function JobsClient({
                   </Link>
                   <button
                     type="button"
-                    onClick={() => void apply(job)}
+                    onClick={() => apply(job)}
                     disabled={applied || candidateStateLoading}
                     className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-90"
                   >

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, Home } from "lucide-react";
-import { syncCandidateRegistrationData } from "@/services/candidateProfileService";
+import { POST_AUTH_REDIRECT_STORAGE_KEY, safeInternalRedirect } from "@/lib/clientRedirect";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,13 +13,10 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [postAuthRedirect, setPostAuthRedirect] = useState("");
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
-    phone: "",
-    dob: "",
-    country: "",
-    city: "",
     password: "",
   });
 
@@ -27,6 +24,13 @@ export default function RegisterPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get("ref");
+      const requestedRedirect = safeInternalRedirect(params.get("redirect"), "");
+      setPostAuthRedirect(requestedRedirect);
+      if (requestedRedirect) {
+        sessionStorage.setItem(POST_AUTH_REDIRECT_STORAGE_KEY, requestedRedirect);
+      } else {
+        sessionStorage.removeItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+      }
       if (ref) {
         setReferralCode(ref.toUpperCase());
         document.cookie = `hirego_ref=${ref.toUpperCase()}; path=/; max-age=${30 * 86400}`;
@@ -70,15 +74,6 @@ export default function RegisterPage() {
         setIsLoading(false);
         return;
       }
-
-      // Synchronize client profile data
-      syncCandidateRegistrationData({
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        location: formData.city ? `${formData.city}, ${formData.country}` : formData.country,
-        userId: data.user?.id || `USR-${Date.now()}`,
-      });
 
       if (typeof window !== "undefined") {
         sessionStorage.setItem("pending_otp_email", formData.email);
@@ -174,7 +169,12 @@ export default function RegisterPage() {
               <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
             </div>
             <nav className="registration-nav mb-4" aria-label="Registration navigation">
-              <Link href="/login" className="registration-nav-link"><ArrowLeft size={15} aria-hidden="true" /> Back to sign in</Link>
+              <Link
+                href={postAuthRedirect ? `/login?redirect=${encodeURIComponent(postAuthRedirect)}` : "/login"}
+                className="registration-nav-link"
+              >
+                <ArrowLeft size={15} aria-hidden="true" /> Back to sign in
+              </Link>
               <Link href="/" className="registration-nav-link"><Home size={15} aria-hidden="true" /> Home</Link>
             </nav>
             <div className="mb-4 text-center">
@@ -190,9 +190,9 @@ export default function RegisterPage() {
               <div className="mb-4 p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-xs text-green-400 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <span>Referral Invite Applied: <span className="font-mono text-white">{referralCode}</span></span>
+                  <span>Referral code captured: <span className="font-mono text-white">{referralCode}</span></span>
                 </span>
-                <span className="text-[10px] text-green-300 font-medium">₹250 Welcome Bonus Active</span>
+                <span className="text-[10px] text-green-300 font-medium">Eligibility is checked by the server</span>
               </div>
             )}
 
@@ -232,75 +232,6 @@ export default function RegisterPage() {
                     placeholder="rahul@example.com"
                     type="email"
                     required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Phone Number
-                  </label>
-                  <input
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
-                    placeholder="+1 555-0199"
-                    type="tel"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Date of Birth
-                  </label>
-                  <input
-                    name="dob"
-                    value={formData.dob}
-                    onChange={handleInputChange}
-                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
-                    type="date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Country
-                  </label>
-                  <div className="relative">
-                    <select
-                      name="country"
-                      value={formData.country}
-                      onChange={handleInputChange}
-                      className="input-pill w-full h-11 text-xs text-text-primary px-4 appearance-none cursor-pointer"
-                    >
-                      <option value="United States" className="bg-[#181818] text-white">United States</option>
-                      <option value="India" className="bg-[#181818] text-white">India</option>
-                      <option value="United Kingdom" className="bg-[#181818] text-white">United Kingdom</option>
-                      <option value="Canada" className="bg-[#181818] text-white">Canada</option>
-                      <option value="Germany" className="bg-[#181818] text-white">Germany</option>
-                      <option value="Singapore" className="bg-[#181818] text-white">Singapore</option>
-                    </select>
-                    <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-secondary text-[18px]">
-                      expand_more
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    City
-                  </label>
-                  <input
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
-                    placeholder="e.g. San Francisco"
-                    type="text"
                   />
                 </div>
               </div>
@@ -356,7 +287,7 @@ export default function RegisterPage() {
               <p className="text-center font-body-md text-xs text-text-secondary mt-3">
                 Already have an account?{" "}
                 <Link
-                  href="/login"
+                  href={postAuthRedirect ? `/login?redirect=${encodeURIComponent(postAuthRedirect)}` : "/login"}
                   className="text-primary hover:underline font-bold"
                 >
                   Sign In

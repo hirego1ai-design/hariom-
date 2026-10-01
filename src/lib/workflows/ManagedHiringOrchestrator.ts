@@ -216,12 +216,16 @@ export async function resolveManagedHiringNextAction(
   }
 
   if (latestOffer.status === "ACCEPTED") {
+    const managedHiring = Boolean(
+      application.job.managedAgreementId || application.job.managedRequirementId,
+    );
     return {
       ...screenedBase,
       nextAction: "WAIT_FOR_JOINING_CONFIRMATION",
       humanDecisionRequired: true,
-      reason:
-        "The candidate accepted the persisted offer. Actual joining must be confirmed before PPH billing can proceed.",
+      reason: managedHiring
+        ? "The candidate accepted the persisted offer. Actual joining must be confirmed before the managed-hiring placement can proceed to billing."
+        : "The candidate accepted the persisted offer. Actual joining must be confirmed to complete the direct-hire workflow.",
     };
   }
 

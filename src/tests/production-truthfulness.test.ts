@@ -293,6 +293,21 @@ test("privileged page guard, OTP hashing, and security headers remain enabled", 
   assert.doesNotMatch(nextConfig, /Referrer-Policy.*origin-when-cross-origin/);
 });
 
+test("production environment example uses the canonical HireGo domain and dedicated recovery secret", () => {
+  const envExample = read(".env.example");
+  assert.doesNotMatch(envExample, /https:\/\/hirego\.ai(?:\b|\/)/);
+  for (const marker of [
+    "NEXTAUTH_URL=https://hiregoai.com",
+    "APP_URL=https://hiregoai.com",
+    "NEXT_PUBLIC_APP_URL=https://hiregoai.com",
+    "VIDEO_ANALYSIS_CALLBACK_ORIGIN=https://hiregoai.com",
+    "The full recovery worker does not accept CRON_SECRET as a fallback.",
+  ]) {
+    assert.ok(envExample.includes(marker), `.env.example missing canonical production marker: ${marker}`);
+  }
+});
+
+
 test("seed script cannot silently target localhost or add sample companies", () => {
   const seed = read("prisma/seed.ts");
   assert.doesNotMatch(seed, /postgresql:\/\/postgres:postgres@localhost/);

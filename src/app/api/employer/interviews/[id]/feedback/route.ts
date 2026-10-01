@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { getSessionCompany } from "@/lib/routeAuthorization";
-import { logAuditEvent } from "@/lib/auditLogger";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const schema = z.object({
   recommendation: z.enum(["PROCEED", "ON_HOLD", "REJECT"]),
@@ -50,6 +50,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await enforceRateLimit(req, "interview_feedback_submit", 20, 60000);
     const { id } = await params; const { session, interview } = await authorized(req, id);
     if (!interview.roundProgress) throw new ApiError("This interview is not connected to a configured interview round.", 409);
+    if (interview.application.status !== "AI_INTERVIEW") {
+      throw new ApiError(
+        "Feedback cannot advance a candidate whose application has left the active interview workflow.",
+        409,
+      );
+    }
     if (!["COMPLETED","FEEDBACK_SUBMITTED"].includes(interview.status)) throw new ApiError("Feedback can be finalized only after the interview has ended.", 409);
     const body = await readValidatedJson(req, schema);
     const policy = interview.roundProgress.round.candidateFeedbackPolicy;
@@ -59,9 +65,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (existing?.finalizedAt) throw new ApiError("Finalized feedback cannot be edited. Use an audited amendment workflow for corrections.", 409);
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
-      // Serialize finalization for this interview so concurrent submissions by
-      // the same interviewer cannot both pass the preflight immutability check.
+      // Serialize on Application -> Interview, matching withdrawal and room
+      // lifecycle lock order. This prevents late feedback from reviving round
+      // state after a candidate has withdrawn or otherwise left interviews.
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${interview.applicationId} FOR UPDATE`;
+      const lockedApplication = await tx.application.findUnique({
+        where: { id: interview.applicationId },
+        select: { status: true },
+      });
+      if (!lockedApplication || lockedApplication.status !== "AI_INTERVIEW") {
+        throw new ApiError(
+          "Application left the active interview workflow before feedback could be finalized.",
+          409,
+        );
+      }
+
       await tx.$queryRaw`SELECT id FROM "Interview" WHERE id = ${id} FOR UPDATE`;
+      const lockedInterview = await tx.interview.findUnique({
+        where: { id },
+        select: { status: true },
+      });
+      if (
+        !lockedInterview ||
+        !["COMPLETED", "FEEDBACK_SUBMITTED"].includes(lockedInterview.status)
+      ) {
+        throw new ApiError(
+          "Interview state changed before feedback could be finalized.",
+          409,
+        );
+      }
+
       const lockedExisting = await tx.interviewFeedback.findUnique({
         where: { interviewId_authorId: { interviewId: id, authorId: session.id } },
         select: { finalizedAt: true },
@@ -88,9 +121,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: "FEEDBACK_SUBMITTED" },
         });
       }
+
+      const auditLog = await tx.auditLog.create({
+        data: {
+          userId: session.id,
+          companyId: interview.application.job.companyId,
+          action: "INTERVIEW_FEEDBACK_FINALIZED",
+          resource: `Interview:${id}`,
+          details: JSON.stringify({
+            applicationId: interview.applicationId,
+            roundProgressId: interview.roundProgress!.id,
+            feedbackId: feedback.id,
+            recommendation: body.recommendation,
+            roundComplete: complete,
+            pendingFeedbackCount: Math.max(0, requiredIds.length - finalized.length),
+            finalizedAt: now.toISOString(),
+          }),
+        },
+      });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
       return { feedback, roundComplete: complete, pendingFeedbackCount: Math.max(0, requiredIds.length - finalized.length) };
     });
-    await logAuditEvent({ userId: session.id, companyId: interview.application.job.companyId, action: "INTERVIEW_FEEDBACK_FINALIZED", resource: `Interview:${id}`, details: `Finalized assigned-interviewer feedback; roundComplete=${result.roundComplete}` });
     return NextResponse.json({ success: true, ...result });
   } catch (e) { return handleApiError(e); }
 }

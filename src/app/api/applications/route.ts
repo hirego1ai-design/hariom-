@@ -9,12 +9,19 @@ import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const applicationSchema = z.object({
   jobId: z.string().uuid(),
-  answers: z.object({
-    noticePeriod: z.string().trim().max(200).optional(),
-    experienceYears: z.string().trim().max(20).optional(),
-    whyJoin: z.string().trim().max(5_000).optional(),
-  }).strict().optional(),
+  answers: z.record(
+    z.string().trim().min(1).max(500),
+    z.string().trim().max(5_000),
+  ).refine((value) => Object.keys(value).length <= 20, {
+    message: "Too many screening answers.",
+  }).optional(),
 }).strict();
+
+const LEGACY_APPLICATION_ANSWER_KEYS = new Set([
+  "noticePeriod",
+  "experienceYears",
+  "whyJoin",
+]);
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,22 +72,93 @@ export async function POST(req: NextRequest) {
     if (session.role !== "CANDIDATE") return jsonError("Candidate access required", 403);
 
     const { jobId, answers } = await readValidatedJson(req, applicationSchema);
-    const screeningAnswers = answers ? (answers as Prisma.InputJsonValue) : undefined;
-    const persistScreeningAnswers = async (applicationId: string) => {
-      if (!screeningAnswers) return;
-      await prisma.application.updateMany({
-        where: { id: applicationId },
-        data: { screeningAnswers },
-      });
-    };
+    const now = new Date();
     const [job, candidate] = await Promise.all([
-      prisma.jobListing.findUnique({ where: { id: jobId } }),
+      prisma.jobListing.findFirst({
+        where: {
+          id: jobId,
+          status: "ACTIVE",
+          publishedAt: { not: null },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+      }),
       prisma.candidateProfile.findUnique({ where: { userId: session.id } }),
     ]);
 
-    if (!job) return jsonError("Job listing not found", 404);
-    if (job.status !== "ACTIVE") return jsonError("This job is no longer accepting applications", 409);
+    if (!job) return jsonError("This job is not published or is no longer accepting applications.", 409);
     if (!candidate) return jsonError("Complete your candidate profile before applying.", 409);
+
+    const configuredScreeningQuestions = Array.from(
+      new Set(
+        (job.screeningQuestions ?? [])
+          .map((question) => question.trim())
+          .filter(Boolean),
+      ),
+    ).slice(0, 20);
+    const submittedAnswers = answers ?? {};
+    const allowedAnswerKeys = new Set([
+      ...configuredScreeningQuestions,
+      ...LEGACY_APPLICATION_ANSWER_KEYS,
+    ]);
+    const unexpectedAnswer = Object.keys(submittedAnswers).find(
+      (key) => !allowedAnswerKeys.has(key),
+    );
+    if (unexpectedAnswer) {
+      return jsonError("One or more screening answers do not belong to this job.", 422);
+    }
+    const missingRequiredAnswer = configuredScreeningQuestions.find(
+      (question) => !submittedAnswers[question]?.trim(),
+    );
+    if (missingRequiredAnswer) {
+      return jsonError("Complete all screening questions before applying.", 422);
+    }
+
+    const screeningAnswers =
+      Object.keys(submittedAnswers).length > 0
+        ? (submittedAnswers as Prisma.InputJsonValue)
+        : undefined;
+    const canonicalScreeningAnswers = (value: Prisma.JsonValue | null) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const record = value as Record<string, Prisma.JsonValue>;
+      const entries = Object.entries(record)
+        .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+        .sort(([left], [right]) => left.localeCompare(right));
+      if (entries.length !== Object.keys(record).length) return null;
+      return JSON.stringify(Object.fromEntries(entries));
+    };
+    const persistScreeningAnswers = async (applicationId: string) => {
+      if (!screeningAnswers) return;
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${applicationId} FOR UPDATE`;
+        const current = await tx.application.findUnique({
+          where: { id: applicationId },
+          select: { screeningAnswers: true },
+        });
+        if (!current) throw new ApiError("Application not found.", 404);
+
+        const submittedCanonical = canonicalScreeningAnswers(
+          screeningAnswers as Prisma.JsonValue,
+        );
+        const currentCanonical = canonicalScreeningAnswers(
+          current.screeningAnswers as Prisma.JsonValue | null,
+        );
+
+        if (current.screeningAnswers !== null && current.screeningAnswers !== undefined) {
+          if (!currentCanonical || currentCanonical !== submittedCanonical) {
+            throw new ApiError(
+              "Screening answers are already locked for this application.",
+              409,
+            );
+          }
+          return;
+        }
+
+        await tx.application.update({
+          where: { id: applicationId },
+          data: { screeningAnswers },
+        });
+      });
+    };
 
     const targetRole = getCandidateTargetRole(candidate.preferences) || job.title;
     const { RosGateway } = await import("@/lib/ros/RosGateway");
@@ -195,12 +273,14 @@ export async function POST(req: NextRequest) {
 
     if (!validationState.completedAndCurrent) {
       let pending;
+      let pendingWasExisting = false;
       try {
         pending = await RosGateway.handleApplicationValidationIntent({
           userId: session.id,
           jobId,
           candidateProfileId: candidate.id,
           companyId: job.companyId,
+          screeningAnswers,
         });
       } catch (raceError: any) {
         if (raceError?.name !== "DuplicateApplicationError" && raceError?.code !== "P2002") {
@@ -230,6 +310,7 @@ export async function POST(req: NextRequest) {
         ) {
           return jsonError("You have already applied to this job.", 409);
         }
+        pendingWasExisting = true;
         pending = {
           application: {
             id: racedApplication.id,
@@ -247,7 +328,11 @@ export async function POST(req: NextRequest) {
         };
       }
 
-      await persistScreeningAnswers(pending.application.id);
+      // New application intents persist screening answers in the same transaction.
+      // A concurrent request that lost the create race updates the already-existing intent explicitly.
+      if (pendingWasExisting) {
+        await persistScreeningAnswers(pending.application.id);
+      }
 
       try {
         const assignment = await assignUniversalAssessment(candidate.id, targetRole);
@@ -282,9 +367,8 @@ export async function POST(req: NextRequest) {
         jobId,
         candidateProfileId: candidate.id,
         companyId: job.companyId,
+        screeningAnswers,
       });
-
-      await persistScreeningAnswers(submission.application.id);
 
       await dispatchApplicationReceivedConfirmation({
         applicationId: submission.application.id,
@@ -337,7 +421,14 @@ export async function PATCH(req: NextRequest) {
       await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${applicationId} FOR UPDATE`;
       const application = await tx.application.findUnique({
         where: { id: applicationId },
-        include: { pphPlacement: { select: { id: true, status: true, invoiceId: true } } },
+        include: {
+          pphPlacement: { select: { id: true, status: true, invoiceId: true } },
+          offers: {
+            where: { status: { in: ["DRAFT", "SENT", "ACCEPTED"] } },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, status: true },
+          },
+        },
       });
       if (!application || application.candidateProfileId !== candidate.id) throw new ApiError("Application not found", 404);
       if (application.status === "WITHDRAWN") return { duplicate: true };
@@ -351,21 +442,156 @@ export async function PATCH(req: NextRequest) {
       if (application.status === "HIRED" || application.pphPlacement) {
         throw new ApiError("This application has entered the joining or placement workflow and cannot be withdrawn here. Contact HireGo support for reconciliation.", 409);
       }
+
+      const acceptedOffer = application.offers.find((offer) => offer.status === "ACCEPTED");
+      if (acceptedOffer) {
+        throw new ApiError(
+          "You already accepted an offer for this application. Joining or offer reconciliation is required before the application can be withdrawn.",
+          409,
+        );
+      }
+      const sentOffer = application.offers.find((offer) => offer.status === "SENT");
+      if (sentOffer) {
+        throw new ApiError(
+          "A sent offer is awaiting your response. Decline the offer from the Offers page before withdrawing this application.",
+          409,
+        );
+      }
+
+      const draftOffers = application.offers.filter((offer) => offer.status === "DRAFT");
+      for (const offer of draftOffers) {
+        await tx.offer.updateMany({
+          where: { id: offer.id, status: "DRAFT" },
+          data: { status: "WITHDRAWN", withdrawnAt: new Date() },
+        });
+
+        const workflow = await tx.workflowInstance.findUnique({
+          where: { correlationId: `offer-send:${offer.id}` },
+          select: {
+            id: true,
+            status: true,
+            checkpointState: true,
+          },
+        });
+        if (workflow && ["RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"].includes(workflow.status)) {
+          const revokedAt = new Date();
+          await tx.workflowApproval.updateMany({
+            where: {
+              workflowInstanceId: workflow.id,
+              consumedAt: null,
+              revokedAt: null,
+            },
+            data: {
+              revokedAt,
+              revokedBy: session.id,
+              revocationReason: "Candidate withdrew the application before the offer was sent.",
+            },
+          });
+          const checkpoint =
+            workflow.checkpointState &&
+            typeof workflow.checkpointState === "object" &&
+            !Array.isArray(workflow.checkpointState)
+              ? workflow.checkpointState as Record<string, unknown>
+              : {};
+          await tx.workflowInstance.update({
+            where: { id: workflow.id },
+            data: {
+              status: "CANCELLED",
+              currentStep: "APPLICATION_WITHDRAWN",
+              checkpointState: {
+                ...checkpoint,
+                cancelledByCandidate: true,
+                cancelledAt: revokedAt.toISOString(),
+                cancellationReason: "Candidate withdrew the application before the offer was sent.",
+              } as Prisma.InputJsonValue,
+            },
+          });
+        }
+      }
+
+      const withdrawnAt = new Date();
       await tx.application.update({ where: { id: applicationId }, data: { status: "WITHDRAWN" } });
       await tx.interview.updateMany({
         where: { applicationId, status: { in: ["SCHEDULED", "RESCHEDULED"] } },
         data: { status: "CANCELLED" },
       });
       await tx.interviewRoundProgress.updateMany({
-        where: { applicationId, status: "SCHEDULED" },
+        where: {
+          applicationId,
+          status: { in: ["PENDING", "SCHEDULED", "ON_HOLD"] },
+        },
         data: { status: "CANCELLED" },
       });
+      const cancelledAssessmentGates = await tx.applicationGate.updateMany({
+        where: {
+          applicationId,
+          status: {
+            in: [
+              ApplicationGateStatus.REQUIRED,
+              ApplicationGateStatus.IN_PROGRESS,
+            ],
+          },
+        },
+        data: {
+          status: ApplicationGateStatus.CANCELLED,
+          completedAt: null,
+        },
+      });
+
+      // Withdrawal is terminal for future hiring work on this application.
+      // Revoke any still-actionable approvals and cancel their workflows so a
+      // stale selection/rejection approval cannot be executed after withdrawal.
+      const activeWorkflows = await tx.workflowInstance.findMany({
+        where: {
+          applicationId,
+          status: { in: ["PENDING", "RUNNING", "PAUSED_FOR_APPROVAL", "FAILED"] },
+        },
+        select: { id: true, checkpointState: true },
+      });
+      for (const workflow of activeWorkflows) {
+        await tx.workflowApproval.updateMany({
+          where: {
+            workflowInstanceId: workflow.id,
+            consumedAt: null,
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: withdrawnAt,
+            revokedBy: session.id,
+            revocationReason: "Candidate withdrew the application.",
+          },
+        });
+        const checkpoint =
+          workflow.checkpointState &&
+          typeof workflow.checkpointState === "object" &&
+          !Array.isArray(workflow.checkpointState)
+            ? workflow.checkpointState as Record<string, unknown>
+            : {};
+        await tx.workflowInstance.update({
+          where: { id: workflow.id },
+          data: {
+            status: "CANCELLED",
+            currentStep: "APPLICATION_WITHDRAWN",
+            checkpointState: {
+              ...checkpoint,
+              cancelledByCandidate: true,
+              cancelledAt: withdrawnAt.toISOString(),
+              cancellationReason: "Candidate withdrew the application.",
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
       const auditLog = await tx.auditLog.create({
         data: {
           userId: session.id,
           action: "APPLICATION_WITHDRAWN",
           resource: `Application:${applicationId}`,
-          details: "Candidate withdrew their own application.",
+          details: JSON.stringify({
+            message: "Candidate withdrew their own application.",
+            invalidatedDraftOfferCount: draftOffers.length,
+            cancelledAssessmentGateCount: cancelledAssessmentGates.count,
+            cancelledWorkflowCount: activeWorkflows.length,
+          }),
         },
       });
       await enqueueSecurityAuditEvent(tx, auditLog, session.id);

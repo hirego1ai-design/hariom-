@@ -5,6 +5,13 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 
 type Placement = { id: string; applicationId: string; status: string; invoiceEligibleAt: string; totalAmount: string; holdReason?: string; invoice?: { invoiceNumber: string } | null };
 type Agreement = { id: string; agreementNumber: string; status: string; invoiceRule: string; feeType: string; feeValue: number; taxRatePct: number; creditDays: number };
+type AcceptedOffer = {
+  id: string;
+  compensationAmount: string | null;
+  currency: string;
+  acceptedAt: string;
+  startDate: string | null;
+};
 export default function ManagedHiringJoinPage() {
   const params = useSearchParams();
   const [form, setForm] = useState({ applicationId: "", agreementId: "", annualCtc: "", joinedAt: "" });
@@ -17,13 +24,44 @@ export default function ManagedHiringJoinPage() {
   const [actionReason, setActionReason] = useState("");
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [requiredAgreementId, setRequiredAgreementId] = useState<string | null>(null);
+  const [acceptedOffer, setAcceptedOffer] = useState<AcceptedOffer | null>(null);
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/employer/managed-hiring/join", { cache: "no-store" });
+    const query = params.get("applicationId")
+      ? `?applicationId=${encodeURIComponent(params.get("applicationId") || "")}`
+      : "";
+    const response = await fetch(`/api/employer/managed-hiring/join${query}`, { cache: "no-store" });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.success) throw new Error(data.error || "Unable to load placements.");
     setPlacements(Array.isArray(data.placements) ? data.placements : []);
-  }, []);
-  useEffect(() => { setForm(current => ({ ...current, applicationId: params.get("applicationId") || current.applicationId })); }, [params]);
+    const linkedAgreementId =
+      typeof data.requiredAgreementId === "string" ? data.requiredAgreementId : null;
+    const serverAcceptedOffer =
+      data.acceptedOffer &&
+      typeof data.acceptedOffer.id === "string" &&
+      typeof data.acceptedOffer.currency === "string" &&
+      typeof data.acceptedOffer.acceptedAt === "string"
+        ? data.acceptedOffer as AcceptedOffer
+        : null;
+    setRequiredAgreementId(linkedAgreementId);
+    setAcceptedOffer(serverAcceptedOffer);
+
+    const scopedApplicationId = params.get("applicationId") || "";
+    if (scopedApplicationId) {
+      setForm((current) => ({
+        ...current,
+        applicationId: scopedApplicationId,
+        agreementId: linkedAgreementId || "",
+        annualCtc: serverAcceptedOffer?.compensationAmount || "",
+      }));
+    }
+  }, [params]);
+  useEffect(() => {
+    const scopedApplicationId = params.get("applicationId");
+    if (scopedApplicationId) {
+      setForm((current) => ({ ...current, applicationId: scopedApplicationId }));
+    }
+  }, [params]);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -101,22 +139,58 @@ export default function ManagedHiringJoinPage() {
       setSaving(false);
     }
   }
-  const selected = agreements.find(agreement => agreement.id === form.agreementId);
+  const applicationScoped = Boolean(params.get("applicationId"));
+  const eligibleAgreements = applicationScoped
+    ? requiredAgreementId
+      ? agreements.filter((agreement) => agreement.id === requiredAgreementId)
+      : []
+    : agreements;
+  const selected = eligibleAgreements.find(agreement => agreement.id === form.agreementId);
+  const acceptedOfferReady =
+    !applicationScoped ||
+    Boolean(
+      acceptedOffer?.compensationAmount &&
+      acceptedOffer.currency === "INR",
+    );
   const inputClass = "w-full rounded-lg bg-black/30 border border-white/10 p-3 text-sm text-white";
   return <PageContainer><div className="max-w-3xl mx-auto py-8 px-4 space-y-6">
     <h1 className="text-3xl font-bold text-white">Confirm PPH joining</h1>
     <p className="text-text-secondary text-sm">The owning employer or HireGo administrator approves salary and joining. An invoice becomes eligible 25 full days after the confirmed joining time. Payment credit days start when the invoice is issued.</p>
     <form onSubmit={submit} className="glass-card rounded-2xl p-6 space-y-4">
-      <label className="block">Application ID<input required className={inputClass} value={form.applicationId} onChange={e => setForm({ ...form, applicationId: e.target.value })} /></label>
-      <label className="block">Accepted DAY_25 agreement<select required className={inputClass} value={form.agreementId} onChange={e => { setForm({ ...form, agreementId: e.target.value }); setAccepted(false); }}>
-        <option value="">Select agreement</option>{agreements.map(a => <option key={a.id} value={a.id}>{a.agreementNumber}</option>)}
+      <label className="block">Application ID<input required readOnly={applicationScoped} className={inputClass} value={form.applicationId} onChange={e => setForm({ ...form, applicationId: e.target.value })} /></label>
+      <label className="block">Accepted DAY_25 agreement<select required disabled={applicationScoped} className={inputClass} value={form.agreementId} onChange={e => { setForm({ ...form, agreementId: e.target.value }); setAccepted(false); }}>
+        <option value="">Select agreement</option>{eligibleAgreements.map(a => <option key={a.id} value={a.id}>{a.agreementNumber}</option>)}
       </select></label>
-      {!agreements.length && <p>No active DAY_25 agreement is available. Ask HireGo to prepare the agreement for acceptance.</p>}
+      {!eligibleAgreements.length && (
+        <p>
+          {applicationScoped
+            ? "This application is not linked to an active approved DAY_25 agreement. Complete managed-hiring agreement setup before confirming joining."
+            : "No active DAY_25 agreement is available. Ask HireGo to prepare the agreement for acceptance."}
+        </p>
+      )}
       {selected && <p className="text-sm">Fee: {selected.feeValue} {selected.feeType === "PERCENTAGE" ? "%" : "INR"}; tax: {selected.taxRatePct}%; payment period: {selected.creditDays} days. <a className="underline" href={`/employer/managed-hiring/agreements/${selected.id}`}>Review full signed terms</a>.</p>}
-      <label className="block">Approved annual CTC (INR)<input required type="number" min="0.01" max="1000000000" step="0.01" className={inputClass} value={form.annualCtc} onChange={e => { setForm({ ...form, annualCtc: e.target.value }); setAccepted(false); }} /></label>
+      {applicationScoped && (
+        <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-text-secondary">
+          {acceptedOffer ? (
+            <>
+              <p><strong className="text-white">Accepted offer:</strong> {acceptedOffer.currency} {acceptedOffer.compensationAmount || "Compensation not stated"}</p>
+              <p className="mt-1">Accepted: {new Date(acceptedOffer.acceptedAt).toLocaleString()}</p>
+              {acceptedOffer.startDate && <p className="mt-1">Proposed start: {new Date(acceptedOffer.startDate).toLocaleString()}</p>}
+            </>
+          ) : (
+            <p>No accepted offer is recorded for this application.</p>
+          )}
+        </div>
+      )}
+      {!acceptedOfferReady && applicationScoped && (
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+          PPH joining requires an accepted INR offer with a stated compensation amount. Amend and re-send the offer before confirming joining.
+        </p>
+      )}
+      <label className="block">Accepted annual CTC (INR)<input required readOnly={applicationScoped} type="number" min="0.01" max="1000000000" step="0.01" className={inputClass} value={form.annualCtc} onChange={e => { setForm({ ...form, annualCtc: e.target.value }); setAccepted(false); }} /></label>
       <label className="block">Actual joining time (your local timezone)<input required type="datetime-local" className={inputClass} value={form.joinedAt} onChange={e => { setForm({ ...form, joinedAt: e.target.value }); setAccepted(false); }} /></label>
-      <label className="flex gap-3 text-sm"><input required type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />I am authorised to approve this salary and confirm actual joining under the signed agreement, including automatic invoicing after 25 days.</label>
-      <button disabled={saving || !accepted} className="w-full rounded-xl bg-emerald-500 text-black font-bold py-3 disabled:opacity-50">{saving ? "Saving..." : "Approve joining & schedule invoice"}</button>
+      <label className="flex gap-3 text-sm"><input required disabled={!acceptedOfferReady} type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />I am authorised to confirm actual joining under the signed agreement using the candidate-accepted compensation, including automatic invoicing after 25 days.</label>
+      <button disabled={saving || !accepted || !acceptedOfferReady} className="w-full rounded-xl bg-emerald-500 text-black font-bold py-3 disabled:opacity-50">{saving ? "Saving..." : "Approve joining & schedule invoice"}</button>
     </form>
     {status && <p role={statusType === "error" ? "alert" : "status"} className={statusType === "error" ? "text-sm text-red-300" : "text-sm text-emerald-300"}>{status}</p>}
     {loading && <p className="text-sm text-text-secondary">Loading joining and agreement records…</p>}

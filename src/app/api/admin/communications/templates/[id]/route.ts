@@ -60,11 +60,29 @@ export async function PATCH(
         throw new ApiError(`Missing required variables: ${check.missing.join(", ")}`, 422);
       }
 
-      if (
-        body.enabled === true &&
-        !((body.providerAlias ?? current.providerAlias) || (body.providerTemplateId ?? current.providerTemplateId))
-      ) {
-        throw new ApiError("Provider mapping is required before activation.", 422);
+      const nextProviderAlias = body.providerAlias === undefined ? current.providerAlias : body.providerAlias;
+      const nextProviderTemplateId = body.providerTemplateId === undefined ? current.providerTemplateId : body.providerTemplateId;
+
+      if (body.enabled === true) {
+        if (current.channel === "WHATSAPP") {
+          if (current.provider !== "META") {
+            throw new ApiError("WhatsApp templates must use META.", 422);
+          }
+          if (!(nextProviderAlias || nextProviderTemplateId)) {
+            throw new ApiError("Provider mapping is required before activation.", 422);
+          }
+        }
+        if (current.channel === "EMAIL") {
+          if (current.provider !== "ZEPTOMAIL" && current.provider !== "SENDGRID") {
+            throw new ApiError("Email templates must use ZEPTOMAIL or SENDGRID.", 422);
+          }
+          if (!nextSubject?.trim()) {
+            throw new ApiError("Email templates require a subject before activation.", 422);
+          }
+          if (current.provider === "ZEPTOMAIL" && !(nextProviderAlias || nextProviderTemplateId)) {
+            throw new ApiError("ZeptoMail template mapping is required before activation.", 422);
+          }
+        }
       }
 
       if (current.channel === "WHATSAPP") {

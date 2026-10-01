@@ -394,6 +394,26 @@ async function runIsolatedTests() {
     results.push({ name: "Managed hiring join test suite", category: "Managed Hiring Join", passed: false, message: e.message });
   }
 
+  // 15b. Direct-hire joining completion. This verifies that accepted
+  // non-PPH offers can reach HIRED without creating placement billing.
+  try {
+    const { runDirectHireJoiningTests } = await import("./direct-hire-joining.test");
+    const directJoinTests = await runDirectHireJoiningTests();
+    results.push(...directJoinTests.results);
+  } catch (e: any) {
+    results.push({ name: "Direct-hire joining test suite", category: "Direct Hire Joining", passed: false, message: e.message });
+  }
+
+  // 15c. Offer expiry lifecycle. Expiration must terminate joining
+  // workflows and revoke stale approvals instead of leaving orphan state.
+  try {
+    const { runOfferLifecycleTests } = await import("./offer-lifecycle.test");
+    const offerLifecycle = await runOfferLifecycleTests();
+    results.push(...offerLifecycle.results);
+  } catch (e: any) {
+    results.push({ name: "Offer lifecycle integration suite", category: "Offer Lifecycle", passed: false, message: e.message });
+  }
+
   // 16. Billing Invoices and Private Proof Verification. Verified RBAC,
   // company-scoped listings, payment processing, and StoredFile uploads.
   try {

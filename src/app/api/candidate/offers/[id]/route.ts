@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth";
 import { ApiError, enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { expireOfferIfDue } from "@/lib/offerLifecycle";
+import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
 const schema = z.object({
   action: z.enum(["ACCEPT", "DECLINE"]),
@@ -20,7 +22,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!profile) throw new ApiError("Candidate profile not found.", 404);
 
     const now = new Date();
+    const ownedOffer = await prisma.offer.findFirst({
+      where: {
+        id,
+        application: { candidateProfileId: profile.id },
+      },
+      select: { id: true, applicationId: true, status: true, expiresAt: true },
+    });
+    if (!ownedOffer) throw new ApiError("Offer not found.", 404);
+
+    if (ownedOffer.status === "SENT" && ownedOffer.expiresAt <= now) {
+      const expired = await expireOfferIfDue(ownedOffer.id, now);
+      if (expired) throw new ApiError("This offer has expired.", 409);
+    }
+
     const result = await prisma.$transaction(async (tx) => {
+      // Canonical lifecycle lock order is Application -> Offer. This matches
+      // employer rejection/withdraw/send flows and prevents offer responses
+      // from racing an application into a contradictory state.
+      await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${ownedOffer.applicationId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM "Offer" WHERE id = ${id} FOR UPDATE`;
       const current = await tx.offer.findUnique({
         where: { id },
@@ -41,11 +61,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (current.status !== "SENT") throw new ApiError(`This offer cannot be ${body.action.toLowerCase()}ed from status ${current.status}.`, 409);
 
       if (current.expiresAt <= now) {
-        const expiredOffer = await tx.offer.update({ where: { id }, data: { status: "EXPIRED" } });
-        return { offer: expiredOffer, expired: true, joiningWorkflow: null };
+        throw new ApiError("This offer has expired.", 409);
       }
-      if (["HIRED", "REJECTED", "WITHDRAWN"].includes(current.application.status)) {
-        throw new ApiError("This application is no longer eligible for an offer response.", 409);
+      if (current.application.status !== "SHORTLISTED") {
+        throw new ApiError(
+          `Offer response requires a shortlisted application; current application status is ${current.application.status}.`,
+          409,
+        );
       }
 
       const updatedOffer = await tx.offer.update({
@@ -133,20 +155,45 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
       }
 
-      await tx.auditLog.create({
+      const auditLog = await tx.auditLog.create({
         data: {
           userId: session.id,
           companyId: updatedOffer.companyId,
           action: body.action === "ACCEPT" ? "OFFER_ACCEPTED" : "OFFER_DECLINED",
           resource: `Offer:${updatedOffer.id}`,
-          details: body.note || null,
+          details: JSON.stringify({
+            applicationId: current.applicationId,
+            candidateUserId: session.id,
+            response: body.action,
+            note: body.note || null,
+            respondedAt: now.toISOString(),
+          }),
         },
       });
+      await enqueueSecurityAuditEvent(tx, auditLog, session.id);
 
-      return { offer: updatedOffer, expired: false, joiningWorkflow };
+      return {
+        offer: updatedOffer,
+        expired: false,
+        joiningWorkflow,
+        notifyUserId: current.createdById,
+      };
     });
 
-    if (result.expired) throw new ApiError("This offer has expired.", 409);
+
+    if (result.notifyUserId && result.notifyUserId !== session.id) {
+      await prisma.notification.create({
+        data: {
+          userId: result.notifyUserId,
+          title: body.action === "ACCEPT" ? "Offer accepted" : "Offer declined",
+          message:
+            body.action === "ACCEPT"
+              ? "The candidate accepted the offer. Review the joining workflow for the next required confirmation."
+              : "The candidate declined the offer. Review the candidate application before issuing another offer.",
+          type: "OFFER",
+        },
+      }).catch(() => undefined);
+    }
 
     return NextResponse.json({
       success: true,

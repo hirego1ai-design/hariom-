@@ -146,6 +146,8 @@ export default function WithdrawApplicationPage() {
             <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
               Only active applications from your HireGo account are shown. A confirmed
               withdrawal is saved immediately and may cancel scheduled interview activity.
+              Pending or accepted offers must be resolved from the Offers page first; unsent
+              draft offers are invalidated automatically.
             </p>
           </div>
           <Link

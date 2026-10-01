@@ -6,6 +6,7 @@ import { PphBillingWorker } from '../pph-billing';
 import { WhatsAppQueueRecovery, type WhatsAppRecoveryReport } from '../whatsapp-queue';
 import { SecurityAuditDeliveryWorker, type SecurityAuditDeliveryReport } from '../securityAuditDelivery';
 import { recoverStaleVideoAnalysisJobs } from '../videoAnalysisQueue';
+import { prepareCommunicationRetries, type CommunicationRetryReport } from '../communications/RetryWorker';
 
 export interface RecoveryReport {
   pphBilling?: { invoiced: number; held: number };
@@ -16,6 +17,7 @@ export interface RecoveryReport {
   whatsapp?: WhatsAppRecoveryReport;
   securityAudit?: SecurityAuditDeliveryReport;
   videoAnalysis?: { scanned: number; retried: number; exhausted: number };
+  communicationRetries?: CommunicationRetryReport;
   timeBudgetExhausted: boolean;
 }
 
@@ -40,6 +42,19 @@ export class FailureRecoveryRunner {
     const securityAudit = Date.now() < stopAt
       ? await SecurityAuditDeliveryWorker.run(4)
       : { configured: Boolean(process.env.SIEM_WEBHOOK_URL && process.env.SIEM_WEBHOOK_TOKEN), pending: 0, delivered: 0, retried: 0, failed: 0, unclaimed: 0 };
+
+    const communicationRetries = Date.now() < stopAt
+      ? await prepareCommunicationRetries(5, stopAt)
+      : {
+          eligible: 0,
+          exhausted: 0,
+          accepted: 0,
+          rescheduled: 0,
+          terminal: 0,
+          claimConflicts: 0,
+          workerErrors: 0,
+          timeBudgetExhausted: true,
+        };
 
     const videoAnalysis = Date.now() < stopAt
       ? await recoverStaleVideoAnalysisJobs(10)
@@ -88,6 +103,7 @@ export class FailureRecoveryRunner {
       outbox,
       whatsapp,
       securityAudit,
+      communicationRetries,
       videoAnalysis,
       timeBudgetExhausted: Date.now() >= stopAt,
     };

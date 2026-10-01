@@ -3,7 +3,21 @@ import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 
-type Interview = { id: string; scheduledAt?: string; status?: string; job?: { title?: string; company?: { name?: string } }; roomId?: string };
+type Interview = {
+  id: string;
+  applicationId: string;
+  scheduledAt?: string;
+  durationMins?: number;
+  status?: string;
+  mode?: "ONLINE" | "OFFLINE" | "PHONE";
+  job?: { id?: string; title?: string; company?: { name?: string } };
+  roomId?: string | null;
+  canEnterRoom?: boolean;
+  roomAvailabilityMessage?: string | null;
+  address?: string | null;
+  contactNumber?: string | null;
+  instructions?: string | null;
+};
 
 export default function CandidateInterviewsPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
@@ -37,10 +51,48 @@ export default function CandidateInterviewsPage() {
             const scheduled = interview.scheduledAt ? new Date(interview.scheduledAt) : null;
             return <article key={interview.id} className="rounded-2xl border border-outline bg-bg-card p-5">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                <div><p className="text-xs font-bold text-primary">{interview.status || "Scheduled"}</p><h2 className="mt-1 text-lg font-bold">{interview.job?.title || "Interview"}</h2><p className="text-sm text-text-muted">{interview.job?.company?.name || "Employer"}</p></div>
-                <div className="text-sm text-text-secondary">{scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled.toLocaleString() : "Schedule pending"}</div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs font-bold text-primary">{interview.status || "Scheduled"}</p>
+                    {interview.mode && (
+                      <span className="rounded-full border border-outline px-2 py-0.5 text-[10px] font-bold text-text-muted">
+                        {interview.mode === "ONLINE" ? "Online" : interview.mode === "PHONE" ? "Phone" : "In person"}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="mt-1 text-lg font-bold">{interview.job?.title || "Interview"}</h2>
+                  <p className="text-sm text-text-muted">{interview.job?.company?.name || "Employer"}</p>
+                </div>
+                <div className="text-sm text-text-secondary">
+                  {scheduled && !Number.isNaN(scheduled.getTime()) ? scheduled.toLocaleString() : "Schedule pending"}
+                </div>
               </div>
-              {interview.roomId && <Link href={`/interviews/room/${interview.roomId}`} className="mt-5 min-h-11 inline-flex items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white">Enter interview room</Link>}
+
+              {interview.instructions && (
+                <p className="mt-4 rounded-xl border border-outline bg-bg-page/40 p-3 text-sm text-text-secondary">
+                  {interview.instructions}
+                </p>
+              )}
+
+              {interview.mode === "OFFLINE" && interview.address && (
+                <p className="mt-4 text-sm text-text-secondary">
+                  <span className="font-bold text-text-primary">Location:</span> {interview.address}
+                </p>
+              )}
+              {(interview.mode === "OFFLINE" || interview.mode === "PHONE") && interview.contactNumber && (
+                <p className="mt-2 text-sm text-text-secondary">
+                  <span className="font-bold text-text-primary">Contact:</span> {interview.contactNumber}
+                </p>
+              )}
+
+              {interview.mode === "ONLINE" && interview.roomId && interview.canEnterRoom && (
+                <Link href={`/interviews/room/${encodeURIComponent(interview.roomId)}`} className="mt-5 min-h-11 inline-flex items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white">
+                  Enter interview room
+                </Link>
+              )}
+              {interview.mode === "ONLINE" && (!interview.canEnterRoom || !interview.roomId) && interview.roomAvailabilityMessage && (
+                <p className="mt-4 text-xs text-text-muted">{interview.roomAvailabilityMessage}</p>
+              )}
             </article>;
           })}
         </div>

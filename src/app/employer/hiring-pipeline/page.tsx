@@ -28,7 +28,7 @@ interface StageConfig {
   borderColor: string;
 }
 
-const GENERIC_MOVE_TARGETS = new Set<StageId>(["Screening", "Assessment", "Interview", "Shortlisted"]);
+const GENERIC_MOVE_TARGETS = new Set<StageId>(["Screening"]);
 
 const STAGES: StageConfig[] = [
   { id: "Applied", label: "Applied", color: "text-[#90CAF9]", bgColor: "bg-[#90CAF9]/10", borderColor: "border-[#90CAF9]/30" },
@@ -68,7 +68,7 @@ export default function HiringPipelinePage() {
     const candidate = candidates.find((c) => c.applicationId === applicationId);
     if (!candidate) return;
     if (!GENERIC_MOVE_TARGETS.has(targetStage)) {
-      showToast("Joined and rejected decisions must use the controlled decision workflow.");
+      showToast("Assessment, interview, shortlist, rejection and joining are controlled workflow states.");
       return;
     }
     if (await updateCandidateStage(applicationId, targetStage)) showToast(`Moved ${candidate.name} to ${targetStage}`);
@@ -466,12 +466,14 @@ export default function HiringPipelinePage() {
                     <ScoreBadge score={c.matchScore} size="sm" />
                   </div>
                   
-                  <div className="flex flex-col gap-1.5 min-w-[120px]">
+                  <div className="flex flex-col gap-1.5 min-w-[140px]">
                     <span className="text-[10px] text-text-muted font-bold uppercase">Pipeline Stage</span>
                     <select
                       value={c.stage}
                       onChange={(e) => handleMove(c.applicationId, e.target.value as StageId)}
-                      className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none w-full"
+                      disabled={!["Applied", "Screening"].includes(c.stage)}
+                      title={!["Applied", "Screening"].includes(c.stage) ? "This stage is controlled by its dedicated workflow." : undefined}
+                      className="bg-[#1C1C22] border border-white/10 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none w-full disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {STAGES.map((s) => (
                         <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
@@ -479,6 +481,22 @@ export default function HiringPipelinePage() {
                         </option>
                       ))}
                     </select>
+                    {c.stage === "Screening" && (
+                      <Link
+                        href={`/employer/interview-scheduler?applicationId=${encodeURIComponent(c.applicationId)}`}
+                        className="min-h-9 inline-flex items-center justify-center rounded-lg border border-secondary/30 bg-secondary/10 px-3 text-[11px] font-bold text-secondary hover:bg-secondary/20"
+                      >
+                        Schedule interview
+                      </Link>
+                    )}
+                    {c.stage === "Shortlisted" && (
+                      <Link
+                        href={`/employer/offer-letter-create-and-send?applicationId=${encodeURIComponent(c.applicationId)}`}
+                        className="min-h-9 inline-flex items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 text-[11px] font-bold text-emerald-300 hover:bg-emerald-400/20"
+                      >
+                        Create offer
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -627,7 +645,9 @@ function CandidateCard({
         <select
           value={candidate.stage}
           onChange={(e) => onMoveStage(e.target.value as StageId)}
-          className="bg-[#1C1C22] border border-white/10 hover:border-white/20 text-white rounded-lg px-2 py-1 text-[10px] outline-none flex-1 max-w-[140px] cursor-pointer"
+          disabled={!["Applied", "Screening"].includes(candidate.stage)}
+          title={!["Applied", "Screening"].includes(candidate.stage) ? "This stage is controlled by its dedicated workflow." : undefined}
+          className="bg-[#1C1C22] border border-white/10 hover:border-white/20 text-white rounded-lg px-2 py-1 text-[10px] outline-none flex-1 max-w-[140px] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
         >
           {STAGES.map((s) => (
             <option key={s.id} value={s.id} disabled={!GENERIC_MOVE_TARGETS.has(s.id)}>
@@ -637,6 +657,24 @@ function CandidateCard({
         </select>
 
         <div className="flex items-center gap-1">
+          {candidate.stage === "Screening" && (
+            <Link
+              href={`/employer/interview-scheduler?applicationId=${encodeURIComponent(candidate.applicationId)}`}
+              className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/20 flex items-center justify-center text-primary transition-all"
+              title="Schedule interview"
+            >
+              <span className="material-symbols-outlined text-[14px]">event</span>
+            </Link>
+          )}
+          {candidate.stage === "Shortlisted" && (
+            <Link
+              href={`/employer/offer-letter-create-and-send?applicationId=${encodeURIComponent(candidate.applicationId)}`}
+              className="w-7 h-7 rounded-lg bg-emerald-400/10 hover:bg-emerald-400/20 border border-emerald-400/20 flex items-center justify-center text-emerald-300 transition-all"
+              title="Create offer"
+            >
+              <span className="material-symbols-outlined text-[14px]">description</span>
+            </Link>
+          )}
           {candidate.videoResumeId && (
             <Link
               href={`/employer/video-resume/${encodeURIComponent(candidate.videoResumeId)}`}

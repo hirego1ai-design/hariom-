@@ -16,6 +16,8 @@ export default function JobApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [screeningQuestions, setScreeningQuestions] = useState<string[]>([]);
+  const [screeningAnswers, setScreeningAnswers] = useState<Record<string, string>>({});
   const [profileLoadError, setProfileLoadError] = useState("");
   const [jobLoadError, setJobLoadError] = useState("");
 
@@ -27,6 +29,12 @@ export default function JobApplyPage() {
       try {
         const response = await fetch("/api/candidate/profile", { cache: "no-store" });
         const data = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          router.replace(
+            `/login?redirect=${encodeURIComponent(`/jobs/${jobId}/apply`)}`,
+          );
+          return;
+        }
         if (!response.ok || !data.success || !data.profile) {
           throw new Error(data.error || "Your candidate profile could not be loaded.");
         }
@@ -50,10 +58,23 @@ export default function JobApplyPage() {
         if (!response.ok || !data.success || !data.job) {
           throw new Error(data.error || "This job listing could not be loaded.");
         }
-        if (!cancelled) setJobTitle(data.job.title || null);
+        if (!cancelled) {
+          setJobTitle(data.job.title || null);
+          const questions = Array.isArray(data.job.screeningQuestions)
+            ? data.job.screeningQuestions
+                .filter((question: unknown): question is string => typeof question === "string")
+                .map((question: string) => question.trim())
+                .filter(Boolean)
+                .slice(0, 20)
+            : [];
+          setScreeningQuestions(Array.from(new Set(questions)));
+          setScreeningAnswers({});
+        }
       } catch (error) {
         if (!cancelled) {
           setJobTitle(null);
+          setScreeningQuestions([]);
+          setScreeningAnswers({});
           setJobLoadError(error instanceof Error ? error.message : "This job listing could not be loaded.");
         }
       }
@@ -62,7 +83,7 @@ export default function JobApplyPage() {
     void loadProfile();
     void loadJob();
     return () => { cancelled = true; };
-  }, [jobId]);
+  }, [jobId, router]);
 
   const handleSubmitApplication = async () => {
     if (!jobId) return;
@@ -73,7 +94,10 @@ export default function JobApplyPage() {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId }),
+        body: JSON.stringify({
+          jobId,
+          ...(screeningQuestions.length > 0 ? { answers: screeningAnswers } : {}),
+        }),
       });
 
       const data = await res.json();
@@ -253,9 +277,33 @@ export default function JobApplyPage() {
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-secondary">
-                No application answer is invented on this screen. Assessment requirements are assigned from the active job configuration after submission.
-              </div>
+              {screeningQuestions.length > 0 ? (
+                <div className="space-y-4">
+                  {screeningQuestions.map((question, index) => (
+                    <label key={question} className="block p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <span className="block text-xs font-bold text-text-primary mb-2">
+                        {index + 1}. {question}
+                      </span>
+                      <textarea
+                        value={screeningAnswers[question] || ""}
+                        onChange={(event) => {
+                          const value = event.target.value.slice(0, 5_000);
+                          setScreeningAnswers((current) => ({ ...current, [question]: value }));
+                        }}
+                        rows={3}
+                        maxLength={5_000}
+                        required
+                        className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-text-primary outline-none focus:border-primary/60"
+                        placeholder="Enter your answer"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-text-secondary">
+                  This job has no employer screening questions. Assessment requirements are assigned from the active job configuration after submission.
+                </div>
+              )}
 
               <div className="flex justify-between items-center pt-2">
                 <button
@@ -268,7 +316,8 @@ export default function JobApplyPage() {
                 <button
                   type="button"
                   onClick={() => setStep(3)}
-                  className="btn-3d-red px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
+                  disabled={screeningQuestions.some((question) => !screeningAnswers[question]?.trim())}
+                  className="btn-3d-red disabled:opacity-50 disabled:cursor-not-allowed px-8 py-2.5 rounded-full text-xs font-bold text-white flex items-center gap-1.5 shadow-md"
                 >
                   <span>Review & Submit</span>
                   <span className="material-symbols-outlined text-[16px]">arrow_forward</span>

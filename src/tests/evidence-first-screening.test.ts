@@ -204,7 +204,8 @@ test("generic managed pipeline cannot directly reject and the controlled endpoin
     stageRoute,
     /z\.enum\(\[[^\]]*["']REJECTED["']/,
   );
-  assert.match(stageRoute, /controlled candidate-decision workflow for rejection/i);
+  assert.match(stageRoute, /stage:\s*z\.literal\("SCREENING"\)/);
+  assert.match(stageRoute, /rejection and joining use controlled workflows/i);
 
   for (const token of [
     "CANDIDATE_REJECTION",

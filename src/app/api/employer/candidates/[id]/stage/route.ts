@@ -3,9 +3,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/apiSecurity";
+import { logAuditEvent } from "@/lib/auditLogger";
 
 const schema = z.object({
-  stage: z.enum(["SCREENING", "ASSESSMENT", "AI_INTERVIEW", "SHORTLISTED"]),
+  stage: z.literal("SCREENING"),
 }).strict();
 
 export async function PATCH(
@@ -35,7 +36,12 @@ export async function PATCH(
     const { stage } = schema.parse(await req.json());
     const application = await prisma.application.findUnique({
       where: { id },
-      include: { job: true },
+      include: {
+        job: true,
+        gates: {
+          select: { status: true },
+        },
+      },
     });
     if (!application) {
       return NextResponse.json(
@@ -59,44 +65,6 @@ export async function PATCH(
       }
     }
 
-    if (stage === "SHORTLISTED") {
-      const process = await prisma.jobInterviewProcess.findUnique({
-        where: { jobId: application.jobId },
-        select: { id: true, isActive: true },
-      });
-      if (process?.isActive) {
-        const finalRound = await prisma.interviewRound.findFirst({
-          where: { processId: process.id },
-          orderBy: { sequence: "desc" },
-          select: { id: true },
-        });
-        if (finalRound) {
-          const finalProgress = await prisma.interviewRoundProgress.findUnique({
-            where: {
-              applicationId_roundId: {
-                applicationId: application.id,
-                roundId: finalRound.id,
-              },
-            },
-            select: { status: true },
-          });
-          if (
-            !finalProgress ||
-            !["ROUND_COMPLETE", "TRANSFERRED"].includes(finalProgress.status)
-          ) {
-            return NextResponse.json(
-              {
-                success: false,
-                error:
-                  "Complete the configured final interview round before selecting this candidate.",
-              },
-              { status: 409 },
-            );
-          }
-        }
-      }
-    }
-
     if (["HIRED", "REJECTED", "WITHDRAWN"].includes(application.status)) {
       return NextResponse.json(
         {
@@ -108,8 +76,39 @@ export async function PATCH(
       );
     }
 
+    if (application.gates.some((gate) => ["REQUIRED", "IN_PROGRESS"].includes(gate.status))) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Complete the candidate's required assessment/validation gates before screening.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (!["APPLIED", "SCREENING"].includes(application.status)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Assessment, interview and shortlist stages are controlled by their dedicated workflows and cannot be set manually.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (application.status === "SCREENING") {
+      return NextResponse.json({
+        success: true,
+        applicationId: id,
+        stage,
+        idempotent: true,
+      });
+    }
+
     const updated = await prisma.application.updateMany({
-      where: { id, status: application.status },
+      where: { id, status: "APPLIED" },
       data: { status: stage },
     });
     if (updated.count !== 1) {
@@ -123,6 +122,14 @@ export async function PATCH(
       );
     }
 
+    await logAuditEvent({
+      userId: session.id,
+      companyId: application.job.companyId,
+      action: "APPLICATION_STAGE_ADVANCED_TO_SCREENING",
+      resource: `Application:${id}`,
+      details: "Manual operational transition APPLIED -> SCREENING. Assessment, interview and shortlist remain workflow-owned states.",
+    });
+
     return NextResponse.json({ success: true, applicationId: id, stage });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -130,7 +137,7 @@ export async function PATCH(
         {
           success: false,
           error:
-            "Use the controlled candidate-decision workflow for rejection. Generic stage updates only support screening, assessment, interview, and shortlist.",
+            "Only the Screening operational stage can be moved manually. Assessment, interview, shortlist, rejection and joining use controlled workflows.",
         },
         { status: 400 },
       );

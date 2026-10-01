@@ -91,6 +91,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    let jobAssessmentContext: { applicationId: string; gateId: string } | null = null;
+
     if (assessment.scope === "EMPLOYER_JOB") {
       if (!assessment.jobListingId) {
         throw new ApiError("Assessment is not linked to an active job listing and cannot be started.", 403);
@@ -123,10 +125,13 @@ export async function POST(req: NextRequest) {
         throw new ApiError("This assessment is not currently assigned to your application.", 403);
       }
 
-      const eligibleStatuses = new Set(["APPLIED", "SCREENING", "AI_INTERVIEW", "ASSESSMENT", "SHORTLISTED"]);
-      if (!eligibleStatuses.has(application.status)) {
-        throw new ApiError(`Application is in '${application.status}' status and is not eligible to take assessments.`, 403);
+      if (application.status !== "ASSESSMENT") {
+        throw new ApiError(
+          `Job-specific assessment can be started only while the application is in ASSESSMENT; current status is '${application.status}'.`,
+          409,
+        );
       }
+      jobAssessmentContext = { applicationId: application.id, gateId: gate.id };
     } else {
       if (!assessment.roleTitle || !assessment.seniority) {
         throw new ApiError("Job-Ready assessment configuration is incomplete.", 409);
@@ -145,79 +150,138 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Atomic concurrency protection for starting/resuming attempts
-    let activeAttempt = await prisma.mcqAttempt.findFirst({
-      where: {
-        candidateProfileId: candidateProfile.id,
-        assessmentId: assessmentId,
-      },
-      orderBy: { startedAt: "desc" },
-    });
+    let activeAttempt;
 
-    if (activeAttempt) {
-      if (activeAttempt.submittedAt !== null) {
-        if (assessment.scope !== "PLATFORM_READINESS" || !assessment.retakeCooldownHours) {
-          throw new ApiError("Assessment already completed", 400);
-        }
-        const retryAt = new Date(activeAttempt.submittedAt.getTime() + assessment.retakeCooldownHours * 60 * 60 * 1000);
-        if (retryAt > new Date()) {
-          throw new ApiError(`Assessment retake is available after ${retryAt.toISOString()}.`, 409);
-        }
-        activeAttempt = null;
-      }
-    }
-    if (!activeAttempt) {
-      try {
-        activeAttempt = await prisma.mcqAttempt.create({
-          data: {
-            candidateProfileId: candidateProfile.id,
-            assessmentId: assessmentId,
-          },
+    if (jobAssessmentContext) {
+      activeAttempt = await prisma.$transaction(async (tx) => {
+        // Canonical lifecycle order: Application -> Gate -> Attempt.
+        await tx.$queryRaw`SELECT id FROM "Application" WHERE id = ${jobAssessmentContext.applicationId} FOR UPDATE`;
+        const lockedApplication = await tx.application.findUnique({
+          where: { id: jobAssessmentContext.applicationId },
+          select: { status: true, candidateProfileId: true, jobId: true },
         });
-      } catch (createErr: any) {
-        // The partial unique index in the migration is the concurrency guard.
-        // Only a unique-constraint conflict may be recovered by loading the
-        // in-progress attempt created by the winning request.
-        if (createErr?.code !== "P2002") {
-          throw createErr;
+        if (
+          !lockedApplication ||
+          lockedApplication.candidateProfileId !== candidateProfile.id ||
+          lockedApplication.jobId !== assessment.jobListingId ||
+          lockedApplication.status !== "ASSESSMENT"
+        ) {
+          throw new ApiError(
+            "Application left the assessment stage before this job-specific assessment could start.",
+            409,
+          );
         }
 
-        activeAttempt = await prisma.mcqAttempt.findFirst({
+        await tx.$queryRaw`SELECT id FROM "ApplicationGate" WHERE id = ${jobAssessmentContext.gateId} FOR UPDATE`;
+        const lockedGate = await tx.applicationGate.findUnique({
+          where: { id: jobAssessmentContext.gateId },
+          select: { assessmentId: true, status: true, applicationId: true, type: true },
+        });
+        if (
+          !lockedGate ||
+          lockedGate.applicationId !== jobAssessmentContext.applicationId ||
+          lockedGate.type !== ApplicationGateType.JOB_SPECIFIC_ASSESSMENT ||
+          lockedGate.assessmentId !== assessment.id ||
+          (lockedGate.status !== ApplicationGateStatus.REQUIRED &&
+            lockedGate.status !== ApplicationGateStatus.IN_PROGRESS)
+        ) {
+          throw new ApiError(
+            "Job-specific assessment assignment changed before the attempt could start.",
+            409,
+          );
+        }
+
+        await tx.$queryRaw`SELECT id FROM "McqAttempt"
+          WHERE "candidateProfileId" = ${candidateProfile.id}
+            AND "assessmentId" = ${assessment.id}
+          ORDER BY "startedAt" DESC
+          LIMIT 1
+          FOR UPDATE`;
+        const existingAttempt = await tx.mcqAttempt.findFirst({
           where: {
             candidateProfileId: candidateProfile.id,
-            assessmentId: assessmentId,
-            submittedAt: null,
+            assessmentId: assessment.id,
           },
           orderBy: { startedAt: "desc" },
         });
+        if (existingAttempt?.submittedAt) {
+          throw new ApiError("Assessment already completed", 400);
+        }
 
-        if (!activeAttempt) {
-          throw createErr;
+        const attempt = existingAttempt ?? await tx.mcqAttempt.create({
+          data: {
+            candidateProfileId: candidateProfile.id,
+            assessmentId: assessment.id,
+          },
+        });
+
+        if (lockedGate.status === ApplicationGateStatus.REQUIRED) {
+          const claimed = await tx.applicationGate.updateMany({
+            where: {
+              id: jobAssessmentContext.gateId,
+              status: ApplicationGateStatus.REQUIRED,
+              assessmentId: assessment.id,
+            },
+            data: { status: ApplicationGateStatus.IN_PROGRESS },
+          });
+          if (claimed.count !== 1) {
+            throw new ApiError(
+              "Job-specific assessment assignment changed before the attempt could start.",
+              409,
+            );
+          }
+        }
+
+        return attempt;
+      }, { maxWait: 5_000, timeout: 10_000 });
+    } else {
+      // PLATFORM_READINESS assessments can be resumed and may support cooldown retakes.
+      activeAttempt = await prisma.mcqAttempt.findFirst({
+        where: {
+          candidateProfileId: candidateProfile.id,
+          assessmentId,
+        },
+        orderBy: { startedAt: "desc" },
+      });
+
+      if (activeAttempt && activeAttempt.submittedAt !== null) {
+        if (!assessment.retakeCooldownHours) {
+          throw new ApiError("Assessment already completed", 400);
+        }
+        const retryAt = new Date(
+          activeAttempt.submittedAt.getTime() +
+            assessment.retakeCooldownHours * 60 * 60 * 1000,
+        );
+        if (retryAt > new Date()) {
+          throw new ApiError(
+            `Assessment retake is available after ${retryAt.toISOString()}.`,
+            409,
+          );
+        }
+        activeAttempt = null;
+      }
+
+      if (!activeAttempt) {
+        try {
+          activeAttempt = await prisma.mcqAttempt.create({
+            data: {
+              candidateProfileId: candidateProfile.id,
+              assessmentId,
+            },
+          });
+        } catch (createErr: any) {
+          if (createErr?.code !== "P2002") throw createErr;
+          activeAttempt = await prisma.mcqAttempt.findFirst({
+            where: {
+              candidateProfileId: candidateProfile.id,
+              assessmentId,
+              submittedAt: null,
+            },
+            orderBy: { startedAt: "desc" },
+          });
+          if (!activeAttempt) throw createErr;
         }
       }
-    }
-
-    if (assessment.scope === "EMPLOYER_JOB" && assessment.jobListingId) {
-      const application = await prisma.application.findUnique({
-        where: {
-          candidateProfileId_jobId: {
-            candidateProfileId: candidateProfile.id,
-            jobId: assessment.jobListingId,
-          },
-        },
-        select: { id: true },
-      });
-      if (!application) throw new ApiError("Application assignment changed before assessment start.", 409);
-
-      await prisma.applicationGate.updateMany({
-        where: {
-          applicationId: application.id,
-          type: ApplicationGateType.JOB_SPECIFIC_ASSESSMENT,
-          assessmentId: assessment.id,
-          status: ApplicationGateStatus.REQUIRED,
-        },
-        data: { status: ApplicationGateStatus.IN_PROGRESS },
-      });
     }
 
     await logAuditEvent({

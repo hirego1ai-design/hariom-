@@ -8,10 +8,11 @@ interface WebRTCInterviewRoomProps {
   interviewerName?: string;
   roomId?: string;
   onComplete?: (interviewId?: string) => void;
+  onLifecycleStatusChange?: (status: string) => void;
 }
 
 type Signal = { id: string; senderId: string; targetId?: string | null; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; participantLabels: Record<string, string>; roundTitle: string; isHost: boolean; status: "ACTIVE" | "COMPLETED" | "CLOSED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
+type RoomSnapshot = { interviewId: string; participantId: string; authorizedParticipantIds: string[]; participantLabels: Record<string, string>; roundTitle: string; isHost: boolean; lifecycleStatus: string; status: "ACTIVE" | "COMPLETED" | "CLOSED"; iceServers: RTCIceServer[]; signaling: { offers: Signal[]; answers: Signal[]; candidates: Signal[] } };
 
 async function readRoom(roomId: string): Promise<RoomSnapshot> {
   const response = await fetch(`/api/interviews/room?roomId=${encodeURIComponent(roomId)}`, { cache: "no-store" });
@@ -26,7 +27,7 @@ function RemoteVideo({ stream, label }: { stream: MediaStream; label: string }) 
   return <div className="relative rounded-2xl bg-[#121216] border border-white/10 overflow-hidden min-h-[220px]"><video ref={ref} autoPlay playsInline className="w-full h-full object-cover" /><span className="absolute bottom-3 left-3 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold">{label}</span></div>;
 }
 
-export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidateName, interviewerName, roomId = "managed-hiring-room", onComplete }: WebRTCInterviewRoomProps) {
+export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidateName, interviewerName, roomId = "managed-hiring-room", onComplete, onLifecycleStatusChange }: WebRTCInterviewRoomProps) {
   const localVideo = useRef<HTMLVideoElement>(null);
   const peers = useRef(new Map<string, RTCPeerConnection>());
   const stream = useRef<MediaStream | null>(null);
@@ -104,6 +105,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
         setResolvedRoundTitle(room.roundTitle || roundTitle);
         iceServersRef.current = room.iceServers;
         setInterviewId(room.interviewId);
+        onLifecycleStatusChange?.(room.lifecycleStatus);
 
         const media = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (stopped) { media.getTracks().forEach(track => track.stop()); return; }
@@ -121,11 +123,21 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
             await signal("OFFER", peerId, { sdp: offer });
           }
         }
-        setStatus("Secure interview room active");
+        setStatus(
+          room.lifecycleStatus === "LIVE"
+            ? "Secure interview room active"
+            : "Waiting for an assigned interviewer to start the live interview…",
+        );
 
         poll = setInterval(async () => {
           let latest: RoomSnapshot;
           try { latest = await readRoom(roomId); } catch { setStatus("Signaling connection interrupted — retrying…"); return; }
+          onLifecycleStatusChange?.(latest.lifecycleStatus);
+          if (latest.lifecycleStatus === "LIVE") {
+            setStatus("Secure interview room active");
+          } else if (latest.status === "ACTIVE") {
+            setStatus("Waiting for an assigned interviewer to start the live interview…");
+          }
           if (latest.status !== "ACTIVE") {
             setStatus("Interview ended");
             peers.current.forEach(connection => connection.close());
@@ -202,7 +214,7 @@ export default function WebRTCInterviewRoom({ roundTitle = "Interview", candidat
       displayStream.current?.getTracks().forEach(track => track.stop());
       displayStream.current = null;
     };
-  }, [roomId]);
+  }, [roomId, onLifecycleStatusChange]);
 
   const toggleTrack = (kind: "audio" | "video") => {
     const track = stream.current?.getTracks().find(item => item.kind === kind);

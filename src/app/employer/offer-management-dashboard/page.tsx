@@ -6,7 +6,16 @@ import { PageContainer } from "@/components/employer/LayoutSystem";
 type Offer = {
   id: string; applicationId: string; title: string; status: string; currency: string;
   compensationAmount?: string | null; expiresAt: string; sentAt?: string | null; acceptedAt?: string | null;
-  application: { status: string; job: { title: string; company: { name: string } }; candidateProfile: { user: { name?: string | null; email?: string | null } } };
+  application: {
+    status: string;
+    job: {
+      title: string;
+      managedAgreementId?: string | null;
+      managedRequirementId?: string | null;
+      company: { name: string };
+    };
+    candidateProfile: { user: { name?: string | null; email?: string | null } };
+  };
 };
 
 export default function OfferManagementDashboardPage() {
@@ -154,7 +163,20 @@ export default function OfferManagementDashboardPage() {
         <div className="flex flex-wrap gap-3">
           {offer.status === "DRAFT" && <button disabled={busy === offer.id} onClick={() => void prepareSend(offer)} className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-bold text-black">Approve & send</button>}
           {["DRAFT","SENT"].includes(offer.status) && <button disabled={busy === offer.id} onClick={() => { setWithdrawReason(""); setPendingWithdraw(offer); }} className="rounded-full border border-red-400/30 px-4 py-2 text-xs font-bold text-red-300">Withdraw</button>}
-          {offer.status === "ACCEPTED" && <a href={`/employer/managed-hiring/join?applicationId=${encodeURIComponent(offer.applicationId)}`} className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-bold text-emerald-300">Confirm joining</a>}
+          {offer.status === "ACCEPTED" && (
+            <a
+              href={
+                offer.application.job.managedAgreementId || offer.application.job.managedRequirementId
+                  ? `/employer/managed-hiring/join?applicationId=${encodeURIComponent(offer.applicationId)}`
+                  : `/employer/joining-confirmation?applicationId=${encodeURIComponent(offer.applicationId)}`
+              }
+              className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-bold text-emerald-300"
+            >
+              {offer.application.job.managedAgreementId || offer.application.job.managedRequirementId
+                ? "Confirm PPH joining"
+                : "Confirm joining"}
+            </a>
+          )}
         </div>
       </article>)}
     </div>

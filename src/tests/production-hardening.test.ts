@@ -97,6 +97,8 @@ export async function runProductionHardeningTests(): Promise<{ results: Hardenin
       description: "A disposable integration-test job.",
       requirements: ["TypeScript"],
       status: "ACTIVE",
+      publishedAt: new Date(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
   await prisma.candidateReadiness.create({
