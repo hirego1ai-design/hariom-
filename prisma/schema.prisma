@@ -279,6 +279,8 @@ model CandidateProfile {
   creditWallet               CandidateCreditWallet?
   creditLedgerEntries        CandidateCreditLedger[]
   serviceUsages              CandidateServiceUsage[]
+  paymentOrders              PaymentOrder[]       @relation("CandidatePaymentOrders")
+  paymentTransactions        PaymentTransaction[] @relation("CandidatePaymentTransactions")
   sourcingRelationships      CandidateSourcingRelationship[]
   candidateSkills            CandidateSkill[]
   assessmentNoticeAcknowledgements AssessmentNoticeAcknowledgement[]
@@ -1171,9 +1173,11 @@ model PphPlacement {
 }
 
 model PaymentTransaction {
-  id           String   @id @default(uuid())
-  gatewayTxId  String   @unique
-  companyId    String
+  id                 String            @id @default(uuid())
+  gatewayTxId        String            @unique
+  companyId          String?
+  candidateProfileId String?
+  candidateProfile   CandidateProfile? @relation("CandidatePaymentTransactions", fields: [candidateProfileId], references: [id], onDelete: SetNull)
   productType  String   @default("LEGACY_SUBSCRIPTION")
   planId       String?
   amount       Float    @default(0.0)
@@ -1186,6 +1190,7 @@ model PaymentTransaction {
   updatedAt    DateTime @updatedAt
 
   @@index([companyId])
+  @@index([candidateProfileId])
 }
 
 model IdempotencyRecord {
@@ -2572,7 +2577,9 @@ model WhatsAppInboundEvent {
 model PaymentOrder {
   id                    String   @id @default(uuid())
   orderId               String   @unique
-  companyId             String
+  companyId             String?
+  candidateProfileId    String?
+  candidateProfile      CandidateProfile? @relation("CandidatePaymentOrders", fields: [candidateProfileId], references: [id], onDelete: SetNull)
   productType           String   @default("LEGACY_SUBSCRIPTION")
   billingCountry        String?
   planId                String
@@ -2590,6 +2597,7 @@ model PaymentOrder {
   updatedAt             DateTime @updatedAt
 
   @@index([companyId])
+  @@index([candidateProfileId])
   @@index([gatewayOrderId])
   @@index([gatewayTxId])
 }
@@ -2908,6 +2916,22 @@ model CandidateReadiness {
   @@index([candidateProfileId, status])
   @@index([roleTitle, seniority, status])
   @@index([assessmentId])
+}
+
+model CandidateCreditPackage {
+  id          String   @id @default(uuid())
+  packageKey  String   @unique
+  name        String
+  description String?
+  credits     Int
+  price       Float
+  currency    String   @default("INR")
+  isActive    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
 }
 
 model CandidateCreditWallet {
