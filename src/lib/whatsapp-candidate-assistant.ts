@@ -1,0 +1,377 @@
+import { ApplicationGateStatus, ApplicationGateType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { computeMatchScore } from "@/lib/matching/JobMatchingEngine";
+import { generateHandoffToken } from "@/lib/whatsapp-auth";
+import {
+  assignUniversalAssessment,
+  getCandidateTargetRole,
+  getUniversalValidationState,
+} from "@/lib/universalSkillValidation";
+import { DuplicateApplicationError, RosGateway } from "@/lib/ros/RosGateway";
+import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
+
+type CandidateIntent =
+  | { type: "MENU" }
+  | { type: "FIND_JOBS" }
+  | { type: "APPLICATIONS" }
+  | { type: "APPLICATION_STATUS" }
+  | { type: "PROFILE" }
+  | { type: "DASHBOARD" }
+  | { type: "SUPPORT" }
+  | { type: "APPLY"; index: number }
+  | { type: "UNKNOWN" };
+
+type AssistantMemory = {
+  lastJobIds?: string[];
+  lastIntent?: string;
+};
+
+type CollectedData = Record<string, unknown> & {
+  assistant?: AssistantMemory;
+};
+
+const MENU =
+  "What would you like to do?\n\n" +
+  "1️⃣ Find Jobs\n" +
+  "2️⃣ My Applications\n" +
+  "3️⃣ Application Status\n" +
+  "4️⃣ Complete Profile\n" +
+  "🔟 Open Dashboard\n" +
+  "0️⃣ Support\n\n" +
+  "You can also type naturally, for example: _Delhi sales jobs_, _my application status_, or _apply 2_.";
+
+function normalizedText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function routeWhatsAppCandidateIntent(raw: string): CandidateIntent {
+  const text = normalizedText(raw);
+  if (!text || ["hi", "hello", "hey", "menu", "start", "help"].includes(text)) return { type: "MENU" };
+
+  const applyMatch = text.match(/^(?:apply|apply for|i want to apply|mujhe apply karna hai)\s*(?:job\s*)?#?(\d{1,2})$/i);
+  if (applyMatch) {
+    const index = Number(applyMatch[1]);
+    return Number.isInteger(index) && index >= 1 && index <= 20
+      ? { type: "APPLY", index }
+      : { type: "UNKNOWN" };
+  }
+
+  if (text === "1" || /\b(find|search|show|recommend|matching)\b.*\b(job|jobs|naukri)\b/.test(text) || /\b(job|jobs|naukri)\b.*\b(find|search|show|chahiye|dikhao)\b/.test(text)) {
+    return { type: "FIND_JOBS" };
+  }
+  if (text === "2" || /\b(my applications|applications|applied jobs|meri applications|maine apply)\b/.test(text)) {
+    return { type: "APPLICATIONS" };
+  }
+  if (text === "3" || /\b(application status|status of application|application ka status|mera status)\b/.test(text)) {
+    return { type: "APPLICATION_STATUS" };
+  }
+  if (text === "4" || /\b(profile|complete profile|update profile|profile complete)\b/.test(text)) {
+    return { type: "PROFILE" };
+  }
+  if (text === "10" || /\b(dashboard|open dashboard|hirego dashboard)\b/.test(text)) {
+    return { type: "DASHBOARD" };
+  }
+  if (text === "0" || /\b(support|human|agent|help me|madad)\b/.test(text)) {
+    return { type: "SUPPORT" };
+  }
+
+  // A role/location-only query such as "Delhi BPO jobs" should still enter job search.
+  if (/\b(job|jobs|naukri)\b/.test(text)) return { type: "FIND_JOBS" };
+
+  return { type: "UNKNOWN" };
+}
+
+function appBaseUrl() {
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://hiregoai.com").replace(/\/$/, "");
+}
+
+async function readMemory(sessionId: string): Promise<CollectedData> {
+  const session = await prisma.whatsAppOnboardingSession.findUnique({
+    where: { id: sessionId },
+    select: { collectedData: true },
+  });
+  return (session?.collectedData && typeof session.collectedData === "object"
+    ? session.collectedData
+    : {}) as CollectedData;
+}
+
+async function writeMemory(sessionId: string, patch: AssistantMemory) {
+  const current = await readMemory(sessionId);
+  await prisma.whatsAppOnboardingSession.update({
+    where: { id: sessionId },
+    data: {
+      collectedData: {
+        ...current,
+        assistant: {
+          ...(current.assistant || {}),
+          ...patch,
+        },
+      },
+    },
+  });
+}
+
+async function makeDashboardLink(userId: string, sessionId: string, path = "/candidate/dashboard") {
+  const token = await generateHandoffToken(userId, sessionId);
+  const handoff = `${appBaseUrl()}/api/whatsapp/auth/handoff?token=${encodeURIComponent(token)}`;
+  if (path === "/candidate/dashboard") return handoff;
+  return `${handoff}&next=${encodeURIComponent(path)}`;
+}
+
+function compact(value: string | null | undefined, max = 70) {
+  const trimmed = (value || "").replace(/\s+/g, " ").trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+async function findRecommendedJobs(userId: string, sessionId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    include: {
+      candidateSkills: { where: { isVisible: true } },
+    },
+  });
+  if (!candidate) {
+    return "I couldn't find your candidate profile. Reply *4* to reopen profile setup.";
+  }
+
+  const jobs = await prisma.jobListing.findMany({
+    where: {
+      status: "ACTIVE",
+      publishedAt: { not: null },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    include: {
+      company: { select: { name: true } },
+    },
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+    take: 60,
+  });
+
+  if (!jobs.length) return "There are no active jobs available right now. Please try again later.";
+
+  const preferences = candidate.preferences && typeof candidate.preferences === "object"
+    ? candidate.preferences as Record<string, unknown>
+    : {};
+  const preferredTitles = Array.isArray(preferences.preferredTitles)
+    ? preferences.preferredTitles.filter((v): v is string => typeof v === "string")
+    : [];
+  const targetRole = (preferredTitles[0] || candidate.headline || "").toLowerCase();
+  const location = (candidate.location || "").toLowerCase();
+
+  const ranked = jobs.map((job) => {
+    const match = computeMatchScore(candidate, job);
+    const titleBoost = targetRole && job.title.toLowerCase().includes(targetRole) ? 25 : 0;
+    const locationBoost = location && (job.location || "").toLowerCase().includes(location) ? 10 : 0;
+    return {
+      job,
+      match,
+      sortScore: (match.evidenceAvailable ? match.matchScore : 0) + titleBoost + locationBoost,
+    };
+  }).sort((a, b) => b.sortScore - a.sortScore).slice(0, 5);
+
+  await writeMemory(sessionId, {
+    lastJobIds: ranked.map(({ job }) => job.id),
+    lastIntent: "FIND_JOBS",
+  });
+
+  const lines = ranked.map(({ job, match }, index) => {
+    const measured = match.evidenceAvailable ? ` • Match ${match.matchScore}%` : "";
+    const company = job.company?.name ? ` — ${compact(job.company.name, 45)}` : "";
+    const locationText = job.location ? ` • ${compact(job.location, 45)}` : "";
+    return `*${index + 1}. ${compact(job.title, 70)}*${company}\n${locationText}${measured}`;
+  });
+
+  return (
+    `Here are your top active HireGo jobs:\n\n${lines.join("\n\n")}\n\n` +
+    "To apply, reply *apply 1*, *apply 2*, etc.\n" +
+    "_HireGo only shows a match percentage when enough profile evidence is available._"
+  );
+}
+
+async function listApplications(userId: string, statusOnly = false) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!candidate) return "Candidate profile not found.";
+
+  const applications = await prisma.application.findMany({
+    where: { candidateProfileId: candidate.id },
+    include: {
+      job: { include: { company: { select: { name: true } } } },
+      gates: {
+        where: { status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] } },
+        select: { type: true, assessmentId: true, status: true },
+      },
+      offers: {
+        where: { status: { in: ["SENT", "ACCEPTED"] } },
+        select: { id: true, status: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+
+  if (!applications.length) {
+    return "You haven't applied to any jobs yet. Reply *1* and I'll find active jobs for you.";
+  }
+
+  const lines = applications.map((application, index) => {
+    const company = application.job.company?.name ? ` — ${compact(application.job.company.name, 40)}` : "";
+    const pendingGate = application.gates[0];
+    const gate = pendingGate
+      ? pendingGate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+        ? " • Skill validation pending"
+        : " • Job assessment pending"
+      : "";
+    const offer = application.offers[0] ? ` • Offer ${application.offers[0].status.toLowerCase()}` : "";
+    return `*${index + 1}. ${compact(application.job.title, 65)}*${company}\nStatus: ${application.status.replace(/_/g, " ")}${gate}${offer}`;
+  });
+
+  return `${statusOnly ? "Your latest application status:" : "Your recent applications:"}\n\n${lines.join("\n\n")}\n\nReply *1* to find more jobs.`;
+}
+
+async function applyToRememberedJob(userId: string, sessionId: string, index: number) {
+  const memory = await readMemory(sessionId);
+  const jobId = memory.assistant?.lastJobIds?.[index - 1];
+  if (!jobId) {
+    return "That job selection has expired or isn't in your latest list. Reply *1* to refresh jobs, then reply *apply 1*.";
+  }
+
+  const [candidate, job] = await Promise.all([
+    prisma.candidateProfile.findUnique({ where: { userId } }),
+    prisma.jobListing.findUnique({
+      where: { id: jobId },
+      select: { id: true, title: true, companyId: true, status: true, expiresAt: true },
+    }),
+  ]);
+  if (!candidate) return "Candidate profile not found. Reply *4* to complete your profile.";
+  if (!job || job.status !== "ACTIVE" || (job.expiresAt && job.expiresAt <= new Date())) {
+    return "That job is no longer accepting applications. Reply *1* and I'll refresh the active jobs.";
+  }
+
+  const existing = await prisma.application.findUnique({
+    where: {
+      candidateProfileId_jobId: {
+        candidateProfileId: candidate.id,
+        jobId: job.id,
+      },
+    },
+    include: {
+      gates: {
+        where: { status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] } },
+        select: { type: true, assessmentId: true },
+        take: 1,
+      },
+    },
+  });
+  if (existing) {
+    const gate = existing.gates[0];
+    if (gate?.assessmentId) {
+      const path = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+        ? `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(gate.assessmentId)}&applicationId=${encodeURIComponent(existing.id)}`
+        : `/assessment/mcq/active?id=${encodeURIComponent(gate.assessmentId)}`;
+      const link = await makeDashboardLink(userId, sessionId, path);
+      return `You've already started applying for *${compact(job.title)}*.\n\nComplete the pending assessment here:\n${link}`;
+    }
+    return `You've already applied for *${compact(job.title)}*. Current status: *${existing.status.replace(/_/g, " ")}*.`;
+  }
+
+  const targetRole = getCandidateTargetRole(candidate.preferences) || job.title;
+  const validationState = await getUniversalValidationState(candidate.id, targetRole);
+
+  try {
+    if (!validationState.completedAndCurrent) {
+      const pending = await RosGateway.handleApplicationValidationIntent({
+        userId,
+        jobId: job.id,
+        candidateProfileId: candidate.id,
+        companyId: job.companyId,
+      });
+      const assignment = await assignUniversalAssessment(candidate.id, targetRole);
+      await RosGateway.attachUniversalAssessment({
+        applicationId: pending.application.id,
+        candidateProfileId: candidate.id,
+        assessmentId: assignment.assessment.id,
+      });
+      const path = `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assignment.assessment.id)}&applicationId=${encodeURIComponent(pending.application.id)}`;
+      const link = await makeDashboardLink(userId, sessionId, path);
+      await writeMemory(sessionId, { lastIntent: "APPLY_PENDING_VALIDATION" });
+      return (
+        `Your application for *${compact(job.title)}* is saved. ✅\n\n` +
+        "HireGo Skill Validation is required before the application is released to the employer.\n" +
+        `Continue securely here:\n${link}`
+      );
+    }
+
+    const submission = await RosGateway.handleApplicationSubmission({
+      userId,
+      jobId: job.id,
+      candidateProfileId: candidate.id,
+      companyId: job.companyId,
+    });
+    await dispatchApplicationReceivedConfirmation({
+      applicationId: submission.application.id,
+      userId,
+      jobId: job.id,
+    });
+
+    await writeMemory(sessionId, { lastIntent: "APPLICATION_SUBMITTED" });
+
+    if (submission.jobSpecificAssessmentId) {
+      const path = `/assessment/mcq/active?id=${encodeURIComponent(submission.jobSpecificAssessmentId)}`;
+      const link = await makeDashboardLink(userId, sessionId, path);
+      return (
+        `Application submitted for *${compact(job.title)}*. ✅\n\n` +
+        "This employer requires an additional job-specific assessment.\n" +
+        `Start it here:\n${link}`
+      );
+    }
+
+    return `Application submitted for *${compact(job.title)}*. ✅\n\nI'll keep your application status available here on WhatsApp. Reply *3* anytime.`;
+  } catch (error) {
+    if (error instanceof DuplicateApplicationError || (error as { code?: string })?.code === "P2002") {
+      return `You've already applied for *${compact(job.title)}*. Reply *3* to check the status.`;
+    }
+    return "I couldn't complete that application safely right now. Your existing data has not been duplicated. Please try again shortly.";
+  }
+}
+
+async function profileOrDashboard(userId: string, sessionId: string, profile = false) {
+  const link = await makeDashboardLink(userId, sessionId, profile ? "/candidate/profile" : "/candidate/dashboard");
+  return profile
+    ? `Open your secure HireGo profile here:\n${link}\n\nThe sign-in link expires shortly and can only be used once.`
+    : `Open your secure HireGo dashboard here:\n${link}\n\nThe sign-in link expires shortly and can only be used once.`;
+}
+
+export async function handleCompletedWhatsAppAssistant(params: {
+  waId: string;
+  userId: string;
+  sessionId: string;
+  message: string;
+}): Promise<string> {
+  const intent = routeWhatsAppCandidateIntent(params.message);
+
+  switch (intent.type) {
+    case "MENU":
+      return MENU;
+    case "FIND_JOBS":
+      return findRecommendedJobs(params.userId, params.sessionId);
+    case "APPLICATIONS":
+      return listApplications(params.userId, false);
+    case "APPLICATION_STATUS":
+      return listApplications(params.userId, true);
+    case "PROFILE":
+      return profileOrDashboard(params.userId, params.sessionId, true);
+    case "DASHBOARD":
+      return profileOrDashboard(params.userId, params.sessionId, false);
+    case "SUPPORT":
+      return "HireGo Support\n\nEmail: support@hiregoai.com\n\nFor account-security issues, never share OTPs or passwords in WhatsApp.";
+    case "APPLY":
+      return applyToRememberedJob(params.userId, params.sessionId, intent.index);
+    default:
+      return `I can help with jobs and your HireGo application journey.\n\n${MENU}`;
+  }
+}
+
+export { MENU as WHATSAPP_CANDIDATE_MENU };
