@@ -285,6 +285,9 @@ test("candidate credit checkout creates provider-backed orders but never self-fu
   assert.match(fulfillment, /candidate-credit-purchase:\$\{paymentOrder\.orderId\}/);
   assert.match(fulfillment, /type: "PURCHASE"/);
   assert.match(fulfillment, /balance: \{ increment: snapshot\.credits \}/);
+  assert.match(fulfillment, /processPaymentReferralReward/);
+  assert.match(fulfillment, /ReferralProductType\.CANDIDATE_CAREER_PASS/);
+  assert.match(fulfillment, /tx,/);
 
   assert.doesNotMatch(boost, /status:\s*["']SUCCESS["']/);
   assert.doesNotMatch(boost, /isBoosted:\s*true/);
