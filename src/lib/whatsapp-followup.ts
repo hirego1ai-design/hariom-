@@ -5,6 +5,11 @@ const HOUR_MS = 60 * 60 * 1000;
 const MIN_FOLLOWUP_AGE_MS = 18 * HOUR_MS;
 const MAX_FOLLOWUP_AGE_MS = 23 * HOUR_MS + 30 * 60 * 1000;
 
+export function isWhatsAppFollowupAgeEligible(lastInboundAt: Date, nowMs = Date.now()): boolean {
+  const ageMs = nowMs - lastInboundAt.getTime();
+  return ageMs >= MIN_FOLLOWUP_AGE_MS && ageMs <= MAX_FOLLOWUP_AGE_MS;
+}
+
 export type WhatsAppFollowupDecision =
   | { eligible: false; reason: string }
   | { eligible: true; message: string; eventKey: string };
@@ -40,7 +45,7 @@ async function candidateFollowupMessage(userId: string): Promise<WhatsAppFollowu
       eventKey: "WHATSAPP_PENDING_ASSESSMENT_NUDGE",
       message:
         "Your *" + step + "* for *" + pendingGate.application.job.title + "* is still pending. " +
-        "If you want to continue now, reply *application status* and I’ll take you to the right secure step.",
+        "Want me to open the secure assessment step? Reply *assessment*.",
     };
   }
 
@@ -94,8 +99,12 @@ export async function evaluateWhatsAppFollowup(anchorEventId: string): Promise<W
   if (!anchor) return { eligible: false, reason: "anchor_event_missing" };
 
   const ageMs = Date.now() - anchor.receivedAt.getTime();
-  if (ageMs < MIN_FOLLOWUP_AGE_MS) return { eligible: false, reason: "too_early" };
-  if (ageMs > MAX_FOLLOWUP_AGE_MS) return { eligible: false, reason: "conversation_window_not_safely_open" };
+  if (!isWhatsAppFollowupAgeEligible(anchor.receivedAt)) {
+    return {
+      eligible: false,
+      reason: ageMs < MIN_FOLLOWUP_AGE_MS ? "too_early" : "conversation_window_not_safely_open",
+    };
+  }
 
   const [contact, latestInbound] = await Promise.all([
     prisma.whatsAppContact.findUnique({
