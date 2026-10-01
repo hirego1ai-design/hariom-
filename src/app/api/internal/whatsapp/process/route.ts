@@ -7,11 +7,13 @@ import {
   markWhatsAppJobRetry,
   restoreWhatsAppJobPending,
   scheduleWhatsAppInboundRetry,
+  scheduleWhatsAppFollowupCheck,
   WhatsAppQueueUnavailableError,
   type WhatsAppRetryErrorType,
 } from "@/lib/whatsapp-queue";
 import { processWhatsAppMessage } from "@/lib/whatsapp-onboarding";
 import { markWhatsAppMessageRead, sendWhatsAppTextMessage } from "@/lib/whatsapp";
+import { shouldScheduleWhatsAppFollowup } from "@/lib/whatsapp-followup";
 
 const schema = z.object({ eventId: z.string().uuid() });
 
@@ -69,6 +71,15 @@ export async function POST(request: Request) {
 
       await markWhatsAppMessageRead(event.providerEventId);
       await markWhatsAppJobProcessed(event);
+
+      // Schedule only an eligibility check. The delayed worker re-checks the
+      // latest user reply, opt-in, cooldown, conversation-window age and live
+      // business state before it is allowed to send one high-value nudge.
+      if (result.userId && await shouldScheduleWhatsAppFollowup(result.userId)) {
+        await scheduleWhatsAppFollowupCheck(event.id).catch(() => {
+          console.warn("WHATSAPP_FOLLOWUP_SCHEDULE_FAILED");
+        });
+      }
 
       return NextResponse.json({ success: true });
     } catch (error) {
