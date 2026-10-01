@@ -7,7 +7,7 @@ import {
   classifyWhatsAppAudience,
   routeEmployerIntentDeterministically,
 } from "@/lib/whatsapp-autonomous-agent";
-import { isWhatsAppFollowupAgeEligible } from "@/lib/whatsapp-followup";
+import { isCustomerServiceWindowNudgeAge } from "@/lib/whatsapp-engagement";
 
 test("candidate WhatsApp routes high-value product intents without LLM", () => {
   assert.equal(routeWhatsAppCandidateIntent("I want to practice mock interview").type, "MOCK_INTERVIEW");
@@ -18,6 +18,8 @@ test("candidate WhatsApp routes high-value product intents without LLM", () => {
 test("audience routing recognizes employer acquisition and candidate acquisition", () => {
   assert.equal(classifyWhatsAppAudience("We need to hire 25 customer support executives"), "EMPLOYER");
   assert.equal(classifyWhatsAppAudience("Mujhe Delhi mein job chahiye"), "CANDIDATE");
+  assert.equal(classifyWhatsAppAudience("I am a candidate looking for a job"), "CANDIDATE");
+  assert.equal(classifyWhatsAppAudience("I need candidates for my company"), "EMPLOYER");
   assert.equal(classifyWhatsAppAudience("hello"), "UNKNOWN");
 });
 
@@ -31,11 +33,11 @@ test("employer common intents are deterministic so LLM is fallback-only", () => 
 
 test("proactive WhatsApp nudge is eligible only near the end of the open service window", () => {
   const now = Date.parse("2026-10-01T12:00:00.000Z");
-  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 19 * 60 * 60 * 1000), now), false);
-  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 20 * 60 * 60 * 1000), now), true);
-  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 23 * 60 * 60 * 1000), now), true);
-  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 23.5 * 60 * 60 * 1000), now), false);
-  assert.equal(isWhatsAppFollowupAgeEligible(new Date(now - 24 * 60 * 60 * 1000), now), false);
+  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 19 * 60 * 60 * 1000), now), false);
+  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 20 * 60 * 60 * 1000), now), true);
+  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 23 * 60 * 60 * 1000), now), true);
+  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 23.5 * 60 * 60 * 1000), now), false);
+  assert.equal(isCustomerServiceWindowNudgeAge(new Date(now - 24 * 60 * 60 * 1000), now), false);
 });
 
 test("WhatsApp handoff remains allowlist-based for new candidate and employer surfaces", () => {
@@ -56,11 +58,16 @@ test("WhatsApp handoff remains allowlist-based for new candidate and employer su
   assert.doesNotMatch(file, /new URL\(dest\s*,/);
 });
 
-test("inbound WhatsApp worker schedules one durable delayed follow-up check", () => {
-  const worker = fs.readFileSync(
+test("Railway recovery runner owns the single WhatsApp engagement scheduler", () => {
+  const runner = fs.readFileSync(
+    path.join(process.cwd(), "src/lib/workflows/FailureRecoveryRunner.ts"),
+    "utf8",
+  );
+  assert.match(runner, /WhatsAppEngagementWorker\.run/);
+
+  const inboundWorker = fs.readFileSync(
     path.join(process.cwd(), "src/app/api/internal/whatsapp/process/route.ts"),
     "utf8",
   );
-  assert.match(worker, /scheduleWhatsAppFollowupCheck/);
-  assert.match(worker, /shouldScheduleWhatsAppFollowup/);
+  assert.doesNotMatch(inboundWorker, /scheduleWhatsAppFollowupCheck|shouldScheduleWhatsAppFollowup/);
 });
