@@ -111,11 +111,20 @@ async function writeMemory(sessionId: string, patch: AssistantMemory) {
   });
 }
 
-async function makeDashboardLink(userId: string, sessionId: string, path = "/candidate/dashboard") {
+async function makeHandoffLink(
+  userId: string,
+  sessionId: string,
+  destination: "dashboard" | "profile" | "jobs" | "skill-validation" | "job-assessment" = "dashboard",
+  params: { assessmentId?: string; applicationId?: string } = {},
+) {
   const token = await generateHandoffToken(userId, sessionId);
-  const handoff = `${appBaseUrl()}/api/whatsapp/auth/handoff?token=${encodeURIComponent(token)}`;
-  if (path === "/candidate/dashboard") return handoff;
-  return `${handoff}&next=${encodeURIComponent(path)}`;
+  const query = new URLSearchParams({
+    token,
+    dest: destination,
+    ...(params.assessmentId ? { assessmentId: params.assessmentId } : {}),
+    ...(params.applicationId ? { applicationId: params.applicationId } : {}),
+  });
+  return `${appBaseUrl()}/api/whatsapp/auth/handoff?${query.toString()}`;
 }
 
 function compact(value: string | null | undefined, max = 70) {
@@ -268,10 +277,9 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
   if (existing) {
     const gate = existing.gates[0];
     if (gate?.assessmentId) {
-      const path = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
-        ? `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(gate.assessmentId)}&applicationId=${encodeURIComponent(existing.id)}`
-        : `/assessment/mcq/active?id=${encodeURIComponent(gate.assessmentId)}`;
-      const link = await makeDashboardLink(userId, sessionId, path);
+      const link = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+        ? await makeHandoffLink(userId, sessionId, "skill-validation", { assessmentId: gate.assessmentId, applicationId: existing.id })
+        : await makeHandoffLink(userId, sessionId, "job-assessment", { assessmentId: gate.assessmentId });
       return `You've already started applying for *${compact(job.title)}*.\n\nComplete the pending assessment here:\n${link}`;
     }
     return `You've already applied for *${compact(job.title)}*. Current status: *${existing.status.replace(/_/g, " ")}*.`;
@@ -294,8 +302,10 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
         candidateProfileId: candidate.id,
         assessmentId: assignment.assessment.id,
       });
-      const path = `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assignment.assessment.id)}&applicationId=${encodeURIComponent(pending.application.id)}`;
-      const link = await makeDashboardLink(userId, sessionId, path);
+      const link = await makeHandoffLink(userId, sessionId, "skill-validation", {
+        assessmentId: assignment.assessment.id,
+        applicationId: pending.application.id,
+      });
       await writeMemory(sessionId, { lastIntent: "APPLY_PENDING_VALIDATION" });
       return (
         `Your application for *${compact(job.title)}* is saved. ✅\n\n` +
@@ -319,8 +329,9 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
     await writeMemory(sessionId, { lastIntent: "APPLICATION_SUBMITTED" });
 
     if (submission.jobSpecificAssessmentId) {
-      const path = `/assessment/mcq/active?id=${encodeURIComponent(submission.jobSpecificAssessmentId)}`;
-      const link = await makeDashboardLink(userId, sessionId, path);
+      const link = await makeHandoffLink(userId, sessionId, "job-assessment", {
+        assessmentId: submission.jobSpecificAssessmentId,
+      });
       return (
         `Application submitted for *${compact(job.title)}*. ✅\n\n` +
         "This employer requires an additional job-specific assessment.\n" +
@@ -338,7 +349,7 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
 }
 
 async function profileOrDashboard(userId: string, sessionId: string, profile = false) {
-  const link = await makeDashboardLink(userId, sessionId, profile ? "/candidate/profile" : "/candidate/dashboard");
+  const link = await makeHandoffLink(userId, sessionId, profile ? "profile" : "dashboard");
   return profile
     ? `Open your secure HireGo profile here:\n${link}\n\nThe sign-in link expires shortly and can only be used once.`
     : `Open your secure HireGo dashboard here:\n${link}\n\nThe sign-in link expires shortly and can only be used once.`;
