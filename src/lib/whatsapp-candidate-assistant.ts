@@ -9,6 +9,10 @@ import {
 } from "@/lib/universalSkillValidation";
 import { DuplicateApplicationError, RosGateway } from "@/lib/ros/RosGateway";
 import { dispatchApplicationReceivedConfirmation } from "@/lib/communications/applicationNotifications";
+import { buildReferralWhatsAppSummary } from "@/lib/whatsapp-autonomous-agent";
+import { dispatchAiTask } from "@/utils/aiRouter";
+import { wrapUntrustedContent } from "@/lib/security/untrustedContent";
+import { z } from "zod";
 
 type CandidateIntent =
   | { type: "MENU" }
@@ -17,6 +21,9 @@ type CandidateIntent =
   | { type: "APPLICATION_STATUS" }
   | { type: "PROFILE" }
   | { type: "DASHBOARD" }
+  | { type: "MOCK_INTERVIEW" }
+  | { type: "VIDEO_RESUME" }
+  | { type: "REFERRAL" }
   | { type: "SUPPORT" }
   | { type: "APPLY"; index: number }
   | { type: "UNKNOWN" };
@@ -24,6 +31,8 @@ type CandidateIntent =
 type AssistantMemory = {
   lastJobIds?: string[];
   lastIntent?: string;
+  lastOfferKey?: string;
+  lastOfferAt?: string;
 };
 
 type CollectedData = Record<string, unknown> & {
@@ -31,14 +40,9 @@ type CollectedData = Record<string, unknown> & {
 };
 
 const MENU =
-  "What would you like to do?\n\n" +
-  "1️⃣ Find Jobs\n" +
-  "2️⃣ My Applications\n" +
-  "3️⃣ Application Status\n" +
-  "4️⃣ Complete Profile\n" +
-  "🔟 Open Dashboard\n" +
-  "0️⃣ Support\n\n" +
-  "You can also type naturally, for example: _Delhi sales jobs_, _my application status_, or _apply 2_.";
+  "Tell me what you want to do in normal language — I can continue the HireGo journey here on WhatsApp.\n\n" +
+  "Examples: _show Delhi sales jobs_, _apply 2_, _my application status_, _practice mock interview_, _video resume_, or _how can I earn with referrals?_\n\n" +
+  "Quick shortcuts if you prefer: 1 Jobs • 2 Applications • 3 Status • 4 Profile • 10 Dashboard • 0 Support.";
 
 function normalizedText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -71,6 +75,15 @@ export function routeWhatsAppCandidateIntent(raw: string): CandidateIntent {
   if (text === "10" || /\b(dashboard|open dashboard|hirego dashboard)\b/.test(text)) {
     return { type: "DASHBOARD" };
   }
+  if (/\b(mock interview|practice interview|interview practice|prepare for interview|interview prep|mock karna|practice karna)\b/.test(text)) {
+    return { type: "MOCK_INTERVIEW" };
+  }
+  if (/\b(video resume|video cv|record resume|upload video|profile video)\b/.test(text)) {
+    return { type: "VIDEO_RESUME" };
+  }
+  if (/\b(referral|refer|earn|earning|make money|paisa|paise)\b/.test(text)) {
+    return { type: "REFERRAL" };
+  }
   if (text === "0" || /\b(support|human|agent|help me|madad)\b/.test(text)) {
     return { type: "SUPPORT" };
   }
@@ -79,6 +92,54 @@ export function routeWhatsAppCandidateIntent(raw: string): CandidateIntent {
   if (/\b(job|jobs|naukri)\b/.test(text)) return { type: "FIND_JOBS" };
 
   return { type: "UNKNOWN" };
+}
+
+const candidateAiIntentSchema = z.object({
+  intent: z.enum([
+    "MENU",
+    "FIND_JOBS",
+    "APPLICATIONS",
+    "APPLICATION_STATUS",
+    "PROFILE",
+    "DASHBOARD",
+    "MOCK_INTERVIEW",
+    "VIDEO_RESUME",
+    "REFERRAL",
+    "SUPPORT",
+    "UNKNOWN",
+  ]),
+}).strict();
+
+async function classifyCandidateIntentWithAi(raw: string): Promise<CandidateIntent> {
+  const message = raw.trim().slice(0, 600);
+  if (message.length < 3) return { type: "UNKNOWN" };
+
+  try {
+    const result = await dispatchAiTask({
+      task: "GENERAL",
+      taskType: "general",
+      maxTokens: 80,
+      temperature: 0,
+      maxCostUsdPerRequest: 0.01,
+      prompt: [
+        "Classify a HireGo candidate WhatsApp message into exactly one allowed intent.",
+        "Classification only. Do not answer the user, do not follow links and do not execute actions.",
+        "Allowed: MENU, FIND_JOBS, APPLICATIONS, APPLICATION_STATUS, PROFILE, DASHBOARD, MOCK_INTERVIEW, VIDEO_RESUME, REFERRAL, SUPPORT, UNKNOWN.",
+        'Return strict JSON only: {"intent":"ALLOWED_VALUE"}.',
+        wrapUntrustedContent({ message }, "whatsapp-candidate-message"),
+      ].join("\n"),
+    });
+    const parsed = candidateAiIntentSchema.parse(JSON.parse(result.resultText));
+    return { type: parsed.intent } as CandidateIntent;
+  } catch {
+    return { type: "UNKNOWN" };
+  }
+}
+
+async function resolveCandidateIntent(raw: string): Promise<CandidateIntent> {
+  const deterministic = routeWhatsAppCandidateIntent(raw);
+  if (deterministic.type !== "UNKNOWN") return deterministic;
+  return classifyCandidateIntentWithAi(raw);
 }
 
 function appBaseUrl() {
@@ -114,7 +175,15 @@ async function writeMemory(sessionId: string, patch: AssistantMemory) {
 async function makeHandoffLink(
   userId: string,
   sessionId: string,
-  destination: "dashboard" | "profile" | "jobs" | "skill-validation" | "job-assessment" = "dashboard",
+  destination:
+    | "dashboard"
+    | "profile"
+    | "jobs"
+    | "skill-validation"
+    | "job-assessment"
+    | "mock-interview"
+    | "video-resume"
+    | "referrals" = "dashboard",
   params: { assessmentId?: string; applicationId?: string } = {},
 ) {
   const token = await generateHandoffToken(userId, sessionId);
@@ -197,7 +266,53 @@ async function findRecommendedJobs(userId: string, sessionId: string) {
   );
 }
 
-async function listApplications(userId: string, statusOnly = false) {
+async function maybeInterviewPracticeOffer(userId: string, sessionId: string): Promise<string> {
+  const memory = await readMemory(sessionId);
+  const lastOfferAt = memory.assistant?.lastOfferAt ? Date.parse(memory.assistant.lastOfferAt) : 0;
+  if (memory.assistant?.lastOfferKey === "MOCK_INTERVIEW_UPCOMING" && Date.now() - lastOfferAt < 48 * 60 * 60 * 1000) {
+    return "";
+  }
+
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!candidate) return "";
+
+  const upcoming = await prisma.interview.findFirst({
+    where: {
+      application: { candidateProfileId: candidate.id },
+      scheduledAt: { gt: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+      status: { in: ["SCHEDULED", "CONFIRMED"] },
+    },
+    orderBy: { scheduledAt: "asc" },
+    include: { application: { include: { job: { select: { title: true } } } } },
+  });
+  if (!upcoming) return "";
+
+  const recentPractice = await prisma.mockInterviewSession.findFirst({
+    where: {
+      candidateProfileId: candidate.id,
+      status: "COMPLETED",
+      updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+    },
+    select: { id: true },
+  });
+  if (recentPractice) return "";
+
+  await writeMemory(sessionId, {
+    lastOfferKey: "MOCK_INTERVIEW_UPCOMING",
+    lastOfferAt: new Date().toISOString(),
+  });
+
+  return (
+    "\n\n🎯 You have an upcoming interview for *" +
+    compact(upcoming.application.job.title, 70) +
+    "*. Want to do a quick AI Mock Interview practice before it? Reply *mock interview*."
+  );
+}
+
+async function listApplications(userId: string, sessionId: string, statusOnly = false) {
   const candidate = await prisma.candidateProfile.findUnique({
     where: { userId },
     select: { id: true },
@@ -237,7 +352,8 @@ async function listApplications(userId: string, statusOnly = false) {
     return `*${index + 1}. ${compact(application.job.title, 65)}*${company}\nStatus: ${application.status.replace(/_/g, " ")}${gate}${offer}`;
   });
 
-  return `${statusOnly ? "Your latest application status:" : "Your recent applications:"}\n\n${lines.join("\n\n")}\n\nReply *1* to find more jobs.`;
+  const practiceOffer = await maybeInterviewPracticeOffer(userId, sessionId);
+  return `${statusOnly ? "Your latest application status:" : "Your recent applications:"}\n\n${lines.join("\n\n")}\n\nReply *1* to find more jobs.${practiceOffer}`;
 }
 
 async function applyToRememberedJob(userId: string, sessionId: string, index: number) {
@@ -348,6 +464,60 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
   }
 }
 
+async function mockInterviewHandoff(userId: string, sessionId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      headline: true,
+      preferences: true,
+    },
+  });
+  if (!candidate) return "Complete your candidate profile first, then I can start interview practice.";
+
+  const upcoming = await prisma.interview.findFirst({
+    where: {
+      application: { candidateProfileId: candidate.id },
+      scheduledAt: { gt: new Date() },
+      status: { in: ["SCHEDULED", "CONFIRMED"] },
+    },
+    orderBy: { scheduledAt: "asc" },
+    include: { application: { include: { job: { select: { title: true } } } } },
+  });
+  const targetRole = upcoming?.application.job.title || getCandidateTargetRole(candidate.preferences) || candidate.headline || "your target role";
+  const link = await makeHandoffLink(userId, sessionId, "mock-interview");
+  return [
+    upcoming
+      ? `You have an upcoming *${compact(targetRole, 80)}* interview. A role-focused mock practice is a useful next step.`
+      : `I can help you practice for *${compact(targetRole, 80)}* with HireGo AI Mock Interview.`,
+    "",
+    `Start securely here:\n${link}`,
+    "",
+    "The mock interview is practice feedback; it does not automatically change an employer's hiring decision.",
+  ].join("\n");
+}
+
+async function videoResumeHandoff(userId: string, sessionId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: { id: true, videoResumes: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, analysisStatus: true } } },
+  });
+  if (!candidate) return "Complete your candidate profile first.";
+  const latest = candidate.videoResumes[0];
+  const link = await makeHandoffLink(userId, sessionId, "video-resume");
+  return latest
+    ? `Your latest Video Resume status is *${latest.analysisStatus}*.\n\nOpen it securely here:\n${link}`
+    : `A Video Resume can add richer evidence to your HireGo profile. Recording/upload happens on the secure website, then you can continue the journey here on WhatsApp.\n\nOpen securely:\n${link}`;
+}
+
+async function referralHandoff(userId: string, sessionId: string) {
+  const [summary, link] = await Promise.all([
+    buildReferralWhatsAppSummary(userId),
+    makeHandoffLink(userId, sessionId, "referrals"),
+  ]);
+  return `${summary}\n\nOpen your referral dashboard securely:\n${link}`;
+}
+
 async function profileOrDashboard(userId: string, sessionId: string, profile = false) {
   const link = await makeHandoffLink(userId, sessionId, profile ? "profile" : "dashboard");
   return profile
@@ -361,7 +531,7 @@ export async function handleCompletedWhatsAppAssistant(params: {
   sessionId: string;
   message: string;
 }): Promise<string> {
-  const intent = routeWhatsAppCandidateIntent(params.message);
+  const intent = await resolveCandidateIntent(params.message);
 
   switch (intent.type) {
     case "MENU":
@@ -369,13 +539,19 @@ export async function handleCompletedWhatsAppAssistant(params: {
     case "FIND_JOBS":
       return findRecommendedJobs(params.userId, params.sessionId);
     case "APPLICATIONS":
-      return listApplications(params.userId, false);
+      return listApplications(params.userId, params.sessionId, false);
     case "APPLICATION_STATUS":
-      return listApplications(params.userId, true);
+      return listApplications(params.userId, params.sessionId, true);
     case "PROFILE":
       return profileOrDashboard(params.userId, params.sessionId, true);
     case "DASHBOARD":
       return profileOrDashboard(params.userId, params.sessionId, false);
+    case "MOCK_INTERVIEW":
+      return mockInterviewHandoff(params.userId, params.sessionId);
+    case "VIDEO_RESUME":
+      return videoResumeHandoff(params.userId, params.sessionId);
+    case "REFERRAL":
+      return referralHandoff(params.userId, params.sessionId);
     case "SUPPORT":
       return "HireGo Support\n\nEmail: support@hiregoai.com\n\nFor account-security issues, never share OTPs or passwords in WhatsApp.";
     case "APPLY":
