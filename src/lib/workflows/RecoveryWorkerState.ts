@@ -1,4 +1,4 @@
-import { timingSafeEqual, randomUUID } from 'crypto';
+import { timingSafeEqual, randomUUID, createHmac } from 'crypto';
 import { Redis } from '@upstash/redis';
 import { ApiError } from '../apiSecurity';
 import type { RecoveryReport } from './FailureRecoveryRunner';
@@ -16,8 +16,20 @@ function redis() {
   return client;
 }
 
+function recoveryWorkerKey(): string {
+  const explicit = process.env.WORKER_RECOVERY_API_KEY?.trim();
+  if (explicit) return explicit;
+
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret || cronSecret.length < 32) return '';
+
+  return createHmac('sha256', cronSecret)
+    .update('hirego:workflow-recovery:v1')
+    .digest('base64url');
+}
+
 export function requireRecoveryWorkerKey(request: Request) {
-  const expected = process.env.WORKER_RECOVERY_API_KEY?.trim();
+  const expected = recoveryWorkerKey();
   if (!expected || expected.length < 32) {
     throw new ApiError('Recovery worker key is not configured.', 503);
   }
