@@ -47,3 +47,16 @@ test("Meta CTWA sanitization preserves campaign identifiers without retaining fu
   assert.equal(sanitized.referral.ctwa_clid, "click-123");
   assert.doesNotMatch(JSON.stringify(sanitized), /919876543210/);
 });
+
+
+test("candidate mock interview handoff checks credit balance before secure start", async () => {
+  const fs = await import("node:fs");
+  const assistant = fs.readFileSync(new URL("../lib/whatsapp-candidate-assistant.ts", import.meta.url), "utf8");
+  const handoff = fs.readFileSync(new URL("../app/api/whatsapp/auth/handoff/route.ts", import.meta.url), "utf8");
+
+  assert.match(assistant, /creditWallet/);
+  assert.match(assistant, /candidateCreditPackage\.findFirst/);
+  assert.match(assistant, /makeHandoffLink\(userId, sessionId, "credits"\)/);
+  assert.match(assistant, /Payment happens on the website\/app/);
+  assert.match(handoff, /credits: "\/credits\?returnTo=mock-interview"/);
+});

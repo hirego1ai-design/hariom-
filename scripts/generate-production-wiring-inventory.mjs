@@ -145,8 +145,17 @@ function classify(text, kind, hasAction = false) {
   if (kind === "screen" && !hasAction) return { status: "GREEN", severity: "LOW", reason: "Static render-only screen; runtime readiness is not inferred." };
   if (kind === "endpoint") {
     const wired = detectDbModels(text).length > 0 || detectServices(text).length > 0 || detectProvider(text).length > 0;
-    return wired && hasErrorHandling(text)
-      ? { status: "GREEN", severity: "LOW", reason: "Endpoint has implementation references and error handling." }
+    const validatedInternalRedirect =
+      /NextResponse\.redirect\s*\(/.test(text) &&
+      /safeParse|ALLOWED_DESTINATIONS|new URL\s*\(\s*["']\//.test(text);
+    return (wired && hasErrorHandling(text)) || validatedInternalRedirect
+      ? {
+          status: "GREEN",
+          severity: "LOW",
+          reason: validatedInternalRedirect
+            ? "Validated internal redirect endpoint; no persistence dependency is required."
+            : "Endpoint has implementation references and error handling.",
+        }
       : { status: "YELLOW", severity: "MEDIUM", reason: "Endpoint lacks clear implementation wiring or error handling." };
   }
   return hasAction

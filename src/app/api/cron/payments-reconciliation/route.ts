@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PaymentGatewayController } from "@/lib/payments/PaymentGatewayController";
 import { isGateway } from "@/lib/payments/PaymentGatewayInterface";
+import { parseCandidateCreditPackageSnapshot } from "@/lib/payments/candidateCreditCommerce";
 
 const BATCH_SIZE = 50;
 const STALE_PENDING_MINUTES = 10;
@@ -85,15 +86,33 @@ async function handleCron(request: NextRequest) {
             });
           }
 
-          await tx.auditLog.create({
-            data: {
-              userId: null,
-              companyId: order.companyId,
-              action: "PAYMENT_RECONCILIATION_FAILED",
-              resource: `PaymentOrder:${order.orderId}`,
-              details: `Provider ${order.gateway} reported failed payment for stale checkout.`,
-            },
-          });
+          if (order.productType === "CANDIDATE_CREDITS") {
+            const snapshot = parseCandidateCreditPackageSnapshot(order.planSnapshot);
+            const profile = await tx.candidateProfile.findUnique({
+              where: { id: snapshot.candidateProfileId },
+              select: { userId: true },
+            });
+            if (profile) {
+              await tx.auditLog.create({
+                data: {
+                  userId: profile.userId,
+                  action: "CANDIDATE_CREDIT_PAYMENT_RECONCILIATION_FAILED",
+                  resource: `PaymentOrder:${order.orderId}`,
+                  details: `Provider ${order.gateway} reported failed payment for stale candidate checkout; creditsGranted:0`,
+                },
+              });
+            }
+          } else {
+            await tx.auditLog.create({
+              data: {
+                userId: null,
+                companyId: order.companyId,
+                action: "PAYMENT_RECONCILIATION_FAILED",
+                resource: `PaymentOrder:${order.orderId}`,
+                details: `Provider ${order.gateway} reported failed payment for stale checkout.`,
+              },
+            });
+          }
         });
         results.push({ orderId: order.orderId, status: "FAILED" });
         continue;
@@ -103,23 +122,41 @@ async function handleCron(request: NextRequest) {
         // Do not synthesize fulfillment here. The verified webhook owns the
         // atomic subscription/promo/ledger transition. Preserve CREATED so a
         // delayed/replayed verified webhook can still claim and fulfill it.
-        await prisma.systemEvent.upsert({
-          where: { idempotencyKey: `payment-reconciliation-success:${order.orderId}` },
-          update: {},
-          create: {
-            scope: "TENANT",
-            companyId: order.companyId,
-            eventType: "PAYMENT_RECONCILIATION_SUCCESS_DETECTED",
-            correlationId: order.orderId,
-            idempotencyKey: `payment-reconciliation-success:${order.orderId}`,
-            payload: {
-              orderId: order.orderId,
-              gateway: order.gateway,
-              gatewayOrderId: order.gatewayOrderId,
-              actionRequired: "VERIFIED_WEBHOOK_FULFILLMENT",
+        if (order.productType === "CANDIDATE_CREDITS") {
+          const snapshot = parseCandidateCreditPackageSnapshot(order.planSnapshot);
+          const profile = await prisma.candidateProfile.findUnique({
+            where: { id: snapshot.candidateProfileId },
+            select: { userId: true },
+          });
+          if (profile) {
+            await prisma.auditLog.create({
+              data: {
+                userId: profile.userId,
+                action: "CANDIDATE_CREDIT_PAYMENT_SUCCESS_AWAITING_WEBHOOK",
+                resource: `PaymentOrder:${order.orderId}`,
+                details: `Provider ${order.gateway} reports paid; signed webhook fulfillment is still required before credits are granted.`,
+              },
+            });
+          }
+        } else {
+          await prisma.systemEvent.upsert({
+            where: { idempotencyKey: `payment-reconciliation-success:${order.orderId}` },
+            update: {},
+            create: {
+              scope: "TENANT",
+              companyId: order.companyId,
+              eventType: "PAYMENT_RECONCILIATION_SUCCESS_DETECTED",
+              correlationId: order.orderId,
+              idempotencyKey: `payment-reconciliation-success:${order.orderId}`,
+              payload: {
+                orderId: order.orderId,
+                gateway: order.gateway,
+                gatewayOrderId: order.gatewayOrderId,
+                actionRequired: "VERIFIED_WEBHOOK_FULFILLMENT",
+              },
             },
-          },
-        });
+          });
+        }
         results.push({ orderId: order.orderId, status: "SUCCESS_AWAITING_VERIFIED_WEBHOOK" });
         continue;
       }

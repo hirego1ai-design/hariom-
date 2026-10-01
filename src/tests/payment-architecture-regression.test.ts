@@ -267,14 +267,110 @@ test("admin payment routing UI cannot persist fabricated healthy fallbacks", asy
   assert.match(controller, /No enabled payment gateways are available/);
 });
 
-test("candidate credit and job boost purchase endpoints do not self-fulfill payment success", async () => {
+test("candidate credit checkout creates provider-backed orders but never self-fulfills credits", async () => {
   const fs = await import("node:fs");
   const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const fulfillment = fs.readFileSync(new URL("../lib/payments/candidateCreditCommerce.ts", import.meta.url), "utf8");
+  const webhook = fs.readFileSync(new URL("../app/api/payments/webhook/route.ts", import.meta.url), "utf8");
   const boost = fs.readFileSync(new URL("../app/api/employer/jobs/[id]/boost/route.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(credits, /status:\s*["']SUCCESS["']/);
-  assert.doesNotMatch(credits, /balance:\s*\{\s*increment:/);
-  assert.match(credits, /PAYMENT_INTEGRATION_REQUIRED/);
+
+  assert.match(credits, /CANDIDATE_CREDIT_PRODUCT_TYPE/);
+  assert.match(credits, /PaymentGatewayController\.createOrder/);
+  assert.match(credits, /Idempotency-Key/);
+  assert.doesNotMatch(credits, /candidateCreditWallet\.upsert[\s\S]*increment:\s*creditPackage\.credits/);
+
+  assert.match(webhook, /handleCandidateCreditPaymentWebhook/);
+  assert.match(fulfillment, /verification\.status !== "SUCCESS"/);
+  assert.match(fulfillment, /Math\.abs\(verification\.amount - paymentOrder\.expectedAmount\)/);
+  assert.match(fulfillment, /candidate-credit-purchase:\$\{paymentOrder\.orderId\}/);
+  assert.match(fulfillment, /type: "PURCHASE"/);
+  assert.match(fulfillment, /balance: \{ increment: snapshot\.credits \}/);
+  assert.match(fulfillment, /processPaymentReferralReward/);
+  assert.match(fulfillment, /ReferralProductType\.CANDIDATE_CAREER_PASS/);
+  assert.match(fulfillment, /tx,/);
+
   assert.doesNotMatch(boost, /status:\s*["']SUCCESS["']/);
   assert.doesNotMatch(boost, /isBoosted:\s*true/);
   assert.match(boost, /PAYMENT_INTEGRATION_REQUIRED/);
+});
+
+test("candidate credit commercial values come from the database package catalog", async () => {
+  const fs = await import("node:fs");
+  const route = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../../prisma/schema.prisma", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../app/credits/page.tsx", import.meta.url), "utf8");
+
+  assert.match(schema, /model CandidateCreditPackage/);
+  assert.match(route, /candidateCreditPackage\.findMany/);
+  assert.match(route, /candidateCreditPackage\.findUnique/);
+  assert.doesNotMatch(route, /const\s+packages\s*=\s*\[[^\]]+\]/);
+  assert.match(page, /signed gateway webhook/);
+  assert.match(page, /submitPayU/);
+});
+
+
+test("payment gateways honor server-provided product return URLs", async () => {
+  const fs = await import("node:fs");
+  const stripe = fs.readFileSync(new URL("../lib/payments/StripeGateway.ts", import.meta.url), "utf8");
+  const payu = fs.readFileSync(new URL("../lib/payments/PayUGateway.ts", import.meta.url), "utf8");
+  const contract = fs.readFileSync(new URL("../lib/payments/PaymentGatewayInterface.ts", import.meta.url), "utf8");
+
+  assert.match(contract, /successUrl\?: string/);
+  assert.match(contract, /cancelUrl\?: string/);
+  assert.match(stripe, /params\.successUrl \|\|/);
+  assert.match(stripe, /params\.cancelUrl \|\|/);
+  assert.match(payu, /params\.successUrl \|\|/);
+  assert.match(payu, /params\.cancelUrl \|\|/);
+});
+
+
+test("candidate gateway browser returns never fulfill credits", async () => {
+  const fs = await import("node:fs");
+  const checkout = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const browserReturn = fs.readFileSync(new URL("../app/api/candidate/credits/return/route.ts", import.meta.url), "utf8");
+
+  assert.match(checkout, /\/api\/candidate\/credits\/return\?orderId=/);
+  assert.match(browserReturn, /NextResponse\.redirect\(target, 303\)/);
+  assert.match(browserReturn, /export async function POST/);
+  assert.doesNotMatch(browserReturn, /candidateCreditWallet/);
+  assert.doesNotMatch(browserReturn, /paymentTransaction/);
+});
+
+
+test("candidate mock interview is never debited through the generic candidate service endpoint", async () => {
+  const fs = await import("node:fs");
+  const credits = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const genericService = fs.readFileSync(new URL("../app/api/candidate/services/[serviceKey]/request/route.ts", import.meta.url), "utf8");
+  const mockStart = fs.readFileSync(new URL("../app/api/assessment/mock-interview/start/route.ts", import.meta.url), "utf8");
+
+  assert.match(credits, /serviceKey: \{ notIn: \["mock-interview", "mock_interview"\] \}/);
+  assert.match(genericService, /AI Mock Interview is charged only when an actual interview session starts/);
+  assert.match(mockStart, /mock-interview:\$\{candidateProfile\.id\}:\$\{idempotencyKey\}/);
+  assert.match(mockStart, /balance: \{ decrement: mockService\.creditCost \}/);
+});
+
+test("candidate checkout preserves only the allowlisted mock interview return intent", async () => {
+  const fs = await import("node:fs");
+  const checkout = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const browserReturn = fs.readFileSync(new URL("../app/api/candidate/credits/return/route.ts", import.meta.url), "utf8");
+  const setup = fs.readFileSync(new URL("../app/ai/mock-interview/setup/page.tsx", import.meta.url), "utf8");
+  const creditsPage = fs.readFileSync(new URL("../app/credits/page.tsx", import.meta.url), "utf8");
+
+  assert.match(checkout, /returnTo: z\.enum\(\["mock-interview"\]\)\.optional\(\)/);
+  assert.match(browserReturn, /returnTo: z\.enum\(\["mock-interview"\]\)\.optional\(\)/);
+  assert.match(setup, /res\.status === 402/);
+  assert.match(setup, /\/credits\?returnTo=mock-interview/);
+  assert.match(creditsPage, /window\.location\.assign\("\/ai\/mock-interview\/setup"\)/);
+});
+
+test("Stripe checkout fails closed when signed webhook readiness is missing and blocks ambiguous cross-provider failover", async () => {
+  const fs = await import("node:fs");
+  const stripe = fs.readFileSync(new URL("../lib/payments/StripeGateway.ts", import.meta.url), "utf8");
+  const controller = fs.readFileSync(new URL("../lib/payments/PaymentGatewayController.ts", import.meta.url), "utf8");
+
+  assert.match(stripe, /STRIPE_WEBHOOK_SECRET \|\| process\.env\.PAYMENT_WEBHOOK_SECRET/);
+  assert.match(stripe, /AmbiguousPaymentOrderError/);
+  assert.match(stripe, /response\.status >= 500/);
+  assert.match(controller, /err instanceof AmbiguousPaymentOrderError/);
+  assert.match(controller, /Never create a second provider order/);
 });

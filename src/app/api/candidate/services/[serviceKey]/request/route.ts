@@ -20,6 +20,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await enforceRateLimit(request, "candidate_service_request", 20, 60_000);
     const { session, profile } = await candidateProfile(request);
     const { serviceKey } = await params;
+    const normalizedServiceKey = serviceKey.trim().toLowerCase();
+    if (normalizedServiceKey === "mock-interview" || normalizedServiceKey === "mock_interview") {
+      throw new ApiError(
+        "AI Mock Interview is charged only when an actual interview session starts. Open Mock Interview setup instead.",
+        409,
+      );
+    }
     const { idempotencyKey } = await readValidatedJson(request, requestSchema, 4 * 1024);
 
     const usage = await prisma.$transaction(async (tx) => {

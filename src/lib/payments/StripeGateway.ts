@@ -6,6 +6,7 @@ import {
   CreateOrderResult,
   VerifyWebhookParams,
   VerifyWebhookResult,
+  AmbiguousPaymentOrderError,
 } from "./PaymentGatewayInterface";
 
 export class StripeGateway implements PaymentGateway {
@@ -13,16 +14,19 @@ export class StripeGateway implements PaymentGateway {
 
   async createOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
     const secretKey = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!secretKey || !appUrl) {
-      if (process.env.NODE_ENV === "production") throw new Error("Stripe checkout credentials are not configured.");
+    if (!secretKey || !appUrl || (process.env.NODE_ENV === "production" && !webhookSecret)) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Stripe checkout or signed-webhook credentials are not configured.");
+      }
       const id = `cs_test_${crypto.randomUUID()}`;
       return { success: true, gateway: "STRIPE", orderId: params.orderId, gatewayOrderId: id, amount: params.amount, currency: params.currency || "INR", checkoutUrl: `/payment/status?orderId=${params.orderId}&gatewayOrderId=${id}&gateway=STRIPE`, rawPayload: { mock: true, gatewayOrderId: id } };
     }
     const body = new URLSearchParams();
     body.set("mode", "payment");
-    body.set("success_url", `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE`);
-    body.set("cancel_url", `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE&cancelled=1`);
+    body.set("success_url", params.successUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE`);
+    body.set("cancel_url", params.cancelUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE&cancelled=1`);
     body.set("client_reference_id", params.orderId);
     if (params.customerEmail) body.set("customer_email", params.customerEmail.trim().toLowerCase());
     body.set("metadata[companyId]", params.companyId);
@@ -32,10 +36,67 @@ export class StripeGateway implements PaymentGateway {
     body.set("line_items[0][price_data][currency]", (params.currency || "INR").toLowerCase());
     body.set("line_items[0][price_data][unit_amount]", String(Math.round(params.amount * 100)));
     body.set("line_items[0][price_data][product_data][name]", params.planName);
-    const response = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": `hirego-${params.orderId}` }, body, signal: AbortSignal.timeout(10_000), redirect: "error", cache: "no-store" });
-    const payload = await response.json();
-    if (!response.ok || !payload?.id || !payload?.url) throw new Error("Stripe checkout session creation failed.");
-    return { success: true, gateway: "STRIPE", orderId: params.orderId, gatewayOrderId: payload.id, amount: params.amount, currency: params.currency || "INR", checkoutUrl: payload.url, rawPayload: { id: payload.id } };
+    let response: Response;
+    try {
+      response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Idempotency-Key": `hirego-${params.orderId}`,
+        },
+        body,
+        signal: AbortSignal.timeout(10_000),
+        redirect: "error",
+        cache: "no-store",
+      });
+    } catch {
+      // The request may have reached Stripe before the connection failed.
+      // Never fail over to another provider in this state: doing so could
+      // create two payable checkout orders for one HireGo purchase.
+      throw new AmbiguousPaymentOrderError(
+        "Stripe checkout outcome is unknown. Start a new checkout only after this attempt is reconciled or abandoned.",
+        "STRIPE",
+      );
+    }
+
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      if (response.ok || response.status >= 500) {
+        throw new AmbiguousPaymentOrderError(
+          "Stripe checkout returned an indeterminate response.",
+          "STRIPE",
+        );
+      }
+      throw new Error("Stripe checkout session creation failed.");
+    }
+
+    if (response.status >= 500) {
+      throw new AmbiguousPaymentOrderError(
+        "Stripe checkout returned a server error with an uncertain order outcome.",
+        "STRIPE",
+      );
+    }
+    if (!response.ok) throw new Error("Stripe checkout session creation failed.");
+    if (!payload?.id || !payload?.url) {
+      throw new AmbiguousPaymentOrderError(
+        "Stripe checkout response was successful but incomplete.",
+        "STRIPE",
+      );
+    }
+
+    return {
+      success: true,
+      gateway: "STRIPE",
+      orderId: params.orderId,
+      gatewayOrderId: payload.id,
+      amount: params.amount,
+      currency: params.currency || "INR",
+      checkoutUrl: payload.url,
+      rawPayload: { id: payload.id },
+    };
   }
 
   async verifyWebhook(params: VerifyWebhookParams): Promise<VerifyWebhookResult> {

@@ -23,6 +23,8 @@ export interface CreateOrderParams {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  successUrl?: string;
+  cancelUrl?: string;
 }
 
 export interface CreateOrderResult {

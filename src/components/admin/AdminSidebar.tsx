@@ -32,6 +32,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "referrals", label: "Referrals", href: "/admin/referrals", icon: "share" },
   { id: "pricing-engine", label: "Pricing Engine", href: "/admin/pricing-engine", icon: "sell" },
   { id: "payment-gateways", label: "Payment Gateways", href: "/admin/payment-gateways", icon: "account_balance" },
+  { id: "candidate-credits", label: "Candidate Credit Commerce", href: "/admin/candidate-credits", icon: "toll" },
   { id: "communications", label: "Communications", href: "/admin/communications", icon: "forum" },
   { id: "content", label: "Content Management", href: "/admin/content", icon: "article" },
   { id: "settings", label: "Admin Settings Hub", href: "/admin/settings/hub", icon: "settings" },
