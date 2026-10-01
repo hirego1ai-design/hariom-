@@ -198,6 +198,7 @@ async function makeHandoffLink(
     | "skill-validation"
     | "job-assessment"
     | "mock-interview"
+    | "credits"
     | "video-resume"
     | "referrals" = "dashboard",
   params: { assessmentId?: string; applicationId?: string } = {},
@@ -597,20 +598,54 @@ async function mockInterviewHandoff(userId: string, sessionId: string) {
       id: true,
       headline: true,
       preferences: true,
+      creditWallet: { select: { balance: true } },
     },
   });
   if (!candidate) return "Complete your candidate profile first, then I can start interview practice.";
 
-  const upcoming = await prisma.interview.findFirst({
-    where: {
-      application: { candidateProfileId: candidate.id },
-      scheduledAt: { gt: new Date() },
-      status: { in: ["SCHEDULED", "CONFIRMED"] },
-    },
-    orderBy: { scheduledAt: "asc" },
-    include: { application: { include: { job: { select: { title: true } } } } },
-  });
+  const [upcoming, mockService] = await Promise.all([
+    prisma.interview.findFirst({
+      where: {
+        application: { candidateProfileId: candidate.id },
+        scheduledAt: { gt: new Date() },
+        status: { in: ["SCHEDULED", "CONFIRMED"] },
+      },
+      orderBy: { scheduledAt: "asc" },
+      include: { application: { include: { job: { select: { title: true } } } } },
+    }),
+    prisma.candidateServiceCatalog.findFirst({
+      where: { serviceKey: { in: ["mock-interview", "mock_interview"] }, isActive: true },
+      select: { creditCost: true },
+    }),
+  ]);
+
   const targetRole = upcoming?.application.job.title || getCandidateTargetRole(candidate.preferences) || candidate.headline || "your target role";
+  const requiredCredits = mockService?.creditCost || 0;
+  const walletBalance = candidate.creditWallet?.balance || 0;
+
+  if (requiredCredits > walletBalance) {
+    const activePackage = await prisma.candidateCreditPackage.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    if (!activePackage) {
+      return [
+        `AI Mock Interview for *${compact(targetRole, 80)}* requires ${requiredCredits} credits. Your current balance is ${walletBalance}.`,
+        "",
+        "Credit purchase is not currently published, so I won't send a fake payment link. You can continue using any services covered by your existing balance.",
+      ].join("\n");
+    }
+    const link = await makeHandoffLink(userId, sessionId, "credits");
+    return [
+      `AI Mock Interview for *${compact(targetRole, 80)}* requires ${requiredCredits} credits. Your current balance is ${walletBalance}.`,
+      "",
+      "Buy credits securely on HireGo:",
+      link,
+      "",
+      "Payment happens on the website/app through the configured gateway. Credits are added only after verified payment confirmation; then start Mock Interview from HireGo.",
+    ].join("\n");
+  }
+
   const link = await makeHandoffLink(userId, sessionId, "mock-interview");
   return [
     upcoming
@@ -619,10 +654,9 @@ async function mockInterviewHandoff(userId: string, sessionId: string) {
     "",
     `Start securely here:\n${link}`,
     "",
-    "The mock interview is practice feedback; it does not automatically change an employer's hiring decision.",
+    "The mock interview runs on HireGo website/app and provides practice feedback; it does not automatically change an employer's hiring decision.",
   ].join("\n");
 }
-
 async function videoResumeHandoff(userId: string, sessionId: string) {
   const candidate = await prisma.candidateProfile.findUnique({
     where: { userId },
