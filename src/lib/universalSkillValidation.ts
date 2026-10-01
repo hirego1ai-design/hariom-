@@ -6,6 +6,7 @@ import { ModelRouter } from "@/lib/ai/ModelRouter";
 import { dispatchAiTask, markAiExecutionValidationFailure } from "@/utils/aiRouter";
 import { getUniversalSkillValidationPolicy } from "@/lib/universalSkillValidationPolicy";
 import { resolveCanonicalSkillTags } from "@/lib/skillTaxonomy";
+import { getRoleSkillSuggestions } from "@/lib/skill-master";
 
 export const UNIVERSAL_VALIDATION_SENIORITY = "UNIVERSAL";
 
@@ -108,9 +109,14 @@ async function getCoreRoleSkills(
     throw new Error(`Assessment authoring received unknown skill tags: ${unknownTags.join(", ")}`);
   }
 
+  const bootstrapSkills = ordered.length === 0
+    ? getRoleSkillSuggestions(roleTitle).map((skill) => skill.name)
+    : [];
+
   const orderedSkillNames = Array.from(new Set([
     ...canonicalTags,
     ...ordered.map((mapping) => mapping.skill.name),
+    ...bootstrapSkills,
   ]));
 
   return buildSkillAllocation(orderedSkillNames, totalQuestions);
