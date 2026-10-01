@@ -670,8 +670,8 @@ async function dispatchCommunicationInternal(input: DispatchCommunicationInput, 
         : await prisma.communicationDelivery.create({ data: deliveryData });
   } catch (error) {
     // A concurrent caller may have won the idempotency race (or consumed the
-    // one-shot consequential approval together with its delivery row). Never
-    // issue a second provider call: resolve and return the winner if its
+    // one-shot consequential approval together with its delivery row).
+    // Never issue a second provider call: resolve and return the winner if its
     // persisted binding exactly matches this request.
     const racedDelivery = await resolveExistingDelivery();
     if (racedDelivery) {
