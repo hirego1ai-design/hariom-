@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { effectivePublishedWhere, editorialPublicPath } from "@/lib/contentCms";
 import { SEO_JOB_CITIES, matchesSeoCity } from "@/lib/seoJobCities";
 import { categoriesForCity, matchesSeoCategory } from "@/lib/seoJobCategories";
+import { MOCK_INTERVIEW_ROLES } from "@/lib/revenueSeo";
 
 const base = "https://www.hiregoai.com";
 export const revalidate = 3600;
@@ -11,6 +12,7 @@ export const revalidate = 3600;
 // candidate, admin and API routes are intentionally excluded.
 const publicPaths = [
   "/", "/features", "/services", "/solutions", "/video-resume",
+  "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hiring-in",
   "/pricing", "/about", "/company", "/enterprise", "/contact",
   "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources",
   "/ai-features", "/certifications", "/post-job-public", "/jobs", "/jobs-in", "/free-job-posting",
@@ -22,6 +24,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url: `${base}${path === "/" ? "" : path}`,
     changeFrequency: path === "/" ? "weekly" : path === "/jobs" ? "daily" : "monthly",
     priority: path === "/" ? 1 : ["/services", "/solutions", "/video-resume", "/about", "/resources", "/jobs", "/free-job-posting"].includes(path) ? .8 : .6,
+  }));
+
+  const hiringCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({
+    url: `${base}/hiring-in/${city.slug}`,
+    changeFrequency: "monthly",
+    priority: .78,
+  }));
+
+  const mockInterviewRoleEntries: MetadataRoute.Sitemap = MOCK_INTERVIEW_ROLES.map((role) => ({
+    url: `${base}/ai-mock-interview/${role.slug}`,
+    changeFrequency: "monthly",
+    priority: .7,
   }));
 
   const freePostingCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({
@@ -88,6 +102,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     return [
       ...staticEntries,
+      ...hiringCityEntries,
+      ...mockInterviewRoleEntries,
       ...freePostingCityEntries,
       ...cityEntries,
       ...categoryEntries,
@@ -101,6 +117,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   } catch {
     // Keep the sitemap available even during a temporary database outage.
-    return [...staticEntries, ...freePostingCityEntries];
+    return [...staticEntries, ...hiringCityEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries];
   }
 }

@@ -6,7 +6,7 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/free-job-posting",
-  title: "AI Recruitment & Free Job Posting in India | HireGo AI",
+  title: "Free Job Posting in India for Employers | HireGo AI",
   description: "Post jobs across India and manage applicants, screening, assessments and interviews with HireGo AI. Explore employer hiring pages for major Indian cities.",
 });
 
@@ -32,7 +32,7 @@ export default function FreeJobPostingIndiaPage() {
         <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Hire across India</p>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting & AI Recruitment Platform in India</h1>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting in India for Employers</h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-300">
               Create a clear role, publish it for candidates, and manage applicant screening, assessments and interview steps in one structured hiring workflow.
             </p>
