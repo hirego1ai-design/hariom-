@@ -403,7 +403,8 @@ test("full recovery endpoint requires a dedicated recovery key and never falls b
 test("communication retries are owned by the existing workflow recovery pass", () => {
   const runner = fs.readFileSync(new URL("../lib/workflows/FailureRecoveryRunner.ts", import.meta.url), "utf8");
   const vercel = fs.readFileSync(new URL("../../vercel.json", import.meta.url), "utf8");
-  assert(runner.includes("prepareCommunicationRetries(5)"));
+  assert(runner.includes("prepareCommunicationRetries(5, stopAt)"));
+  assert(runner.includes("Date.now() < stopAt"));
   assert(!vercel.includes("communication-retries"));
 });
 
