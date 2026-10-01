@@ -32,6 +32,7 @@ import {
   linkContactToUser,
   waIdToE164,
   setWhatsAppConsent,
+  isWhatsAppOptOutCommand,
 } from "./whatsapp-identity";
 import { handleCompletedWhatsAppAssistant } from "./whatsapp-candidate-assistant";
 
@@ -356,6 +357,19 @@ export async function processWhatsAppMessage(
 
   // Get or create session
   const session = await getOrCreateSession(waId, contact.id);
+
+  // STOP/UNSUBSCRIBE must take effect regardless of onboarding state. Do not
+  // continue the assistant after opt-out, which could otherwise look like a
+  // marketing reply after the user explicitly revoked messaging consent.
+  if (isWhatsAppOptOutCommand(msg)) {
+    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");
+    return {
+      reply: "You have been opted out of proactive HireGo WhatsApp updates. You can still use HireGo on the web at https://hiregoai.com.",
+      nextStep: session.currentStep as OnboardingStep,
+      sessionComplete: session.status === "COMPLETE",
+      userId: session.userId ?? undefined,
+    };
+  }
 
   // Click-to-WhatsApp referral metadata is accepted only from the signed Meta
   // webhook path and is first-touch attributed. Later messages cannot overwrite it.
