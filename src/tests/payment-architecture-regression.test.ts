@@ -304,3 +304,18 @@ test("candidate credit commercial values come from the database package catalog"
   assert.match(page, /signed gateway webhook/);
   assert.match(page, /submitPayU/);
 });
+
+
+test("payment gateways honor server-provided product return URLs", async () => {
+  const fs = await import("node:fs");
+  const stripe = fs.readFileSync(new URL("../lib/payments/StripeGateway.ts", import.meta.url), "utf8");
+  const payu = fs.readFileSync(new URL("../lib/payments/PayUGateway.ts", import.meta.url), "utf8");
+  const contract = fs.readFileSync(new URL("../lib/payments/PaymentGatewayInterface.ts", import.meta.url), "utf8");
+
+  assert.match(contract, /successUrl\?: string/);
+  assert.match(contract, /cancelUrl\?: string/);
+  assert.match(stripe, /params\.successUrl \|\|/);
+  assert.match(stripe, /params\.cancelUrl \|\|/);
+  assert.match(payu, /params\.successUrl \|\|/);
+  assert.match(payu, /params\.cancelUrl \|\|/);
+});
