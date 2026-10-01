@@ -24,8 +24,8 @@ export default function PressKitPage() {
     "@type": "Organization",
     name: PUBLIC_BUSINESS_DETAILS.brandName,
     alternateName: ["HireGoAI", "Hire Go AI", "HireGo"],
-    url: "https://hiregoai.com",
-    logo: "https://hiregoai.com/marketing/hirego-logo-hd.png",
+    url: "https://www.hiregoai.com",
+    logo: "https://www.hiregoai.com/marketing/hirego-logo-hd.png",
     email: PUBLIC_BUSINESS_DETAILS.supportEmail,
     address: {
       "@type": "PostalAddress",
@@ -67,7 +67,7 @@ export default function PressKitPage() {
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#82b1ff]">Brand facts</p>
               <dl className="mt-5 space-y-4 text-sm">
                 <div><dt className="font-bold text-white">Brand</dt><dd className="mt-1 text-slate-400">HireGo AI</dd></div>
-                <div><dt className="font-bold text-white">Website</dt><dd className="mt-1"><a className="text-[#82b1ff] hover:underline" href="https://hiregoai.com">hiregoai.com</a></dd></div>
+                <div><dt className="font-bold text-white">Website</dt><dd className="mt-1"><a className="text-[#82b1ff] hover:underline" href="https://www.hiregoai.com">hiregoai.com</a></dd></div>
                 <div><dt className="font-bold text-white">Primary market</dt><dd className="mt-1 text-slate-400">India</dd></div>
                 <div><dt className="font-bold text-white">Location</dt><dd className="mt-1 text-slate-400">{PUBLIC_BUSINESS_DETAILS.postalAddress}</dd></div>
                 <div><dt className="font-bold text-white">Support</dt><dd className="mt-1"><a className="text-[#82b1ff] hover:underline" href={`mailto:${PUBLIC_BUSINESS_DETAILS.supportEmail}`}>{PUBLIC_BUSINESS_DETAILS.supportEmail}</a></dd></div>

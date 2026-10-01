@@ -21,7 +21,7 @@ const paths: Record<string, string> = {
 };
 
 export function marketingMetadata({ path, title, description, image = "/marketing/og/home.webp" }: { path: string; title: string; description: string; image?: string }): Metadata {
-  const url = `https://hiregoai.com${path === "/" ? "" : path}`;
+  const url = `https://www.hiregoai.com${path === "/" ? "" : path}`;
   return {
     title, description,
     alternates: { canonical: url },
