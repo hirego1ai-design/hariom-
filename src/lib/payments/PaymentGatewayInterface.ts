@@ -19,7 +19,10 @@ export interface CreateOrderParams {
   currency: string;
   planName: string;
   planId?: string;
-  companyId: string;
+  companyId?: string;
+  subjectId?: string;
+  productType?: string;
+  productId?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -51,6 +54,9 @@ export interface VerifyWebhookResult {
   gatewayOrderId?: string;
   orderId?: string;
   companyId?: string;
+  subjectId?: string;
+  productType?: string;
+  productId?: string;
   planId?: string;
   amount?: number;
   currency?: string;
