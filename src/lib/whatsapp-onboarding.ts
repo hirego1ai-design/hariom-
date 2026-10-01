@@ -406,6 +406,15 @@ export async function processWhatsAppMessage(
     const identity = await resolveWhatsAppIdentity(waId);
 
     if (identity.status === "existing_contact") {
+      if (identity.user!.role !== "CANDIDATE") {
+        return {
+          reply:
+            "This WhatsApp assistant currently handles candidate job discovery and onboarding. " +
+            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
+          nextStep: "START",
+          sessionComplete: false,
+        };
+      }
       // Already linked — bind this onboarding session to the canonical user so
       // every later WhatsApp message can use the autonomous assistant.
       await prisma.whatsAppOnboardingSession.update({
@@ -443,6 +452,15 @@ export async function processWhatsAppMessage(
     }
 
     if (identity.status === "phone_match") {
+      if (identity.user!.role !== "CANDIDATE") {
+        return {
+          reply:
+            "This number belongs to a non-candidate HireGo account. " +
+            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
+          nextStep: "START",
+          sessionComplete: false,
+        };
+      }
       // Existing HireGo account — verify before linking
       const updatedData: CollectedData = {
         ...data,
