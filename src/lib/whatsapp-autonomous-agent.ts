@@ -48,22 +48,27 @@ export function classifyWhatsAppAudience(raw: string): WhatsAppAudience {
   const text = normalize(raw);
   if (!text) return "UNKNOWN";
 
-  const employerSignals = [
-    /\b(hire|hiring|recruit|recruitment|talent|candidates?|vacanc(?:y|ies)|openings?)\b/,
-    /\b(employer|hr|recruiter|company|business)\b/,
-    /\b(staff|manpower|workforce)\b.*\b(need|chahiye|hire)\b/,
-    /\b(copilot|managed hiring|pay per hire|pph)\b/,
-  ];
-  if (employerSignals.some((pattern) => pattern.test(text))) return "EMPLOYER";
-
+  // Strong self-identified job-seeker language wins before generic words such
+  // as "candidate" or "interview", which can appear on both sides of hiring.
   const candidateSignals = [
-    /\b(job|jobs|naukri|career|apply|application)\b/,
-    /\b(interview|resume|cv|assessment)\b/,
-    /\b(job seeker|candidate|fresher)\b/,
-    /\b(mujhe|mere liye|i need|looking for)\b.*\b(job|naukri)\b/,
+    /\b(looking for|need|want|searching for)\b.*\b(job|jobs|naukri|career)\b/,
+    /\b(mujhe|mere liye)\b.*\b(job|jobs|naukri)\b/,
+    /\b(job seeker|fresher|apply|application status|my application)\b/,
+    /\b(my resume|my cv|mock interview|interview practice|my assessment)\b/,
   ];
   if (candidateSignals.some((pattern) => pattern.test(text))) return "CANDIDATE";
 
+  const employerSignals = [
+    /\b(we|our company|company|i)\b.*\b(need|want|plan|looking)\b.*\b(hire|hiring|candidates?|talent|staff|employees?)\b/,
+    /\b(need|want|looking for)\b.*\b(candidates?|talent|staff|manpower|workforce)\b/,
+    /\b(hiring|recruitment|recruiter|employer|hr team|talent acquisition)\b/,
+    /\b(copilot|managed hiring|pay per hire|pph|bulk hiring|mass hiring)\b/,
+  ];
+  if (employerSignals.some((pattern) => pattern.test(text))) return "EMPLOYER";
+
+  // Generic job discovery language is candidate-oriented; generic "candidate"
+  // alone is deliberately ambiguous instead of creating the wrong account type.
+  if (/\b(job|jobs|naukri)\b/.test(text)) return "CANDIDATE";
   return "UNKNOWN";
 }
 
