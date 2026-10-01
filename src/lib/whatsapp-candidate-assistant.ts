@@ -611,15 +611,44 @@ async function mockInterviewHandoff(userId: string, sessionId: string) {
     include: { application: { include: { job: { select: { title: true } } } } },
   });
   const targetRole = upcoming?.application.job.title || getCandidateTargetRole(candidate.preferences) || candidate.headline || "your target role";
+  const mockService = await prisma.candidateServiceCatalog.findFirst({
+    where: {
+      serviceKey: { in: ["mock-interview", "mock_interview"] },
+      isActive: true,
+    },
+    select: { creditCost: true },
+  });
+  const wallet = await prisma.candidateCreditWallet.upsert({
+    where: { candidateProfileId: candidate.id },
+    create: { candidateProfileId: candidate.id },
+    update: {},
+    select: { balance: true },
+  });
+
+  if (mockService && mockService.creditCost > 0 && wallet.balance < mockService.creditCost) {
+    const creditLink = await makeHandoffLink(userId, sessionId, "credits");
+    return [
+      upcoming
+        ? `You have an upcoming *${compact(targetRole, 80)}* interview. A role-focused Mock Interview is available before it.`
+        : `HireGo AI Mock Interview is available for *${compact(targetRole, 80)}* practice.`,
+      "",
+      `It requires *${mockService.creditCost} credits*. Your current balance is *${wallet.balance}*.`,
+      "Buy credits securely on HireGo — payment is completed on the website/app and credits are added only after verified gateway confirmation:",
+      creditLink,
+      "",
+      "After payment, start the Mock Interview on HireGo. It does not run inside WhatsApp.",
+    ].join("\n");
+  }
+
   const link = await makeHandoffLink(userId, sessionId, "mock-interview");
   return [
     upcoming
       ? `You have an upcoming *${compact(targetRole, 80)}* interview. A role-focused mock practice is a useful next step.`
       : `I can help you practice for *${compact(targetRole, 80)}* with HireGo AI Mock Interview.`,
     "",
-    `Start securely here:\n${link}`,
+    `Start securely on HireGo here:\n${link}`,
     "",
-    "The mock interview is practice feedback; it does not automatically change an employer's hiring decision.",
+    "The Mock Interview runs on the website/app and is practice feedback; it does not automatically change an employer's hiring decision.",
   ].join("\n");
 }
 
