@@ -9,8 +9,8 @@ const LEASE_MS = 90_000;
 let client: Redis | undefined;
 
 function redis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (!url || !token) throw new ApiError('Recovery worker coordination is not configured.', 503);
   client ??= new Redis({ url, token });
   return client;
