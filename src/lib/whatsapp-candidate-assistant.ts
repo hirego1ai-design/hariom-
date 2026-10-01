@@ -428,13 +428,15 @@ async function listApplications(userId: string, sessionId: string, statusOnly = 
   const actionable = applications.find((application) => application.gates[0]?.assessmentId);
   if (actionable?.gates[0]?.assessmentId) {
     const gate = actionable.gates[0];
+    const assessmentId = gate.assessmentId;
+    if (!assessmentId) throw new Error("Assessment handoff requires an assessment id.");
     const link = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
       ? await makeHandoffLink(userId, sessionId, "skill-validation", {
-          assessmentId: gate.assessmentId,
+          assessmentId,
           applicationId: actionable.id,
         })
       : await makeHandoffLink(userId, sessionId, "job-assessment", {
-          assessmentId: gate.assessmentId,
+          assessmentId,
         });
     pendingAction = `\n\nContinue your pending assessment securely:\n${link}`;
   }
