@@ -24,6 +24,7 @@ const ALLOWED_DESTINATIONS: Record<string, string> = {
   jobs: "/candidate/job-search",
   profile: "/candidate/profile",
   "mock-interview": "/ai/mock-interview/setup",
+  credits: "/credits",
   "video-resume": "/profile/video-resume",
   referrals: "/referrals/dashboard",
   "employer-dashboard": "/employer/dashboard",
