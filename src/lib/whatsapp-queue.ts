@@ -290,3 +290,52 @@ export async function deferRateLimitedWhatsAppEvent(eventId: string, delayMs: nu
     throw error;
   }
 }
+
+
+export const WHATSAPP_FOLLOWUP_DELAY_MS = 20 * 60 * 60 * 1000;
+
+/**
+ * Schedules one delayed eligibility check near the end of the user-initiated
+ * WhatsApp service window. It does not itself send a user message.
+ */
+export async function scheduleWhatsAppFollowupCheck(
+  eventId: string,
+  delayMs = WHATSAPP_FOLLOWUP_DELAY_MS,
+): Promise<void> {
+  const appUrl = process.env.APP_URL?.replace(/\/$/, "");
+  const key = process.env.INTERNAL_API_KEY;
+  const qstashToken = process.env.QSTASH_TOKEN;
+
+  if (!appUrl || !key || !qstashToken) {
+    if (process.env.NODE_ENV === "production") {
+      throw new WhatsAppQueueUnavailableError(
+        "QStash, APP_URL, and INTERNAL_API_KEY are required for WhatsApp follow-up scheduling.",
+      );
+    }
+    return;
+  }
+
+  const destination = `${appUrl}/api/internal/whatsapp/followup`;
+  const response = await fetch(
+    `https://qstash.upstash.io/v2/publish/${encodeURIComponent(destination)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${qstashToken}`,
+        "Content-Type": "application/json",
+        "Upstash-Forward-x-api-key": key,
+        "Upstash-Retries": "1",
+        "Upstash-Redact-Fields": "body,header[x-api-key]",
+        "Upstash-Delay": `${Math.max(1, Math.ceil(delayMs / 1_000))}s`,
+      },
+      body: JSON.stringify({ eventId }),
+      signal: AbortSignal.timeout(5_000),
+    },
+  );
+
+  if (!response.ok) {
+    throw new WhatsAppQueueUnavailableError(
+      `QStash rejected WhatsApp follow-up scheduling with status ${response.status}.`,
+    );
+  }
+}
