@@ -4,6 +4,7 @@ import { z } from "zod";
 const querySchema = z.object({
   orderId: z.string().trim().min(16).max(160),
   cancelled: z.enum(["0", "1"]).optional().default("0"),
+  returnTo: z.enum(["mock-interview"]).optional(),
 }).strict();
 
 function redirectToCredits(request: NextRequest) {
@@ -15,6 +16,7 @@ function redirectToCredits(request: NextRequest) {
   }
   target.searchParams.set("paymentOrderId", parsed.data.orderId);
   if (parsed.data.cancelled === "1") target.searchParams.set("cancelled", "1");
+  if (parsed.data.returnTo) target.searchParams.set("returnTo", parsed.data.returnTo);
   return NextResponse.redirect(target, 303);
 }
 
