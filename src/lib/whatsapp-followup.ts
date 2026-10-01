@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppTextMessage } from "@/lib/whatsapp";
 
 const HOUR_MS = 60 * 60 * 1000;
-const MIN_FOLLOWUP_AGE_MS = 18 * HOUR_MS;
-const MAX_FOLLOWUP_AGE_MS = 23 * HOUR_MS + 30 * 60 * 1000;
+const MIN_FOLLOWUP_AGE_MS = 20 * HOUR_MS;
+const MAX_FOLLOWUP_AGE_MS = 23 * HOUR_MS + 15 * 60 * 1000;
 const PROACTIVE_COOLDOWN_MS = 48 * HOUR_MS;
 const FOLLOWUP_EVENT_KEYS = [
   "WHATSAPP_PENDING_ASSESSMENT_NUDGE",
