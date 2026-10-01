@@ -42,6 +42,7 @@ export default function CandidateCreditsPage() {
   const [requesting, setRequesting] = useState("");
   const [purchasing, setPurchasing] = useState("");
   const [purchaseStatus, setPurchaseStatus] = useState("");
+  const [returnTo, setReturnTo] = useState<"mock-interview" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +64,8 @@ export default function CandidateCreditsPage() {
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
+    const requestedReturn = search.get("returnTo") === "mock-interview" ? "mock-interview" : null;
+    setReturnTo(requestedReturn);
     const orderId = search.get("paymentOrderId");
     if (!orderId) return;
     if (search.get("cancelled") === "1") {
@@ -84,6 +87,10 @@ export default function CandidateCreditsPage() {
           setSuccessNotice(`Payment verified. ${data.order.credits} credits are now available in your wallet.`);
           setError("");
           await load();
+          if (requestedReturn === "mock-interview") {
+            window.location.assign("/ai/mock-interview/setup");
+            return;
+          }
           window.history.replaceState({}, "", "/credits");
           return;
         }
@@ -120,7 +127,11 @@ export default function CandidateCreditsPage() {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify({ packageId: pkg.id, paymentMethod: "AUTO" }),
+        body: JSON.stringify({
+          packageId: pkg.id,
+          paymentMethod: "AUTO",
+          ...(returnTo === "mock-interview" ? { returnTo } : {}),
+        }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || "Could not create secure checkout.");
@@ -182,6 +193,12 @@ export default function CandidateCreditsPage() {
             <p className="mt-1 text-sm text-text-secondary">Payment is completed on Stripe or PayU secure checkout. Credits are added only after HireGo verifies the signed gateway webhook.</p>
           </div>
         </div>
+
+        {returnTo === "mock-interview" && (
+          <div className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-400/5 p-4 text-sm text-blue-100">
+            You came here for AI Mock Interview. Buy enough credits through secure checkout; after the signed payment confirmation updates your wallet, HireGo will return you to Mock Interview setup.
+          </div>
+        )}
 
         {purchaseStatus === "PAYMENT_CONFIGURATION_UNAVAILABLE" && (
           <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-200">
