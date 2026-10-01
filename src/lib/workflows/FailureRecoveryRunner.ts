@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 import { registerProductionConsumers } from '../events/ProductionConsumers';
 import { PphBillingWorker } from '../pph-billing';
 import { WhatsAppQueueRecovery, type WhatsAppRecoveryReport } from '../whatsapp-queue';
-import { WhatsAppEngagementWorker, type WhatsAppEngagementReport } from '../whatsapp-engagement';
 import { SecurityAuditDeliveryWorker, type SecurityAuditDeliveryReport } from '../securityAuditDelivery';
 import { recoverStaleVideoAnalysisJobs } from '../videoAnalysisQueue';
 
@@ -15,7 +14,6 @@ export interface RecoveryReport {
   failedWorkflowsEnqueued: number;
   outbox: OutboxPollReport;
   whatsapp?: WhatsAppRecoveryReport;
-  whatsappEngagement?: WhatsAppEngagementReport;
   securityAudit?: SecurityAuditDeliveryReport;
   videoAnalysis?: { scanned: number; retried: number; exhausted: number };
   timeBudgetExhausted: boolean;
@@ -39,9 +37,6 @@ export class FailureRecoveryRunner {
     const whatsapp = Date.now() < stopAt
       ? await WhatsAppQueueRecovery.run(5, stopAt)
       : { eligible: 0, scheduled: 0, failed: 0, timeBudgetExhausted: true };
-    const whatsappEngagement = Date.now() < stopAt
-      ? await WhatsAppEngagementWorker.run(10, stopAt)
-      : { scanned: 0, eligible: 0, sent: 0, skipped: 0, failed: 0, timeBudgetExhausted: true };
     const securityAudit = Date.now() < stopAt
       ? await SecurityAuditDeliveryWorker.run(4)
       : { configured: Boolean(process.env.SIEM_WEBHOOK_URL && process.env.SIEM_WEBHOOK_TOKEN), pending: 0, delivered: 0, retried: 0, failed: 0, unclaimed: 0 };
@@ -92,7 +87,6 @@ export class FailureRecoveryRunner {
       failedWorkflowsEnqueued,
       outbox,
       whatsapp,
-      whatsappEngagement,
       securityAudit,
       videoAnalysis,
       timeBudgetExhausted: Date.now() >= stopAt,
