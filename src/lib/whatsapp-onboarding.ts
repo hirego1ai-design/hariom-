@@ -126,6 +126,21 @@ async function saveStep(sessionId: string, step: OnboardingStep, data?: Collecte
   });
 }
 
+async function reactivateSession(sessionId: string): Promise<void> {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
+  await prisma.whatsAppOnboardingSession.update({
+    where: { id: sessionId },
+    data: {
+      currentStep: "START",
+      status: "ACTIVE",
+      collectedData: {},
+      completedAt: null,
+      expiresAt,
+    },
+  });
+}
+
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
 const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ' .-]{2,60}$/;
@@ -386,12 +401,21 @@ export async function processWhatsAppMessage(
   const currentStep = session.currentStep as OnboardingStep;
   const data = (session.collectedData ?? {}) as CollectedData;
 
-  // ── Expired session ────────────────────────────────────────────────────────
+  // ── Expired/cancelled session recovery ────────────────────────────────────
   if (currentStep === "EXPIRED" || session.status === "EXPIRED") {
-    await saveStep(session.id, "START", {});
+    await reactivateSession(session.id);
+    return processWhatsAppMessage(waId, rawMessage, context);
+  }
+
+  if (currentStep === "CANCELLED" || session.status === "CANCELLED") {
+    const normalized = msg.toLowerCase();
+    if (["hi", "hello", "hey", "start", "restart", "start over"].includes(normalized)) {
+      await reactivateSession(session.id);
+      return processWhatsAppMessage(waId, rawMessage, context);
+    }
     return {
-      reply: `Welcome back to HireGo AI! 👋\n\nYour previous session expired. Let's start fresh.\n\n${stepPrompt("NAME", {})}`,
-      nextStep: "NAME",
+      reply: "Registration is currently cancelled. Reply *Hi* or *restart* whenever you want to begin again.",
+      nextStep: "CANCELLED",
       sessionComplete: false,
     };
   }
