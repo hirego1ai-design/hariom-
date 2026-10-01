@@ -60,3 +60,14 @@ test("candidate mock interview handoff checks credit balance before secure start
   assert.match(assistant, /Payment happens on the website\/app/);
   assert.match(handoff, /credits: "\/credits\?returnTo=mock-interview"/);
 });
+
+
+test("WhatsApp does not treat missing Mock Interview pricing as free", async () => {
+  const fs = await import("node:fs");
+  const assistant = fs.readFileSync(new URL("../lib/whatsapp-candidate-assistant.ts", import.meta.url), "utf8");
+
+  assert.match(assistant, /if \(!mockService\)/);
+  assert.match(assistant, /I won't send a payment link or pretend the service is free/);
+  assert.match(assistant, /const requiredCredits = mockService\.creditCost/);
+  assert.doesNotMatch(assistant, /mockService\?\.creditCost \|\| 0/);
+});
