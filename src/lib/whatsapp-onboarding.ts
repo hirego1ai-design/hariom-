@@ -2,8 +2,8 @@
  * HireGo WhatsApp — Onboarding State Machine
  *
  * State flow (new candidate):
- *   START → NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONFIRMATION
- *         → CREATING → COMPLETE
+ *   START → NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONSENT
+ *         → CONFIRMATION → CREATING → COMPLETE
  *
  * State flow (existing user — phone match):
  *   START → EXISTING_USER_VERIFY (email OTP challenge) → COMPLETE
