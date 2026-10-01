@@ -5,6 +5,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 import ManagedHiringVisual from "@/components/marketing/ManagedHiringVisual";
 import { EditorialHero, FAQ, FinalCTA, JsonLd, SectionHeading, breadcrumbSchema, styles } from "@/components/marketing/Editorial";
 import { marketingMetadata } from "@/lib/marketingMetadata";
+import { SEO_JOB_CITIES } from "@/lib/seoJobCities";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/services",
@@ -69,6 +70,13 @@ export default function ServicesPage() {
     <section className={`${styles.section} ${styles.tint}`} id="video-resume"><div className={`${styles.container} ${styles.split}`}><div><SectionHeading eyebrow="See more than a PDF" title="Let candidates explain their work in their own words." body="A short video resume can show how a candidate describes experience, a project and role knowledge. Where available, a transcript and presentation report help your team review faster. A person still decides what the evidence means for the job." /><Link className={styles.button} href="/video-resume">Explore video resumes ↗</Link></div><div className={styles.card}><p className={styles.eyebrow}>Candidate → HireGo → Employer</p><h3 className="mt-4">A human introduction, with useful context.</h3><ol className={`${styles.flow} mt-6`}>{["Candidate shares a short video","Report organizes key moments","Employer reviews the full application","Employer decides"].map(item=><li className={styles.flowItem} key={item}>{item}</li>)}</ol><p>Video is optional and should never be treated as an automatic rejection score.</p></div></div></section>
 
     <section className={`${styles.section} ${styles.tint}`} id="commercial-models"><div className={styles.container}><SectionHeading eyebrow="Ways to work together" title="Choose how you want to hire." body="Some teams want software, some want operational support, and some need interview capacity. Commercial scope and availability are agreed before work begins." /><div className={styles.grid3}>{commercial.map(item=><article className={styles.card} key={item.title}><h3>{item.title}</h3><p><strong>{item.best}</strong></p><p>{item.body}</p><p>{item.detail}</p><Link className={styles.inlineLink} href={item.href}>{item.label} ↗</Link></article>)}</div><p className="mt-7 max-w-3xl leading-7 text-slate-600"><strong>Need a hybrid model?</strong> HireGo can support a combination of recurring platform access, managed hiring or additional interview services where commercially available.</p></div></section>
+
+    <section className={styles.section} id="hire-by-city"><div className={styles.container}>
+      <SectionHeading eyebrow="Hire across India" title="Local hiring pages for major Indian cities." body="Explore HireGo AI employer pages for job posting and structured hiring workflows in priority markets. Each page uses city-specific hiring categories and local areas rather than duplicate location swaps." />
+      <div className={styles.grid3}>
+        {SEO_JOB_CITIES.map((city)=><Link key={city.slug} href={`/free-job-posting/${city.slug}`} className={styles.card}><h3>Hiring in {city.name}</h3><p>{city.industries.slice(0,3).join(" · ")}</p><span className={styles.inlineLink}>Explore {city.name} hiring →</span></Link>)}
+      </div>
+    </div></section>
 
     <FAQ items={faqs} />
     <FinalCTA title="A connected workflow starts with a clear requirement." body="Tell us how your team hires today. We can discuss the platform, operational services and the human approvals your process needs." primary={{label:"Start Hiring with HireGo",href:"/register?type=employer"}} secondary={{label:"Talk to Our Team",href:"/contact"}} />
