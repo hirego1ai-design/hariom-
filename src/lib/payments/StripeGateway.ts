@@ -25,7 +25,10 @@ export class StripeGateway implements PaymentGateway {
     body.set("cancel_url", `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE&cancelled=1`);
     body.set("client_reference_id", params.orderId);
     if (params.customerEmail) body.set("customer_email", params.customerEmail.trim().toLowerCase());
-    body.set("metadata[companyId]", params.companyId);
+    if (params.companyId) body.set("metadata[companyId]", params.companyId);
+    if (params.subjectId) body.set("metadata[subjectId]", params.subjectId);
+    if (params.productType) body.set("metadata[productType]", params.productType);
+    if (params.productId) body.set("metadata[productId]", params.productId);
     body.set("metadata[planId]", params.planId || "");
     body.set("metadata[orderId]", params.orderId);
     body.set("line_items[0][quantity]", "1");
@@ -181,8 +184,11 @@ export class StripeGateway implements PaymentGateway {
       isValid: true,
       gatewayTxId,
       gatewayOrderId,
-      companyId: dataObj?.metadata?.companyId || dataObj?.client_reference_id,
-      planId: dataObj?.metadata?.planId,
+      companyId: dataObj?.metadata?.companyId || undefined,
+      subjectId: dataObj?.metadata?.subjectId || undefined,
+      productType: dataObj?.metadata?.productType || undefined,
+      productId: dataObj?.metadata?.productId || undefined,
+      planId: dataObj?.metadata?.planId || undefined,
       orderId: dataObj?.metadata?.orderId || dataObj?.client_reference_id,
       amount: dataObj?.amount_total ? dataObj.amount_total / 100 : dataObj?.amount ? dataObj.amount / 100 : undefined,
       currency: (dataObj?.currency || "INR").toUpperCase(),
