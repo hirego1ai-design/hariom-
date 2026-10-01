@@ -58,5 +58,5 @@ test("candidate mock interview handoff checks credit balance before secure start
   assert.match(assistant, /candidateCreditPackage\.findFirst/);
   assert.match(assistant, /makeHandoffLink\(userId, sessionId, "credits"\)/);
   assert.match(assistant, /Payment happens on the website\/app/);
-  assert.match(handoff, /credits: "\/credits"/);
+  assert.match(handoff, /credits: "\/credits\?returnTo=mock-interview"/);
 });
