@@ -412,6 +412,7 @@ export async function runManagedHiringJoinTests(): Promise<{
         },
       });
 
+      const concurrentAcceptedAt = new Date(Date.now() - 2 * 3600000);
       await prisma.offer.create({
         data: {
           applicationId: application2.id,
@@ -423,10 +424,11 @@ export async function runManagedHiringJoinTests(): Promise<{
           expiresAt: new Date(Date.now() + 7 * 86400000),
           terms: { source: "managed-hiring-join-concurrency-test" },
           status: "ACCEPTED",
-          sentAt: new Date(Date.now() - 2 * 3600000),
-          acceptedAt: new Date(Date.now() - 3600000),
+          sentAt: new Date(concurrentAcceptedAt.getTime() - 3600000),
+          acceptedAt: concurrentAcceptedAt,
         },
       });
+      const concurrentJoinedAt = new Date(concurrentAcceptedAt.getTime() + 30 * 60 * 1000).toISOString();
 
       // Dispatch 2 simultaneous requests with the exact same company and idempotencyKey
       const [concResA, concResB] = await Promise.all([
@@ -434,14 +436,14 @@ export async function runManagedHiringJoinTests(): Promise<{
           applicationId: application2.id,
           agreementId: agreementA.id,
           annualCtc: 3000000,
-          joinedAt,
+          joinedAt: concurrentJoinedAt,
           termsAccepted: true,
         }),
         callJoinApi(tokenEmployer, {
           applicationId: application2.id,
           agreementId: agreementA.id,
           annualCtc: 3000000,
-          joinedAt,
+          joinedAt: concurrentJoinedAt,
           termsAccepted: true,
         }),
       ]);
@@ -471,7 +473,7 @@ export async function runManagedHiringJoinTests(): Promise<{
         applicationId: application2.id,
         agreementId: agreementA.id,
         annualCtc: 3000000,
-        joinedAt,
+        joinedAt: concurrentJoinedAt,
         termsAccepted: true,
       });
 
