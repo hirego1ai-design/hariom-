@@ -20,6 +20,7 @@ function recoveryWorkerKey(): string {
   const explicit = process.env.WORKER_RECOVERY_API_KEY?.trim();
   if (explicit) return explicit;
 
+  if (process.env.NODE_ENV !== 'production') return '';
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (!cronSecret || cronSecret.length < 32) return '';
 
