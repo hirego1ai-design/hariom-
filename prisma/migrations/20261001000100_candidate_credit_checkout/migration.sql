@@ -18,3 +18,20 @@ CREATE TABLE "CandidateCreditPackage" (
 
 CREATE UNIQUE INDEX "CandidateCreditPackage_code_key" ON "CandidateCreditPackage"("code");
 CREATE INDEX "CandidateCreditPackage_isActive_sortOrder_idx" ON "CandidateCreditPackage"("isActive", "sortOrder");
+
+-- Keep candidate credit commerce private to the server-side Prisma application.
+-- HireGo uses custom JWT sessions rather than Supabase Auth; direct Data API
+-- access is neither required nor trusted for commercial package configuration.
+ALTER TABLE "CandidateCreditPackage" ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    EXECUTE 'REVOKE ALL ON TABLE "CandidateCreditPackage" FROM anon';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    EXECUTE 'REVOKE ALL ON TABLE "CandidateCreditPackage" FROM authenticated';
+  END IF;
+END
+$$;
