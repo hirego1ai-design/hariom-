@@ -24,6 +24,7 @@ type CandidateIntent =
   | { type: "MOCK_INTERVIEW" }
   | { type: "VIDEO_RESUME" }
   | { type: "REFERRAL" }
+  | { type: "PENDING_ASSESSMENT" }
   | { type: "SUPPORT" }
   | { type: "APPLY"; index: number }
   | { type: "UNKNOWN" };
@@ -33,6 +34,8 @@ type AssistantMemory = {
   lastIntent?: string;
   lastOfferKey?: string;
   lastOfferAt?: string;
+  pendingProactiveAction?: "PENDING_ASSESSMENT" | "MOCK_INTERVIEW" | "APPLICATION_STATUS" | null;
+  pendingProactiveSetAt?: string | null;
 };
 
 type CollectedData = Record<string, unknown> & {
@@ -464,6 +467,43 @@ async function applyToRememberedJob(userId: string, sessionId: string, index: nu
   }
 }
 
+async function pendingAssessmentHandoff(userId: string, sessionId: string) {
+  const candidate = await prisma.candidateProfile.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+  if (!candidate) return "Candidate profile not found.";
+
+  const gate = await prisma.applicationGate.findFirst({
+    where: {
+      application: { candidateProfileId: candidate.id },
+      status: { in: [ApplicationGateStatus.REQUIRED, ApplicationGateStatus.IN_PROGRESS] },
+      assessmentId: { not: null },
+    },
+    orderBy: { updatedAt: "asc" },
+    select: {
+      type: true,
+      assessmentId: true,
+      applicationId: true,
+      application: { select: { job: { select: { title: true } } } },
+    },
+  });
+  if (!gate?.assessmentId) {
+    return "I checked your current applications and there is no pending assessment right now.";
+  }
+
+  const link = gate.type === ApplicationGateType.UNIVERSAL_SKILL_VALIDATION
+    ? await makeHandoffLink(userId, sessionId, "skill-validation", {
+        assessmentId: gate.assessmentId,
+        applicationId: gate.applicationId,
+      })
+    : await makeHandoffLink(userId, sessionId, "job-assessment", {
+        assessmentId: gate.assessmentId,
+      });
+
+  return `Your pending assessment for *${compact(gate.application.job.title, 80)}* is ready.\n\nContinue securely here:\n${link}`;
+}
+
 async function mockInterviewHandoff(userId: string, sessionId: string) {
   const candidate = await prisma.candidateProfile.findUnique({
     where: { userId },
@@ -531,7 +571,27 @@ export async function handleCompletedWhatsAppAssistant(params: {
   sessionId: string;
   message: string;
 }): Promise<string> {
-  const intent = await resolveCandidateIntent(params.message);
+  const pendingMemory = await readMemory(params.sessionId);
+  const pendingAction = pendingMemory.assistant?.pendingProactiveAction;
+  const pendingSetAt = pendingMemory.assistant?.pendingProactiveSetAt
+    ? Date.parse(pendingMemory.assistant.pendingProactiveSetAt)
+    : 0;
+  const affirmative = ["yes", "y", "haan", "ha", "sure", "ok", "okay", "do it"].includes(normalizedText(params.message));
+
+  let intent: CandidateIntent;
+  if (affirmative && pendingAction && pendingSetAt > 0 && Date.now() - pendingSetAt < 26 * 60 * 60 * 1000) {
+    intent = pendingAction === "PENDING_ASSESSMENT"
+      ? { type: "PENDING_ASSESSMENT" }
+      : pendingAction === "MOCK_INTERVIEW"
+        ? { type: "MOCK_INTERVIEW" }
+        : { type: "APPLICATION_STATUS" };
+    await writeMemory(params.sessionId, {
+      pendingProactiveAction: null,
+      pendingProactiveSetAt: null,
+    });
+  } else {
+    intent = await resolveCandidateIntent(params.message);
+  }
 
   switch (intent.type) {
     case "MENU":
@@ -552,6 +612,8 @@ export async function handleCompletedWhatsAppAssistant(params: {
       return videoResumeHandoff(params.userId, params.sessionId);
     case "REFERRAL":
       return referralHandoff(params.userId, params.sessionId);
+    case "PENDING_ASSESSMENT":
+      return pendingAssessmentHandoff(params.userId, params.sessionId);
     case "SUPPORT":
       return "HireGo Support\n\nEmail: support@hiregoai.com\n\nFor account-security issues, never share OTPs or passwords in WhatsApp.";
     case "APPLY":
