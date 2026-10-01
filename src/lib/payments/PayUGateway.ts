@@ -42,9 +42,9 @@ export class PayUGateway implements PaymentGateway {
     const surl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU`;
     const furl = `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=PAYU&status=FAILED`;
     const udf1 = params.orderId;
-    const udf2 = params.companyId;
-    const udf3 = params.planId || "";
-    const udf4 = "";
+    const udf2 = params.subjectId || params.companyId || "";
+    const udf3 = params.productId || params.planId || "";
+    const udf4 = params.productType || "";
     const udf5 = "";
 
     let hash = "";
@@ -182,8 +182,11 @@ export class PayUGateway implements PaymentGateway {
       isValid: true,
       gatewayTxId,
       gatewayOrderId,
-      companyId: udf2 || undefined,
-      planId: udf3 || undefined,
+      companyId: udf4 ? undefined : (udf2 || undefined),
+      subjectId: udf4 ? (udf2 || undefined) : undefined,
+      productType: udf4 || undefined,
+      productId: udf4 ? (udf3 || undefined) : undefined,
+      planId: udf4 ? undefined : (udf3 || undefined),
       amount: amount ? parseFloat(amount) : undefined,
       currency: "INR",
       status,
