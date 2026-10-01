@@ -182,7 +182,13 @@ test("communication retries use encrypted bounded replay and leased worker claim
   assert(dispatcher.includes("function communicationHashSecret()"));
   assert(dispatcher.includes("secret.length < 32"));
   assert(dispatcher.includes("placeholder|your[-_ ]|change[-_ ]me|set-a-long"));
-  assert(dispatcher.includes("must be a non-placeholder secret of at least 32 characters in production"));
+  // Assert the actual fail-closed guard rather than a brittle exact error sentence.
+  // Formatting/copy edits must not make the security regression fail when the
+  // production enforcement is still present.
+  assert(dispatcher.includes('process.env.NODE_ENV === "production"'));
+  assert(dispatcher.includes("secret.length < 32"));
+  assert(dispatcher.includes("placeholder|your[-_ ]|change[-_ ]me|set-a-long"));
+  assert(/non-placeholder\s+secret\s+of\s+at\s+least\s+32\s+characters\s+in\s+production/i.test(dispatcher));
 
   assert(dispatcher.includes('reason.match(/(?:returned|API returned)\\s+(\\d{3})/i)'));
   assert(!dispatcher.includes('reason.match(/(?:returned|API returned)\\\\s+(\\\\d{3})/i)'));
