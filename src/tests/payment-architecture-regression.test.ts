@@ -319,3 +319,16 @@ test("payment gateways honor server-provided product return URLs", async () => {
   assert.match(payu, /params\.successUrl \|\|/);
   assert.match(payu, /params\.cancelUrl \|\|/);
 });
+
+
+test("candidate gateway browser returns never fulfill credits", async () => {
+  const fs = await import("node:fs");
+  const checkout = fs.readFileSync(new URL("../app/api/candidate/credits/route.ts", import.meta.url), "utf8");
+  const browserReturn = fs.readFileSync(new URL("../app/api/candidate/credits/return/route.ts", import.meta.url), "utf8");
+
+  assert.match(checkout, /\/api\/candidate\/credits\/return\?orderId=/);
+  assert.match(browserReturn, /NextResponse\.redirect\(target, 303\)/);
+  assert.match(browserReturn, /export async function POST/);
+  assert.doesNotMatch(browserReturn, /candidateCreditWallet/);
+  assert.doesNotMatch(browserReturn, /paymentTransaction/);
+});
