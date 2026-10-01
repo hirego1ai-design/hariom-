@@ -1,9 +1,10 @@
 /**
  * HireGo WhatsApp — Onboarding State Machine
  *
- * State flow (new candidate):
- *   START → NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONSENT
- *         → CONFIRMATION → CREATING → COMPLETE
+ * State flow (new contact):
+ *   START → AUDIENCE → candidate: NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONSENT
+ *                    → CONFIRMATION → CREATING → COMPLETE
+ *                    → employer: EMPLOYER_LEAD → qualified lead → employer registration
  *
  * State flow (existing user — phone match):
  *   START → EXISTING_USER_VERIFY (email OTP challenge) → COMPLETE
@@ -35,11 +36,18 @@ import {
   isWhatsAppOptOutCommand,
 } from "./whatsapp-identity";
 import { handleCompletedWhatsAppAssistant } from "./whatsapp-candidate-assistant";
+import {
+  classifyWhatsAppAudience,
+  handleLinkedEmployerWhatsApp,
+  handleUnlinkedEmployerSalesLead,
+} from "./whatsapp-autonomous-agent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type OnboardingStep =
   | "START"
+  | "AUDIENCE"
+  | "EMPLOYER_LEAD"
   | "NAME"
   | "EMAIL"
   | "ROLE"
@@ -420,16 +428,26 @@ export async function processWhatsAppMessage(
     };
   }
 
-  // ── Completed session / autonomous candidate assistant ─────────────────────
+  // ── Completed session / autonomous linked-user agent ───────────────────────
   if (currentStep === "COMPLETE" || session.status === "COMPLETE") {
     const userId = session.userId;
     if (userId) {
-      const reply = await handleCompletedWhatsAppAssistant({
-        waId,
-        userId,
-        sessionId: session.id,
-        message: msg,
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
       });
+      const reply = user && user.role !== "CANDIDATE"
+        ? await handleLinkedEmployerWhatsApp({
+            userId,
+            sessionId: session.id,
+            message: msg,
+          })
+        : await handleCompletedWhatsAppAssistant({
+            waId,
+            userId,
+            sessionId: session.id,
+            message: msg,
+          });
       return {
         reply,
         nextStep: "COMPLETE",
@@ -444,17 +462,8 @@ export async function processWhatsAppMessage(
     const identity = await resolveWhatsAppIdentity(waId);
 
     if (identity.status === "existing_contact") {
-      if (identity.user!.role !== "CANDIDATE") {
-        return {
-          reply:
-            "This WhatsApp assistant currently handles candidate job discovery and onboarding. " +
-            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
-          nextStep: "START",
-          sessionComplete: false,
-        };
-      }
       // Already linked — bind this onboarding session to the canonical user so
-      // every later WhatsApp message can use the autonomous assistant.
+      // every later WhatsApp message uses the role-aware autonomous agent.
       await prisma.whatsAppOnboardingSession.update({
         where: { id: session.id },
         data: {
@@ -465,12 +474,18 @@ export async function processWhatsAppMessage(
           completedAt: session.completedAt ?? new Date(),
         },
       });
-      const reply = await handleCompletedWhatsAppAssistant({
-        waId,
-        userId: identity.user!.id,
-        sessionId: session.id,
-        message: msg,
-      });
+      const reply = identity.user!.role === "CANDIDATE"
+        ? await handleCompletedWhatsAppAssistant({
+            waId,
+            userId: identity.user!.id,
+            sessionId: session.id,
+            message: msg,
+          })
+        : await handleLinkedEmployerWhatsApp({
+            userId: identity.user!.id,
+            sessionId: session.id,
+            message: msg,
+          });
       return {
         reply,
         nextStep: "COMPLETE",
@@ -490,15 +505,6 @@ export async function processWhatsAppMessage(
     }
 
     if (identity.status === "phone_match") {
-      if (identity.user!.role !== "CANDIDATE") {
-        return {
-          reply:
-            "This number belongs to a non-candidate HireGo account. " +
-            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
-          nextStep: "START",
-          sessionComplete: false,
-        };
-      }
       // Existing HireGo account — verify before linking
       const updatedData: CollectedData = {
         ...data,
@@ -529,13 +535,36 @@ export async function processWhatsAppMessage(
       };
     }
 
-    // new_contact or unlinked_contact — start onboarding
-    await saveStep(session.id, "NAME", {});
+    // New/unlinked contact — route by intent before choosing candidate or employer flow.
+    const audience = classifyWhatsAppAudience(msg);
+    if (audience === "EMPLOYER") {
+      await saveStep(session.id, "EMPLOYER_LEAD", data);
+      const reply = await handleUnlinkedEmployerSalesLead({
+        sessionId: session.id,
+        message: msg,
+      });
+      return {
+        reply,
+        nextStep: "EMPLOYER_LEAD",
+        sessionComplete: false,
+      };
+    }
+    if (audience === "CANDIDATE") {
+      await saveStep(session.id, "NAME", {});
+      return {
+        reply:
+          `Welcome to HireGo AI! 👋\n\nI'll set up your candidate profile in a few quick WhatsApp questions.\n\n` +
+          stepPrompt("NAME", {}, 1),
+        nextStep: "NAME",
+        sessionComplete: false,
+      };
+    }
+
+    await saveStep(session.id, "AUDIENCE", data);
     return {
       reply:
-        `Welcome to HireGo AI! 👋\n\nI'll set up your profile in just a few quick steps.\n\n` +
-        stepPrompt("NAME", {}, 1),
-      nextStep: "NAME",
+        "Welcome to HireGo AI! 👋\n\nI can continue the journey here on WhatsApp. Are you *looking for a job* or *hiring people*?",
+      nextStep: "AUDIENCE",
       sessionComplete: false,
     };
   }
@@ -586,21 +615,64 @@ export async function processWhatsAppMessage(
       },
     });
 
-    // Generate handoff token (5 min expiry)
+    // Generate role-aware handoff token (5 min expiry)
     const { generateHandoffToken } = await import("./whatsapp-auth");
     const token = await generateHandoffToken(userId, session.id);
-    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}`;
-
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, role: true } });
+    const dest = user?.role === "CANDIDATE" ? "dashboard" : "employer-dashboard";
+    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}&dest=${dest}`;
 
     return {
       reply:
-        `✅ Verified! Welcome back, ${user?.name}.\n\nTap the link below to open your HireGo dashboard:\n${handoffUrl}\n\n_This link expires in 5 minutes._`,
+        `✅ Verified! Welcome back, ${user?.name}.\n\nYour WhatsApp agent is connected to the same HireGo account state. Open your secure dashboard here:\n${handoffUrl}\n\n_This link expires in 5 minutes._`,
       nextStep: "COMPLETE",
       sessionComplete: true,
       handoffToken: token,
       userId,
     };
+  }
+
+  // ── Audience selection / unlinked employer sales flow ────────────────────
+  if (currentStep === "AUDIENCE") {
+    const audience = classifyWhatsAppAudience(msg);
+    if (audience === "EMPLOYER") {
+      await saveStep(session.id, "EMPLOYER_LEAD", data);
+      const reply = await handleUnlinkedEmployerSalesLead({ sessionId: session.id, message: msg });
+      return { reply, nextStep: "EMPLOYER_LEAD", sessionComplete: false };
+    }
+    if (audience === "CANDIDATE") {
+      await saveStep(session.id, "NAME", {});
+      return {
+        reply: `Great — let's build your candidate profile.\n\n${stepPrompt("NAME", {}, 1)}`,
+        nextStep: "NAME",
+        sessionComplete: false,
+      };
+    }
+    return {
+      reply: "Please tell me which journey you want: *I am looking for a job* or *I am hiring*.",
+      nextStep: "AUDIENCE",
+      sessionComplete: false,
+    };
+  }
+
+  if (currentStep === "EMPLOYER_LEAD") {
+    const normalized = msg.trim().toLowerCase();
+    if (["restart", "start over", "candidate", "job seeker", "looking for a job"].includes(normalized)) {
+      await reactivateSession(session.id);
+      await saveStep(session.id, "AUDIENCE", {});
+      return {
+        reply: "No problem. Are you *looking for a job* or *hiring people*?",
+        nextStep: "AUDIENCE",
+        sessionComplete: false,
+      };
+    }
+    if (["cancel", "stop"].includes(normalized)) {
+      await saveStep(session.id, "CANCELLED");
+      await prisma.whatsAppOnboardingSession.update({ where: { id: session.id }, data: { status: "CANCELLED" } });
+      return { reply: "Conversation paused. Send *Hi* whenever you want to continue.", nextStep: "CANCELLED", sessionComplete: false };
+    }
+    const reply = await handleUnlinkedEmployerSalesLead({ sessionId: session.id, message: msg });
+    return { reply, nextStep: "EMPLOYER_LEAD", sessionComplete: false };
   }
 
   // ── Command handling (any active step) ────────────────────────────────────
