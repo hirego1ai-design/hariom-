@@ -17,6 +17,10 @@ const snapshotSchema = z.object({
   credits: z.number().int().positive(),
   price: z.number().positive(),
   currency: z.string().trim().min(3).max(8),
+  gatewayCheckout: z.object({
+    checkoutUrl: z.string().min(1).max(4000),
+    checkoutParams: z.record(z.string(), z.any()).optional(),
+  }).strict().optional(),
 }).strict();
 
 export type CandidateCreditPackageSnapshot = z.infer<typeof snapshotSchema>;
