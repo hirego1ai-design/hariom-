@@ -239,6 +239,27 @@ export async function linkContactToUser(
 export function sanitizeRawPayload(payload: any): object {
   if (!payload || typeof payload !== "object") return {};
 
+  const referral = payload.referral && typeof payload.referral === "object"
+    ? {
+        source_url: typeof payload.referral.source_url === "string" ? payload.referral.source_url.slice(0, 2_000) : undefined,
+        source_type: typeof payload.referral.source_type === "string" ? payload.referral.source_type.slice(0, 80) : undefined,
+        source_id: typeof payload.referral.source_id === "string" ? payload.referral.source_id.slice(0, 200) : undefined,
+        headline: typeof payload.referral.headline === "string" ? payload.referral.headline.slice(0, 500) : undefined,
+        body: typeof payload.referral.body === "string" ? payload.referral.body.slice(0, 1_000) : undefined,
+        media_type: typeof payload.referral.media_type === "string" ? payload.referral.media_type.slice(0, 80) : undefined,
+        ctwa_clid: typeof payload.referral.ctwa_clid === "string" ? payload.referral.ctwa_clid.slice(0, 500) : undefined,
+      }
+    : undefined;
+
+  const document = payload.document && typeof payload.document === "object"
+    ? {
+        id: typeof payload.document.id === "string" ? payload.document.id.slice(0, 200) : undefined,
+        filename: typeof payload.document.filename === "string" ? payload.document.filename.slice(0, 255) : undefined,
+        mime_type: typeof payload.document.mime_type === "string" ? payload.document.mime_type.slice(0, 160) : undefined,
+        caption: typeof payload.document.caption === "string" ? payload.document.caption.slice(0, 500) : undefined,
+      }
+    : undefined;
+
   return {
     id: payload.id ?? undefined,
     from: payload.from ? `${String(payload.from).slice(0, 4)}***${String(payload.from).slice(-3)}` : undefined,
@@ -246,6 +267,8 @@ export function sanitizeRawPayload(payload: any): object {
     timestamp: payload.timestamp ?? undefined,
     hasText: Boolean(payload.text?.body),
     hasInteractive: Boolean(payload.interactive),
+    ...(referral ? { referral } : {}),
+    ...(document ? { document } : {}),
   };
 }
 

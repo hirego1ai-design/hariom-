@@ -2,8 +2,8 @@
  * HireGo WhatsApp — Onboarding State Machine
  *
  * State flow (new candidate):
- *   START → NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONFIRMATION
- *         → CREATING → COMPLETE
+ *   START → NAME → EMAIL → ROLE → EXPERIENCE → LOCATION → CONSENT
+ *         → CONFIRMATION → CREATING → COMPLETE
  *
  * State flow (existing user — phone match):
  *   START → EXISTING_USER_VERIFY (email OTP challenge) → COMPLETE
@@ -31,7 +31,10 @@ import {
   ensureWhatsAppContact,
   linkContactToUser,
   waIdToE164,
+  setWhatsAppConsent,
+  isWhatsAppOptOutCommand,
 } from "./whatsapp-identity";
+import { handleCompletedWhatsAppAssistant } from "./whatsapp-candidate-assistant";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ export type OnboardingStep =
   | "ROLE"
   | "EXPERIENCE"
   | "LOCATION"
+  | "CONSENT"
   | "CONFIRMATION"
   | "EXISTING_USER_VERIFY"
   | "CREATING"
@@ -71,6 +75,10 @@ export interface ProcessResult {
   sessionComplete: boolean;
   handoffToken?: string;            // Present on COMPLETE for new accounts
   userId?: string;
+}
+
+export interface WhatsAppProcessContext {
+  campaignMeta?: Record<string, unknown>;
 }
 
 // ─── Session helpers ──────────────────────────────────────────────────────────
@@ -114,6 +122,21 @@ async function saveStep(sessionId: string, step: OnboardingStep, data?: Collecte
     data: {
       currentStep: step,
       ...(data ? { collectedData: data as any } : {}),
+    },
+  });
+}
+
+async function reactivateSession(sessionId: string): Promise<void> {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + SESSION_TTL_DAYS);
+  await prisma.whatsAppOnboardingSession.update({
+    where: { id: sessionId },
+    data: {
+      currentStep: "START",
+      status: "ACTIVE",
+      collectedData: {},
+      completedAt: null,
+      expiresAt,
     },
   });
 }
@@ -188,7 +211,7 @@ function detectCommand(msg: string) {
   return COMMANDS[msg.trim().toLowerCase()] ?? null;
 }
 
-const STEP_ORDER: OnboardingStep[] = ["NAME", "EMAIL", "ROLE", "EXPERIENCE", "LOCATION", "CONFIRMATION"];
+const STEP_ORDER: OnboardingStep[] = ["NAME", "EMAIL", "ROLE", "EXPERIENCE", "LOCATION", "CONSENT", "CONFIRMATION"];
 
 function prevStep(current: OnboardingStep): OnboardingStep {
   const idx = STEP_ORDER.indexOf(current);
@@ -211,6 +234,12 @@ function stepPrompt(step: OnboardingStep, data: CollectedData, stepNum?: number)
       return `*${num}/${total} — How many years of experience do you have?*\n\nReply *Fresher* if you're just starting out.`;
     case "LOCATION":
       return `*${num}/${total} — What's your current city or location?*\n\nExample: _Bangalore_, _Mumbai_, _Delhi_`;
+    case "CONSENT":
+      return (
+        `*${num}/${total} — WhatsApp updates*\n\n` +
+        "Would you like HireGo to send job, application, assessment and interview updates to this WhatsApp number?\n\n" +
+        "Reply *YES* to opt in or *NO* to continue without proactive WhatsApp updates. You can reply *STOP* anytime."
+      );
     default:
       return "Please continue.";
   }
@@ -333,7 +362,8 @@ async function createAccountTransaction(
  */
 export async function processWhatsAppMessage(
   waId: string,
-  rawMessage: string
+  rawMessage: string,
+  context: WhatsAppProcessContext = {}
 ): Promise<ProcessResult> {
   const msg = rawMessage.trim();
 
@@ -342,28 +372,66 @@ export async function processWhatsAppMessage(
 
   // Get or create session
   const session = await getOrCreateSession(waId, contact.id);
+
+  // STOP/UNSUBSCRIBE must take effect regardless of onboarding state. Do not
+  // continue the assistant after opt-out, which could otherwise look like a
+  // marketing reply after the user explicitly revoked messaging consent.
+  if (isWhatsAppOptOutCommand(msg)) {
+    await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_inbound_command");
+    return {
+      reply: "You have been opted out of proactive HireGo WhatsApp updates. You can still use HireGo on the web at https://hiregoai.com.",
+      nextStep: session.currentStep as OnboardingStep,
+      sessionComplete: session.status === "COMPLETE",
+      userId: session.userId ?? undefined,
+    };
+  }
+
+  // Click-to-WhatsApp referral metadata is accepted only from the signed Meta
+  // webhook path and is first-touch attributed. Later messages cannot overwrite it.
+  if (context.campaignMeta && !session.campaignMeta) {
+    await prisma.whatsAppOnboardingSession.update({
+      where: { id: session.id },
+      data: {
+        campaignMeta: context.campaignMeta as any,
+        attributionSource: "meta_click_to_whatsapp",
+      },
+    });
+  }
+
   const currentStep = session.currentStep as OnboardingStep;
   const data = (session.collectedData ?? {}) as CollectedData;
 
-  // ── Expired session ────────────────────────────────────────────────────────
+  // ── Expired/cancelled session recovery ────────────────────────────────────
   if (currentStep === "EXPIRED" || session.status === "EXPIRED") {
-    await saveStep(session.id, "START", {});
+    await reactivateSession(session.id);
+    return processWhatsAppMessage(waId, rawMessage, context);
+  }
+
+  if (currentStep === "CANCELLED" || session.status === "CANCELLED") {
+    const normalized = msg.toLowerCase();
+    if (["hi", "hello", "hey", "start", "restart", "start over"].includes(normalized)) {
+      await reactivateSession(session.id);
+      return processWhatsAppMessage(waId, rawMessage, context);
+    }
     return {
-      reply: `Welcome back to HireGo AI! 👋\n\nYour previous session expired. Let's start fresh.\n\n${stepPrompt("NAME", {})}`,
-      nextStep: "NAME",
+      reply: "Registration is currently cancelled. Reply *Hi* or *restart* whenever you want to begin again.",
+      nextStep: "CANCELLED",
       sessionComplete: false,
     };
   }
 
-  // ── Completed session ──────────────────────────────────────────────────────
+  // ── Completed session / autonomous candidate assistant ─────────────────────
   if (currentStep === "COMPLETE" || session.status === "COMPLETE") {
     const userId = session.userId;
     if (userId) {
+      const reply = await handleCompletedWhatsAppAssistant({
+        waId,
+        userId,
+        sessionId: session.id,
+        message: msg,
+      });
       return {
-        reply:
-          `Welcome back to HireGo AI! 👋\n\nYour account is already set up.\n\n` +
-          `What would you like to do?\n\n` +
-          `1️⃣ Find Jobs\n2️⃣ My Applications\n3️⃣ Application Status\n4️⃣ Complete Profile\n🔟 Open Dashboard\n0️⃣ Support`,
+        reply,
         nextStep: "COMPLETE",
         sessionComplete: true,
         userId,
@@ -376,13 +444,35 @@ export async function processWhatsAppMessage(
     const identity = await resolveWhatsAppIdentity(waId);
 
     if (identity.status === "existing_contact") {
-      // Already linked — skip onboarding
-      await saveStep(session.id, "COMPLETE");
+      if (identity.user!.role !== "CANDIDATE") {
+        return {
+          reply:
+            "This WhatsApp assistant currently handles candidate job discovery and onboarding. " +
+            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
+          nextStep: "START",
+          sessionComplete: false,
+        };
+      }
+      // Already linked — bind this onboarding session to the canonical user so
+      // every later WhatsApp message can use the autonomous assistant.
+      await prisma.whatsAppOnboardingSession.update({
+        where: { id: session.id },
+        data: {
+          status: "COMPLETE",
+          currentStep: "COMPLETE",
+          userId: identity.user!.id,
+          candidateId: identity.candidateProfileId,
+          completedAt: session.completedAt ?? new Date(),
+        },
+      });
+      const reply = await handleCompletedWhatsAppAssistant({
+        waId,
+        userId: identity.user!.id,
+        sessionId: session.id,
+        message: msg,
+      });
       return {
-        reply:
-          `Welcome back to HireGo AI, ${identity.user!.name}! 👋\n\n` +
-          `Your account is ready.\n\n` +
-          `1️⃣ Find Jobs\n2️⃣ My Applications\n4️⃣ Complete Profile\n🔟 Open Dashboard`,
+        reply,
         nextStep: "COMPLETE",
         sessionComplete: true,
         userId: identity.user!.id,
@@ -393,13 +483,22 @@ export async function processWhatsAppMessage(
       return {
         reply:
           `Welcome to HireGo AI.\n\nWe found multiple accounts associated with this number. ` +
-          `Please contact support at support@hirego.ai to verify your identity.`,
+          `Please contact support at support@hiregoai.com to verify your identity.`,
         nextStep: "START",
         sessionComplete: false,
       };
     }
 
     if (identity.status === "phone_match") {
+      if (identity.user!.role !== "CANDIDATE") {
+        return {
+          reply:
+            "This number belongs to a non-candidate HireGo account. " +
+            "Please use the HireGo employer dashboard for hiring workflows: https://hiregoai.com/dashboard",
+          nextStep: "START",
+          sessionComplete: false,
+        };
+      }
       // Existing HireGo account — verify before linking
       const updatedData: CollectedData = {
         ...data,
@@ -490,7 +589,7 @@ export async function processWhatsAppMessage(
     // Generate handoff token (5 min expiry)
     const { generateHandoffToken } = await import("./whatsapp-auth");
     const token = await generateHandoffToken(userId, session.id);
-    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
+    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}`;
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
 
@@ -589,7 +688,7 @@ export async function processWhatsAppMessage(
         return {
           reply:
             `An account with that email already exists.\n\nIf this is your account, please reply *cancel* ` +
-            `and contact support@hirego.ai, or use a different email address.`,
+            `and contact support@hiregoai.com, or use a different email address.`,
           nextStep: "EMAIL",
           sessionComplete: false,
         };
@@ -628,8 +727,34 @@ export async function processWhatsAppMessage(
         return { reply: `❌ ${result.error}`, nextStep: "LOCATION", sessionComplete: false };
       }
       const updated = { ...data, location: result.value };
+      await saveStep(session.id, "CONSENT", updated);
+      return { reply: stepPrompt("CONSENT", updated, 6), nextStep: "CONSENT", sessionComplete: false };
+    }
+
+    // ── CONSENT ─────────────────────────────────────────────────────────────
+    case "CONSENT": {
+      const answer = msg.trim().toLowerCase();
+      const yes = ["yes", "y", "haan", "ha", "1", "opt in", "agree"].includes(answer);
+      const no = ["no", "n", "nahi", "nahin", "2", "skip"].includes(answer);
+      if (!yes && !no) {
+        return {
+          reply: "Please reply *YES* to receive proactive HireGo WhatsApp updates or *NO* to continue without them.",
+          nextStep: "CONSENT",
+          sessionComplete: false,
+        };
+      }
+      if (yes) {
+        await setWhatsAppConsent(waId, "OPTED_IN", "whatsapp_onboarding_explicit_consent");
+      } else {
+        await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_onboarding_explicit_decline");
+      }
+      const updated = { ...data, whatsappUpdatesOptIn: yes };
       await saveStep(session.id, "CONFIRMATION", updated);
-      return { reply: confirmationMessage(updated), nextStep: "CONFIRMATION", sessionComplete: false };
+      return {
+        reply: (yes ? "✅ WhatsApp updates enabled.\n\n" : "No problem — proactive WhatsApp updates are off.\n\n") + confirmationMessage(updated),
+        nextStep: "CONFIRMATION",
+        sessionComplete: false,
+      };
     }
 
     // ── CONFIRMATION ────────────────────────────────────────────────────────
@@ -683,7 +808,7 @@ export async function processWhatsAppMessage(
         // Generate auth handoff token (5 min expiry)
         const { generateHandoffToken } = await import("./whatsapp-auth");
         const token = await generateHandoffToken(userId, session.id);
-        const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
+        const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}`;
 
         await logAuditEvent({
           userId,

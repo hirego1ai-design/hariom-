@@ -17,13 +17,31 @@ import { consumeHandoffToken } from "@/lib/whatsapp-auth";
 import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/apiSecurity";
 
-// Approved redirect destinations — prevents open redirect
+// Approved redirect destinations — prevents open redirect. Assessment
+// destinations are built only from validated UUID query parameters.
 const ALLOWED_DESTINATIONS: Record<string, string> = {
-  dashboard: "/dashboard",
-  jobs: "/jobs",
-  profile: "/onboarding",
-  default: "/dashboard",
+  dashboard: "/candidate/dashboard",
+  jobs: "/candidate/job-search",
+  profile: "/candidate/profile",
+  default: "/candidate/dashboard",
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function resolveDestination(req: NextRequest, dest: string) {
+  if (dest === "skill-validation") {
+    const assessmentId = req.nextUrl.searchParams.get("assessmentId") || "";
+    const applicationId = req.nextUrl.searchParams.get("applicationId") || "";
+    if (!UUID_RE.test(assessmentId) || !UUID_RE.test(applicationId)) return ALLOWED_DESTINATIONS.default;
+    return `/assessment/skill-validation/notice?assessmentId=${encodeURIComponent(assessmentId)}&applicationId=${encodeURIComponent(applicationId)}`;
+  }
+  if (dest === "job-assessment") {
+    const assessmentId = req.nextUrl.searchParams.get("assessmentId") || "";
+    if (!UUID_RE.test(assessmentId)) return ALLOWED_DESTINATIONS.default;
+    return `/assessment/mcq/active?id=${encodeURIComponent(assessmentId)}`;
+  }
+  return ALLOWED_DESTINATIONS[dest] ?? ALLOWED_DESTINATIONS.default;
+}
 
 export async function GET(req: NextRequest) {
   // Rate limit: 10 exchange attempts per minute per IP
@@ -48,7 +66,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Issue standard hirego_session cookie
-  const redirectPath = ALLOWED_DESTINATIONS[dest] ?? ALLOWED_DESTINATIONS.default;
+  const redirectPath = resolveDestination(req, dest);
   const response = NextResponse.redirect(new URL(redirectPath, req.nextUrl.origin));
 
   response.cookies.set(AUTH_COOKIE_NAME, result.sessionCookie, {
