@@ -21,8 +21,8 @@ export class StripeGateway implements PaymentGateway {
     }
     const body = new URLSearchParams();
     body.set("mode", "payment");
-    body.set("success_url", `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE`);
-    body.set("cancel_url", `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE&cancelled=1`);
+    body.set("success_url", params.successUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE`);
+    body.set("cancel_url", params.cancelUrl || `${appUrl}/payment/status?orderId=${encodeURIComponent(params.orderId)}&gateway=STRIPE&cancelled=1`);
     body.set("client_reference_id", params.orderId);
     if (params.customerEmail) body.set("customer_email", params.customerEmail.trim().toLowerCase());
     body.set("metadata[companyId]", params.companyId);
