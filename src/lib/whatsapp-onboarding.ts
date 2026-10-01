@@ -551,7 +551,7 @@ export async function processWhatsAppMessage(
     // Generate handoff token (5 min expiry)
     const { generateHandoffToken } = await import("./whatsapp-auth");
     const token = await generateHandoffToken(userId, session.id);
-    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
+    const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}`;
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
 
@@ -707,6 +707,8 @@ export async function processWhatsAppMessage(
       }
       if (yes) {
         await setWhatsAppConsent(waId, "OPTED_IN", "whatsapp_onboarding_explicit_consent");
+      } else {
+        await setWhatsAppConsent(waId, "OPTED_OUT", "whatsapp_onboarding_explicit_decline");
       }
       const updated = { ...data, whatsappUpdatesOptIn: yes };
       await saveStep(session.id, "CONFIRMATION", updated);
@@ -768,7 +770,7 @@ export async function processWhatsAppMessage(
         // Generate auth handoff token (5 min expiry)
         const { generateHandoffToken } = await import("./whatsapp-auth");
         const token = await generateHandoffToken(userId, session.id);
-        const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hirego.ai"}/api/whatsapp/auth/handoff?token=${token}`;
+        const handoffUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://hiregoai.com"}/api/whatsapp/auth/handoff?token=${token}`;
 
         await logAuditEvent({
           userId,
