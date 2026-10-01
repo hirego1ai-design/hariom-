@@ -5,6 +5,11 @@ const MIN_INACTIVITY_MS = 20 * 60 * 60 * 1000;
 const MAX_WINDOW_AGE_MS = 23 * 60 * 60 * 1000 + 15 * 60 * 1000;
 const EVENT_KEY = "WHATSAPP_VALUE_REENGAGEMENT";
 
+export function isCustomerServiceWindowNudgeAge(lastInboundAt: Date, nowMs = Date.now()): boolean {
+  const age = nowMs - lastInboundAt.getTime();
+  return age >= MIN_INACTIVITY_MS && age <= MAX_WINDOW_AGE_MS;
+}
+
 type PendingAction = "PENDING_ASSESSMENT" | "MOCK_INTERVIEW" | "APPLICATION_STATUS";
 
 type EngagementCandidate = {
@@ -187,8 +192,7 @@ export class WhatsAppEngagementWorker {
         continue;
       }
 
-      const age = Date.now() - inbound.receivedAt.getTime();
-      if (age < MIN_INACTIVITY_MS || age > MAX_WINDOW_AGE_MS) {
+      if (!isCustomerServiceWindowNudgeAge(inbound.receivedAt)) {
         report.skipped += 1;
         continue;
       }
