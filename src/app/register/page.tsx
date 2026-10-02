@@ -15,9 +15,12 @@ export default function RegisterPage() {
   const [referralCode, setReferralCode] = useState("");
   const [postAuthRedirect, setPostAuthRedirect] = useState("");
   const [formData, setFormData] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
+    dateOfBirth: "",
     email: "",
     password: "",
+    confirmPassword: "",
   });
 
   React.useEffect(() => {
@@ -47,8 +50,12 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.fullName || !formData.email || !formData.password) {
+    if (!formData.firstName || !formData.lastName || !formData.dateOfBirth || !formData.email || !formData.password || !formData.confirmPassword) {
       setErrorMessage("Please fill in all required fields.");
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMessage("Passwords do not match.");
       return;
     }
 
@@ -60,7 +67,8 @@ export default function RegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.fullName,
+          name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+          dateOfBirth: formData.dateOfBirth,
           email: formData.email,
           password: formData.password,
           referralCode: referralCode || undefined,
@@ -207,22 +215,54 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Full Name *
+                    First Name *
                   </label>
                   <input
-                    name="fullName"
-                    value={formData.fullName}
+                    name="firstName"
+                    value={formData.firstName}
                     onChange={handleInputChange}
                     className="input-pill w-full h-11 text-xs text-text-primary px-4"
-                    placeholder="e.g. Rahul Verma"
+                    placeholder="e.g. Rahul"
                     type="text"
+                    autoComplete="given-name"
                     required
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Work / Personal Email *
+                    Last Name *
+                  </label>
+                  <input
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
+                    placeholder="e.g. Verma"
+                    type="text"
+                    autoComplete="family-name"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
+                    Date of Birth *
+                  </label>
+                  <input
+                    name="dateOfBirth"
+                    value={formData.dateOfBirth}
+                    onChange={handleInputChange}
+                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
+                    type="date"
+                    autoComplete="bday"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
+                    Email *
                   </label>
                   <input
                     name="email"
@@ -231,36 +271,51 @@ export default function RegisterPage() {
                     className="input-pill w-full h-11 text-xs text-text-primary px-4"
                     placeholder="rahul@example.com"
                     type="email"
+                    autoComplete="email"
                     required
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                  Password *
-                </label>
-                <div className="relative">
+                <div className="space-y-1">
+                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
+                    Password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      name="password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      className="input-pill w-full h-11 text-xs text-text-primary px-4 pr-10"
+                      placeholder="Create a strong password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
+                    Confirm Password *
+                  </label>
                   <input
-                    name="password"
-                    value={formData.password}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className="input-pill w-full h-11 text-xs text-text-primary px-4 pr-10"
-                    placeholder="Create a strong password"
+                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
+                    placeholder="Re-enter password"
                     type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
                 </div>
               </div>
 
