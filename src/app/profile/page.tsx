@@ -146,6 +146,23 @@ export default function ProfilePage() {
             </div>
           )}
 
+          {profile && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-white">Complete or edit your full candidate profile</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Add personal details, education, work experience, skills, resume and job preferences. Saved data will appear here.
+                </p>
+              </div>
+              <Link
+                href="/onboarding/personal-details"
+                className="inline-flex min-h-10 items-center justify-center rounded-full bg-primary px-5 text-xs font-bold text-white"
+              >
+                Complete profile
+              </Link>
+            </div>
+          )}
+
           {/* Profile Header Card */}
           <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 flex flex-col md:flex-row items-center md:items-end gap-6 shadow-xl relative overflow-hidden bg-white/5">
             <div className="relative">
@@ -304,6 +321,14 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-6">
                   <h3 className="text-base font-bold text-white">Work Experience</h3>
                   <div className="space-y-4">
+                    {(profile?.experience || []).length === 0 && (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
+                        <p className="text-xs text-gray-400">No work experience has been added yet.</p>
+                        <Link href="/onboarding/experience" className="mt-3 inline-flex text-xs font-bold text-primary hover:underline">
+                          Add work experience →
+                        </Link>
+                      </div>
+                    )}
                     {(profile?.experience || []).map((exp, idx) => (
                       <div
                         key={idx}
@@ -329,6 +354,14 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Education & Degrees</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(profile?.education || []).length === 0 && (
+                      <div className="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
+                        <p className="text-xs text-gray-400">No education details have been added yet.</p>
+                        <Link href="/onboarding/education" className="mt-3 inline-flex text-xs font-bold text-primary hover:underline">
+                          Add education →
+                        </Link>
+                      </div>
+                    )}
                     {(profile?.education || []).map((edu, idx) => (
                       <div
                         key={idx}
@@ -402,7 +435,12 @@ export default function ProfilePage() {
 
               {activeTab === "preferences" && (
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
-                  <h3 className="text-base font-bold text-white">Job Preferences</h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-base font-bold text-white">Job Preferences</h3>
+                    <Link href="/onboarding/preferences" className="text-xs font-bold text-primary hover:underline">
+                      Edit preferences
+                    </Link>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                       <span className="text-gray-400 block text-[10px] uppercase font-bold">
