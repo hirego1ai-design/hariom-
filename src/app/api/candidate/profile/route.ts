@@ -76,6 +76,13 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const presentedProfile = profile ? {
       ...profile,
+      // Candidate profile data is stored separately from account identity.
+      // Expose the account fields at the top level as well so candidate UIs
+      // do not render a blank name/email while keeping the nested user object.
+      name: profile.user.name,
+      email: profile.user.email,
+      avatarUrl: profile.user.avatarUrl,
+      phoneNumber: profile.user.phoneNumber,
       candidateSkills: profile.candidateSkills.map((skill) => {
         const expired = !!skill.validUntil && skill.validUntil <= now;
         return {
