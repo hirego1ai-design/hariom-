@@ -23,6 +23,17 @@ function getZohoCpaasApiBaseUrl() {
   return value;
 }
 
+function normalizeZohoCpaasApiKey(value: string) {
+  const normalized = value
+    .trim()
+    .replace(/^(?:Zoho-enczapikey\s+)+/i, "")
+    .trim();
+  if (!normalized) {
+    throw new EmailProviderDispatchError("Zoho CPaaS API key is empty after normalization.", false);
+  }
+  return normalized;
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
 }
@@ -118,7 +129,7 @@ async function sendWithSendGrid(message: EmailMessage, apiKey: string, sender: s
 async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: string, messageId: string): Promise<EmailDeliveryResult> {
   const response = await fetch(`${getZohoCpaasApiBaseUrl()}/email`, {
     method: "POST",
-    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
+    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${normalizeZohoCpaasApiKey(apiKey)}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
     redirect: "error",
     cache: "no-store",
@@ -159,7 +170,7 @@ async function sendZeptoMailStoredTemplate(
   }
   const response = await fetch(`${getZohoCpaasApiBaseUrl()}/email/template`, {
     method: "POST",
-    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${apiKey}`, "Content-Type": "application/json" },
+    headers: { Accept: "application/json", Authorization: `Zoho-enczapikey ${normalizeZohoCpaasApiKey(apiKey)}`, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(EMAIL_PROVIDER_TIMEOUT_MS),
     redirect: "error",
     cache: "no-store",
