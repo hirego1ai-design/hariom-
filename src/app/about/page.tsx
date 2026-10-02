@@ -4,7 +4,7 @@ import MarketingShell from "@/components/marketing/MarketingShell";
 import { EditorialHero, FAQ, FinalCTA, JsonLd, SectionHeading, breadcrumbSchema, styles } from "@/components/marketing/Editorial";
 import { marketingMetadata } from "@/lib/marketingMetadata";
 
-export const metadata: Metadata = marketingMetadata({ path: "/about", title: "About HireGo AI | Autonomous AI Hiring Platform", description: "Learn why HireGo AI is building an autonomous agentic hiring platform that connects sourcing, screening, assessments, interviews and hiring operations in one workflow.", image: "/marketing/og/about.webp" });
+export const metadata: Metadata = marketingMetadata({ path: "/about", title: "HireGo | About HireGo AI & Autonomous Hiring Platform", description: "Meet HireGo AI (HireGo), an autonomous hiring platform connecting sourcing, screening, assessments, interviews and recruiting operations in one workflow.", image: "/marketing/og/about.webp" });
 
 const disconnected = [["Job portal", "Candidate discovery"], ["ATS", "Application tracking"], ["Assessment platform", "Role-related tests"], ["Scheduling product", "Calendar coordination"], ["Video platform", "Interviews"], ["Messaging tools", "Follow-ups"]];
 const stages = ["Employer Requirement","Requirement Understanding","Candidate Sourcing","Screening","Assessment","Interview Scheduling","Interview Coordination","Feedback","Human Hiring Decision","Joining Workflow"];
