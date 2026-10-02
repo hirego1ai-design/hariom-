@@ -9,8 +9,8 @@ import { SEO_JOB_CITIES } from "@/lib/seoJobCities";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/services",
-  title: "Managed Hiring & Pay Per Hire Services | HireGo AI",
-  description: "HireGo helps employers source and coordinate candidates through Managed Hiring. Your team makes the final decision; Pay Per Hire fees follow agreed successful hire terms.",
+  title: "Hire Go Recruitment Services | Managed Hiring | HireGo AI",
+  description: "HireGo AI (HireGo / Hire Go) provides managed recruitment, Pay Per Hire, candidate sourcing, screening and interview coordination for employers.",
   image: "/marketing/og/services.webp",
 });
 
