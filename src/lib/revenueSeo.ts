@@ -53,8 +53,8 @@ export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   },
   "ai-hiring-copilot": {
     slug: "ai-hiring-copilot",
-    metadataTitle: "AI Hiring Co-Pilot for Recruiting Teams | HireGo AI",
-    description: "HireGo AI Employer Co-Pilot helps recruiting teams coordinate permitted sourcing, screening, assessment, scheduling and follow-up work while humans keep control of hiring decisions.",
+    metadataTitle: "HireGo AI Hiring Co-Pilot | Recruitment Automation",
+    description: "HireGo AI (HireGo) Employer Co-Pilot automates permitted recruiting operations across sourcing, screening, assessments, scheduling and follow-up with human-controlled hiring decisions.",
     eyebrow: "Recruiting operations",
     title: "An AI hiring Co-Pilot that keeps the recruiting workflow moving.",
     lead: "Employer Co-Pilot is designed to reduce repetitive coordination between jobs, candidates, assessments, interview rounds and follow-up while preserving human approvals for consequential actions.",
