@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,28 @@ export default function EducationPage() {
       : []
   );
   const [saveError, setSaveError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError("");
+    fetch("/api/candidate/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile) {
+          throw new Error(body.error || "Could not load saved education.");
+        }
+        if (cancelled) return;
+        if (eduList.length === 0 && Array.isArray(body.profile.education) && body.profile.education.length > 0) {
+          setEduList(body.profile.education);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Could not load saved education.");
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleAdd = () => {
     setEduList([...eduList, { degree: "", university: "", year: "", gpa: "" }]);
@@ -126,6 +147,11 @@ export default function EducationPage() {
 
         {/* Main Workspace Body */}
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          {loadError && (
+            <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {loadError}
+            </div>
+          )}
           <div className="space-y-4">
             {eduList.map((edu, idx) => (
               <div
