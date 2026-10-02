@@ -16,7 +16,6 @@ export const metadata: Metadata = {
       },
     ],
     shortcut: "/hirego-ai-favicon-48.png",
-    apple: "/hirego-ai-favicon-48.png",
   },
 };
 
