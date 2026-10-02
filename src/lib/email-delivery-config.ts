@@ -68,12 +68,16 @@ export function decryptEmailProviderSecret(value: string): string {
 }
 
 function environmentConfig(provider: EmailProvider): EmailProviderRuntimeConfig | null {
-  const apiKey = provider === "SENDGRID"
-    ? process.env.SENDGRID_API_KEY
-    : process.env.ZOHO_CPAAS_SEND_MAIL_TOKEN || process.env.ZEPTOMAIL_API_KEY;
-  const fromEmail = provider === "SENDGRID"
-    ? process.env.SENDGRID_FROM_EMAIL
-    : process.env.ZOHO_CPAAS_FROM_EMAIL || process.env.ZEPTOMAIL_FROM_EMAIL;
+  const apiKey = (
+    provider === "SENDGRID"
+      ? process.env.SENDGRID_API_KEY
+      : process.env.ZOHO_CPAAS_SEND_MAIL_TOKEN || process.env.ZEPTOMAIL_API_KEY
+  )?.trim();
+  const fromEmail = (
+    provider === "SENDGRID"
+      ? process.env.SENDGRID_FROM_EMAIL
+      : process.env.ZOHO_CPAAS_FROM_EMAIL || process.env.ZEPTOMAIL_FROM_EMAIL
+  )?.trim();
   return apiKey && fromEmail ? { provider, apiKey, fromEmail } : null;
 }
 
@@ -101,8 +105,8 @@ function resolveProviderConfig(
   const encryptedKey = provider === "SENDGRID" ? stored?.sendgridApiKeyEncrypted : stored?.zeptoMailApiKeyEncrypted;
   const configuredFromEmail = provider === "SENDGRID" ? stored?.sendgridFromEmail : stored?.zeptoMailFromEmail;
   const fallback = environmentConfig(provider);
-  const apiKey = encryptedKey ? decryptEmailProviderSecret(encryptedKey) : fallback?.apiKey;
-  const fromEmail = configuredFromEmail || fallback?.fromEmail;
+  const apiKey = (encryptedKey ? decryptEmailProviderSecret(encryptedKey) : fallback?.apiKey)?.trim();
+  const fromEmail = (configuredFromEmail || fallback?.fromEmail)?.trim();
   return apiKey && fromEmail ? { provider, apiKey, fromEmail } : null;
 }
 
