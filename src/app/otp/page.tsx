@@ -71,7 +71,14 @@ export default function OTPPage() {
         return;
       }
 
-      router.push("/onboarding/welcome");
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("pending_otp_email");
+        // Remove the legacy unscoped onboarding draft so an older browser
+        // session cannot prefill another candidate's registration flow.
+        localStorage.removeItem("hirego_onboarding_v1");
+      }
+      router.replace("/onboarding/role-select");
+      router.refresh();
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to verify code. Please try again.");
       setIsLoading(false);

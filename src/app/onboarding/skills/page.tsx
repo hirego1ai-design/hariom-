@@ -10,16 +10,37 @@ import RoleSkillSelector, { SelectedRoleSkill } from "@/components/skills/RoleSk
 export default function SkillsPage() {
   const router = useRouter();
   const { state, updateState, markStepComplete } = useOnboarding();
-  const [skills, setSkills] = useState<SkillEntry[]>([]);
-  const [targetRole, setTargetRole] = useState("");
+  const [skills, setSkills] = useState<SkillEntry[]>(state.skills || []);
+  const [targetRole, setTargetRole] = useState(state.targetRole || "");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Saved onboarding data is restored after hydration.
   useEffect(() => {
-    setSkills(state.skills || []);
-    setTargetRole(state.targetRole || "");
-  }, [state.skills, state.targetRole]);
+    let cancelled = false;
+    fetch("/api/candidate/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        const preferences = body.profile.preferences && typeof body.profile.preferences === "object"
+          ? body.profile.preferences
+          : {};
+        const savedTargetRole = typeof preferences.targetRole === "string"
+          ? preferences.targetRole
+          : "";
+        setTargetRole(savedTargetRole);
+
+        if (Array.isArray(body.profile.candidateSkills) && body.profile.candidateSkills.length > 0) {
+          setSkills(body.profile.candidateSkills.map((skill: { name: string; claimedLevel?: string }) => ({
+            name: skill.name,
+            level: String(skill.claimedLevel || "INTERMEDIATE").toLowerCase() as SkillEntry["level"],
+          })));
+        } else if (Array.isArray(body.profile.skills) && body.profile.skills.length > 0) {
+          setSkills(body.profile.skills.map((name: string) => ({ name, level: "intermediate" as const })));
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const saveAndContinue = async (nextSkills: SkillEntry[]) => {
     if (!targetRole.trim() || isSaving) {
@@ -72,8 +93,13 @@ export default function SkillsPage() {
             <div className="mb-6">
               <h2 className="font-extrabold text-base" style={{ color: "var(--text-primary)" }}>Choose skills you actually have</h2>
               <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>We show only skills related to your role. You can remove any suggestion and set your proficiency.</p>
+              {targetRole.trim() && (
+                <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                  Using the target role you selected earlier. Go back to Role Selection if you want to change it.
+                </p>
+              )}
             </div>
-            <RoleSkillSelector role={targetRole} onRoleChange={setTargetRole} selectedSkills={selectedSkills} onSelectedSkillsChange={updateSelectedSkills} mode="candidate" />
+            <RoleSkillSelector role={targetRole} onRoleChange={setTargetRole} selectedSkills={selectedSkills} onSelectedSkillsChange={updateSelectedSkills} mode="candidate" roleEditable={!targetRole.trim()} />
             {saveError && <p role="alert" className="mt-4 text-xs font-semibold" style={{ color: "var(--primary)" }}>{saveError}</p>}
           </section>
 

@@ -23,9 +23,22 @@ export default function RoleSelectPage() {
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
-    setSelectedRole(state.candidateRole);
-    setTargetRole(state.targetRole);
-  }, [state.candidateRole, state.targetRole]);
+    let cancelled = false;
+    fetch("/api/candidate/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        const preferences = body.profile.preferences && typeof body.profile.preferences === "object"
+          ? body.profile.preferences
+          : {};
+        const savedRole = preferences.candidateRole as CandidateRole | undefined;
+        const savedTargetRole = typeof preferences.targetRole === "string" ? preferences.targetRole : "";
+        if (savedRole) setSelectedRole(savedRole);
+        if (savedTargetRole) setTargetRole(savedTargetRole);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!targetRole.trim()) {
@@ -139,7 +152,7 @@ export default function RoleSelectPage() {
           </section>
 
           <footer className="flex items-center justify-between pt-7 mt-7">
-            <Link href="/onboarding/welcome" className="px-6 h-12 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all border hover:-translate-y-0.5" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-primary)", boxShadow: "0 7px 14px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
+            <Link href="/dashboard" className="px-6 h-12 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all border hover:-translate-y-0.5" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-primary)", boxShadow: "0 7px 14px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
               <span className="material-symbols-outlined text-[16px]">arrow_back</span>Back
             </Link>
             <button onClick={() => void handleNext()} disabled={!selectedRole || !targetRole.trim() || isSaving} className="px-8 h-12 rounded-2xl text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-45 disabled:hover:translate-y-0" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))", boxShadow: "0 9px 0 rgba(126,20,29,0.95), 0 14px 25px rgba(230,57,70,0.22), inset 0 1px 0 rgba(255,255,255,0.25)" }}>

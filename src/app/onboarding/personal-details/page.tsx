@@ -26,11 +26,16 @@ export default function PersonalDetailsPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.profile) {
+          const preferences = data.profile.preferences && typeof data.profile.preferences === "object"
+            ? data.profile.preferences
+            : {};
           setFormData((prev) => ({
             ...prev,
-            fullName: prev.fullName || data.profile.name || "",
-            email: prev.email || data.profile.email || "",
-            location: prev.location || data.profile.location || "",
+            fullName: data.profile.name || prev.fullName || "",
+            email: data.profile.email || prev.email || "",
+            phone: data.profile.phoneNumber || prev.phone || "",
+            location: data.profile.location || prev.location || "",
+            linkedinUrl: typeof preferences.linkedinUrl === "string" ? preferences.linkedinUrl : prev.linkedinUrl,
           }));
         }
       })
@@ -137,6 +142,10 @@ export default function PersonalDetailsPage() {
 
         {/* Main Form Body */}
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          <div className="rounded-2xl border px-4 py-3 text-xs" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}>
+            Your verified name and email are already filled from registration. Add only the missing details or edit anything that has changed.
+          </div>
+
           <form
             onSubmit={handleNext}
             className="rounded-3xl p-8 lg:p-10 space-y-6 shadow-2xl relative overflow-hidden"
