@@ -7,6 +7,17 @@ export const metadata: Metadata = {
   title: "HireGo AI | Managed Hiring & AI Hiring Workflows",
   description:
     "HireGo AI helps employers source, screen and interview candidates through connected hiring workflows, Managed Hiring, Pay Per Hire and Employer Co-Pilot tools.",
+  icons: {
+    icon: [
+      {
+        url: "/hirego-ai-favicon-48.png",
+        type: "image/png",
+        sizes: "48x48",
+      },
+    ],
+    shortcut: "/hirego-ai-favicon-48.png",
+    apple: "/hirego-ai-favicon-48.png",
+  },
 };
 
 /**
