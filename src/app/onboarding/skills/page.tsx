@@ -10,8 +10,8 @@ import RoleSkillSelector, { SelectedRoleSkill } from "@/components/skills/RoleSk
 export default function SkillsPage() {
   const router = useRouter();
   const { state, updateState, markStepComplete } = useOnboarding();
-  const [skills, setSkills] = useState<SkillEntry[]>([]);
-  const [targetRole, setTargetRole] = useState("");
+  const [skills, setSkills] = useState<SkillEntry[]>(state.skills || []);
+  const [targetRole, setTargetRole] = useState(state.targetRole || "");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -26,7 +26,7 @@ export default function SkillsPage() {
           : {};
         const savedTargetRole = typeof preferences.targetRole === "string"
           ? preferences.targetRole
-          : state.targetRole || "";
+          : "";
         setTargetRole(savedTargetRole);
 
         if (Array.isArray(body.profile.candidateSkills) && body.profile.candidateSkills.length > 0) {
@@ -36,14 +36,9 @@ export default function SkillsPage() {
           })));
         } else if (Array.isArray(body.profile.skills) && body.profile.skills.length > 0) {
           setSkills(body.profile.skills.map((name: string) => ({ name, level: "intermediate" as const })));
-        } else {
-          setSkills(state.skills || []);
         }
       })
-      .catch(() => {
-        setSkills(state.skills || []);
-        setTargetRole(state.targetRole || "");
-      });
+      .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
 
