@@ -90,8 +90,8 @@ export default function RegisterPage() {
     <div className="auth-registration-page min-h-screen bg-bg-page flex items-center justify-center text-text-primary px-3 sm:px-4 py-2">
       <div className="auth-registration-card w-full max-w-[1060px] mx-auto grid grid-cols-1 glass-card rounded-2xl overflow-hidden shadow-2xl border border-outline my-auto">
         {/* Left Side: Visual & Progress */}
-        <section className="auth-registration-sidebar hidden md:flex bg-surface-container-low/40 border-r border-outline flex-col p-6 lg:p-8 justify-between relative">
-          <div className="relative flex-grow flex items-center justify-center my-4">
+        <section className="auth-registration-sidebar hidden md:flex bg-surface-container-low/40 border-r border-outline flex-col p-6 lg:p-8 justify-center gap-10 lg:gap-12 relative">
+          <div className="relative flex items-center justify-center">
             <div className="auth-brand-block relative w-full max-w-[230px]">
               <div className="absolute inset-3 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-[34px] opacity-75 logo-color-flow" />
               <Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative z-10 w-full h-auto object-contain" />
@@ -99,7 +99,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div className="auth-progress-list relative z-10 space-y-3 pl-1">
+          <div className="auth-progress-list relative z-10 space-y-3 w-full max-w-[230px] mx-auto">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-white font-bold">
                 ✓
@@ -163,7 +163,7 @@ export default function RegisterPage() {
         </section>
 
         {/* Right Side: Registration Form */}
-        <section className="flex items-start justify-center p-5 sm:p-7 lg:p-9">
+        <section className="flex items-center justify-center p-5 sm:p-7 lg:p-9">
           <div className="w-full max-w-[560px]">
             <div className="mb-5 flex justify-center md:hidden">
               <span className="relative inline-flex"><span className="absolute inset-1 rounded-full bg-[linear-gradient(105deg,#ff4e57,#ffcf45,#49cf78,#4285ff,#ff4e57)] blur-xl opacity-70 logo-color-flow" /><Image src="/marketing/hirego-logo-hd.png" alt="HireGo" width={660} height={220} priority className="relative h-auto w-32 object-contain" /></span>
