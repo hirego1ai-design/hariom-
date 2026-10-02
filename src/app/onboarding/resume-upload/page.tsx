@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,8 +11,26 @@ export default function ResumeUploadPage() {
   const { updateState, markStepComplete } = useOnboarding();
 
   const [fileName, setFileName] = useState<string | null>(null);
+  const [existingResume, setExistingResume] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/candidate/profile", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        if (body.profile.resumeUrl) {
+          setExistingResume(true);
+          setFileName("Resume already saved to your profile");
+          setExistingResume(true);
+        updateState({ resumeUploaded: true });
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [updateState]);
 
   const handleFileDrop = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,7 +96,7 @@ export default function ResumeUploadPage() {
   };
 
   const handleSkip = () => {
-    updateState({ resumeUploaded: false });
+    updateState({ resumeUploaded: existingResume });
     markStepComplete(7);
     router.push("/onboarding/video-resume");
   };
@@ -151,6 +169,12 @@ export default function ResumeUploadPage() {
 
         {/* Main Workspace Body */}
         <main className="flex-1 p-6 lg:p-12 space-y-6 max-w-[1000px] w-full mx-auto overflow-y-auto">
+          {existingResume && (
+            <div className="rounded-2xl border px-4 py-3 text-xs font-semibold" style={{ backgroundColor: "rgba(46,125,50,0.10)", borderColor: "rgba(46,125,50,0.35)", color: "var(--text-primary)" }}>
+              A resume is already saved on your profile. Upload another file only if you want to replace it.
+            </div>
+          )}
+
           {/* Main Upload Bento Card */}
           <div
             className="rounded-3xl p-6 lg:p-8 space-y-6 shadow-2xl relative overflow-hidden"
