@@ -28,9 +28,10 @@ export default function PersonalDetailsPage() {
         if (data.success && data.profile) {
           setFormData((prev) => ({
             ...prev,
-            fullName: prev.fullName || data.profile.name || "",
-            email: prev.email || data.profile.email || "",
+            fullName: prev.fullName || data.profile.user?.name || data.profile.name || "",
+            email: prev.email || data.profile.user?.email || data.profile.email || "",
             location: prev.location || data.profile.location || "",
+            dateOfBirth: prev.dateOfBirth || (typeof data.profile.preferences?.dateOfBirth === "string" ? data.profile.preferences.dateOfBirth : ""),
           }));
         }
       })
@@ -48,7 +49,6 @@ export default function PersonalDetailsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: formData.fullName,
           phone: formData.phone,
           location: formData.location,
           linkedinUrl: formData.linkedinUrl,
@@ -158,7 +158,7 @@ export default function PersonalDetailsPage() {
                 style={{ color: "var(--text-primary)" }}
               >
                 <span className="material-symbols-outlined text-[18px]" style={{ color: "var(--primary)" }}>person</span>
-                Candidate Contact Details
+                Additional Contact Details
               </h2>
               <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
                 Visible to authorized employers
@@ -166,54 +166,6 @@ export default function PersonalDetailsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  FULL LEGAL NAME
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor: "var(--bg-input)",
-                    border: "1.5px solid var(--outline)",
-                    color: "var(--text-primary)",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "var(--primary)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "var(--outline)";
-                  }}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
-                  EMAIL ADDRESS
-                </label>
-                <input
-                  type="email"
-                  required
-                  readOnly
-                  value={formData.email}
-                  className="w-full h-11 px-4 rounded-full outline-none text-xs font-semibold transition-all"
-                  style={{
-                    backgroundColor: "var(--bg-input)",
-                    border: "1.5px solid var(--outline)",
-                    color: "var(--text-primary)",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "var(--primary)";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "var(--outline)";
-                  }}
-                />
-              </div>
-
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold block tracking-wide" style={{ color: "var(--text-primary)" }}>
                   MOBILE NUMBER · OPTIONAL
