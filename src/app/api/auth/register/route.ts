@@ -11,6 +11,7 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(2, "Name must be at least 2 characters"),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date of birth"),
   referralCode: z.string().optional(),
 }).strict();
 
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
       await prisma.candidateProfile.create({
         data: {
           userId: user.id,
+          preferences: { dateOfBirth: body.dateOfBirth },
         },
       });
     } catch (profileErr: any) {
