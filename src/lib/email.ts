@@ -50,6 +50,50 @@ class EmailProviderDispatchError extends Error {
   }
 }
 
+function redactProviderErrorText(value: string): string {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
+async function describeProviderError(response: Response, providerLabel: string): Promise<string> {
+  const fallback = `${providerLabel} returned ${response.status}`;
+  try {
+    const payload = await response.clone().json() as {
+      code?: unknown;
+      message?: unknown;
+      error?: { code?: unknown; message?: unknown } | unknown;
+    };
+    const nestedError =
+      payload && typeof payload.error === "object" && payload.error !== null
+        ? payload.error as { code?: unknown; message?: unknown }
+        : undefined;
+    const code =
+      typeof nestedError?.code === "string" || typeof nestedError?.code === "number"
+        ? String(nestedError.code)
+        : typeof payload?.code === "string" || typeof payload?.code === "number"
+          ? String(payload.code)
+          : "";
+    const message =
+      typeof nestedError?.message === "string"
+        ? nestedError.message
+        : typeof payload?.message === "string"
+          ? payload.message
+          : "";
+    const detail = redactProviderErrorText([code, message].filter(Boolean).join(": "));
+    return detail ? `${fallback} (${detail})` : fallback;
+  } catch {
+    try {
+      const detail = redactProviderErrorText(await response.text());
+      return detail ? `${fallback} (${detail})` : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 async function sendWithSendGrid(message: EmailMessage, apiKey: string, sender: string, messageId: string): Promise<EmailDeliveryResult> {
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
@@ -86,7 +130,12 @@ async function sendWithZeptoMail(message: EmailMessage, apiKey: string, sender: 
       textbody: message.text,
     }),
   });
-  if (!response.ok) throw new EmailProviderDispatchError(`Zoho CPaaS returned ${response.status}`, response.status >= 400 && response.status < 500);
+  if (!response.ok) {
+    throw new EmailProviderDispatchError(
+      await describeProviderError(response, "Zoho CPaaS"),
+      response.status >= 400 && response.status < 500,
+    );
+  }
   const body = await response.json().catch(() => null);
   const providerMessageId = body?.data?.[0]?.message_id || body?.message_id;
   return { success: true, messageId: providerMessageId || messageId, provider: "ZEPTOMAIL" };
@@ -121,7 +170,12 @@ async function sendZeptoMailStoredTemplate(
       merge_info: message.mergeInfo,
     }),
   });
-  if (!response.ok) throw new EmailProviderDispatchError(`Zoho CPaaS template API returned ${response.status}`, response.status >= 400 && response.status < 500);
+  if (!response.ok) {
+    throw new EmailProviderDispatchError(
+      await describeProviderError(response, "Zoho CPaaS template API"),
+      response.status >= 400 && response.status < 500,
+    );
+  }
   const body = await response.json().catch(() => null);
   return { success: true, messageId: body?.data?.[0]?.message_id || body?.message_id || messageId, provider: "ZEPTOMAIL" };
 }
