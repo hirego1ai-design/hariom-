@@ -6,7 +6,7 @@ import EmployerPricingPreview from "./EmployerPricingPreview";
 type PageKind = "features" | "pricing" | "enterprise" | "about" | "company" | "careers" | "contact" | "terms" | "privacy" | "ai-features" | "find-jobs" | "certifications" | "career-resources" | "post-job-public";
 
 const content: Record<PageKind, { eyebrow: string; title: string; intro: string }> = {
-  features: { eyebrow: "One trusted workflow", title: "Turn potential into proof.", intro: "HireGo AI helps candidates build job-ready evidence and gives employers a faster, fairer way to discover it." },
+  features: { eyebrow: "Agentic Hiring Operating System", title: "One connected system for the hiring workflow.", intro: "HireGo AI connects sourcing, screening, assessments, interviews, candidate communication and workflow coordination while keeping consequential employment decisions under human control." },
   pricing: { eyebrow: "Simple, transparent plans", title: "Invest in better hiring.", intro: "Start with the tools you need today and scale when your hiring or career goals grow." },
   enterprise: { eyebrow: "For teams that are hiring", title: "Hire people for what they can do.", intro: "Create structured hiring workflows, compare verified skills, and move from shortlist to offer with confidence." },
   about: { eyebrow: "Our mission", title: "Make opportunity easier to reach.", intro: "We are building a more useful bridge between human potential and the teams looking for it." },
@@ -49,8 +49,8 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
   return (
     <MarketingShell>
       <Hero kind={kind} />
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">
-        {["features", "ai-features", "find-jobs", "certifications", "career-resources"].includes(kind) && (
+      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">\n        {kind === "features" && <FeaturesContent />}
+        {["ai-features", "find-jobs", "certifications", "career-resources"].includes(kind) && (
           <div className="grid gap-5 md:grid-cols-2">
             {featureCards.map(([number, title, description]) => (
               <article key={number} className="glass-card p-7">
@@ -71,6 +71,45 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
       </section>
     </MarketingShell>
   );
+}
+
+function FeaturesContent() {
+  const capabilities = [
+    { title: "Employer AI Co-Pilot", description: "Assist with defined hiring operations, workflow context and next-step coordination while your team retains control of consequential decisions.", href: "/ai-hiring-copilot", cta: "Explore AI Co-Pilot" },
+    { title: "Candidate Search & Screening", description: "Bring candidate discovery and evidence-based screening into the same workflow so teams can review relevant signals with context.", href: "/candidate-screening-software", cta: "Explore candidate screening" },
+    { title: "Assessments & AI Mock Interviews", description: "Use structured assessments and interview-practice experiences to build useful evidence of skills and job readiness.", href: "/ai-mock-interview", cta: "Explore AI Mock Interviews" },
+    { title: "Video Resume & Candidate Intelligence", description: "Combine candidate information, video resumes, assessment evidence and interview insights into a more unified candidate view.", href: "/video-resume", cta: "Explore Video Resume" },
+    { title: "Interview Orchestration", description: "Coordinate interview stages, interviewer context and workflow progression without separating the process across disconnected tools.", href: "/interview-proctoring-software", cta: "Explore interview workflows" },
+    { title: "Candidate Communication & Follow-ups", description: "Support timely candidate communication and follow-up workflows while maintaining durable hiring context across stages.", href: "/solutions", cta: "Explore hiring workflows" },
+    { title: "Managed Hiring", description: "Access an additional hiring model for employers that need hands-on support, including hiring talent from India for global requirements.", href: "/pay-per-hire", cta: "Explore Managed Hiring" },
+  ];
+  return <div className="space-y-16">
+    <section>
+      <div className="mx-auto max-w-3xl text-center">
+        <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Connected capabilities</p>
+        <h2 className="mt-4 text-3xl font-extrabold text-white sm:text-4xl">From candidate discovery to coordinated hiring operations.</h2>
+        <p className="mt-5 leading-7 text-slate-400">Instead of treating sourcing, assessment, interviews and follow-ups as separate systems, HireGo AI is designed to keep the workflow and its evidence connected.</p>
+      </div>
+      <div className="mt-10 grid gap-5 md:grid-cols-2">
+        {capabilities.map((capability) => <article key={capability.title} className="glass-card p-7">
+          <h3 className="text-2xl font-bold text-white">{capability.title}</h3>
+          <p className="mt-3 leading-7 text-slate-400">{capability.description}</p>
+          <Link href={capability.href} className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">{capability.cta} →</Link>
+        </article>)}
+      </div>
+    </section>
+    <section className="glass-card p-8 sm:p-10">
+      <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff8a80]">Human control</p>
+      <h2 className="mt-4 text-3xl font-extrabold text-white">AI can execute permitted workflows. People make consequential employment decisions.</h2>
+      <p className="mt-5 max-w-4xl leading-7 text-slate-300">HireGo AI is designed to assist with and execute defined operational work while final selection or rejection, offers, compensation commitments and other consequential employment decisions remain under human control.</p>
+      <div className="mt-7 flex flex-wrap gap-3"><Link href="/about#human-control" className="btn-primary-blue">How human control works</Link><Link href="/solutions" className="btn-secondary">Explore solutions</Link></div>
+    </section>
+    <section className="text-center">
+      <h2 className="text-3xl font-extrabold text-white">Choose the HireGo workflow that fits your hiring needs.</h2>
+      <p className="mx-auto mt-4 max-w-2xl leading-7 text-slate-400">Use the platform directly or explore managed hiring support for requirements that need additional operational help.</p>
+      <div className="mt-7 flex flex-wrap justify-center gap-3"><Link href="/pricing" className="btn-primary-red">View pricing</Link><Link href="/contact" className="btn-primary-blue">Talk to HireGo AI</Link></div>
+    </section>
+  </div>;
 }
 
 function PricingContent() {
