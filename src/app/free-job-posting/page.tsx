@@ -7,14 +7,14 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 export const metadata: Metadata = marketingMetadata({
   path: "/free-job-posting",
   title: "Free Job Posting in India for Employers | HireGo AI",
-  description: "Post jobs across India and manage applicants, screening, assessments and interviews with HireGo AI. Explore employer hiring pages for major Indian cities.",
+  description: "Post jobs for free in India with HireGo AI. Free job posting for employers with applicant tracking, screening, assessments and interview workflows.",
 });
 
 export default function FreeJobPostingIndiaPage() {
   const faq = [
     {
-      question: "Can employers post jobs for free on HireGo AI?",
-      answer: "HireGo AI can provide free job posting access based on the employer plan and eligibility shown in the account. Current limits and validity are always shown before a role is published.",
+      question: "Where can I post jobs for free in India?",
+      answer: "Employers can create a HireGo AI employer account and use the job posting workflow. Free posting access, limits and validity depend on the current plan and eligibility shown in the account before publication.",
     },
     {
       question: "Which Indian cities does HireGo AI support?",
@@ -32,17 +32,16 @@ export default function FreeJobPostingIndiaPage() {
         <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Hire across India</p>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting in India for Employers</h1>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Post Jobs for Free in India</h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-300">
-              Create a clear role, publish it for candidates, and manage applicant screening, assessments and interview steps in one structured hiring workflow.
+              Looking for free job posting in India? Create an employer account, publish eligible roles, and manage applicant screening, assessments and interview steps in one structured hiring workflow.
             </p>
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-400">
-              HireGo AI is built for employers searching for a faster recruitment platform, applicant workflow and local hiring support across major Indian cities.
+              HireGo AI gives employers a free job posting workflow with clear role details, applicant management and hiring tools across India.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Create Employer Account</Link>
-              <Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Employer Sign In</Link>
-              <Link href="/jobs" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Browse Jobs</Link>
+              <Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post Jobs for Free</Link>
+              <Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Already an Employer? Sign In</Link>
             </div>
             <p className="mx-auto mt-5 max-w-2xl text-xs leading-5 text-slate-400">
               Free posting availability, limits and validity depend on the current employer plan and eligibility shown in your HireGo account.
@@ -51,6 +50,13 @@ export default function FreeJobPostingIndiaPage() {
         </section>
 
         <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">
+          <div className="mb-12 max-w-4xl">
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#82b1ff]">How to post a job for free</p>
+            <h2 className="mt-3 text-3xl font-bold">Free job posting for employers in three steps</h2>
+            <p className="mt-4 leading-7 text-slate-400">
+              If you are searching for where to post jobs for free in India, start by creating your employer account. Your account shows the current posting eligibility, limits and validity before you publish.
+            </p>
+          </div>
           <div className="grid gap-5 md:grid-cols-3">
             {[
               ["1", "Create the role", "Add the job title, location, requirements, work mode and other role details."],
