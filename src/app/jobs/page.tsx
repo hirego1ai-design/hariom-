@@ -48,10 +48,10 @@ const getInitialJobs = unstable_cache(
 );
 
 export default async function JobsPage({
-  searchParams,
+  searchParams = Promise.resolve({}),
 }: {
-  searchParams: Promise<{ location?: string | string[] }>;
-}) {
+  searchParams?: Promise<{ location?: string | string[] }>;
+} = {}) {
   const [initial, params] = await Promise.all([getInitialJobs(), searchParams]);
   const initialLocation = typeof params.location === "string" ? params.location : "";
 
