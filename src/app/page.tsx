@@ -26,10 +26,11 @@ export default function HomePage() {
     <section className={`${heroStyles.hero} ${heroFont.variable}`}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
-        <h1 className={heroStyles.headline}><span className="block">AI-Assisted Hiring and</span><span className="mt-1 block"><span className={heroStyles.futureWord}>Pay Per Hire</span> in India</span></h1>
-        <p className={heroStyles.tagline}>Connected hiring workflows with people in control</p>
+        <h1 className={heroStyles.headline}>Welcome to Future of Hiring</h1>
+        <p className={heroStyles.tagline}>The world’s fastest hiring platform.</p>
         <div className="mx-auto mt-5 max-w-3xl text-slate-200">
-          <p className={heroStyles.description}>HireGo AI helps employers manage sourcing, candidate screening, interviews and hiring operations. Choose Managed Hiring with Pay Per Hire or use the platform workflow; people make the final hiring decisions.</p>
+          <p className={heroStyles.description}>Designed to reduce recruiting time by up to 80–85%.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">HireGo AI helps employers manage sourcing, candidate screening, interviews and hiring operations, with people making the final hiring decisions.</p>
         </div>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap"><Link href="/employer/employer-sign-in" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Explore Managed Hiring <span aria-hidden className="ml-2">→</span></Link><Link href="/jobs" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Browse Jobs</Link></div>
       </div>
