@@ -94,7 +94,7 @@ export default function JobsClient({
   useEffect(() => {
     if (!didHandleInitialJobsEffect.current) {
       didHandleInitialJobsEffect.current = true;
-      if (!query) return;
+      if (!query && !mappedLocation) return;
     }
 
     const controller = new AbortController();
