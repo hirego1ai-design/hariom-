@@ -47,12 +47,19 @@ const getInitialJobs = unstable_cache(
   { revalidate: 15 },
 );
 
-export default async function JobsPage() {
-  const initial = await getInitialJobs();
+export default async function JobsPage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<{ location?: string | string[] }>;
+} = {}) {
+  const [initial, params] = await Promise.all([getInitialJobs(), searchParams]);
+  const initialLocation = typeof params.location === "string" ? params.location : "";
+
   return (
     <JobsClient
       initialJobs={initial.jobs}
       initialTotalPages={initial.totalPages}
+      initialLocation={initialLocation}
     />
   );
 }

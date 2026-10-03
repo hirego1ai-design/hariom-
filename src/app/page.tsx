@@ -58,6 +58,7 @@ export default function HomePage() {
           "@id": "https://www.hiregoai.com/#organization",
           name: "HireGo AI",
           url: "https://www.hiregoai.com",
+          logo: "https://www.hiregoai.com/marketing/hirego-logo.png",
           description: "HireGo AI is an AI-assisted hiring platform based in Noida, India.",
           address: {
             "@type": "PostalAddress",

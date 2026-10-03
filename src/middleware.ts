@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { configuredSecurityHeaders } from "@/lib/securityHeaders";
+import { findSeoJobCity } from "@/lib/seoJobCities";
+import { categoriesForCity, findSeoJobCategory } from "@/lib/seoJobCategories";
 
 const AUTH_COOKIE_NAME = "hirego_session";
 
@@ -122,6 +124,39 @@ async function parseSessionToken(token: string): Promise<SessionPayload | null> 
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Legacy public SEO routes are permanent moves. Handle them before auth
+  // checks and use an explicit 301 so crawlers replace the old URLs.
+  const jobsInMatch = pathname.match(/^\/jobs-in\/([^/]+)(?:\/([^/]+))?\/?$/);
+  if (jobsInMatch) {
+    const city = findSeoJobCity(jobsInMatch[1]);
+    if (city) {
+      const destination = new URL("/jobs", request.url);
+      destination.searchParams.set("location", city.name);
+
+      const categorySlug = jobsInMatch[2];
+      if (categorySlug) {
+        const category = findSeoJobCategory(categorySlug);
+        const validCategory = category && categoriesForCity(city.slug).some((item) => item.slug === category.slug);
+        if (validCategory) {
+          destination.searchParams.set("q", category.name);
+          return NextResponse.redirect(destination, 301);
+        }
+      } else {
+        return NextResponse.redirect(destination, 301);
+      }
+    }
+  }
+
+  const hiringInMatch = pathname.match(/^\/hiring-in\/([^/]+)\/?$/);
+  if (hiringInMatch) {
+    const city = findSeoJobCity(hiringInMatch[1]);
+    if (city) {
+      const destination = new URL("/jobs", request.url);
+      destination.searchParams.set("location", city.name);
+      return NextResponse.redirect(destination, 301);
+    }
+  }
 
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const token = bearer || request.cookies.get(AUTH_COOKIE_NAME)?.value;

@@ -115,7 +115,7 @@ export default async function MockInterviewRolePage({ params }: Props) {
             "@type": "Service",
             name: "AI Mock Interview for " + role.name,
             serviceType: "AI mock interview practice",
-            provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com" },
+            provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com", logo: "https://www.hiregoai.com/marketing/hirego-logo.png" },
             url: "https://www.hiregoai.com/ai-mock-interview/" + role.slug
           },
           {

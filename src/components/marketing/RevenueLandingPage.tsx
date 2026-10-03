@@ -113,7 +113,8 @@ export default function RevenueLandingPage({ page }: { page: RevenueSeoPage }) {
             provider: {
               "@type": "Organization",
               name: "HireGo AI",
-              url: "https://www.hiregoai.com"
+              url: "https://www.hiregoai.com",
+              logo: "https://www.hiregoai.com/marketing/hirego-logo.png"
             },
             url: "https://www.hiregoai.com" + path
           },

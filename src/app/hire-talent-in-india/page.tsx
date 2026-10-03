@@ -136,7 +136,7 @@ export default function HireTalentInIndiaPage() {
           "@type": "Service",
           name: "Hire talent in India with HireGo AI",
           serviceType: "Candidate sourcing, screening, interview coordination and managed hiring",
-          provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com" },
+          provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com", logo: "https://www.hiregoai.com/marketing/hirego-logo.png" },
           areaServed: employerMarkets.map((name) => ({ "@type": "Country", name })),
           url: "https://www.hiregoai.com/hire-talent-in-india"
         }} />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import MarketingNav from "@/components/marketing/MarketingNav";
 
@@ -69,13 +69,14 @@ type JobRecommendation = {
 export default function JobsClient({
   initialJobs,
   initialTotalPages,
+  initialLocation = "",
 }: {
   initialJobs: Job[];
   initialTotalPages: number;
+  initialLocation?: string;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const mappedLocation = (searchParams.get("location") || "").trim();
+  const mappedLocation = initialLocation.trim();
   const didHandleInitialJobsEffect = useRef(false);
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
