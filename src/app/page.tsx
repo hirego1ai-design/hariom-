@@ -14,8 +14,8 @@ const heroFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font
 
 export const metadata: Metadata = marketingMetadata({
   path: "/",
-  title: "HireGo — HireGo AI | World’s Fastest Hiring Platform",
-  description: "HireGo AI (HireGo) is the world’s fastest hiring platform, designed to reduce recruiting time by up to 80–85% with AI sourcing, screening and interviews.",
+  title: "AI Hiring Platform & Pay Per Hire India | HireGo AI",
+  description: "HireGo AI supports managed hiring, Pay Per Hire, candidate screening, interviews and hiring workflows in India, with people making final decisions.",
   image: "/marketing/og/home.webp",
 });
 
@@ -26,12 +26,12 @@ export default function HomePage() {
     <section className={`${heroStyles.hero} ${heroFont.variable}`}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
-        <h1 className={heroStyles.headline}><span className="block">Welcome to <span className={heroStyles.futureWord}>Future</span></span><span className="mt-1 block">of Hiring</span></h1>
-        <p className={heroStyles.tagline}>The world’s fastest hiring platform</p>
+        <h1 className={heroStyles.headline}><span className="block">AI-Assisted Hiring and</span><span className="mt-1 block"><span className={heroStyles.futureWord}>Pay Per Hire</span> in India</span></h1>
+        <p className={heroStyles.tagline}>Connected hiring workflows with people in control</p>
         <div className="mx-auto mt-5 max-w-3xl text-slate-200">
-          <p className={heroStyles.description}>HireGo AI (HireGo) finds, evaluates and prepares job-ready candidates while autonomous AI agents keep hiring moving. The platform is designed to reduce recruiting time by up to 80–85%.</p>
+          <p className={heroStyles.description}>HireGo AI helps employers manage sourcing, candidate screening, interviews and hiring operations. Choose Managed Hiring with Pay Per Hire or use the platform workflow; people make the final hiring decisions.</p>
         </div>
-        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap"><Link href="/employer/employer-sign-in" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Find Job-Ready Talent <span aria-hidden className="ml-2">→</span></Link><Link href="/jobs" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Browse Jobs</Link></div>
+        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap"><Link href="/employer/employer-sign-in" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Explore Managed Hiring <span aria-hidden className="ml-2">→</span></Link><Link href="/jobs" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Browse Jobs</Link></div>
       </div>
       <svg className={heroStyles.transition} viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="hirego-carved-edge" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#eaf4ff" /><stop offset="1" stopColor="#fff" /></linearGradient></defs><path d="M0 -8 C220 142 780 142 1000 -8 L1000 122 L0 122Z" fill="url(#hirego-carved-edge)" /><path d="M0 0 C220 150 780 150 1000 0 L1000 122 L0 122Z" fill="#fff" /></svg>
     </section>
@@ -51,40 +51,55 @@ export default function HomePage() {
       "@context": "https://schema.org",
       "@graph": [
         {
-          "@type": "WebSite",
-          "@id": "https://www.hiregoai.com/#website",
-          url: "https://www.hiregoai.com",
-          name: "HireGo AI",
-          alternateName: ["HireGo", "HireGoAI", "Hire Go", "Hire Go AI"],
-          description: "HireGo AI (HireGo) is the world’s fastest hiring platform, designed to reduce recruiting time by up to 80–85% with AI sourcing, screening and interviews.",
-          publisher: { "@id": "https://www.hiregoai.com/#organization" },
-        },
-        {
           "@type": "Organization",
           "@id": "https://www.hiregoai.com/#organization",
           name: "HireGo AI",
-          alternateName: ["HireGo", "HireGoAI", "Hire Go", "Hire Go AI"],
           url: "https://www.hiregoai.com",
-          logo: "https://www.hiregoai.com/marketing/hirego-logo-hd.png",
-          slogan: "The world’s fastest hiring platform",
-          description: "HireGo AI builds connected AI hiring workflows for sourcing, screening, assessments, interview coordination and managed hiring.",
-          email: PUBLIC_BUSINESS_DETAILS.supportEmail,
+          description: "HireGo AI is an AI-assisted hiring platform based in Noida, India.",
           address: {
             "@type": "PostalAddress",
-            streetAddress: "G-31, Sector 63",
             addressLocality: "Noida",
-            addressRegion: "Uttar Pradesh",
-            postalCode: "201301",
             addressCountry: "IN",
           },
-          contactPoint: {
-            "@type": "ContactPoint",
-            email: PUBLIC_BUSINESS_DETAILS.supportEmail,
-            contactType: "customer support",
-            areaServed: ["IN", "US", "CA", "AU", "AE"],
-            availableLanguage: ["English", "Hindi"],
-          },
-          sameAs: ["https://github.com/hirego1ai-design"],
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.hiregoai.com/#software",
+          name: "HireGo AI",
+          url: "https://www.hiregoai.com",
+          applicationCategory: "BusinessApplication",
+          description: "AI-assisted hiring software for managed hiring, candidate screening, interviews, video resumes, mock interviews and employer hiring workflows.",
+          provider: { "@id": "https://www.hiregoai.com/#organization" },
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://www.hiregoai.com/#faq",
+          mainEntity: [
+            {
+              "@type": "Question",
+              name: "What is HireGo AI?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "HireGo AI is an AI-assisted hiring platform based in Noida, India.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "What hiring services does HireGo AI offer?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "HireGo AI offers Managed Hiring with Pay Per Hire, Employer Co-Pilot, candidate screening, interview and proctoring workflows, video resumes, AI mock interviews, free job posting and city-based hiring pages.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "Does AI make the final hiring decision on HireGo AI?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "No. AI supports operational hiring work while people remain responsible for hiring decisions.",
+              },
+            },
+          ],
         },
       ],
     }} />
