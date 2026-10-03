@@ -40,7 +40,8 @@ export default function FreeJobPostingIndiaPage() {
               HireGo AI is built for employers searching for a faster recruitment platform, applicant workflow and local hiring support across major Indian cities.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/employer/employer-sign-in" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post a Job</Link>
+              <Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Create Employer Account</Link>
+              <Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Employer Sign In</Link>
               <Link href="/jobs" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Browse Jobs</Link>
             </div>
             <p className="mx-auto mt-5 max-w-2xl text-xs leading-5 text-slate-400">
