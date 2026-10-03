@@ -14,8 +14,8 @@ const heroFont = Outfit({ subsets: ["latin"], display: "swap", variable: "--font
 
 export const metadata: Metadata = marketingMetadata({
   path: "/",
-  title: "HireGo — HireGo AI | World’s Fastest Hiring Platform",
-  description: "HireGo AI (HireGo) is the world’s fastest hiring platform, designed to reduce recruiting time by up to 80–85% with AI sourcing, screening and interviews.",
+  title: "HireGo AI | Agentic Hiring Operating System",
+  description: "HireGo AI connects sourcing, screening, assessments, interviews, candidate communication and hiring workflows while keeping consequential employment decisions under human control.",
   image: "/marketing/og/home.webp",
 });
 
@@ -27,9 +27,9 @@ export default function HomePage() {
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
         <h1 className={heroStyles.headline}><span className="block">Welcome to <span className={heroStyles.futureWord}>Future</span></span><span className="mt-1 block">of Hiring</span></h1>
-        <p className={heroStyles.tagline}>The world’s fastest hiring platform</p>
+        <p className={heroStyles.tagline}>Connected hiring workflows. Human-controlled decisions.</p>
         <div className="mx-auto mt-5 max-w-3xl text-slate-200">
-          <p className={heroStyles.description}>HireGo AI (HireGo) finds, evaluates and prepares job-ready candidates while autonomous AI agents keep hiring moving. The platform is designed to reduce recruiting time by up to 80–85%.</p>
+          <p className={heroStyles.description}>HireGo AI connects sourcing, screening, assessments, interviews and follow-ups while specialized AI agents help execute permitted operational work. Your hiring team keeps control of consequential decisions.</p>
         </div>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap"><Link href="/employer/employer-sign-in" className={`${heroStyles.primaryCta} rounded-full bg-white px-12 py-3 font-semibold text-[#1450c5] transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Find Job-Ready Talent <span aria-hidden className="ml-2">→</span></Link><Link href="/jobs" className={`${heroStyles.secondaryCta} rounded-full border border-white px-12 py-3 font-medium text-white transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300`}>Browse Jobs</Link></div>
       </div>
@@ -56,7 +56,7 @@ export default function HomePage() {
           url: "https://www.hiregoai.com",
           name: "HireGo AI",
           alternateName: ["HireGo", "HireGoAI", "Hire Go", "Hire Go AI"],
-          description: "HireGo AI (HireGo) is the world’s fastest hiring platform, designed to reduce recruiting time by up to 80–85% with AI sourcing, screening and interviews.",
+          description: "HireGo AI connects sourcing, screening, assessments, interviews, candidate communication and hiring workflows while keeping consequential employment decisions under human control.",
           publisher: { "@id": "https://www.hiregoai.com/#organization" },
         },
         {
@@ -66,7 +66,7 @@ export default function HomePage() {
           alternateName: ["HireGo", "HireGoAI", "Hire Go", "Hire Go AI"],
           url: "https://www.hiregoai.com",
           logo: "https://www.hiregoai.com/marketing/hirego-logo-hd.png",
-          slogan: "The world’s fastest hiring platform",
+          slogan: "Connected hiring workflows. Human-controlled decisions.",
           description: "HireGo AI builds connected AI hiring workflows for sourcing, screening, assessments, interview coordination and managed hiring.",
           email: PUBLIC_BUSINESS_DETAILS.supportEmail,
           address: {
