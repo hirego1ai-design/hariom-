@@ -69,9 +69,11 @@ type JobRecommendation = {
 export default function JobsClient({
   initialJobs,
   initialTotalPages,
+  seoIntro,
 }: {
   initialJobs: Job[];
   initialTotalPages: number;
+  seoIntro?: React.ReactNode;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -258,6 +260,7 @@ export default function JobsClient({
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       {!candidateStateLoading && (candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />)}
       <main className={`w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 ${candidateAuthenticated ? "md:ml-[116px]" : "pt-28 sm:pt-32"}`}>
+        {seoIntro}
         <h2 className="text-2xl font-bold">{mappedLocation ? `Jobs in ${mappedLocation}` : "Search current jobs"}</h2>
         {mappedLocation && <p className="mt-2 text-sm text-text-muted">Showing current jobs mapped to {mappedLocation}.</p>}
         <label className="sr-only" htmlFor="job-search">Search jobs</label>
