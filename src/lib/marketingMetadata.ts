@@ -14,6 +14,14 @@ const titles: Record<string, string> = {
   privacy: "Privacy — HireGo AI",
 };
 
+const descriptions: Record<string, string> = {
+  features: "Explore HireGo AI hiring features for sourcing, screening, assessments, interviews and workflow coordination, with people making hiring decisions.",
+  enterprise: "Explore HireGo AI workflows for employers that need structured screening, interview coordination and hiring operations with human decision control.",
+  company: "Learn how HireGo AI approaches AI-assisted hiring, connected recruitment workflows and human-controlled hiring decisions from Noida, India.",
+  careers: "Learn about careers and opportunities with HireGo AI, an AI-assisted hiring platform based in Noida, India.",
+  contact: "Contact HireGo AI in Noida, India about Managed Hiring, Pay Per Hire, Employer Co-Pilot, candidate screening and hiring workflows.",
+};
+
 const paths: Record<string, string> = {
   home: "/", features: "/features", pricing: "/pricing", enterprise: "/enterprise",
   about: "/about", company: "/company", careers: "/careers", blog: "/blog",
@@ -33,6 +41,6 @@ export function marketingMetadata({ path, title, description, image = "/marketin
 
 export function createMarketingMetadata(kind: string): Metadata {
   const title = titles[kind] ?? "HireGo AI";
-  const description = "HireGo AI connects candidate sourcing, screening, assessments and interviews in one hiring workflow, with people in control of hiring decisions.";
+  const description = descriptions[kind] ?? "HireGo AI supports AI-assisted hiring workflows while people remain responsible for hiring decisions.";
   return marketingMetadata({ title, description, path: paths[kind] ?? "/" });
 }
