@@ -17,7 +17,7 @@ const publicPaths = [
   "/", "/features", "/services", "/solutions", "/video-resume",
   "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hire-talent-in-india",
   "/pricing", "/about", "/company", "/enterprise", "/contact",
-  "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources",
+  "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources", "/jobs-in", "/hiring-in",
   "/ai-features", "/certifications", "/post-job-public", "/jobs", "/free-job-posting",
   "/free-job-posting-sites-in-india", "/how-to-post-a-job-for-free", "/where-to-post-jobs-for-free", "/free-job-posting-for-employers",
   "/legal", "/privacy", "/terms", "/refund-cancellation", "/service-delivery",

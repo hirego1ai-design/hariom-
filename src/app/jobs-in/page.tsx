@@ -28,7 +28,7 @@ export default function JobsByCityPage() {
         <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {SEO_JOB_CITIES.map((city) => (
-              <Link key={city.slug} href={`/jobs-in/${city.slug}`} className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#448aff]">
+              <Link key={city.slug} href={`/jobs?location=${encodeURIComponent(city.name)}`} className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 transition hover:border-[#448aff]">
                 <h2 className="text-xl font-bold">Jobs in {city.name}</h2>
                 <p className="mt-3 text-sm leading-6 text-slate-400">{city.candidateIntro}</p>
                 <span className="mt-5 inline-flex text-sm font-bold text-[#82b1ff]">View jobs →</span>
