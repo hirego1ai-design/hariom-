@@ -1,0 +1,15 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import MarketingShell from "@/components/marketing/MarketingShell";
+import { marketingMetadata } from "@/lib/marketingMetadata";
+
+export const metadata: Metadata = marketingMetadata({
+ path:"/free-job-posting-for-employers",
+ title:"Free Job Posting for Employers in India | HireGo AI",
+ description:"Free job posting for employers in India with a structured path from role publication to applicant review, screening, assessments and interview workflow.",
+});
+
+export default function Page(){return <MarketingShell><main className="bg-[#071322] text-white">
+ <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28"><div className="mx-auto max-w-4xl"><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Built for employer workflow</p><h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Free Job Posting for Employers in India</h1><p className="mt-6 text-lg leading-8 text-slate-300">Move from an eligible job posting into an organized hiring workflow instead of treating publication as the end of the process.</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post a Job</Link><Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold">Employer Sign In</Link></div><p className="mt-5 text-xs leading-5 text-slate-400">Free posting availability, limits and validity depend on the current employer plan and eligibility shown in your account.</p></div></section>
+ <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 md:py-24"><h2 className="text-3xl font-bold">From job listing to hiring workflow</h2><div className="mt-8 grid gap-5 md:grid-cols-2">{[["Publish a clear role","Define the title, location, work mode and requirements candidates need to evaluate the opportunity."],["Organize applications","Keep applicants connected to the role and review the information and evidence available in the workflow."],["Use configured evaluation steps","Where appropriate, screening and assessments can add structured evidence before interviews."],["Coordinate interviews","Track interview progression and workflow state while people retain control of consequential employment decisions."]].map(([t,c])=><article key={t} className="rounded-3xl border border-white/10 bg-white/[0.04] p-7"><h2 className="text-xl font-bold">{t}</h2><p className="mt-3 leading-7 text-slate-400">{c}</p></article>)}</div><div className="mt-14 flex flex-wrap gap-5 text-sm font-bold text-[#82b1ff]"><Link href="/free-job-posting">Free posting in India →</Link><Link href="/free-job-posting-sites-in-india">Posting-site guide →</Link><Link href="/solutions">Hiring solutions →</Link><Link href="/pricing">Employer plans →</Link></div></section>
+ </main></MarketingShell>}
