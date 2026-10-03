@@ -60,7 +60,7 @@ export default function HiringInIndiaPage() {
           "@type": "Service",
           name: "HireGo AI recruitment and managed hiring services in India",
           serviceType: "Recruitment software, managed hiring and hiring workflow automation",
-          provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com" },
+          provider: { "@type": "Organization", name: "HireGo AI", url: "https://www.hiregoai.com", logo: "https://www.hiregoai.com/marketing/hirego-logo.png" },
           areaServed: { "@type": "Country", name: "India" },
           url: "https://www.hiregoai.com/hiring-in"
         }} />
