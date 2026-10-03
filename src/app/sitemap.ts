@@ -1,8 +1,7 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { effectivePublishedWhere, editorialPublicPath } from "@/lib/contentCms";
-import { SEO_JOB_CITIES, matchesSeoCity } from "@/lib/seoJobCities";
-import { categoriesForCity, matchesSeoCategory } from "@/lib/seoJobCategories";
+import { SEO_JOB_CITIES } from "@/lib/seoJobCities";
 import { MOCK_INTERVIEW_ROLES } from "@/lib/revenueSeo";
 
 const base = "https://www.hiregoai.com";
@@ -16,10 +15,10 @@ const launchPressReleasePath = "/press-releases/hirego-ai-launch-october-13-2026
 // candidate, admin and API routes are intentionally excluded.
 const publicPaths = [
   "/", "/features", "/services", "/solutions", "/video-resume",
-  "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hire-talent-in-india", "/hiring-in",
+  "/pay-per-hire", "/ai-hiring-copilot", "/candidate-screening-software", "/interview-proctoring-software", "/ai-mock-interview", "/hire-talent-in-india",
   "/pricing", "/about", "/company", "/enterprise", "/contact",
   "/careers", "/blog", "/press-releases", "/press-kit", "/resources", "/find-jobs", "/career-resources",
-  "/ai-features", "/certifications", "/post-job-public", "/jobs", "/jobs-in", "/free-job-posting",
+  "/ai-features", "/certifications", "/post-job-public", "/jobs", "/free-job-posting",
   "/legal", "/privacy", "/terms", "/refund-cancellation", "/service-delivery",
 ];
 
@@ -35,12 +34,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: "weekly",
     priority: .8,
   }];
-
-  const hiringCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({
-    url: `${base}/hiring-in/${city.slug}`,
-    changeFrequency: "monthly",
-    priority: .78,
-  }));
 
   const mockInterviewRoleEntries: MetadataRoute.Sitemap = MOCK_INTERVIEW_ROLES.map((role) => ({
     url: `${base}/ai-mock-interview/${role.slug}`,
@@ -91,33 +84,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: .78,
     }));
 
-    const cityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES
-      .filter((city) => jobs.filter((job) => matchesSeoCity(job.location, city)).length >= 3)
-      .map((city) => ({
-        url: `${base}/jobs-in/${city.slug}`,
-        changeFrequency: "daily",
-        priority: .7,
-      }));
-
-    const categoryEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.flatMap((city) => {
-      const cityJobs = jobs.filter((job) => matchesSeoCity(job.location, city));
-      return categoriesForCity(city.slug)
-        .filter((category) => cityJobs.filter((job) => matchesSeoCategory(job, category)).length >= 3)
-        .map((category) => ({
-          url: `${base}/jobs-in/${city.slug}/${category.slug}`,
-          changeFrequency: "daily" as const,
-          priority: .68,
-        }));
-    });
-
     return [
       ...staticEntries,
-      ...hiringCityEntries,
       ...mockInterviewRoleEntries,
       ...freePostingCityEntries,
       ...launchPressReleaseEntry,
-      ...cityEntries,
-      ...categoryEntries,
       ...jobEntries,
       ...editorial.map((item) => ({
         url: `${base}${editorialPublicPath(item.type, item.slug)}`,
@@ -128,6 +99,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   } catch {
     // Keep the sitemap available even during a temporary database outage.
-    return [...staticEntries, ...hiringCityEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries, ...launchPressReleaseEntry];
+    return [...staticEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries, ...launchPressReleaseEntry];
   }
 }

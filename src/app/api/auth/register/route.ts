@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db, prisma } from "@/lib/prisma";
+import { db } from "@/lib/prisma";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { enforceRateLimit, handleApiError, readValidatedJson } from "@/lib/apiSecurity";
 import { logCriticalAuditEvent } from "@/lib/auditLogger";
@@ -11,7 +11,6 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date of birth"),
   referralCode: z.string().optional(),
 }).strict();
 
@@ -49,16 +48,6 @@ export async function POST(request: Request) {
       role: "CANDIDATE",
     });
 
-    try {
-      await prisma.candidateProfile.create({
-        data: {
-          userId: user.id,
-          preferences: { dateOfBirth: body.dateOfBirth },
-        },
-      });
-    } catch (profileErr: any) {
-      console.warn("[Register] Candidate profile initialization notice:", profileErr?.message);
-    }
 
     // Referral Attribution Capture (Rule 11, 12, 13)
     let refCode = body.referralCode;

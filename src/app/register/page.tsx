@@ -17,7 +17,6 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    dateOfBirth: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -50,7 +49,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.firstName || !formData.lastName || !formData.dateOfBirth || !formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.confirmPassword) {
       setErrorMessage("Please fill in all required fields.");
       return;
     }
@@ -68,7 +67,6 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
-          dateOfBirth: formData.dateOfBirth,
           email: formData.email,
           password: formData.password,
           referralCode: referralCode || undefined,
@@ -241,21 +239,6 @@ export default function RegisterPage() {
                     placeholder="e.g. Verma"
                     type="text"
                     autoComplete="family-name"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-label-md text-xs text-on-surface-variant ml-2">
-                    Date of Birth *
-                  </label>
-                  <input
-                    name="dateOfBirth"
-                    value={formData.dateOfBirth}
-                    onChange={handleInputChange}
-                    className="input-pill w-full h-11 text-xs text-text-primary px-4"
-                    type="date"
-                    autoComplete="bday"
                     required
                   />
                 </div>

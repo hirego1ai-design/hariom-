@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import MarketingShell from "@/components/marketing/MarketingShell";
 import { JsonLd, SectionHeading, styles } from "@/components/marketing/Editorial";
-import { SEO_JOB_CITIES } from "@/lib/seoJobCities";
 import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
@@ -51,26 +50,6 @@ export default function HiringInIndiaPage() {
                   <p>{body}</p>
                   <Link className={styles.inlineLink} href={href}>Explore {name} ↗</Link>
                 </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.container}>
-            <SectionHeading
-              eyebrow="City hiring hubs"
-              title="Recruitment workflows by local hiring market."
-              body="These pages focus on employer hiring intent. Job-seeker city pages remain separate so employer and candidate search intent do not compete for the same URL."
-            />
-            <div className={styles.grid3}>
-              {SEO_JOB_CITIES.map((city) => (
-                <Link key={city.slug} href={"/hiring-in/" + city.slug} className={styles.card}>
-                  <p className={styles.eyebrow}>{city.regionLabel}</p>
-                  <h2 className="mt-3 text-xl">Hiring in {city.name}</h2>
-                  <p>{city.industries.slice(0, 4).join(" · ")}</p>
-                  <span className={styles.inlineLink}>Explore {city.name} hiring ↗</span>
-                </Link>
               ))}
             </div>
           </div>
