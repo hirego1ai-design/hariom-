@@ -91,12 +91,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...freePostingCityEntries,
       ...launchPressReleaseEntry,
       ...jobEntries,
-      ...editorial.map((item) => ({
-        url: `${base}${editorialPublicPath(item.type, item.slug)}`,
-        lastModified: item.updatedAt,
-        changeFrequency: "monthly" as const,
-        priority: item.type === "PRESS_RELEASE" ? .7 : .65,
-      })),
+      ...editorial
+        .filter((item) => editorialPublicPath(item.type, item.slug) !== launchPressReleasePath)
+        .map((item) => ({
+          url: `${base}${editorialPublicPath(item.type, item.slug)}`,
+          lastModified: item.updatedAt,
+          changeFrequency: "monthly" as const,
+          priority: item.type === "PRESS_RELEASE" ? .7 : .65,
+        })),
     ];
   } catch {
     // Keep the sitemap available even during a temporary database outage.
