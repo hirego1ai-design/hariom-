@@ -1,4 +1,5 @@
-import Link from "next/link";\nimport { unstable_cache } from "next/cache";
+import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import JobsClient, { type Job } from "./JobsClient";
 
