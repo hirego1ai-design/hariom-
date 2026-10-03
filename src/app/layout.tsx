@@ -5,23 +5,9 @@ import { AppProvider } from "@/context/AppContext";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.hiregoai.com"),
   applicationName: "HireGo AI",
-  title: "HireGo AI | World’s Fastest Hiring Platform",
+  title: "HireGo AI | AI-Assisted Hiring Platform",
   description:
-    "HireGo AI (HireGo) is the world’s fastest hiring platform, designed to reduce recruiting time by up to 80–85% with AI sourcing, screening and interviews.",
-  keywords: [
-    "HireGo",
-    "HireGo AI",
-    "HireGoAI",
-    "Hire Go",
-    "AI hiring platform",
-    "AI recruitment platform",
-    "world's fastest hiring platform",
-    "managed hiring",
-    "pay per hire",
-    "AI hiring copilot",
-    "AI mock interview",
-    "hire talent in India",
-  ],
+    "HireGo AI is an AI-assisted hiring platform based in Noida, India, supporting managed hiring, candidate screening, interviews and employer workflows.",
   creator: "HireGo AI",
   publisher: "HireGo AI",
   icons: {
