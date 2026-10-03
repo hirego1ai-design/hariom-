@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import MarketingNav from "@/components/marketing/MarketingNav";
 
@@ -69,15 +69,14 @@ type JobRecommendation = {
 export default function JobsClient({
   initialJobs,
   initialTotalPages,
-  seoIntro,
+  initialLocation = "",
 }: {
   initialJobs: Job[];
   initialTotalPages: number;
-  seoIntro?: React.ReactNode;
+  initialLocation?: string;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const mappedLocation = (searchParams.get("location") || "").trim();
+  const mappedLocation = initialLocation.trim();
   const didHandleInitialJobsEffect = useRef(false);
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
@@ -260,8 +259,7 @@ export default function JobsClient({
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       {!candidateStateLoading && (candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />)}
       <main className={`w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 ${candidateAuthenticated ? "md:ml-[116px]" : "pt-28 sm:pt-32"}`}>
-        {seoIntro}
-        <h2 className="text-2xl font-bold">{mappedLocation ? `Jobs in ${mappedLocation}` : "Search current jobs"}</h2>
+        <h1 className="text-3xl font-bold">{mappedLocation ? `Jobs in ${mappedLocation}` : "Find jobs"}</h1>
         {mappedLocation && <p className="mt-2 text-sm text-text-muted">Showing current jobs mapped to {mappedLocation}.</p>}
         <label className="sr-only" htmlFor="job-search">Search jobs</label>
         <input
