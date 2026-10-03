@@ -6,7 +6,11 @@ import { categoriesForCity, matchesSeoCategory } from "@/lib/seoJobCategories";
 import { MOCK_INTERVIEW_ROLES } from "@/lib/revenueSeo";
 
 const base = "https://www.hiregoai.com";
-export const revalidate = 3600;
+export const revalidate = 300;
+
+// Keep the launch announcement discoverable even if the dynamic editorial query
+// temporarily fails; the canonical article itself remains CMS-managed.
+const launchPressReleasePath = "/press-releases/hirego-ai-launch-october-13-2026";
 
 // Only public, indexable pages belong in the sitemap. Account, employer,
 // candidate, admin and API routes are intentionally excluded.
@@ -25,6 +29,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: path === "/" ? "weekly" : path === "/jobs" ? "daily" : "monthly",
     priority: path === "/" ? 1 : ["/services", "/solutions", "/video-resume", "/hire-talent-in-india", "/about", "/resources", "/jobs", "/free-job-posting"].includes(path) ? .8 : .6,
   }));
+
+  const launchPressReleaseEntry: MetadataRoute.Sitemap = [{
+    url: `${base}${launchPressReleasePath}`,
+    changeFrequency: "weekly",
+    priority: .8,
+  }];
 
   const hiringCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({
     url: `${base}/hiring-in/${city.slug}`,
@@ -105,6 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...hiringCityEntries,
       ...mockInterviewRoleEntries,
       ...freePostingCityEntries,
+      ...launchPressReleaseEntry,
       ...cityEntries,
       ...categoryEntries,
       ...jobEntries,
@@ -117,6 +128,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   } catch {
     // Keep the sitemap available even during a temporary database outage.
-    return [...staticEntries, ...hiringCityEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries];
+    return [...staticEntries, ...hiringCityEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries, ...launchPressReleaseEntry];
   }
 }
