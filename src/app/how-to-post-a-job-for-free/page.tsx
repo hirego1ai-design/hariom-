@@ -6,7 +6,7 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 export const metadata: Metadata = marketingMetadata({
   path: "/how-to-post-a-job-for-free",
   title: "How to Post a Job for Free in India | Employer Guide",
-  description: "A practical employer guide to posting a job for free in India: prepare the role, publish it, review applicants and move qualified candidates through hiring.",
+  description: "Learn how to post a job for free in India: prepare the role, create an employer account, confirm eligibility, publish and manage applicants.",
 });
 
 export default function Page() {
