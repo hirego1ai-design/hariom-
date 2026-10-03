@@ -60,8 +60,9 @@ export default async function FreeJobPostingCityPage({ params }: Props) {
               HireGo AI brings job posting, applicant tracking, structured screening, assessments and interview coordination into one employer workflow for teams hiring in {city.name}.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/employer/employer-sign-in" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post a Job in {city.name}</Link>
-              <Link href={`/jobs-in/${city.slug}`} className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">See Jobs in {city.name}</Link>
+              <Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post a Job in {city.name}</Link>
+              <Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Employer Sign In</Link>
+              <Link href={`/jobs?location=${encodeURIComponent(city.name)}`} className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">See Jobs in {city.name}</Link>
             </div>
             <p className="mx-auto mt-5 max-w-2xl text-xs leading-5 text-slate-400">
               Free posting availability, limits and validity depend on the current employer plan and eligibility shown in your HireGo account.
