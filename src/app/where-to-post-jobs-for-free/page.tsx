@@ -6,7 +6,7 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 export const metadata: Metadata = marketingMetadata({
  path:"/where-to-post-jobs-for-free",
  title:"Where Can I Post Jobs for Free in India? | HireGo AI",
- description:"Where can employers post jobs for free in India? Learn how to choose a posting channel based on candidate reach, workflow, role requirements and account eligibility.",
+ description:"Compare where to post jobs for free in India by role, location, candidate reach, workflow needs and the eligibility shown in your employer account.",
 });
 
 export default function Page(){return <MarketingShell><main className="bg-[#071322] text-white">
