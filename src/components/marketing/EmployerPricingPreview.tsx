@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function EmployerPricingPreview() {
-  const [data, setData] = useState<any>({ plans: [], copilotConfig: null });
+  const [data, setData] = useState<any>({ plans: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function EmployerPricingPreview() {
         if (!response.ok || !body.success) throw new Error(body.error || "Unable to load pricing.");
         setData(body);
       })
-      .catch(() => setData({ plans: [], copilotConfig: null }))
+      .catch(() => setData({ plans: [] }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -41,14 +41,7 @@ export default function EmployerPricingPreview() {
           </article>
         ))}
       </div>
-      {data.copilotConfig?.enabled ? (
-        <div className="mt-7 rounded-[28px] border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(42,171,255,.12),rgba(126,77,255,.12))] p-6">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-            <div><p className="text-xs font-black uppercase tracking-[.15em] text-cyan-300">{data.copilotConfig.badgeText || "Co-Pilot"}</p><h3 className="mt-2 text-2xl font-black">{data.copilotConfig.title}</h3><p className="mt-2 max-w-2xl text-sm text-slate-400">{data.copilotConfig.description}</p></div>
-            <div className="text-left md:text-right"><p className="text-3xl font-black">+{money(data.copilotConfig.addonPrice, data.copilotConfig.currency)}</p><p className="text-xs text-slate-400">for {data.copilotConfig.addonJobLimit} job workflow</p></div>
-          </div>
-        </div>
-      ) : null}
+
     </div>
   );
 }

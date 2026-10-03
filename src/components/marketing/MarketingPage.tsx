@@ -7,7 +7,7 @@ type PageKind = "features" | "pricing" | "enterprise" | "about" | "company" | "c
 
 const content: Record<PageKind, { eyebrow: string; title: string; intro: string }> = {
   features: { eyebrow: "Agentic Hiring Operating System", title: "One connected system for the hiring workflow.", intro: "HireGo AI connects sourcing, screening, assessments, interviews, candidate communication and workflow coordination while keeping consequential employment decisions under human control." },
-  pricing: { eyebrow: "Simple, transparent plans", title: "Invest in better hiring.", intro: "Start with the tools you need today and scale when your hiring or career goals grow." },
+  pricing: { eyebrow: "Employer Pricing", title: "Choose how you want to hire.", intro: "Use employer hiring plans, add the AI Hiring Co-Pilot as a separate product, or talk to HireGo about managed hiring support." },
   enterprise: { eyebrow: "For teams that are hiring", title: "Hire people for what they can do.", intro: "Create structured hiring workflows, compare verified skills, and move from shortlist to offer with confidence." },
   about: { eyebrow: "Our mission", title: "Make opportunity easier to reach.", intro: "We are building a more useful bridge between human potential and the teams looking for it." },
   company: { eyebrow: "Inside HireGo", title: "A team building better hiring infrastructure.", intro: "We combine thoughtful product design, responsible AI, and practical workflows to make hiring clearer for everyone." },
@@ -166,11 +166,17 @@ function FindJobsContent() {
 }
 
 function PricingContent() {
-  return <div>
-    <EmployerPricingPreview />
-    <div className="mt-7 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-xs leading-6 text-slate-400">
-      Employer pricing is loaded from the same Admin-managed subscription catalog used at checkout. Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>.
-    </div>
+  return <div className="space-y-14">
+    <section>
+      <div className="mx-auto mb-8 max-w-3xl text-center"><h2 className="text-3xl font-extrabold text-white">Employer hiring plans</h2><p className="mt-4 leading-7 text-slate-400">The plans and prices below are loaded from HireGo's live subscription catalog. Administrators control plan names, prices, job-posting quotas, validity and public benefits from the Admin Subscription & Plan Management console.</p></div>
+      <EmployerPricingPreview />
+    </section>
+    <section className="grid gap-5 lg:grid-cols-2">
+      <article className="glass-card p-8"><p className="text-sm font-bold uppercase tracking-[0.18em] text-[#82b1ff]">AI Hiring Co-Pilot</p><h2 className="mt-4 text-3xl font-extrabold text-white">A separate agentic hiring product.</h2><p className="mt-4 leading-7 text-slate-400">Co-Pilot plans and regional pricing are managed independently through HireGo's Admin Copilot Commerce console. The public Co-Pilot flow resolves the applicable catalog for the billing country, while checkout uses the authoritative commerce configuration.</p><p className="mt-3 text-sm leading-6 text-slate-500">Job posting is separate from Co-Pilot, and consequential employment decisions remain with people.</p><Link href="/ai-hiring-copilot" className="mt-6 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore AI Hiring Co-Pilot →</Link></article>
+      <article className="glass-card p-8"><p className="text-sm font-bold uppercase tracking-[0.18em] text-[#ff8a80]">Managed Hiring</p><h2 className="mt-4 text-3xl font-extrabold text-white">Need hands-on hiring support?</h2><p className="mt-4 leading-7 text-slate-400">Managed Hiring is for employers that want additional operational support rather than a self-serve subscription alone. Commercial terms depend on the agreed hiring requirement and service arrangement.</p><Link href="/pay-per-hire" className="mt-6 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore Managed Hiring →</Link></article>
+    </section>
+    <section className="glass-card p-8 sm:p-10"><h2 className="text-3xl font-extrabold text-white">Which option fits your workflow?</h2><div className="mt-7 grid gap-5 md:grid-cols-3"><div><h3 className="font-bold text-white">Employer plans</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want job-posting and plan entitlements from the standard employer catalog.</p></div><div><h3 className="font-bold text-white">AI Hiring Co-Pilot</h3><p className="mt-2 text-sm leading-6 text-slate-400">For teams that want agentic assistance with permitted hiring operations and workflow coordination.</p></div><div><h3 className="font-bold text-white">Managed Hiring</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want HireGo to provide additional operational hiring support under agreed commercial terms.</p></div></div><div className="mt-8 flex flex-wrap gap-3"><Link href="/features" className="btn-primary-blue">Compare platform capabilities</Link><Link href="/contact" className="btn-primary-red">Contact HireGo</Link></div></section>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-xs leading-6 text-slate-400">Displayed employer plan pricing comes from the current Admin-managed catalog and may change when an administrator updates that catalog. Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>.</div>
   </div>;
 }
 
