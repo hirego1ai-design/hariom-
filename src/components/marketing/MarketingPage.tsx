@@ -18,7 +18,7 @@ const content: Record<PageKind, { eyebrow: string; title: string; intro: string 
   "ai-features": { eyebrow: "The HireGo platform", title: "Useful AI, with people in control.", intro: "Use AI to prepare, organise, and surface signal—while candidates and hiring teams keep the final say." },
   "find-jobs": { eyebrow: "Find your next step", title: "Search with more confidence.", intro: "Discover roles that match your goals and present a profile that gives employers useful context." },
   certifications: { eyebrow: "Show what you know", title: "Turn progress into proof.", intro: "Build credible evidence of your skills through structured practice and assessments." },
-  "career-resources": { eyebrow: "Career resources", title: "Practical help for the journey.", intro: "Guides, practice, and feedback to help you move from where you are to where you want to be." },
+  "career-resources": { eyebrow: "Career Resources", title: "Build the skills, confidence and evidence to get job-ready.", intro: "Prepare for interviews, practise with AI, strengthen how you present your skills and discover opportunities that match your goals." },
   "post-job-public": { eyebrow: "For employers", title: "Post a role people can trust.", intro: "Create a clear brief, reach prepared candidates, and keep your hiring process structured from day one." },
 };
 
@@ -49,8 +49,8 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
   return (
     <MarketingShell>
       <Hero kind={kind} />
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">\n        {kind === "features" && <FeaturesContent />}
-        {["ai-features", "find-jobs", "certifications", "career-resources"].includes(kind) && (
+      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">\n        {kind === "features" && <FeaturesContent />}\n        {kind === "career-resources" && <CareerResourcesContent />}
+        {["ai-features", "find-jobs", "certifications"].includes(kind) && (
           <div className="grid gap-5 md:grid-cols-2">
             {featureCards.map(([number, title, description]) => (
               <article key={number} className="glass-card p-7">
@@ -109,6 +109,36 @@ function FeaturesContent() {
       <p className="mx-auto mt-4 max-w-2xl leading-7 text-slate-400">Use the platform directly or explore managed hiring support for requirements that need additional operational help.</p>
       <div className="mt-7 flex flex-wrap justify-center gap-3"><Link href="/pricing" className="btn-primary-red">View pricing</Link><Link href="/contact" className="btn-primary-blue">Talk to HireGo AI</Link></div>
     </section>
+  </div>;
+}
+
+function CareerResourcesContent() {
+  const guides = [
+    ["Interview preparation", "Practise answering role-specific interview questions in a structured environment before speaking with an employer.", "/ai-mock-interview", "Start an AI Mock Interview"],
+    ["Resume & Video Resume", "Use your profile and Video Resume to introduce yourself, communicate your experience and add context beyond a traditional resume.", "/video-resume", "Explore Video Resume"],
+    ["Skills & assessments", "Use structured assessments and preparation tools to demonstrate what you know and identify areas where additional practice may help.", "/certifications", "Explore skill evidence"],
+    ["Find the right jobs", "Search HireGo jobs and review roles that match your interests, skills and location when you are ready to explore opportunities.", "/jobs", "Browse Jobs"],
+  ];
+  const steps = ["Create your profile", "Build your Video Resume", "Practise and assess", "Find relevant jobs", "Interview with employers", "Track your applications"];
+  const faqs = [
+    ["What are HireGo Career Resources?", "Career Resources brings together interview practice, profile and Video Resume guidance, skill-readiness tools and pathways to job discovery."],
+    ["How does an AI Mock Interview help?", "AI Mock Interviews provide a structured environment to practise responses and reflect on areas you may want to improve before an employer interview."],
+    ["What is a Video Resume?", "A Video Resume gives candidates another way to introduce themselves and add context about their experience, skills and communication beyond a traditional resume."],
+    ["Can I practise before applying for jobs?", "Yes. You can use available preparation and assessment experiences before exploring and applying for relevant opportunities."],
+    ["Does HireGo AI decide whether I get hired?", "No. HireGo AI can support preparation, assessments and hiring workflows, but final employment decisions remain with the employer and the people responsible for the hiring process."],
+    ["Where can I find jobs on HireGo?", "Use the HireGo Jobs area to browse available opportunities and review roles relevant to your interests, skills and location."],
+  ];
+  return <div className="space-y-16">
+    <div className="flex flex-wrap justify-center gap-3"><Link href="/ai-mock-interview" className="btn-primary-blue">Practice AI Mock Interview</Link><Link href="/jobs" className="btn-primary-red">Find Jobs</Link></div>
+    <section>
+      <div className="mx-auto max-w-3xl text-center"><h2 className="text-3xl font-extrabold text-white sm:text-4xl">Prepare for interviews before they count.</h2><p className="mt-5 leading-7 text-slate-400">Use practical preparation tools to become more comfortable explaining your experience, skills and approach before speaking with an employer.</p></div>
+      <div className="mt-10 grid gap-5 md:grid-cols-2">{guides.map(([title, description, href, cta]) => <article key={title} className="glass-card p-7"><h3 className="text-2xl font-bold text-white">{title}</h3><p className="mt-3 leading-7 text-slate-400">{description}</p><Link href={href} className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">{cta} →</Link></article>)}</div>
+    </section>
+    <section className="glass-card p-8 sm:p-10"><h2 className="text-3xl font-extrabold text-white">One journey from preparation to opportunity.</h2><p className="mt-4 max-w-4xl leading-7 text-slate-300">HireGo connects career preparation and job discovery so you can carry useful context and evidence through your journey instead of starting from zero at every stage.</p><div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{steps.map((step, index) => <div key={step} className="rounded-xl border border-white/10 bg-white/[0.03] p-5"><span className="font-mono text-sm text-[#ff8a80]">{String(index + 1).padStart(2, "0")}</span><p className="mt-2 font-semibold text-white">{step}</p></div>)}</div></section>
+    <section><div className="mx-auto max-w-3xl text-center"><h2 className="text-3xl font-extrabold text-white">Practical guidance for every stage of your job search.</h2><p className="mt-4 leading-7 text-slate-400">Explore published HireGo insights for practical guidance. We only link resources that are actually available.</p><Link href="/blog" className="mt-6 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Browse published career guides →</Link></div></section>
+    <section className="glass-card p-8 sm:p-10"><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Human decision-making</p><h2 className="mt-4 text-3xl font-extrabold text-white">AI helps you prepare. Employers make hiring decisions.</h2><p className="mt-5 max-w-4xl leading-7 text-slate-300">HireGo AI can support preparation, assessments, interview practice and hiring workflows. Final employment decisions remain with the employer and the people responsible for the hiring process.</p></section>
+    <section><div className="mx-auto max-w-3xl"><h2 className="text-center text-3xl font-extrabold text-white">Career Resources FAQ</h2><div className="mt-8 space-y-4">{faqs.map(([question, answer]) => <details key={question} className="glass-card p-6"><summary className="cursor-pointer font-bold text-white">{question}</summary><p className="mt-4 leading-7 text-slate-400">{answer}</p></details>)}</div></div></section>
+    <div className="flex flex-wrap justify-center gap-3"><Link href="/find-jobs" className="btn-primary-blue">Explore Find Jobs</Link><Link href="/jobs" className="btn-primary-red">Browse Jobs</Link></div>
   </div>;
 }
 
