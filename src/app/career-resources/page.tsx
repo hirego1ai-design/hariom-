@@ -4,7 +4,7 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/career-resources",
-  title: "Career Resources | Interview Practice, Video Resume & Jobs | HireGo AI",
+  title: "Career Resources & Interview Practice | HireGo AI",
   description: "Prepare for interviews, practise with AI, improve how you present your skills, explore Video Resume tools and discover jobs with HireGo AI.",
 });
 

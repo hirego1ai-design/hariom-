@@ -18,8 +18,8 @@ export type RevenueSeoPage = {
 export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   "pay-per-hire": {
     slug: "pay-per-hire",
-    metadataTitle: "Pay Per Hire Recruitment & Managed Hiring | HireGo AI",
-    description: "HireGo AI Managed Hiring helps employers move from role requirement to candidate sourcing, screening, interview coordination and joining follow-up under agreed Pay Per Hire terms.",
+    metadataTitle: "Pay Per Hire Recruitment India | HireGo AI",
+    description: "Managed Hiring from HireGo AI supports sourcing, screening, interview coordination and joining follow-up under agreed Pay Per Hire terms in India.",
     eyebrow: "Managed hiring",
     title: "Pay Per Hire recruitment built around a successful hiring outcome.",
     lead: "Share the role and hiring context. HireGo helps run the agreed sourcing, screening and coordination work while your team interviews candidates and makes the final hiring decision.",
@@ -53,8 +53,8 @@ export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   },
   "ai-hiring-copilot": {
     slug: "ai-hiring-copilot",
-    metadataTitle: "HireGo AI Hiring Co-Pilot | Recruitment Automation",
-    description: "HireGo AI (HireGo) Employer Co-Pilot automates permitted recruiting operations across sourcing, screening, assessments, scheduling and follow-up with human-controlled hiring decisions.",
+    metadataTitle: "AI Hiring Co-Pilot for Employers | HireGo AI",
+    description: "HireGo AI Employer Co-Pilot supports sourcing, screening, assessments, scheduling and follow-up while people make consequential hiring decisions.",
     eyebrow: "Recruiting operations",
     title: "An AI hiring Co-Pilot that keeps the recruiting workflow moving.",
     lead: "Employer Co-Pilot is designed to reduce repetitive coordination between jobs, candidates, assessments, interview rounds and follow-up while preserving human approvals for consequential actions.",
@@ -88,8 +88,8 @@ export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   },
   "candidate-screening-software": {
     slug: "candidate-screening-software",
-    metadataTitle: "AI Candidate Screening Software for Employers | HireGo AI",
-    description: "Structure candidate screening around job requirements, experience, skills and assessment evidence with HireGo AI. Human reviewers remain responsible for hiring decisions.",
+    metadataTitle: "Candidate Screening Software | HireGo AI",
+    description: "Structure candidate screening around role requirements, experience, skills and assessment evidence. People remain responsible for hiring decisions.",
     eyebrow: "Candidate screening",
     title: "Candidate screening software that organizes evidence before the interview.",
     lead: "HireGo helps employers bring role requirements, candidate experience, skills and available assessment evidence into a structured review workflow instead of relying on disconnected resume checks.",
@@ -124,7 +124,7 @@ export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   "interview-proctoring-software": {
     slug: "interview-proctoring-software",
     metadataTitle: "Interview Proctoring & Evidence for Hiring Teams | HireGo AI",
-    description: "Use HireGo AI interview and assessment proctoring evidence to help hiring teams review integrity signals during configured remote hiring stages without automatic rejection.",
+    description: "Use HireGo AI proctoring evidence to support human review of configured remote interview and assessment stages without automatic rejection.",
     eyebrow: "Interview integrity",
     title: "Interview proctoring evidence for remote hiring workflows.",
     lead: "HireGo can collect configured proctoring and session evidence around remote assessment or interview stages so reviewers have context when something needs attention. Evidence is for review, not an automatic hiring verdict.",
@@ -159,7 +159,7 @@ export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   "ai-mock-interview": {
     slug: "ai-mock-interview",
     metadataTitle: "AI Mock Interview Practice by Role | HireGo AI",
-    description: "Practice role-specific interview questions with HireGo AI. Use structured text-based mock interview sessions to improve answer quality before a real interview.",
+    description: "Practice role-specific interview questions with HireGo AI in structured text-based mock interview sessions before a real interview.",
     eyebrow: "Candidate preparation",
     title: "AI mock interview practice built around the role you want.",
     lead: "Practice job-relevant questions in a structured text-based session, review feedback and improve how you explain your experience before the interview that matters.",

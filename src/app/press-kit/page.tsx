@@ -7,7 +7,7 @@ import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/press-kit",
-  title: "HireGo AI Press Kit | Company Facts, Brand Assets & Media Resources",
+  title: "HireGo AI Press Kit | Company & Brand Resources",
   description: "Official HireGo AI press kit with company overview, approved brand description, logo assets, product facts, press releases and media contact information.",
 });
 
@@ -78,9 +78,9 @@ export default function PressKitPage() {
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             <article className="rounded-3xl border border-white/10 bg-white/[0.04] p-7 sm:p-9">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#82b1ff]">Brand language</p>
-              <h2 className="mt-3 text-2xl font-bold">Approved headline and tagline</h2>
-              <p className="mt-5 text-xl font-bold">Welcome to Future of Hiring</p>
-              <p className="mt-2 text-slate-300">The world’s fastest hiring platform.</p>
+              <h2 className="mt-3 text-2xl font-bold">Approved positioning</h2>
+              <p className="mt-5 text-xl font-bold">AI-assisted hiring with people in control.</p>
+              <p className="mt-2 text-slate-300">Managed Hiring, Employer Co-Pilot and structured hiring workflows.</p>
               <p className="mt-5 text-sm leading-6 text-slate-400">
                 When referencing the product, use “HireGo AI” on first mention. “HireGo” can be used afterward where context is clear.
               </p>

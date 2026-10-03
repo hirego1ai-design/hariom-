@@ -6,8 +6,8 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/blog",
-  title: "HireGo AI Insights",
-  description: "Practical guidance and perspectives on hiring, job readiness, recruiting workflows and responsible AI.",
+  title: "Hiring & Recruitment Insights India | HireGo AI",
+  description: "Read HireGo AI articles on hiring in India, Pay Per Hire, recruiting workflows, candidate screening, interviews and responsible AI in hiring.",
 });
 export const dynamic = "force-dynamic";
 

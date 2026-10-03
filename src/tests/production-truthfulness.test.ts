@@ -274,9 +274,12 @@ test("shared employer state does not invent an authenticated identity", () => {
 
 test("privileged page guard, OTP hashing, and security headers remain enabled", () => {
   const middleware = read("src/middleware.ts");
-  for (const marker of ['pathname.startsWith("/admin")', 'pathname.startsWith("/employer")', 'pathname.startsWith("/candidate")', '"/dashboard"']) {
+  for (const marker of ['pathname.startsWith("/admin")', 'pathname.startsWith("/employer")', '"/dashboard"']) {
     assert.ok(middleware.includes(marker), `middleware route guard missing: ${marker}`);
   }
+  assert.match(middleware, /matchesProtectedPrefix\("\/candidate"\)/);
+  assert.match(middleware, /pathname === prefix \|\| pathname\.startsWith/);
+  assert.doesNotMatch(middleware, /pathname\.startsWith\("\/candidate"\)/);
   assert.match(middleware, /crypto\.subtle\.verify/);
   assert.match(middleware, /AUTH_COOKIE_NAME/);
   assert.match(middleware, /getDistributedSessionState/);

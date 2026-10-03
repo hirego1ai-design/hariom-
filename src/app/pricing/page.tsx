@@ -4,8 +4,8 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/pricing",
-  title: "HireGo AI Pricing | Employer Plans, AI Co-Pilot & Managed Hiring",
-  description: "Explore HireGo AI employer plans, AI Hiring Co-Pilot and Managed Hiring options. Employer plan pricing is loaded from the live Admin-managed subscription catalog.",
+  title: "HireGo AI Pricing | Employer Plans & Managed Hiring",
+  description: "Explore HireGo AI employer plans, Employer Co-Pilot and Managed Hiring options. Review current plan details before choosing a hiring workflow.",
 });
 
 const pricingSchema = {

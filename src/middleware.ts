@@ -190,9 +190,12 @@ export async function middleware(request: NextRequest) {
     pathname === "/jobs/saved" ||
     /^\/jobs\/[^/]+\/apply(?:\/|$)/.test(pathname);
 
+  const matchesProtectedPrefix = (prefix: string) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`);
+
   if (
-    pathname.startsWith("/candidate") ||
-    candidateProtectedPrefixes.some((prefix) => pathname.startsWith(prefix)) ||
+    matchesProtectedPrefix("/candidate") ||
+    candidateProtectedPrefixes.some(matchesProtectedPrefix) ||
     isCandidateJobAction
   ) {
     if (!session || (session.role !== "CANDIDATE" && session.role !== "ADMIN")) {

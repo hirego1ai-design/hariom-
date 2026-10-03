@@ -6,9 +6,9 @@ import { marketingMetadata } from "@/lib/marketingMetadata";
 
 export const metadata: Metadata = marketingMetadata({
   path: "/hire-talent-in-india",
-  title: "HireGo India | Hire Talent in India for Global Teams",
+  title: "Hire Talent in India | HireGo AI",
   description:
-    "Hire Indian talent with HireGo AI (HireGo). Source, screen and interview candidates in India for employers in the US, Canada, Australia and UAE through connected hiring workflows."
+    "HireGo AI helps employers source, screen and interview candidates in India through managed hiring and connected workflows, with human hiring decisions."
 });
 
 const employerMarkets = ["United States", "Canada", "Australia", "United Arab Emirates"];
