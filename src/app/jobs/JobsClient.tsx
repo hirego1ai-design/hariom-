@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import MarketingNav from "@/components/marketing/MarketingNav";
 
@@ -29,12 +29,13 @@ type JobsSearchPayload = {
   error?: string;
 };
 
-async function fetchJobsPage(query: string, page: number, signal?: AbortSignal) {
+async function fetchJobsPage(query: string, page: number, location = "", signal?: AbortSignal) {
   const params = new URLSearchParams({
     q: query,
     page: String(page),
     limit: String(PAGE_SIZE),
   });
+  if (location) params.set("location", location);
   const response = await fetch(`/api/jobs/search?${params.toString()}`, {
     signal,
   });
@@ -73,6 +74,8 @@ export default function JobsClient({
   initialTotalPages: number;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mappedLocation = (searchParams.get("location") || "").trim();
   const didHandleInitialJobsEffect = useRef(false);
   const [query, setQuery] = useState("");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
@@ -100,7 +103,7 @@ export default function JobsClient({
       setLoading(true);
       setError("");
       try {
-        const page = await fetchJobsPage(query, 1, controller.signal);
+        const page = await fetchJobsPage(query, 1, mappedLocation, controller.signal);
         setJobs(page.jobs);
         setCurrentPage(1);
         setTotalPages(page.totalPages);
@@ -116,7 +119,7 @@ export default function JobsClient({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, mappedLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +198,7 @@ export default function JobsClient({
     setError("");
     try {
       const nextPage = currentPage + 1;
-      const page = await fetchJobsPage(query, nextPage);
+      const page = await fetchJobsPage(query, nextPage, mappedLocation);
       setJobs((current) => {
         const seen = new Set(current.map((job) => job.id));
         const additions = page.jobs.filter((job) => !seen.has(job.id));
@@ -255,7 +258,8 @@ export default function JobsClient({
     <div className="min-h-screen bg-bg-page text-text-primary flex">
       {!candidateStateLoading && (candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />)}
       <main className={`w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 pb-24 md:pb-10 ${candidateAuthenticated ? "md:ml-[116px]" : "pt-28 sm:pt-32"}`}>
-        <h1 className="text-3xl font-bold">Find jobs</h1>
+        <h1 className="text-3xl font-bold">{mappedLocation ? `Jobs in ${mappedLocation}` : "Find jobs"}</h1>
+        {mappedLocation && <p className="mt-2 text-sm text-text-muted">Showing current jobs mapped to {mappedLocation}.</p>}
         <label className="sr-only" htmlFor="job-search">Search jobs</label>
         <input
           id="job-search"
