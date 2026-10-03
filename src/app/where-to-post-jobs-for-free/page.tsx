@@ -1,0 +1,15 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import MarketingShell from "@/components/marketing/MarketingShell";
+import { marketingMetadata } from "@/lib/marketingMetadata";
+
+export const metadata: Metadata = marketingMetadata({
+ path:"/where-to-post-jobs-for-free",
+ title:"Where Can I Post Jobs for Free in India? | HireGo AI",
+ description:"Where can employers post jobs for free in India? Learn how to choose a posting channel based on candidate reach, workflow, role requirements and account eligibility.",
+});
+
+export default function Page(){return <MarketingShell><main className="bg-[#071322] text-white">
+ <section className="border-b border-white/10 px-5 py-20 sm:px-8 md:py-28"><div className="mx-auto max-w-4xl"><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#82b1ff]">Employer Q&A</p><h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">Where Can I Post Jobs for Free in India?</h1><p className="mt-6 text-lg leading-8 text-slate-300">Choose a posting channel that matches the role, location and hiring workflow you need. HireGo AI provides an employer job-posting workflow; free availability and limits are shown in the employer account.</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Create Employer Account</Link><Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold">Employer Sign In</Link></div></div></section>
+ <section className="mx-auto max-w-5xl px-5 py-16 sm:px-8 md:py-24"><h2 className="text-3xl font-bold">Match the posting channel to the hiring need</h2><div className="mt-8 grid gap-5 md:grid-cols-3">{[["Local and onsite roles","Use accurate city and work-mode information so candidates can judge location requirements before applying."],["Remote and specialist roles","Describe required skills, experience and remote-work expectations clearly instead of relying on a broad job title."],["Higher-volume hiring","Look beyond publication alone: applicant organization, screening evidence and interview workflow become more important as applications increase."]].map(([t,c])=><article key={t} className="rounded-3xl border border-white/10 bg-white/[0.04] p-7"><h2 className="text-xl font-bold">{t}</h2><p className="mt-3 leading-7 text-slate-400">{c}</p></article>)}</div><div className="mt-14 rounded-3xl border border-white/10 bg-white/[0.04] p-8"><h2 className="text-2xl font-bold">Posting with HireGo AI</h2><p className="mt-4 leading-7 text-slate-300">Create an employer account to see the current posting eligibility available to you. Once an eligible role is published, the same platform can support application review and configured hiring workflow steps.</p><div className="mt-5 flex flex-wrap gap-5 text-sm font-bold text-[#82b1ff]"><Link href="/free-job-posting">India posting hub →</Link><Link href="/free-job-posting-sites-in-india">Compare posting sites →</Link><Link href="/how-to-post-a-job-for-free">Posting guide →</Link></div></div></section>
+ </main></MarketingShell>}
