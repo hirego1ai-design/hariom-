@@ -41,7 +41,7 @@ export default function FreeJobPostingIndiaPage() {
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/employer/employer-registration-company-info" className="rounded-full bg-white px-7 py-3 font-bold text-[#0c2551]">Post Jobs for Free</Link>
-              <Link href="/employer/employer-sign-in" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Already an Employer? Sign In</Link>
+              <Link href="/employer/employer-sign-in?redirect=%2Femployer%2Fcreate-job-basic-info" className="rounded-full border border-white/30 px-7 py-3 font-bold text-white">Already an Employer? Sign In & Post</Link>
             </div>
             <p className="mx-auto mt-5 max-w-2xl text-xs leading-5 text-slate-400">
               Free posting availability, limits and validity depend on the current employer plan and eligibility shown in your HireGo account.
