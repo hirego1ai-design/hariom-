@@ -80,6 +80,6 @@ export default function ServicesPage() {
 
     <FAQ items={faqs} />
     <FinalCTA title="A connected workflow starts with a clear requirement." body="Tell us how your team hires today. We can discuss the platform, operational services and the human approvals your process needs." primary={{label:"Start Hiring with HireGo",href:"/register?type=employer"}} secondary={{label:"Talk to Our Team",href:"/contact"}} />
-    <JsonLd data={[breadcrumbSchema("Services","/services"), {"@context":"https://schema.org","@type":"Service",name:"HireGo AI hiring workflow services",description:"Candidate sourcing, structured screening, assessments, interview coordination and managed hiring with human-controlled hiring decisions.",provider:{"@type":"Organization",name:"HireGo AI",url:"https://www.hiregoai.com",logo:"https://www.hiregoai.com/marketing/hirego-logo-hd.png"},url:"https://hiregoai.com/services"}]} />
+    <JsonLd data={[breadcrumbSchema("Services","/services"), {"@context":"https://schema.org","@type":"Service",name:"HireGo AI hiring workflow services",description:"Candidate sourcing, structured screening, assessments, interview coordination and managed hiring with human-controlled hiring decisions.",provider:{"@type":"Organization",name:"HireGo AI",url:"https://www.hiregoai.com",logo:"https://www.hiregoai.com/marketing/hirego-logo-hd.png"},url:"https://www.hiregoai.com/services"}]} />
   </div></MarketingShell>;
 }

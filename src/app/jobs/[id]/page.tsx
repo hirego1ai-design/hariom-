@@ -1,189 +1,57 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { notFound } from "next/navigation";
+import Link from "next/link";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import MarketingNav from "@/components/marketing/MarketingNav";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { getCurrentSession } from "@/lib/auth";
+import { getPublicJobById } from "@/lib/publicJobs";
+import { buildJobMetadata, buildJobPostingSchema } from "@/lib/publicDiscovery";
+import JobActions from "./JobActions";
 
-interface JobDetail {
-  id: string;
-  title: string;
-  department?: string;
-  location: string;
-  type: string;
-  workMode: string;
-  experienceLevel: string;
-  numberOfOpenings: number;
-  salaryRange?: string;
-  description: string;
-  requirements?: string[];
-  company?: {
-    name: string;
-    logoUrl?: string;
-    description?: string;
-    location?: string;
-  };
-  createdAt?: string;
+type Props = { params: Promise<{ id: string }> };
+export const revalidate = 60;
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const job = await getPublicJobById(id);
+  if (!job) {
+    return {
+      title: "Job unavailable — HireGo AI",
+      robots: { index: false, follow: false },
+    };
+  }
+  return buildJobMetadata(job);
 }
 
-export default function JobDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const jobId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+export default async function JobDetailPage({ params }: Props) {
+  const { id } = await params;
+  const job = await getPublicJobById(id);
+  if (!job) notFound();
 
-  const [job, setJob] = useState<JobDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isSaved, setIsSaved] = useState(false);
-  const [isApplied, setIsApplied] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-  const [feedbackType, setFeedbackType] = useState<"success" | "error">("success");
-  const [candidateAuthenticated, setCandidateAuthenticated] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (!jobId) return;
-
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (res) => {
-        if (res.status === 401) return null;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) throw new Error(data.error || "Account state is unavailable.");
-        return data;
-      })
-      .then((data) => {
-        setCandidateAuthenticated(data?.user?.role === "CANDIDATE");
-      })
-      .catch(() => {
-        setCandidateAuthenticated(false);
-      });
-
-    // Fetch live job details
-    fetch(`/api/jobs/${jobId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.job) {
-          setJob(data.job);
-        } else throw new Error(data.error || "Job listing not found.");
-      })
-      .catch((cause) => {
-        setFeedbackType("error");
-        setFeedbackMessage(cause instanceof Error ? cause.message : "Job listing could not be loaded.");
-      })
-      .finally(() => setLoading(false));
-
-    // Load candidate-specific state only when authenticated as a candidate.
-    fetch("/api/candidate/saved-jobs", { cache: "no-store" })
-      .then(async (res) => {
-        if (res.status === 401 || res.status === 403) return null;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) throw new Error(data.error || "Saved-job state is unavailable.");
-        return data;
-      })
-      .then((data) => {
-        if (data?.savedJobs) {
-          const exists = data.savedJobs.some((s: any) => s.jobId === jobId);
-          setIsSaved(exists);
-        }
-      })
-      .catch((cause) => {
-        setFeedbackType("error");
-        setFeedbackMessage(cause instanceof Error ? cause.message : "Saved-job state is unavailable.");
-      });
-
-    fetch("/api/applications", { cache: "no-store" })
-      .then(async (res) => {
-        if (res.status === 401 || res.status === 403) return null;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) throw new Error(data.error || "Application state is unavailable.");
-        return data;
-      })
-      .then((data) => {
-        if (Array.isArray(data?.applications)) {
-          setIsApplied(data.applications.some((application: any) => application.jobId === jobId));
-        }
-      })
-      .catch((cause) => {
-        setFeedbackType("error");
-        setFeedbackMessage(cause instanceof Error ? cause.message : "Application state is unavailable.");
-      });
-  }, [jobId]);
-
-  const handleApply = () => {
-    if (!jobId || isApplied) return;
-    const destination = `/jobs/${jobId}/apply`;
-    router.push(
-      candidateAuthenticated
-        ? destination
-        : `/login?redirect=${encodeURIComponent(destination)}`,
-    );
-  };
-
-  const handleToggleSave = async () => {
-    if (!jobId) return;
-    const nextState = !isSaved;
-    try {
-      const response = nextState
-        ? await fetch("/api/candidate/saved-jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId }),
-        })
-        : await fetch(`/api/candidate/saved-jobs?jobId=${encodeURIComponent(jobId)}`, {
-          method: "DELETE",
-        });
-      if (response.status === 401) {
-        router.push(`/login?redirect=${encodeURIComponent(`/jobs/${jobId}`)}`);
-        return;
-      }
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success) throw new Error(data.error || "Could not update saved jobs.");
-      setIsSaved(nextState);
-      setFeedbackType("success");
-      setFeedbackMessage(nextState ? "Job saved." : "Job removed from saved jobs.");
-    } catch (cause) {
-      setFeedbackType("error");
-      setFeedbackMessage(cause instanceof Error ? cause.message : "Could not update saved jobs.");
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-        {candidateAuthenticated === true ? <CandidateSidebar /> : candidateAuthenticated === false ? <MarketingNav /> : null}
-        <main className={`flex-1 p-8 flex items-center justify-center ${candidateAuthenticated === true ? "md:ml-[116px]" : candidateAuthenticated === false ? "pt-28 sm:pt-32" : ""}`}>
-          <div className="text-center space-y-3">
-            <span className="material-symbols-outlined text-4xl text-primary animate-spin">
-              progress_activity
-            </span>
-            <p className="text-xs text-text-secondary">Loading opportunity details...</p>
-          </div>
-        </main>
-      </div>
-    );
+  let candidateAuthenticated = false;
+  try {
+    const requestHeaders = await headers();
+    const session = await getCurrentSession(new Headers(requestHeaders));
+    candidateAuthenticated = session?.role === "CANDIDATE";
+  } catch {
+    // Public job discovery must remain available if authenticated account
+    // state is temporarily unavailable. Candidate actions re-check auth.
+    candidateAuthenticated = false;
   }
 
-  if (!job) {
-    return (
-      <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-        {candidateAuthenticated === true ? <CandidateSidebar /> : candidateAuthenticated === false ? <MarketingNav /> : null}
-        <main className={`flex-1 p-8 flex items-center justify-center ${candidateAuthenticated === true ? "md:ml-[116px]" : candidateAuthenticated === false ? "pt-28 sm:pt-32" : ""}`}>
-          <div className="glass-card max-w-md p-8 rounded-3xl border border-white/10 text-center space-y-4">
-            <span className="material-symbols-outlined text-4xl text-primary">work_off</span>
-            <h1 className="text-lg font-bold">Job listing unavailable</h1>
-            <p className="text-sm text-text-secondary">{feedbackMessage || "This listing may have closed or been removed."}</p>
-            <Link href="/jobs" className="inline-flex px-5 py-2.5 rounded-xl btn-3d-red text-xs font-bold text-white">Back to job search</Link>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  const schema = buildJobPostingSchema(job);
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] flex text-text-primary">
-      {candidateAuthenticated === true ? <CandidateSidebar /> : candidateAuthenticated === false ? <MarketingNav /> : null}
+      {candidateAuthenticated ? <CandidateSidebar /> : <MarketingNav />}
 
-      <main className={`flex-1 w-full p-4 sm:p-6 lg:p-10 max-w-6xl ${candidateAuthenticated === true ? "md:ml-[116px] pb-24 md:pb-10" : candidateAuthenticated === false ? "mx-auto pt-28 sm:pt-32" : "mx-auto"}`}>
-        {/* Top Back Link */}
+      <main className={`flex-1 w-full p-4 sm:p-6 lg:p-10 max-w-6xl ${candidateAuthenticated ? "md:ml-[116px] pb-24 md:pb-10" : "mx-auto pt-28 sm:pt-32"}`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, "\\u003c") }}
+        />
+
         <Link
           href="/jobs"
           className="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-primary mb-6 transition-colors font-bold"
@@ -192,165 +60,94 @@ export default function JobDetailPage() {
           <span>Back to Job Search</span>
         </Link>
 
-        {feedbackMessage && (
-          <div
-            role={feedbackType === "error" ? "alert" : "status"}
-            className={`mb-6 p-4 rounded-2xl text-xs flex items-center gap-2 ${
-              feedbackType === "error"
-                ? "bg-red-500/10 border border-red-500/30 text-red-300"
-                : "bg-green-500/10 border border-green-500/30 text-green-400"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">{feedbackType === "error" ? "error" : "check_circle"}</span>
-            <span>{feedbackMessage}</span>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Details (8 cols) */}
-          <div className="lg:col-span-8 space-y-6">
-            {/* Header Card */}
-            <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+          <article className="lg:col-span-8 space-y-6">
+            <header className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center gap-5">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-3">
-                  <span className="material-symbols-outlined text-primary text-[36px]">
-                    business
-                  </span>
+                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-3" aria-hidden="true">
+                  <span className="material-symbols-outlined text-primary text-[36px]">business</span>
                 </div>
                 <div>
-                  <h1 className="text-2xl lg:text-3xl font-extrabold text-text-primary mb-1">
-                    {job.title}
-                  </h1>
+                  <h1 className="text-2xl lg:text-3xl font-extrabold text-text-primary mb-1">{job.title}</h1>
                   <p className="text-xs text-text-secondary">
-                    {job.company?.name || "Company name not available"} • {job.location} • {job.type}
+                    {job.company.name} • {job.location} • {job.type}
                   </p>
                 </div>
               </div>
 
-              {/* Quick Metrics Pill Row */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Salary Range
-                  </span>
-                  <span className="text-xs font-bold text-primary">
-                    {job.salaryRange || "Not disclosed"}
-                  </span>
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">Salary Range</span>
+                  <span className="text-xs font-bold text-primary">{job.salaryRange || "Not disclosed"}</span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Department
-                  </span>
-                  <span className="text-xs font-bold text-text-primary">
-                    {job.department || "Not specified"}
-                  </span>
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">Department</span>
+                  <span className="text-xs font-bold text-text-primary">{job.department || "Not specified"}</span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Work Mode
-                  </span>
-                  <span className="text-xs font-bold text-text-primary">
-                    {job.workMode}
-                  </span>
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">Work Mode</span>
+                  <span className="text-xs font-bold text-text-primary">{job.workMode}</span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Experience
-                  </span>
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">Experience</span>
                   <span className="text-xs font-bold text-text-primary">{job.experienceLevel}</span>
                 </div>
                 <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-center">
-                  <span className="text-[10px] text-text-muted uppercase font-bold block">
-                    Openings
-                  </span>
+                  <span className="text-[10px] text-text-muted uppercase font-bold block">Openings</span>
                   <span className="text-xs font-bold text-text-primary">{job.numberOfOpenings}</span>
                 </div>
               </div>
-            </div>
+            </header>
 
-            {/* Role Overview */}
-            <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+            <section className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
               <h2 className="text-base font-bold text-text-primary">About the Role</h2>
-              <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-line">
-                {job.description}
-              </p>
-            </div>
+              <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-line">{job.description}</p>
+            </section>
 
-            {/* Requirements */}
-            {job.requirements && job.requirements.length > 0 && (
-              <div className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
+            {job.requirements.length > 0 && (
+              <section className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-4">
                 <h2 className="text-base font-bold text-text-primary">Key Requirements</h2>
                 <ul className="space-y-2.5">
-                  {job.requirements.map((req, idx) => (
-                    <li key={idx} className="flex items-start gap-2.5 text-xs text-text-secondary">
-                      <span className="material-symbols-outlined text-primary text-[16px] mt-0.5 flex-shrink-0">
-                        check_circle
-                      </span>
-                      <span>{req}</span>
+                  {job.requirements.map((requirement, index) => (
+                    <li key={`${requirement}-${index}`} className="flex items-start gap-2.5 text-xs text-text-secondary">
+                      <span className="material-symbols-outlined text-primary text-[16px] mt-0.5 flex-shrink-0" aria-hidden="true">check_circle</span>
+                      <span>{requirement}</span>
                     </li>
                   ))}
                 </ul>
-              </div>
+              </section>
             )}
-          </div>
 
-          {/* Right Column: Actions & Company (4 cols) */}
-          <div className="lg:col-span-4 space-y-5 lg:sticky lg:top-8">
-            <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3 shadow-xl">
-              <button
-                onClick={handleApply}
-                disabled={isApplied || candidateAuthenticated === null}
-                className={`w-full h-12 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-                  isApplied
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                    : "btn-3d-red text-white shadow-lg hover:scale-[1.02]"
-                }`}
-              >
-                {isApplied ? (
-                  <>
-                    <span className="material-symbols-outlined text-[18px]">check</span>
-                    <span>Application Submitted</span>
-                  </>
-                ) : candidateAuthenticated === null ? (
-                  <>
-                    <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                    <span>Checking account…</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Apply Now</span>
-                    <span className="material-symbols-outlined text-[18px]">send</span>
-                  </>
-                )}
-              </button>
+            <section className="glass-card p-6 lg:p-8 rounded-3xl border border-white/10 space-y-3">
+              <h2 className="text-base font-bold text-text-primary">Listing Information</h2>
+              <p className="text-xs text-text-secondary">
+                Published {job.publishedAt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}
+                {job.expiresAt ? ` · Applications close by ${job.expiresAt.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+              </p>
+            </section>
+          </article>
 
-              <button
-                onClick={handleToggleSave}
-                className="w-full h-11 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-text-primary flex items-center justify-center gap-2 transition-all"
-              >
-                <span
-                  className="material-symbols-outlined text-[18px] text-primary"
-                  style={{ fontVariationSettings: isSaved ? "'FILL' 1" : "'FILL' 0" }}
-                >
-                  bookmark
-                </span>
-                <span>{isSaved ? "Saved to Bookmarks" : "Save Job"}</span>
-              </button>
-            </div>
+          <aside className="lg:col-span-4 space-y-5 lg:sticky lg:top-8">
+            <JobActions jobId={job.id} candidateAuthenticated={candidateAuthenticated} />
 
-            {/* Company Info */}
             <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3">
-              <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-                Hiring Organization
-              </h3>
-              <p className="text-xs text-text-primary font-bold">
-                {job.company?.name || "Company name not available"}
-              </p>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">Hiring Organization</h2>
+              <p className="text-xs text-text-primary font-bold">{job.company.name}</p>
               <p className="text-[11px] text-text-secondary leading-relaxed">
-                {job.company?.description || "No company description has been provided for this listing."}
+                {job.company.description || "No company description has been provided for this listing."}
               </p>
+              {job.company.website && (
+                <a
+                  href={job.company.website}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="inline-flex text-xs font-bold text-primary hover:underline"
+                >
+                  Company website ↗
+                </a>
+              )}
             </div>
-          </div>
+          </aside>
         </div>
       </main>
     </div>

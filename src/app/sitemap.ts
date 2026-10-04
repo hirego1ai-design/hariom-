@@ -2,9 +2,10 @@ import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { effectivePublishedWhere, editorialPublicPath } from "@/lib/contentCms";
 import { SEO_JOB_CITIES } from "@/lib/seoJobCities";
+import { categoriesForCity } from "@/lib/seoJobCategories";
 import { MOCK_INTERVIEW_ROLES } from "@/lib/revenueSeo";
+import { PUBLIC_ORIGIN } from "@/lib/publicDiscovery";
 
-const base = "https://www.hiregoai.com";
 export const revalidate = 300;
 
 // Keep the launch announcement discoverable even if the dynamic editorial query
@@ -23,27 +24,40 @@ const publicPaths = [
   "/legal", "/privacy", "/terms", "/refund-cancellation", "/service-delivery",
 ];
 
+const jobCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.flatMap((city) => [
+  {
+    url: `${PUBLIC_ORIGIN}/jobs-in/${city.slug}`,
+    changeFrequency: "daily" as const,
+    priority: .76,
+  },
+  ...categoriesForCity(city.slug).map((category) => ({
+    url: `${PUBLIC_ORIGIN}/jobs-in/${city.slug}/${category.slug}`,
+    changeFrequency: "daily" as const,
+    priority: .72,
+  })),
+]);
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = publicPaths.map((path) => ({
-    url: `${base}${path === "/" ? "" : path}`,
+    url: `${PUBLIC_ORIGIN}${path === "/" ? "" : path}`,
     changeFrequency: path === "/" ? "weekly" : path === "/jobs" ? "daily" : "monthly",
     priority: path === "/" ? 1 : ["/services", "/solutions", "/video-resume", "/hire-talent-in-india", "/about", "/resources", "/jobs", "/free-job-posting"].includes(path) ? .8 : .6,
   }));
 
   const launchPressReleaseEntry: MetadataRoute.Sitemap = [{
-    url: `${base}${launchPressReleasePath}`,
+    url: `${PUBLIC_ORIGIN}${launchPressReleasePath}`,
     changeFrequency: "weekly",
     priority: .8,
   }];
 
   const mockInterviewRoleEntries: MetadataRoute.Sitemap = MOCK_INTERVIEW_ROLES.map((role) => ({
-    url: `${base}/ai-mock-interview/${role.slug}`,
+    url: `${PUBLIC_ORIGIN}/ai-mock-interview/${role.slug}`,
     changeFrequency: "monthly",
     priority: .7,
   }));
 
   const freePostingCityEntries: MetadataRoute.Sitemap = SEO_JOB_CITIES.map((city) => ({
-    url: `${base}/free-job-posting/${city.slug}`,
+    url: `${PUBLIC_ORIGIN}/free-job-posting/${city.slug}`,
     changeFrequency: "monthly",
     priority: .72,
   }));
@@ -67,11 +81,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         select: {
           id: true,
           updatedAt: true,
-          location: true,
-          title: true,
-          department: true,
-          requirements: true,
-          experienceLevel: true,
         },
         orderBy: { updatedAt: "desc" },
         take: 5000,
@@ -79,7 +88,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ]);
 
     const jobEntries: MetadataRoute.Sitemap = jobs.map((job) => ({
-      url: `${base}/jobs/${job.id}`,
+      url: `${PUBLIC_ORIGIN}/jobs/${job.id}`,
       lastModified: job.updatedAt,
       changeFrequency: "daily",
       priority: .78,
@@ -89,12 +98,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...staticEntries,
       ...mockInterviewRoleEntries,
       ...freePostingCityEntries,
+      ...jobCityEntries,
       ...launchPressReleaseEntry,
       ...jobEntries,
       ...editorial
         .filter((item) => editorialPublicPath(item.type, item.slug) !== launchPressReleasePath)
         .map((item) => ({
-          url: `${base}${editorialPublicPath(item.type, item.slug)}`,
+          url: `${PUBLIC_ORIGIN}${editorialPublicPath(item.type, item.slug)}`,
           lastModified: item.updatedAt,
           changeFrequency: "monthly" as const,
           priority: item.type === "PRESS_RELEASE" ? .7 : .65,
@@ -102,6 +112,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   } catch {
     // Keep the sitemap available even during a temporary database outage.
-    return [...staticEntries, ...mockInterviewRoleEntries, ...freePostingCityEntries, ...launchPressReleaseEntry];
+    return [
+      ...staticEntries,
+      ...mockInterviewRoleEntries,
+      ...freePostingCityEntries,
+      ...jobCityEntries,
+      ...launchPressReleaseEntry,
+    ];
   }
 }

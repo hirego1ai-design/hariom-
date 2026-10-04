@@ -135,6 +135,7 @@ test("candidate post-auth redirects are internal-only and preserve selected jobs
 test("public job Apply actions cannot bypass configured screening questions", () => {
   const jobs = read("src/app/jobs/JobsClient.tsx");
   const jobDetail = read("src/app/jobs/[id]/page.tsx");
+  const jobActions = read("src/app/jobs/[id]/JobActions.tsx");
   const applyFlow = read("src/app/jobs/[id]/apply/page.tsx");
   const applicationRoute = read("src/app/api/applications/route.ts");
 
@@ -143,8 +144,10 @@ test("public job Apply actions cannot bypass configured screening questions", ()
   // screening-aware apply route.
   assert.doesNotMatch(jobs, /fetch\("\/api\/applications"[\s\S]{0,250}method:\s*"POST"/);
   assert.doesNotMatch(jobDetail, /fetch\("\/api\/applications"[\s\S]{0,250}method:\s*"POST"/);
+  assert.doesNotMatch(jobActions, /fetch\("\/api\/applications"[\s\S]{0,250}method:\s*"POST"/);
   assert.match(jobs, /\/jobs\/\$\{job\.id\}\/apply/);
-  assert.match(jobDetail, /\/jobs\/\$\{jobId\}\/apply/);
+  assert.match(jobDetail, /<JobActions/);
+  assert.match(jobActions, /\/jobs\/\$\{jobId\}\/apply/);
   assert.match(applyFlow, /fetch\("\/api\/applications"/);
   assert.match(applyFlow, /method:\s*"POST"/);
   assert.match(applyFlow, /screeningQuestions/);

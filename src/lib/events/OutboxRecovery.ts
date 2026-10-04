@@ -1,8 +1,10 @@
 import { OutboxPoller } from "@/lib/events/Outbox";
 import { registerProductionConsumers } from "@/lib/events/ProductionConsumers";
+import { reconcilePublicDiscovery } from "@/lib/publicDiscoveryReconciliation";
 
 export async function runEventsOutboxRecovery(maxRuntimeMs = 35_000) {
   registerProductionConsumers();
+  const publicDiscovery = await reconcilePublicDiscovery();
 
   const stopAt = Date.now() + Math.max(5_000, Math.min(maxRuntimeMs, 45_000));
   const reports = [];
@@ -26,5 +28,6 @@ export async function runEventsOutboxRecovery(maxRuntimeMs = 35_000) {
     totalUnhandled,
     passes: reports.length,
     reports,
+    publicDiscovery,
   };
 }

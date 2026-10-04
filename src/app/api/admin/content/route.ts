@@ -10,7 +10,9 @@ import {
   editorialMutationSchema,
   normalizeEditorialPayload,
   validateEditorialPublication,
+  editorialPublicPath,
 } from "@/lib/contentCms";
+import { enqueuePublicIndexing } from "@/lib/publicIndexingEvents";
 
 const querySchema = z.object({
   search: z.string().trim().max(200).optional(),
@@ -138,6 +140,14 @@ export async function POST(req: NextRequest) {
         },
       });
       await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+      if (content.status === "PUBLISHED") {
+        await enqueuePublicIndexing({
+          kind: "EDITORIAL",
+          action: "UPDATED",
+          path: editorialPublicPath(content.type, content.slug),
+          revisionKey: `r${content.revision}:${content.publishedAt?.toISOString() || now.toISOString()}`,
+        }, tx);
+      }
       return content;
     });
 

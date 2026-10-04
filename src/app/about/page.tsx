@@ -41,6 +41,6 @@ export default function AboutPage() {
 
     <FAQ title="Questions about HireGo AI" items={faqs} />
     <FinalCTA title="Explore a more connected hiring workflow." body="See what HireGo is building, who it serves and where human approval belongs." primary={{label:"Explore Services",href:"/services"}} secondary={{label:"Explore Solutions",href:"/solutions"}} />
-    <JsonLd data={[breadcrumbSchema("About Us","/about"), {"@context":"https://schema.org","@type":"Organization",name:"HireGo AI",url:"https://hiregoai.com",logo:"https://hiregoai.com/marketing/hirego-logo-hd.png",description:"HireGo AI builds connected hiring workflow orchestration with human-controlled hiring decisions."}]} />
+    <JsonLd data={[breadcrumbSchema("About Us","/about"), {"@context":"https://schema.org","@type":"Organization",name:"HireGo AI",url:"https://www.hiregoai.com",logo:"https://www.hiregoai.com/marketing/hirego-logo-hd.png",description:"HireGo AI builds connected hiring workflow orchestration with human-controlled hiring decisions."}]} />
   </div></MarketingShell>;
 }

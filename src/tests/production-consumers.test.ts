@@ -48,7 +48,12 @@ function fixture(t: TestContext, options: { missing?: boolean; recipients?: numb
 
 test('production registration is repeatable and covers all published domain types', () => {
   registerProductionConsumers(); registerProductionConsumers();
-  for (const type of ['APPLICATION_SUBMITTED', 'APPLICATION_ASSESSMENT_COMPLETED', 'JOB_LISTING_CREATED', 'HIRING_PIPELINE_COMPLETED']) assert.equal(ConsumerRegistry.getConsumers(type).length, 1);
+  for (const type of ['APPLICATION_SUBMITTED', 'APPLICATION_ASSESSMENT_COMPLETED', 'HIRING_PIPELINE_COMPLETED', 'PUBLIC_INDEXING_REQUESTED']) {
+    assert.equal(ConsumerRegistry.getConsumers(type).length, 1);
+  }
+  // Job creation intentionally fans out to the employer notification and the
+  // independent public-discovery consumer. Re-registering must not duplicate either.
+  assert.equal(ConsumerRegistry.getConsumers('JOB_LISTING_CREATED').length, 2);
   assert.equal(ConsumerRegistry.getConsumers('unknown.event').length, 0);
 });
 test('notification IDs are deterministic valid UUIDs and isolate events and recipients', () => {

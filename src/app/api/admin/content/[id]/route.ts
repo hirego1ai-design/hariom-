@@ -8,7 +8,9 @@ import {
   editorialMutationSchema,
   normalizeEditorialPayload,
   validateEditorialPublication,
+  editorialPublicPath,
 } from "@/lib/contentCms";
+import { enqueuePublicIndexing } from "@/lib/publicIndexingEvents";
 
 function validId(id: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -129,6 +131,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
       });
       await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+
+      const wasPublic =
+        existing.status === "PUBLISHED" ||
+        (existing.status === "SCHEDULED" && Boolean(existing.scheduledAt && existing.scheduledAt <= now));
+      const isPublic =
+        content.status === "PUBLISHED" ||
+        (content.status === "SCHEDULED" && Boolean(content.scheduledAt && content.scheduledAt <= now));
+      const oldPath = editorialPublicPath(existing.type, existing.slug);
+      const newPath = editorialPublicPath(content.type, content.slug);
+
+      if (wasPublic && (!isPublic || oldPath !== newPath)) {
+        await enqueuePublicIndexing({
+          kind: "EDITORIAL",
+          action: "DELETED",
+          path: oldPath,
+          revisionKey: `r${content.revision}:old:${existing.updatedAt.toISOString()}`,
+        }, tx);
+      }
+      if (isPublic) {
+        await enqueuePublicIndexing({
+          kind: "EDITORIAL",
+          action: "UPDATED",
+          path: newPath,
+          revisionKey: `r${content.revision}:${content.updatedAt.toISOString()}`,
+        }, tx);
+      }
       return content;
     });
 
@@ -165,6 +193,18 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           },
         });
         await enqueueSecurityAuditEvent(tx, auditLog, admin.id);
+        const wasPublic =
+          existing.status === "PUBLISHED" ||
+          Boolean(existing.publishedAt) ||
+          (existing.status === "SCHEDULED" && Boolean(existing.scheduledAt && existing.scheduledAt <= new Date()));
+        if (wasPublic) {
+          await enqueuePublicIndexing({
+            kind: "EDITORIAL",
+            action: "DELETED",
+            path: editorialPublicPath(existing.type, existing.slug),
+            revisionKey: `archive:r${row.revision}:${row.updatedAt.toISOString()}`,
+          }, tx);
+        }
         return { archived: true as const, content: row };
       }
 
