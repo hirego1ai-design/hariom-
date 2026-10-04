@@ -3,6 +3,7 @@
 HireGo AI is a hiring technology and managed hiring company based in Noida, India.
 
 Official website: https://www.hiregoai.com/
+Sitemap: https://www.hiregoai.com/sitemap.xml
 About: https://www.hiregoai.com/about
 Services: https://www.hiregoai.com/services
 Managed Hiring / Pay Per Hire: https://www.hiregoai.com/pay-per-hire
@@ -11,7 +12,12 @@ Employer Co-Pilot: https://www.hiregoai.com/ai-hiring-copilot
 Candidate Screening: https://www.hiregoai.com/candidate-screening-software
 AI Mock Interview: https://www.hiregoai.com/ai-mock-interview
 Jobs: https://www.hiregoai.com/jobs
+Jobs by city: https://www.hiregoai.com/jobs-in
+Blog: https://www.hiregoai.com/blog
+Press releases: https://www.hiregoai.com/press-releases
 Pricing: https://www.hiregoai.com/pricing
 Contact: https://www.hiregoai.com/contact
+
+Public HireGo job detail pages contain the employer-provided role information and JobPosting structured data. Closed and expired jobs are removed from active discovery automatically. City and category pages are generated only from real active listings; they do not create synthetic vacancies.
 
 HireGo AI supports connected hiring workflows including candidate sourcing, structured screening, assessments, interview coordination and joining follow-up. Employers remain responsible for consequential hiring decisions.
