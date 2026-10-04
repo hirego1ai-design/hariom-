@@ -29,6 +29,12 @@ const employerNavItems: NavRailItem[] = [
 
 export default function EmployerSidebar() {
   const pathname = usePathname() || "";
+  const [mobileMoreOpen, setMobileMoreOpen] = React.useState(false);
+  const mobilePrimaryItems = employerNavItems.slice(0, 4);
+  const mobileMoreItems = employerNavItems.slice(4);
+  const mobileMoreActive = mobileMoreItems.some(
+    (item) => pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/employer"),
+  );
 
   if (
     !pathname.startsWith("/employer") ||
@@ -91,9 +97,58 @@ export default function EmployerSidebar() {
 
       <div className="fixed top-0 left-[110px] w-[1px] h-screen bg-white/5 pointer-events-none z-40 hidden md:block" />
 
+      {mobileMoreOpen && (
+        <div className="fixed inset-0 z-[70] md:hidden">
+          <button
+            type="button"
+            aria-label="Close employer navigation"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setMobileMoreOpen(false)}
+          />
+          <aside
+            aria-label="More employer tools"
+            className="absolute bottom-20 left-3 right-3 max-h-[70vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#141418] p-3 shadow-2xl"
+          >
+            <div className="mb-2 flex items-center justify-between px-2 py-1">
+              <div>
+                <p className="text-sm font-bold text-white">More employer tools</p>
+                <p className="mt-0.5 text-[10px] text-text-muted">Interviews, managed hiring, billing, analytics and settings.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close more employer tools"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-white"
+                onClick={() => setMobileMoreOpen(false)}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <nav className="grid gap-1" aria-label="Employer mobile secondary navigation">
+              {mobileMoreItems.map((item) => {
+                const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/employer");
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setMobileMoreOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex min-h-12 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${
+                      isActive ? "bg-secondary text-white" : "text-text-secondary hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[21px]">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+        </div>
+      )}
+
       <nav className="md:hidden fixed left-3 right-3 bottom-3 z-50 rounded-2xl border border-white/10 bg-[#141418]/95 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.55)] px-2 py-2">
         <div className="grid grid-cols-5 gap-1">
-          {employerNavItems.slice(0, 5).map((item) => {
+          {mobilePrimaryItems.map((item) => {
             const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/employer");
             return (
               <Link
@@ -101,6 +156,7 @@ export default function EmployerSidebar() {
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
                 className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
                   isActive ? "bg-secondary text-white" : "text-text-muted hover:text-white hover:bg-white/10"
                 }`}
@@ -110,6 +166,18 @@ export default function EmployerSidebar() {
               </Link>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen((open) => !open)}
+            aria-label="More employer tools"
+            aria-expanded={mobileMoreOpen}
+            className={`h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              mobileMoreActive || mobileMoreOpen ? "bg-secondary text-white" : "text-text-muted hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[21px]">more_horiz</span>
+            <span className="text-[9px] font-bold leading-none">More</span>
+          </button>
         </div>
       </nav>
     </>
