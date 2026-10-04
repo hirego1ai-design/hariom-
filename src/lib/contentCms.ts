@@ -160,8 +160,16 @@ export const editorialPayloadSchema = z.object({
   seoTitle: nullableText(120),
   seoDescription: nullableText(220),
   canonicalUrl: z.string().trim().url().max(500).nullable().optional().refine(
-    (value) => !value || value.startsWith("https://hiregoai.com/") || value === "https://hiregoai.com",
-    "Canonical URL must use hiregoai.com.",
+    (value) => {
+      if (!value) return true;
+      try {
+        const url = new URL(value);
+        return url.protocol === "https:" && (url.hostname === "hiregoai.com" || url.hostname === "www.hiregoai.com");
+      } catch {
+        return false;
+      }
+    },
+    "Canonical URL must use the HireGo AI domain.",
   ),
 });
 
@@ -252,7 +260,9 @@ export function normalizeEditorialPayload(input: z.input<typeof editorialPayload
     companyBoilerplate: input.companyBoilerplate || null,
     seoTitle: input.seoTitle || null,
     seoDescription: input.seoDescription || null,
-    canonicalUrl: input.canonicalUrl || null,
+    canonicalUrl: input.canonicalUrl
+      ? input.canonicalUrl.replace(/^https:\/\/hiregoai\.com(?=\/|$)/, "https://www.hiregoai.com")
+      : null,
     contentHtml,
     contentText,
     inlineMediaFileIds,
