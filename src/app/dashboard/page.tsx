@@ -14,6 +14,13 @@ export default function CandidateDashboardPage() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("Candidate");
   const [appliedCount, setAppliedCount] = useState(0);
+  const [interviews, setInterviews] = useState<Array<{
+    id: string;
+    scheduledAt?: string;
+    status?: string;
+    canEnterRoom?: boolean;
+    job?: { title?: string; company?: { name?: string } };
+  }>>([]);
   const [availability, setAvailability] = useState("RECONFIRMATION_REQUIRED");
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [skillValidation, setSkillValidation] = useState<{
@@ -29,6 +36,13 @@ export default function CandidateDashboardPage() {
   } | null>(null);
   const displayName = candidateName || user.name || "Candidate";
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "C";
+  const nextInterview = interviews[0] ?? null;
+  const nextInterviewLabel = nextInterview?.scheduledAt
+    ? new Date(nextInterview.scheduledAt).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
 
   const handleLogout = async () => {
     try {
@@ -77,6 +91,15 @@ export default function CandidateDashboardPage() {
             validatedSkillCount: data.validatedSkillCount ?? 0,
             pendingApplications: data.pendingApplications ?? [],
           });
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/interviews", { credentials: "include", cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.interviews)) {
+          setInterviews(data.interviews);
         }
       })
       .catch(() => {});
@@ -138,16 +161,16 @@ export default function CandidateDashboardPage() {
           <div className="flex items-center gap-3">
             {/* Quick Links */}
             <Link
-              href="/messages/chat"
+              href="/interviews"
               className="w-10 h-10 rounded-full flex items-center justify-center transition-colors relative"
               style={{
                 backgroundColor: "var(--surface-container-high)",
                 border: "1px solid var(--outline)",
                 color: "var(--text-primary)",
               }}
-              title="Messages"
+              title="Interviews"
             >
-              <span className="material-symbols-outlined text-[20px]">forum</span>
+              <span className="material-symbols-outlined text-[20px]">video_call</span>
             </Link>
 
             <Link
@@ -420,11 +443,20 @@ export default function CandidateDashboardPage() {
               </div>
               <div className="flex items-end gap-2 mt-3">
                 <span className="font-display-lg text-display-lg font-extrabold" style={{ color: "var(--text-primary)" }}>
-                  —
+                  {interviews.length}
                 </span>
-                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>No verified schedule loaded</span>
+                <span className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
+                  {interviews.length === 1 ? "Upcoming interview" : "Upcoming interviews"}
+                </span>
               </div>
-              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>Upcoming interviews will appear when scheduled.</p>
+              <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                {nextInterview
+                  ? `${nextInterview.job?.title || "Interview"}${nextInterviewLabel ? ` · ${nextInterviewLabel}` : ""}`
+                  : "No upcoming interview is currently scheduled."}
+              </p>
+              <Link href="/interviews" className="mt-3 inline-flex text-xs font-bold" style={{ color: "var(--primary)" }}>
+                {nextInterview?.canEnterRoom ? "Join or view interview →" : "View interviews →"}
+              </Link>
             </div>
 
             <div
