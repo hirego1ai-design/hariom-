@@ -22,7 +22,7 @@ export const metadata: Metadata = marketingMetadata({
 const stages = ["Job requirement","Candidate sourcing","Screening","Assessments","Interview coordination","Feedback","Human hiring decision","Joining follow-up"];
 
 export default function HomePage() {
-  return <MarketingShell home>
+  return <MarketingShell home><div className={styles.page}>
     <section className={`${heroStyles.hero} ${heroFont.variable}`}>
       <HeroSky /><HeroEarth />
       <div className={heroStyles.copy} data-hero-copy>
@@ -107,5 +107,6 @@ export default function HomePage() {
         },
       ],
     }} />
+    </div>
   </MarketingShell>;
 }
