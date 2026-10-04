@@ -4,6 +4,7 @@ import type { SystemEvent } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ConsumerRegistry } from './ConsumerRegistry';
 import { sourceManagedJobCandidates } from '@/lib/managedHiring/SourcingOrchestrator';
+import { jobListingPublicDiscovery, publicIndexingRequested } from '@/lib/publicIndexingEvents';
 
 const id = z.string().min(1).max(128);
 const company = (event: SystemEvent) => id.parse(event.companyId);
@@ -174,6 +175,8 @@ export function registerProductionConsumers() {
   ConsumerRegistry.register('APPLICATION_SUBMITTED', 'application-receipt-v1', applicationSubmitted);
   ConsumerRegistry.register('APPLICATION_ASSESSMENT_COMPLETED', 'assessment-completed-employer-notification-v1', applicationAssessmentCompleted);
   ConsumerRegistry.register('JOB_LISTING_CREATED', 'job-created-notification-v1', jobListingCreated);
+  ConsumerRegistry.register('JOB_LISTING_CREATED', 'job-public-discovery-v1', jobListingPublicDiscovery);
+  ConsumerRegistry.register('PUBLIC_INDEXING_REQUESTED', 'public-indexing-v1', publicIndexingRequested);
   ConsumerRegistry.register('MANAGED_JOB_ACTIVATED', 'managed-job-safe-sourcing-v1', managedJobActivated);
   ConsumerRegistry.register('HIRING_PIPELINE_COMPLETED', 'advisory-completed-notification-v1', hiringPipelineCompleted);
 }
