@@ -44,7 +44,7 @@ export function JsonLd({ data }: { data: Record<string, unknown> | Record<string
 
 export function breadcrumbSchema(label: string, path: string) {
   return { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
-    { "@type": "ListItem", position: 1, name: "Home", item: "https://hiregoai.com/" },
-    { "@type": "ListItem", position: 2, name: label, item: `https://hiregoai.com${path}` },
+    { "@type": "ListItem", position: 1, name: "Home", item: "https://www.hiregoai.com/" },
+    { "@type": "ListItem", position: 2, name: label, item: `https://www.hiregoai.com${path}` },
   ] };
 }
