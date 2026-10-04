@@ -20,6 +20,7 @@ const mainNavItems: NavRailItem[] = [
   { id: "readiness", label: "Job-Ready Assessment", href: "/assessment/readiness", icon: "verified" },
   { id: "jobs", label: "Browse Opportunities", href: "/jobs", icon: "work" },
   { id: "applications", label: "Applications", href: "/applications", icon: "description" },
+  { id: "interviews", label: "Interviews", href: "/interviews", icon: "video_call" },
   { id: "credits", label: "Career Credits", href: "/credits", icon: "account_balance_wallet" },
   { id: "notifications", label: "Notifications", href: "/notifications", icon: "notifications" },
 ];
@@ -28,7 +29,7 @@ const mobileNavItems: NavRailItem[] = [
   { id: "dashboard", label: "Home", href: "/dashboard", icon: "dashboard" },
   { id: "jobs", label: "Jobs", href: "/jobs", icon: "work" },
   { id: "applications", label: "Applications", href: "/applications", icon: "description" },
-  { id: "notifications", label: "Alerts", href: "/notifications", icon: "notifications" },
+  { id: "interviews", label: "Interviews", href: "/interviews", icon: "video_call" },
   { id: "profile", label: "Profile", href: "/profile", icon: "person" },
 ];
 
