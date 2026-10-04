@@ -15,7 +15,7 @@ export function activePublicJobWhere(now = new Date()): Prisma.JobListingWhereIn
 }
 
 export const getPublicJobById = cache(async (id: string) => {
-  return prisma.jobListing.findFirst({
+  const job = await prisma.jobListing.findFirst({
     where: {
       id,
       ...activePublicJobWhere(),
@@ -32,6 +32,8 @@ export const getPublicJobById = cache(async (id: string) => {
       },
     },
   });
+  if (!job?.publishedAt) return null;
+  return { ...job, publishedAt: job.publishedAt };
 });
 
 export async function getPublicJobsForCity(
