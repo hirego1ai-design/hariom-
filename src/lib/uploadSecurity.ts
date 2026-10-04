@@ -74,11 +74,16 @@ export type UploadScanResult = { status: "CLEAN" | "INFECTED" | "ERROR"; detail?
 export async function scanUpload(fileId: string, data: Buffer): Promise<UploadScanResult> {
   let endpoint = process.env.MALWARE_SCANNER_URL?.trim();
   let token = process.env.MALWARE_SCANNER_TOKEN?.trim();
+  let username = process.env.MALWARE_SCANNER_USERNAME?.trim();
+  let password = process.env.MALWARE_SCANNER_PASSWORD?.trim();
+
   if (process.env.NODE_ENV === "production") {
     try {
       const config = requireMalwareScannerEnv();
       endpoint = config.url;
       token = config.token;
+      username = config.username;
+      password = config.password;
       await assertSafeOutboundNetworkTarget(endpoint, {
         label: "MALWARE_SCANNER_URL",
         requireHttps: true,
@@ -88,25 +93,114 @@ export async function scanUpload(fileId: string, data: Buffer): Promise<UploadSc
       return { status: "ERROR", detail: error instanceof Error ? error.message : "Malware scanner is not configured safely." };
     }
   }
+
   if (!endpoint) return { status: "CLEAN", detail: "Development scan bypass." };
+
+  const authorization = username && password
+    ? `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`
+    : token
+      ? `Bearer ${token}`
+      : undefined;
+
   try {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/octet-stream", "X-HireGo-File-Id": fileId, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-HireGo-File-Id": fileId,
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
       body: new Uint8Array(data),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(30_000),
       redirect: "error",
       cache: "no-store",
     });
-    if (!res.ok) return { status: "ERROR", detail: `Scanner HTTP ${res.status}` };
-    const body = await res.json().catch(() => null) as { clean?: unknown; infected?: unknown; detail?: unknown } | null;
-    if (body?.clean === true && body?.infected !== true) return { status: "CLEAN", detail: typeof body.detail === "string" ? body.detail.slice(0, 500) : undefined };
-    if (body?.infected === true) return { status: "INFECTED", detail: typeof body.detail === "string" ? body.detail.slice(0, 500) : "Malware detected." };
-    return { status: "ERROR", detail: "Scanner returned an invalid response." };
+
+    const raw = await res.text();
+    let body: unknown = null;
+    try {
+      body = raw ? JSON.parse(raw) : null;
+    } catch {
+      body = null;
+    }
+
+    const detailFrom = (value: unknown): string | undefined =>
+      typeof value === "string" && value.trim() ? value.trim().slice(0, 500) : undefined;
+
+    if (res.status === 406) {
+      const object = body && typeof body === "object" ? body as Record<string, unknown> : null;
+      return {
+        status: "INFECTED",
+        detail:
+          detailFrom(object?.Description) ||
+          detailFrom(object?.detail) ||
+          detailFrom(object?.signature) ||
+          detailFrom(raw) ||
+          "Malware detected.",
+      };
+    }
+
+    if (!res.ok) {
+      return { status: "ERROR", detail: `Scanner HTTP ${res.status}${raw ? `: ${raw.slice(0, 300)}` : ""}` };
+    }
+
+    if (body && typeof body === "object" && !Array.isArray(body)) {
+      const object = body as Record<string, unknown>;
+      if (object.clean === true && object.infected !== true) {
+        return { status: "CLEAN", detail: detailFrom(object.detail) };
+      }
+      if (object.infected === true) {
+        return { status: "INFECTED", detail: detailFrom(object.detail) || "Malware detected." };
+      }
+
+      const status = typeof object.status === "string"
+        ? object.status.toUpperCase()
+        : typeof object.Status === "string"
+          ? object.Status.toUpperCase()
+          : "";
+      if (status === "CLEAN" || status === "OK") {
+        return { status: "CLEAN", detail: detailFrom(object.detail) || detailFrom(object.Description) };
+      }
+      if (status === "INFECTED" || status === "FOUND") {
+        return {
+          status: "INFECTED",
+          detail:
+            detailFrom(object.signature) ||
+            detailFrom(object.detail) ||
+            detailFrom(object.Description) ||
+            "Malware detected.",
+        };
+      }
+    }
+
+    if (Array.isArray(body) && body.length > 0) {
+      const entries = body.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object"));
+      const infected = entries.find((entry) => String(entry.Status || entry.status || "").toUpperCase() === "FOUND");
+      if (infected) {
+        return {
+          status: "INFECTED",
+          detail: detailFrom(infected.Description) || detailFrom(infected.detail) || "Malware detected.",
+        };
+      }
+      if (entries.length === body.length && entries.every((entry) => ["OK", "CLEAN"].includes(String(entry.Status || entry.status || "").toUpperCase()))) {
+        return { status: "CLEAN", detail: "ClamAV scan passed." };
+      }
+    }
+
+    const normalized = raw.trim().toUpperCase();
+    if (normalized === "OK" || normalized === "{OK 200}" || normalized === "OK 200") {
+      return { status: "CLEAN", detail: "ClamAV scan passed." };
+    }
+    if (normalized.includes("FOUND")) {
+      return { status: "INFECTED", detail: raw.slice(0, 500) || "Malware detected." };
+    }
+
+    return { status: "ERROR", detail: "Scanner returned an unrecognized response." };
   } catch (error) {
     return { status: "ERROR", detail: error instanceof Error ? error.message.slice(0, 500) : "Scanner request failed." };
   }
 }
+
 
 export async function persistScanResult(fileId: string, result: UploadScanResult) {
   return prisma.storedFile.update({ where: { id: fileId }, data: { scanStatus: result.status, scanCheckedAt: new Date(), scanDetail: result.detail } });
