@@ -10,6 +10,7 @@ import { ensureJobSpecificAssessment } from "@/lib/jobSpecificAssessment";
 import { OutboxPublisher } from "@/lib/events/Outbox";
 import { getJobPublicationTerms } from "@/lib/jobPlanEntitlements";
 import { requireActiveCompanySubscription } from "@/lib/subscriptionAccess";
+import { enqueuePublicIndexing } from "@/lib/publicIndexingEvents";
 
 const updateJobSchema = z.object({
   title: z.string().min(3).optional(),
@@ -164,7 +165,29 @@ export async function PUT(
           }, tx);
           return updated;
         })
-      : await prisma.jobListing.update({ where: { id }, data: updateData });
+      : await prisma.$transaction(async (tx) => {
+          const updated = await tx.jobListing.update({ where: { id }, data: updateData });
+          const now = new Date();
+          const wasPublic =
+            oldJob.status === JobStatus.ACTIVE &&
+            Boolean(oldJob.publishedAt) &&
+            (!oldJob.expiresAt || oldJob.expiresAt > now);
+          const isPublic =
+            updated.status === JobStatus.ACTIVE &&
+            Boolean(updated.publishedAt) &&
+            (!updated.expiresAt || updated.expiresAt > now);
+
+          if (wasPublic || isPublic) {
+            await enqueuePublicIndexing({
+              kind: "JOB",
+              action: isPublic ? "UPDATED" : "DELETED",
+              path: `/jobs/${updated.id}`,
+              revisionKey: `${updated.updatedAt.toISOString()}:${updated.status}`,
+              companyId: updated.companyId,
+            }, tx);
+          }
+          return updated;
+        });
 
     await logAuditEvent({
       userId: session.id,
