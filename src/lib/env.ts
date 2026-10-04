@@ -95,7 +95,18 @@ export function getVideoAnalysisConfig() {
 
 export function requireMalwareScannerEnv() {
   const url = requireProductionEnv("MALWARE_SCANNER_URL");
-  return { url: assertSafeHttpsServiceUrl("MALWARE_SCANNER_URL", url), token: getOptionalEnv("MALWARE_SCANNER_TOKEN") };
+  const token = getOptionalEnv("MALWARE_SCANNER_TOKEN");
+  const username = getOptionalEnv("MALWARE_SCANNER_USERNAME");
+  const password = getOptionalEnv("MALWARE_SCANNER_PASSWORD");
+  if (Boolean(username) !== Boolean(password)) {
+    throw new Error("MALWARE_SCANNER_USERNAME and MALWARE_SCANNER_PASSWORD must be configured together.");
+  }
+  return {
+    url: assertSafeHttpsServiceUrl("MALWARE_SCANNER_URL", url),
+    token,
+    username,
+    password,
+  };
 }
 
 export function buildPublicAppUrl(path: string): string {
