@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildPublicMetadata } from "@/lib/publicDiscovery";
 
 const titles: Record<string, string> = {
   home: "HireGo AI — Autonomous Hiring, Made Human",
@@ -28,15 +29,18 @@ const paths: Record<string, string> = {
   contact: "/contact", terms: "/terms", privacy: "/privacy",
 };
 
-export function marketingMetadata({ path, title, description, image = "/marketing/og/home.webp" }: { path: string; title: string; description: string; image?: string }): Metadata {
-  const url = `https://www.hiregoai.com${path === "/" ? "" : path}`;
-  return {
-    title, description,
-    alternates: { canonical: url },
-    robots: { index: true, follow: true },
-    openGraph: { type: "website", siteName: "HireGo AI", title, description, url, images: [{ url: image, width: 1200, height: 630, alt: `${title} — HireGo AI` }] },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
-  };
+export function marketingMetadata({
+  path,
+  title,
+  description,
+  image = "/marketing/og/home.webp",
+}: {
+  path: string;
+  title: string;
+  description: string;
+  image?: string;
+}): Metadata {
+  return buildPublicMetadata({ path, title, description, image });
 }
 
 export function createMarketingMetadata(kind: string): Metadata {
