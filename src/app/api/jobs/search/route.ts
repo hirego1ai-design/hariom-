@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib";
 import { ApiError, enforceRateLimit } from "@/lib/apiSecurity";
 import { prisma } from "@/lib/prisma";
+import { activePublicJobWhere } from "@/lib/publicJobs";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,12 +19,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit")) || 10));
     const skip = (page - 1) * limit;
 
-    const now = new Date();
-    const where: any = {
-      status: "ACTIVE",
-      publishedAt: { not: null },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    };
+    const where: any = activePublicJobWhere(new Date());
 
       if (query) {
         where.AND = [{

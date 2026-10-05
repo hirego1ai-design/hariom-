@@ -1,99 +1,154 @@
-import { NextResponse } from 'next/server';
-import { getCurrentSession } from '@/lib/auth';
-import { handleApiError, readValidatedJson, ApiError, enforceRateLimit } from "@/lib/apiSecurity";
-import { prisma } from '@/lib/prisma';
-import { logAuditEvent } from '@/lib/auditLogger';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { getCurrentSession } from "@/lib/auth";
+import {
+  handleApiError,
+  readValidatedJson,
+  ApiError,
+  enforceRateLimit,
+} from "@/lib/apiSecurity";
+import { prisma } from "@/lib/prisma";
+import { logAuditEvent } from "@/lib/auditLogger";
+import { z } from "zod";
+import { Prisma, Role } from "@prisma/client";
+import { buildMockInterviewPracticeReport } from "@/lib/mockInterview/MockInterviewReport";
+import { LearningEventStore } from "@/lib/intelligence/LearningEventStore";
 
 const mockInterviewFinishSchema = z.object({
   sessionId: z.string().uuid(),
 }).strict();
 
+function serializeReport(report: ReturnType<typeof buildMockInterviewPracticeReport>) {
+  return {
+    mode: "PRACTICE" as const,
+    practiceScore: report.practiceScore,
+    answeredTurns: report.answeredTurns,
+    estimatedLevel: report.estimatedLevel,
+    levelConfidence: report.levelConfidence,
+    evidenceStatus: report.evidenceStatus,
+    strengths: report.strengths,
+    missingEvidence: report.missingEvidence,
+    nextPracticePlan: report.nextPracticePlan,
+    summary: report.summary,
+  };
+}
+
 export async function POST(request: Request) {
   try {
-    await enforceRateLimit(request, "mock_interview_finish", 20, 60000);
-    const session = await getCurrentSession(request.headers);
-    if (!session || session.role !== 'CANDIDATE') {
-      throw new ApiError('Unauthorized', 401);
+    await enforceRateLimit(request, "mock_interview_finish", 20, 60_000);
+    const auth = await getCurrentSession(request.headers);
+    if (!auth || auth.role !== "CANDIDATE") {
+      throw new ApiError("Unauthorized", 401);
     }
 
     const body = await readValidatedJson(request, mockInterviewFinishSchema);
-    const { sessionId } = body;
 
     const interviewSession = await prisma.mockInterviewSession.findUnique({
-      where: { id: sessionId },
-      include: { turns: true }
+      where: { id: body.sessionId },
+      include: {
+        turns: { orderBy: { questionIndex: "asc" } },
+        persona: true,
+      },
     });
 
     const candidateProfile = await prisma.candidateProfile.findUnique({
-      where: { userId: session.id }
+      where: { userId: auth.id },
+      select: { id: true },
     });
 
-    if (!interviewSession || !candidateProfile || interviewSession.candidateProfileId !== candidateProfile.id) {
-      throw new ApiError('Session not found', 404);
+    if (
+      !interviewSession ||
+      !candidateProfile ||
+      interviewSession.candidateProfileId !== candidateProfile.id
+    ) {
+      throw new ApiError("Session not found", 404);
     }
 
-    const turns = interviewSession.turns.filter(t => t.score !== null);
-    const turnCount = turns.length;
-    
-    let overallScore = 0;
-    if (turnCount > 0) {
-      overallScore = turns.reduce((acc, t) => acc + (t.score || 0), 0) / turnCount;
+    if (interviewSession.status === "ABANDONED") {
+      throw new ApiError("An abandoned practice session cannot be completed.", 409);
     }
 
-    const practiceFeedback = `Practice session completed with ${turnCount} answered turns. The score is a fluency practice metric only; it is not a technical, communication, or hiring evaluation.`;
+    const report = buildMockInterviewPracticeReport(
+      interviewSession.turns,
+      interviewSession.declaredSeniority,
+    );
+    const serialized = serializeReport(report);
 
-    // Idempotent early-return if already completed
-    if (interviewSession.status === 'COMPLETED') {
+    if (interviewSession.status === "COMPLETED") {
       return NextResponse.json({
         success: true,
-        report: {
-          mode: 'PRACTICE',
-          fluencyPracticeScore: interviewSession.overallScore ?? overallScore,
-          turnCount,
-          practiceFeedback: interviewSession.aiFeedback || practiceFeedback,
-          turns: turns.map(t => ({
-            questionIndex: t.questionIndex,
-            question: t.questionText,
-            score: t.score,
-            feedback: t.feedback
-          }))
-        }
+        reused: true,
+        report:
+          interviewSession.finalReport &&
+          typeof interviewSession.finalReport === "object"
+            ? interviewSession.finalReport
+            : serialized,
       });
     }
 
+    const unanswered = interviewSession.turns.filter(
+      (turn) => !turn.candidateAnswerTranscript?.trim(),
+    );
+    if (
+      report.answeredTurns < Math.min(3, interviewSession.totalQuestions) ||
+      unanswered.length > 0
+    ) {
+      throw new ApiError(
+        "Complete the planned interview questions before generating the final practice report.",
+        409,
+      );
+    }
+
     await prisma.mockInterviewSession.update({
-      where: { id: sessionId },
+      where: { id: interviewSession.id },
       data: {
-        status: 'COMPLETED',
-        overallScore,
+        status: "COMPLETED",
+        overallScore: report.practiceScore,
         communicationScore: null,
         technicalScore: null,
-        aiFeedback: practiceFeedback,
-      }
+        integrityScore: null,
+        estimatedLevel: report.estimatedLevel,
+        levelConfidence: report.levelConfidence,
+        missingEvidence: report.missingEvidence as Prisma.InputJsonValue,
+        nextPracticePlan: report.nextPracticePlan as Prisma.InputJsonValue,
+        finalReport: serialized as Prisma.InputJsonValue,
+        aiFeedback: report.summary,
+      },
     });
 
     await logAuditEvent({
-      action: 'MOCK_INTERVIEW_COMPLETED',
-      userId: session.id,
-      resource: `interview_session_${sessionId}`,
-      details: `Completed session with score ${overallScore}`
+      action: "MOCK_INTERVIEW_COMPLETED",
+      userId: auth.id,
+      resource: `interview_session_${interviewSession.id}`,
+      details: `Completed adaptive practice session with ${report.answeredTurns} answered turns`,
     });
+
+    void LearningEventStore.record({
+      idempotencyKey: `mock-interview-finish:${interviewSession.id}`,
+      correlationId: interviewSession.id,
+      actorUserId: auth.id,
+      actorRole: Role.CANDIDATE,
+      channel: "WEB",
+      feature: "MOCK_INTERVIEW",
+      task: "SESSION_COMPLETED",
+      evidenceRefs: {
+        sessionId: interviewSession.id,
+        roleTarget: interviewSession.roleTarget,
+        declaredSeniority: interviewSession.declaredSeniority,
+        roleFamily: interviewSession.roleFamily,
+        personaVersion: interviewSession.personaVersion,
+        answeredTurns: report.answeredTurns,
+      },
+      acceptedResult: serialized,
+      outcome: {
+        evidenceStatus: report.evidenceStatus,
+        estimatedLevel: report.estimatedLevel,
+        levelConfidence: report.levelConfidence,
+      },
+    }).catch(() => null);
 
     return NextResponse.json({
       success: true,
-      report: {
-        mode: 'PRACTICE',
-        fluencyPracticeScore: overallScore,
-        turnCount,
-        practiceFeedback,
-        turns: turns.map(t => ({
-          questionIndex: t.questionIndex,
-          question: t.questionText,
-          score: t.score,
-          feedback: t.feedback
-        }))
-      }
+      report: serialized,
     });
   } catch (error) {
     return handleApiError(error);

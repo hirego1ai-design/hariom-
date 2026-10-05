@@ -3,6 +3,7 @@ import {
   AiModelConfig,
   AiTaskRoute,
   LlmProviderName,
+  ModelCapability,
   getAiRoutingConfig,
   getProviderRuntime,
 } from "./AiRoutingConfig";
@@ -124,7 +125,7 @@ async function smartOrder(taskType: string, candidates: ProviderModel[], configu
 }
 
 export class ModelRouter {
-  public static async route(params: { taskType: string }): Promise<RouteMapping> {
+  public static async route(params: { taskType: string; requiredCapabilities?: ModelCapability[] }): Promise<RouteMapping> {
     const config = await getAiRoutingConfig();
     const policy = config.routes.find((route) => route.taskType === params.taskType);
     if (!policy) {
@@ -139,7 +140,13 @@ export class ModelRouter {
     let candidates: ProviderModel[] = allowedKeys
       .map((key) => modelByKey.get(key))
       .filter((model): model is AiModelConfig =>
-        Boolean(model && model.enabled && supportsTask(model, params.taskType) && providerReady(model))
+        Boolean(
+          model &&
+          model.enabled &&
+          supportsTask(model, params.taskType) &&
+          (params.requiredCapabilities ?? []).every((capability) => model.capabilities.includes(capability)) &&
+          providerReady(model)
+        )
       )
       .map((model) => ({
         key: model.key,
@@ -188,10 +195,14 @@ export class ModelRouter {
 
   public static async executeWithFallback<T>(params: {
     taskType: string;
+    requiredCapabilities?: ModelCapability[];
     fn: (endpoint: ProviderModel, policy: AiTaskRoute, isFallback: boolean) => Promise<T>;
     validateResult?: (result: T, endpoint: ProviderModel, policy: AiTaskRoute) => void | Promise<void>;
   }): Promise<{ result: T; usedEndpoint: ProviderModel }> {
-    const mapping = await this.route({ taskType: params.taskType });
+    const mapping = await this.route({
+      taskType: params.taskType,
+      requiredCapabilities: params.requiredCapabilities,
+    });
     const endpoints = [mapping.primary, ...mapping.fallbackChain];
     const errors: string[] = [];
 

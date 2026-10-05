@@ -92,6 +92,44 @@ export async function getRedisValue(key: string): Promise<string | null> {
   }
 }
 
+
+/**
+ * Atomically read and remove an ephemeral value. This is used for one-time
+ * receipts/tokens where a read-then-delete race would allow replay.
+ */
+export async function takeRedisValue(key: string): Promise<string | null> {
+  const redis = getConfiguredClient();
+  if (!redis) {
+    if (isProduction()) {
+      throw new RedisUnavailableError(
+        "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.",
+      );
+    }
+    const item = developmentStore.get(key);
+    if (!item || item.expiresAt <= Date.now()) {
+      developmentStore.delete(key);
+      return null;
+    }
+    developmentStore.delete(key);
+    return item.value;
+  }
+
+  try {
+    const value = await redis.eval<[], string | null>(
+      "local value = redis.call('GET', KEYS[1])\n" +
+        "if value then redis.call('DEL', KEYS[1]) end\n" +
+        "return value",
+      [key],
+      [],
+    );
+    return value ?? null;
+  } catch (error) {
+    throw new RedisUnavailableError(
+      error instanceof Error ? error.message : "Shared Redis request failed.",
+    );
+  }
+}
+
 /**
  * Atomically increments a short-lived shared counter and applies its TTL only
  * on the first increment. Production never falls back to process-local state.

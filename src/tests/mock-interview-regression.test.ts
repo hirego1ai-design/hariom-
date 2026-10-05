@@ -3,90 +3,165 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-test("mock interview setup, active, and summary pages exist with real client implementations", () => {
-  const setupPath = path.resolve(process.cwd(), "src/app/ai/mock-interview/setup/page.tsx");
-  const activePath = path.resolve(process.cwd(), "src/app/ai/mock-interview/active/page.tsx");
-  const summaryPath = path.resolve(process.cwd(), "src/app/ai/mock-interview/summary/page.tsx");
+const read = (relative: string) =>
+  fs.readFileSync(path.resolve(process.cwd(), relative), "utf8");
 
-  assert.ok(fs.existsSync(setupPath), "setup page must exist");
-  assert.ok(fs.existsSync(activePath), "active page must exist");
-  assert.ok(fs.existsSync(summaryPath), "summary page must exist");
+test("mock interview v2 uses real setup, active and report pages", () => {
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  const summary = read("src/app/ai/mock-interview/summary/page.tsx");
 
-  const setupSrc = fs.readFileSync(setupPath, "utf-8");
-  const activeSrc = fs.readFileSync(activePath, "utf-8");
-  const summarySrc = fs.readFileSync(summaryPath, "utf-8");
-
-  // Verify none are single-line redirects
-  assert.ok(!setupSrc.includes('redirect("/assessment/readiness")'), "setup page must not be a dummy redirect");
-  assert.ok(!activeSrc.includes('redirect("/assessment/readiness")'), "active page must not be a dummy redirect");
-  assert.ok(!summarySrc.includes('redirect("/assessment/readiness")'), "summary page must not be a dummy redirect");
-
-  // Verify setup connects to /api/assessment/mock-interview/start
-  assert.ok(setupSrc.includes("/api/assessment/mock-interview/start"), "setup must post to start API");
-
-  // Verify active connects to /api/assessment/mock-interview/turn
-  assert.ok(activeSrc.includes("/api/assessment/mock-interview/turn"), "active must post to turn API");
-
-  // Verify summary fetches from /api/assessment/mock-interview/session
-  assert.ok(summarySrc.includes("/api/assessment/mock-interview/session"), "summary must fetch session API");
+  assert.ok(setup.includes("/api/assessment/mock-interview/start"));
+  assert.ok(active.includes("/api/assessment/mock-interview/turn"));
+  assert.ok(active.includes("/api/assessment/mock-interview/finish"));
+  assert.ok(summary.includes("/api/assessment/mock-interview/session"));
+  assert.ok(!setup.includes('redirect("/assessment/readiness")'));
+  assert.ok(!active.includes('redirect("/assessment/readiness")'));
+  assert.ok(!summary.includes('redirect("/assessment/readiness")'));
 });
 
-test("mock interview session API route enforces candidate role and session ownership", () => {
-  const sessionRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/session/route.ts");
-  assert.ok(fs.existsSync(sessionRoutePath), "session route must exist");
-
-  const src = fs.readFileSync(sessionRoutePath, "utf-8");
-
-  assert.ok(src.includes('session.role !== "CANDIDATE"'), "must enforce CANDIDATE role");
-  assert.ok(src.includes("candidateProfileId !== candidateProfile.id"), "must enforce candidate ownership");
-  assert.ok(src.includes("enforceRateLimit"), "must enforce rate limiting");
+test("setup uses the real role catalogue instead of hard-coded demo role buttons", () => {
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  assert.ok(setup.includes('/api/skill-master?'));
+  assert.ok(setup.includes('type: "roles"'));
+  assert.ok(!setup.includes('"Full Stack Engineer"'));
+  assert.ok(!setup.includes('"Frontend Architect"'));
+  assert.ok(!setup.includes('"Backend Systems"'));
+  assert.ok(!setup.includes('"AI / ML Engineer"'));
 });
 
-test("mock interview turn evaluation validates scores between 0 and 100", () => {
-  const turnRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/turn/route.ts");
-  const src = fs.readFileSync(turnRoutePath, "utf-8");
-
-  assert.ok(src.includes("turnEvaluationSchema"), "must use typed zod schema for AI output");
-  assert.ok(src.includes("score: z.number().int().min(0).max(100)"), "score must be validated between 0 and 100");
+test("skill master has no in-memory production fallback", () => {
+  const route = read("src/app/api/skill-master/route.ts");
+  assert.ok(route.includes("prisma.customSkillRequest.create"));
+  assert.ok(!route.includes("developmentRequests"));
+  assert.ok(!route.includes("developmentFallback"));
 });
 
-test("legacy dna prototype page redirects to real mock interview setup", () => {
-  const dnaPath = path.resolve(process.cwd(), "src/app/assessment/mock-interview/dna/page.tsx");
-  const src = fs.readFileSync(dnaPath, "utf-8");
-
-  assert.ok(src.includes('redirect("/ai/mock-interview/setup")'), "dna page must redirect to real setup flow");
+test("mock interview start enforces candidate ownership, credits and persisted persona configuration", () => {
+  const route = read("src/app/api/assessment/mock-interview/start/route.ts");
+  assert.ok(route.includes('session.role !== "CANDIDATE"'));
+  assert.ok(route.includes("candidateServiceCatalog.findFirst"));
+  assert.ok(route.includes("candidateCreditWallet.updateMany"));
+  assert.ok(route.includes("resolveMockInterviewPersona"));
+  assert.ok(route.includes("declaredSeniority"));
+  assert.ok(route.includes("calibrationState"));
+  assert.ok(route.includes("declaredLevelIsHypothesis: true"));
+  assert.ok(route.includes("LearningEventStore.record"));
 });
 
-test("mock interview UI enforces text-only interview flow without audio/voice dependencies", () => {
-  const setupPath = path.resolve(process.cwd(), "src/app/ai/mock-interview/setup/page.tsx");
-  const activePath = path.resolve(process.cwd(), "src/app/ai/mock-interview/active/page.tsx");
-
-  const setupSrc = fs.readFileSync(setupPath, "utf-8");
-  const activeSrc = fs.readFileSync(activePath, "utf-8");
-
-  // Verify setup page has no mic check or voice mode
-  assert.ok(!setupSrc.includes("handleTestMic"), "setup page must not have microphone test logic");
-  assert.ok(!setupSrc.includes("navigator.mediaDevices"), "setup page must not request microphone media devices");
-
-  // Verify active page has no speech recognition
-  assert.ok(!activeSrc.includes("webkitSpeechRecognition"), "active page must not use webkitSpeechRecognition");
-  assert.ok(!activeSrc.includes("SpeechRecognition"), "active page must not use SpeechRecognition");
-  assert.ok(!activeSrc.includes("isListening"), "active page must not have listening state");
+test("adaptive engine treats declared level as hypothesis and uses multi-angle evidence", () => {
+  const engine = read("src/lib/mockInterview/MockInterviewEngineV2.ts");
+  assert.ok(engine.includes("declared seniority and claimed skills are hypotheses"));
+  assert.ok(engine.includes("Never infer competence from years of experience alone"));
+  assert.ok(engine.includes("Do not decide the candidate's final level from a single answer"));
+  assert.ok(engine.includes('"FUNDAMENTAL"'));
+  assert.ok(engine.includes('"IMPLEMENTATION"'));
+  assert.ok(engine.includes('"DEBUGGING"'));
+  assert.ok(engine.includes('"TRADEOFF"'));
+  assert.ok(engine.includes('"OWNERSHIP"'));
+  assert.ok(engine.includes("nextDifficulty"));
+  assert.ok(engine.includes("nextCompetency"));
+  assert.ok(engine.includes("nextSkillTags"));
 });
 
-test("mock interview turn schema validates answer minimum length and score clamping", () => {
-  const turnRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/turn/route.ts");
-  const src = fs.readFileSync(turnRoutePath, "utf-8");
+test("one adaptive turn call returns evaluation and next question together", () => {
+  const route = read("src/app/api/assessment/mock-interview/turn/route.ts");
+  const engine = read("src/lib/mockInterview/MockInterviewEngineV2.ts");
 
-  assert.ok(src.includes("min(5"), "turn answer must require at least 5 characters");
-  assert.ok(src.includes("Math.max(0, Math.min(100"), "turn evaluation must clamp scores to [0, 100]");
+  assert.ok(route.includes("MockInterviewEngineV2.evaluateAndGenerateNext"));
+  assert.ok(route.includes("evaluation.nextQuestion"));
+  assert.ok(route.includes("evaluation.nextDifficulty"));
+  assert.ok(engine.includes("mockTurnEvaluationSchema"));
+  assert.ok(engine.includes("nextQuestion: z.string().trim().min(1).max(5_000).nullable()"));
+
+  const structuredCalls = (route.match(/runMockInterviewStructured/g) || []).length;
+  assert.equal(structuredCalls, 0, "route should delegate one combined AI cycle to the v2 engine");
 });
 
-test("mock interview finish route is idempotent for COMPLETED sessions", () => {
-  const finishRoutePath = path.resolve(process.cwd(), "src/app/api/assessment/mock-interview/finish/route.ts");
-  const src = fs.readFileSync(finishRoutePath, "utf-8");
-
-  assert.ok(src.includes("interviewSession.status === 'COMPLETED'"), "finish route must handle already-completed sessions idempotently");
-  assert.ok(src.includes("MOCK_INTERVIEW_COMPLETED"), "finish route must record completion audit event");
+test("turn API is idempotent and never advances from stale state", () => {
+  const route = read("src/app/api/assessment/mock-interview/turn/route.ts");
+  assert.ok(route.includes("candidateAnswerTranscript !== null"));
+  assert.ok(route.includes("questionIndex !== interviewSession.currentQuestionIndex"));
+  assert.ok(route.includes("candidateAnswerTranscript: null"));
+  assert.ok(route.includes("currentQuestionIndex: questionIndex"));
+  assert.ok(route.includes("updateMany"));
 });
 
+test("final report needs repeated evidence before estimating a level", () => {
+  const report = read("src/lib/mockInterview/MockInterviewReport.ts");
+  assert.ok(report.includes("levelSamples.length >= 2"));
+  assert.ok(report.includes("evidenceConfidenceAverage >= 45"));
+  assert.ok(report.includes('"INSUFFICIENT_EVIDENCE"'));
+  assert.ok(report.includes("missingEvidence"));
+  assert.ok(report.includes("nextPracticePlan"));
+});
+
+test("practice output stays private and does not write SkillEvidence or employer decisions", () => {
+  const finish = read("src/app/api/assessment/mock-interview/finish/route.ts");
+  const turn = read("src/app/api/assessment/mock-interview/turn/route.ts");
+  const start = read("src/app/api/assessment/mock-interview/start/route.ts");
+
+  for (const source of [start, turn, finish]) {
+    assert.ok(!source.includes("skillEvidence.create"));
+    assert.ok(!source.includes("skillEvidence.update"));
+    assert.ok(!source.includes("application.update"));
+    assert.ok(!source.includes("SELECTED"));
+    assert.ok(!source.includes("REJECTED"));
+  }
+  assert.ok(finish.includes("technicalScore: null"));
+  assert.ok(finish.includes("communicationScore: null"));
+  assert.ok(finish.includes("finalReport"));
+});
+
+test("completed session is idempotent and finish cannot complete an unfinished interview", () => {
+  const finish = read("src/app/api/assessment/mock-interview/finish/route.ts");
+  assert.ok(finish.includes('interviewSession.status === "COMPLETED"'));
+  assert.ok(finish.includes("Complete the planned interview questions"));
+  assert.ok(finish.includes("MOCK_INTERVIEW_COMPLETED"));
+});
+
+test("candidate session API enforces ownership and exposes v2 provenance", () => {
+  const route = read("src/app/api/assessment/mock-interview/session/route.ts");
+  assert.ok(route.includes('auth.role !== "CANDIDATE"'));
+  assert.ok(route.includes("candidateProfileId !== candidateProfile.id"));
+  assert.ok(route.includes("personaVersion") || route.includes("rubricVersion"));
+  assert.ok(route.includes("evidenceConfidence"));
+  assert.ok(route.includes("transcriptConfidence"));
+  assert.ok(route.includes("finalReport"));
+});
+
+test("text v2 UI keeps immediate practice feedback but no browser speech-recognition shortcut", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+
+  assert.ok(active.includes("Practice response reviewed"));
+  assert.ok(active.includes("One answer does not determine your final level"));
+  assert.ok(active.includes("Your response"));
+  assert.ok(!active.includes("webkitSpeechRecognition"));
+  assert.ok(!active.includes("SpeechRecognition"));
+  assert.ok(!setup.includes("navigator.mediaDevices"));
+});
+
+test("summary uses typed-response wording and evidence based level guidance", () => {
+  const summary = read("src/app/ai/mock-interview/summary/page.tsx");
+  assert.ok(summary.includes("Your typed response"));
+  assert.ok(summary.includes("Declared starting level"));
+  assert.ok(summary.includes("Estimated level"));
+  assert.ok(summary.includes("Missing or partial evidence"));
+  assert.ok(summary.includes("Next practice plan"));
+  assert.ok(!summary.includes("Your Recorded Response"));
+  assert.ok(!summary.includes("Fluency & Technical Practice Summary"));
+});
+
+test("mock interview v2 migration is additive and seeds persisted persona configuration", () => {
+  const migration = read(
+    "prisma/migrations/20261005093000_mock_interview_v2/migration.sql",
+  );
+  assert.ok(migration.includes('CREATE TABLE IF NOT EXISTS "MockInterviewPersona"'));
+  assert.ok(migration.includes('ADD COLUMN IF NOT EXISTS "declaredSeniority"'));
+  assert.ok(migration.includes('ADD COLUMN IF NOT EXISTS "finalReport"'));
+  assert.ok(migration.includes("ON CONFLICT"));
+  assert.ok(migration.includes('ENABLE ROW LEVEL SECURITY'));
+  assert.ok(!migration.includes("DROP TABLE"));
+  assert.ok(!migration.includes("DROP COLUMN"));
+});

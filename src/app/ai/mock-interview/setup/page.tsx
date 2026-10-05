@@ -1,53 +1,242 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Sparkles, ShieldCheck, ArrowRight, Clock, History, AlertCircle } from "lucide-react";
+import {
+  Sparkles,
+  ShieldCheck,
+  ArrowRight,
+  Clock,
+  History,
+  AlertCircle,
+  Search,
+  Mic2,
+  Keyboard,
+  Volume2,
+} from "lucide-react";
+
+type RoleOption = {
+  title: string;
+  department: string;
+  industry?: string;
+};
+
+type SessionSummary = {
+  id: string;
+  roleTarget: string;
+  declaredSeniority: string | null;
+  roleFamily: string | null;
+  status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+  mode: "TEXT" | "VOICE";
+  overallScore: number | null;
+  estimatedLevel: string | null;
+  levelConfidence: number | null;
+  createdAt: string;
+};
+
+type VoiceReadiness = {
+  ready: boolean;
+  code: string;
+  message: string;
+  personaName: string | null;
+};
+
+const SENIORITY_OPTIONS = [
+  "Junior",
+  "Mid-Level",
+  "Senior",
+  "Staff/Lead",
+] as const;
+
+const INTERVIEW_LENGTHS = [
+  { count: 3, label: "Short", detail: "3 questions" },
+  { count: 5, label: "Standard", detail: "5 questions" },
+  { count: 8, label: "Comprehensive", detail: "8 questions" },
+] as const;
 
 export default function MockInterviewSetupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roleFromAssessment = searchParams.get("role")?.trim() || "";
-  const focusSkills = (searchParams.get("focus") || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .slice(0, 6);
+  const focusSkills = useMemo(
+    () =>
+      (searchParams.get("focus") || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .slice(0, 6),
+    [searchParams],
+  );
+
   const [roleTarget, setRoleTarget] = useState(roleFromAssessment);
-  const [seniority, setSeniority] = useState("Senior");
-  const [totalQuestions, setTotalQuestions] = useState(3);
+  const [seniority, setSeniority] =
+    useState<(typeof SENIORITY_OPTIONS)[number]>("Senior");
+  const [totalQuestions, setTotalQuestions] = useState<number>(5);
+  const [practiceContext, setPracticeContext] = useState("");
+  const [mode, setMode] = useState<"TEXT" | "VOICE">("TEXT");
+  const [voiceReadiness, setVoiceReadiness] =
+    useState<VoiceReadiness | null>(null);
+  const [checkingVoice, setCheckingVoice] = useState(false);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(true);
+  const [roleError, setRoleError] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [pastSessions, setPastSessions] = useState<any[]>([]);
+  const [pastSessions, setPastSessions] = useState<SessionSummary[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [historyError, setHistoryError] = useState("");
   const startRequestKey = useRef<string | null>(null);
 
-  // Load candidate's past sessions for history overview
   useEffect(() => {
+    startRequestKey.current = null;
+  }, [roleTarget, seniority, totalQuestions, practiceContext, mode]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsLoadingRoles(true);
+        setRoleError("");
+        const params = new URLSearchParams({ type: "roles" });
+        if (roleTarget.trim()) params.set("q", roleTarget.trim());
+        const res = await fetch(`/api/skill-master?${params.toString()}`, {
+          signal: controller.signal,
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Role catalogue is unavailable.");
+        const data = (await res.json()) as { roles?: RoleOption[] };
+        setRoleOptions(Array.isArray(data.roles) ? data.roles : []);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setRoleError(
+          error instanceof Error
+            ? error.message
+            : "Role catalogue could not be loaded.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingRoles(false);
+      }
+    }, roleTarget.trim() ? 250 : 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [roleTarget]);
+
+  useEffect(() => {
+    const controller = new AbortController();
     async function loadHistory() {
       try {
-        const res = await fetch("/api/assessment/mock-interview/session");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.sessions)) {
-            setPastSessions(data.sessions);
-          }
+        const res = await fetch("/api/assessment/mock-interview/session", {
+          signal: controller.signal,
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Practice history could not be loaded.");
+        const data = (await res.json()) as {
+          success?: boolean;
+          sessions?: SessionSummary[];
+        };
+        if (data.success && Array.isArray(data.sessions)) {
+          setPastSessions(data.sessions);
         }
       } catch (error) {
-        setHistoryError(error instanceof Error ? error.message : "Practice history could not be loaded.");
+        if (controller.signal.aborted) return;
+        setHistoryError(
+          error instanceof Error
+            ? error.message
+            : "Practice history could not be loaded.",
+        );
       } finally {
-        setIsLoadingHistory(false);
+        if (!controller.signal.aborted) setIsLoadingHistory(false);
       }
     }
-    loadHistory();
+    void loadHistory();
+    return () => controller.abort();
   }, []);
 
-  const handleStartInterview = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (mode !== "VOICE") {
+      setVoiceReadiness(null);
+      setCheckingVoice(false);
+      return;
+    }
+
     if (!roleTarget.trim()) {
-      setErrorMessage("Please enter a target role.");
+      setVoiceReadiness({
+        ready: false,
+        code: "ROLE_REQUIRED",
+        message: "Select a target role before checking Voice Mode.",
+        personaName: null,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCheckingVoice(true);
+      try {
+        const params = new URLSearchParams({ role: roleTarget.trim() });
+        const res = await fetch(
+          `/api/assessment/mock-interview/voice/readiness?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        const data = (await res.json().catch(() => null)) as
+          | ({ success?: boolean; error?: string } & Partial<VoiceReadiness>)
+          | null;
+
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.error || "Voice Mode readiness could not be checked.",
+          );
+        }
+
+        setVoiceReadiness({
+          ready: Boolean(data.ready),
+          code: data.code || "UNAVAILABLE",
+          message: data.message || "Voice Mode is unavailable.",
+          personaName: data.personaName || null,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setVoiceReadiness({
+          ready: false,
+          code: "READINESS_ERROR",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Voice Mode readiness could not be checked.",
+          personaName: null,
+        });
+      } finally {
+        if (!controller.signal.aborted) setCheckingVoice(false);
+      }
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mode, roleTarget]);
+
+  const handleStartInterview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!roleTarget.trim()) {
+      setErrorMessage("Please enter or select a target role.");
+      return;
+    }
+    if (mode === "VOICE" && !voiceReadiness?.ready) {
+      setErrorMessage(
+        voiceReadiness?.message ||
+          "Voice Mode is not ready for this interviewer.",
+      );
       return;
     }
 
@@ -55,45 +244,74 @@ export default function MockInterviewSetupPage() {
     setErrorMessage(null);
 
     try {
-      const fullRoleTarget = `${seniority} ${roleTarget.trim()}`;
-      const idempotencyKey = startRequestKey.current || crypto.randomUUID();
+      const idempotencyKey =
+        startRequestKey.current || crypto.randomUUID();
       startRequestKey.current = idempotencyKey;
+
       const res = await fetch("/api/assessment/mock-interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           idempotencyKey,
-          roleTarget: fullRoleTarget,
-          totalQuestions: Number(totalQuestions),
+          roleTarget: roleTarget.trim(),
+          declaredSeniority: seniority,
+          totalQuestions,
           focusSkills,
+          practiceContext: practiceContext.trim() || null,
+          mode,
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            error?: string;
+            session?: { id: string };
+          }
+        | null;
 
       if (res.status === 402) {
         router.push("/credits?returnTo=mock-interview");
         return;
       }
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to start mock interview session.");
+      if (!res.ok || !data?.success || !data.session?.id) {
+        throw new Error(
+          data?.error || "Failed to start mock interview session.",
+        );
       }
 
-      router.push(`/ai/mock-interview/active?sessionId=${data.session.id}`);
-    } catch (err: any) {
-      setErrorMessage(err.message || "An unexpected error occurred. Please try again.");
+      router.push(
+        `/ai/mock-interview/active?sessionId=${data.session.id}`,
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again.",
+      );
       setIsStarting(false);
     }
   };
 
+  const startDisabled =
+    isStarting ||
+    !roleTarget.trim() ||
+    (mode === "VOICE" &&
+      (checkingVoice || voiceReadiness?.ready !== true));
+
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col">
-      {/* Top Header */}
       <header className="h-[64px] border-b border-white/10 px-6 flex items-center justify-between bg-[#121212]/80 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-1 font-bold text-xl tracking-tight">
-            <span>Hire<span className="text-[#C5221F]">Go</span></span>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1 font-bold text-xl tracking-tight"
+          >
+            <span>
+              Hire<span className="text-[#C5221F]">Go</span>
+            </span>
             <span className="text-[#4285F4]">AI</span>
           </Link>
           <span className="text-white/30">|</span>
@@ -102,252 +320,386 @@ export default function MockInterviewSetupPage() {
             AI Practice Studio
           </span>
         </div>
-
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="text-xs text-white/60 hover:text-white transition-colors"
-          >
-            Dashboard
-          </Link>
-        </div>
+        <Link
+          href="/dashboard"
+          className="text-xs text-white/60 hover:text-white transition-colors"
+        >
+          Dashboard
+        </Link>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-6 md:p-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-white mb-2 flex items-center gap-2.5">
-            Technical Mock Interview Setup
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
+            Adaptive Mock Interview
           </h1>
-          <p className="text-sm text-white/60 max-w-2xl">
-            Practice role-relevant interview questions in a text-only session. Type your answers, receive structured turn-by-turn feedback, and track your practice progression.
+          <p className="text-sm text-white/60 max-w-3xl">
+            Practice in Text Mode or, when production voice infrastructure is
+            configured, a real turn-based Voice Mode. HireGo adapts from
+            demonstrated evidence rather than trusting a self-declared level.
           </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Setup Form */}
-          <div className="lg:col-span-7 bg-[#141414] border border-white/10 rounded-2xl p-6 shadow-xl">
+          <section className="lg:col-span-8 bg-[#141414] border border-white/10 rounded-2xl p-6 shadow-xl">
             <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#C5221F]" /> Interview Parameters
+              <Sparkles className="w-4 h-4 text-[#C5221F]" />
+              Interview Parameters
             </h2>
 
             {focusSkills.length > 0 && (
               <div className="mb-6 rounded-xl border border-[#4285F4]/30 bg-[#4285F4]/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#8AB4F8]">Practice focus from Skill Validation</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#8AB4F8]">
+                  Practice focus from Skill Validation
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {focusSkills.map((skill) => (
-                    <span key={skill} className="rounded-full border border-[#4285F4]/30 bg-black/20 px-3 py-1.5 text-xs text-white">
+                    <span
+                      key={skill}
+                      className="rounded-full border border-[#4285F4]/30 bg-black/20 px-3 py-1.5 text-xs text-white"
+                    >
                       {skill}
                     </span>
                   ))}
                 </div>
                 <p className="mt-3 text-[11px] leading-relaxed text-white/50">
-                  These focus areas guide practice questions only. Mock Interview performance does not rewrite your historical Skill Validation score.
+                  This session cannot overwrite historical skill validation or
+                  employer decisions.
                 </p>
               </div>
             )}
 
             {errorMessage && (
-              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-3">
+              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center gap-3">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
             <form onSubmit={handleStartInterview} className="space-y-6">
-              {/* Role Target */}
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
+                  Practice Mode
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setMode("TEXT")}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      mode === "TEXT"
+                        ? "border-[#C5221F]/70 bg-[#C5221F]/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Keyboard className="h-4 w-4 text-[#C5221F]" />
+                      <span className="text-sm font-bold">Text Practice</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-white/50">
+                      Type each answer and receive immediate turn-by-turn
+                      coaching.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMode("VOICE")}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      mode === "VOICE"
+                        ? "border-[#4285F4]/70 bg-[#4285F4]/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mic2 className="h-4 w-4 text-[#4285F4]" />
+                      <span className="text-sm font-bold">Real Voice Mode</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-white/50">
+                      Hear the interviewer, answer by voice, and receive the
+                      detailed evaluation only after the interview.
+                    </p>
+                  </button>
+                </div>
+
+                {mode === "VOICE" && (
+                  <div
+                    className={`mt-3 rounded-xl border p-3 text-xs ${
+                      voiceReadiness?.ready
+                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200"
+                        : "border-amber-500/20 bg-amber-500/5 text-amber-200"
+                    }`}
+                  >
+                    {checkingVoice
+                      ? "Checking Whisper, interviewer voice, and TTS routing..."
+                      : voiceReadiness?.message ||
+                        "Select a role to check Voice Mode."}
+                    {voiceReadiness?.personaName && (
+                      <span className="ml-1 font-bold">
+                        Interviewer: {voiceReadiness.personaName}.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
                   Target Role
                 </label>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {[
-                    "Full Stack Engineer",
-                    "Frontend Architect",
-                    "Backend Systems",
-                    "AI / ML Engineer",
-                  ].map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => setRoleTarget(role)}
-                      className={`text-left text-xs px-3.5 py-2.5 rounded-lg border transition-all ${
-                        roleTarget === role
-                          ? "border-[#C5221F] bg-[#C5221F]/10 text-white font-semibold"
-                          : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-white/35" />
+                  <input
+                    type="text"
+                    value={roleTarget}
+                    onChange={(event) => setRoleTarget(event.target.value)}
+                    placeholder="Search or enter your target role"
+                    maxLength={120}
+                    className="w-full text-sm bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#C5221F] transition-colors"
+                    required
+                  />
                 </div>
-                <input
-                  type="text"
-                  value={roleTarget}
-                  onChange={(e) => setRoleTarget(e.target.value)}
-                  placeholder="Or enter custom role (e.g. AI Systems Architect)"
-                  maxLength={100}
-                  className="w-full text-sm bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#C5221F] transition-colors"
-                  required
-                />
+
+                <div className="mt-3 min-h-[42px]">
+                  {isLoadingRoles ? (
+                    <p className="text-xs text-white/40">
+                      Loading role catalogue...
+                    </p>
+                  ) : roleError ? (
+                    <p className="text-xs text-amber-300">{roleError}</p>
+                  ) : roleOptions.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {roleOptions.slice(0, 8).map((role) => (
+                        <button
+                          key={role.title}
+                          type="button"
+                          onClick={() => setRoleTarget(role.title)}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-white/75 hover:border-[#4285F4]/50 hover:text-white"
+                          title={[role.department, role.industry]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        >
+                          {role.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/40">
+                      No catalogue match. You can still use a custom role.
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* Seniority Level */}
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Seniority Level
+                  Starting Seniority
                 </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {["Junior", "Mid-Level", "Senior", "Staff/Lead"].map((lvl) => (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {SENIORITY_OPTIONS.map((level) => (
                     <button
-                      key={lvl}
+                      key={level}
                       type="button"
-                      onClick={() => setSeniority(lvl)}
+                      onClick={() => setSeniority(level)}
                       className={`text-center text-xs py-2.5 rounded-lg border transition-all ${
-                        seniority === lvl
+                        seniority === level
                           ? "border-[#C5221F] bg-[#C5221F]/10 text-white font-semibold"
                           : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
                       }`}
                     >
-                      {lvl}
+                      {level}
                     </button>
                   ))}
                 </div>
+                <p className="mt-2 text-[11px] text-white/40">
+                  This is a starting hypothesis only. Difficulty moves from
+                  demonstrated practice evidence.
+                </p>
               </div>
 
-              {/* Question Count */}
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
                   Interview Length
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { count: 3, label: "Short (3 Qs)", time: "~10 mins" },
-                    { count: 5, label: "Standard (5 Qs)", time: "~20 mins" },
-                    { count: 8, label: "Comprehensive (8 Qs)", time: "~35 mins" },
-                  ].map((len) => (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {INTERVIEW_LENGTHS.map((option) => (
                     <button
-                      key={len.count}
+                      key={option.count}
                       type="button"
-                      onClick={() => setTotalQuestions(len.count)}
+                      onClick={() => setTotalQuestions(option.count)}
                       className={`text-left p-3 rounded-xl border transition-all ${
-                        totalQuestions === len.count
+                        totalQuestions === option.count
                           ? "border-[#C5221F] bg-[#C5221F]/10 text-white"
                           : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
                       }`}
                     >
-                      <div className="text-xs font-bold text-white mb-0.5">{len.label}</div>
+                      <div className="text-xs font-bold text-white mb-1">
+                        {option.label}
+                      </div>
                       <div className="text-[11px] text-white/40 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {len.time}
+                        <Clock className="w-3 h-3" /> {option.detail}
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Text-Based Evaluation Notice */}
+              <div>
+                <label
+                  htmlFor="practice-context"
+                  className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2"
+                >
+                  What do you want help with?{" "}
+                  <span className="text-white/35">Optional</span>
+                </label>
+                <textarea
+                  id="practice-context"
+                  value={practiceContext}
+                  onChange={(event) =>
+                    setPracticeContext(event.target.value)
+                  }
+                  maxLength={2_000}
+                  rows={3}
+                  placeholder="Example: I struggle to explain system-design trade-offs clearly."
+                  className="w-full text-sm bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#4285F4] transition-colors resize-y"
+                />
+              </div>
+
               <div className="p-4 rounded-xl bg-black/30 border border-white/5 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <ShieldCheck className="w-4 h-4" />
+                  {mode === "VOICE" ? (
+                    <Volume2 className="w-4 h-4" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4" />
+                  )}
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-white">Text-Based Practice Evaluation</div>
+                  <div className="text-xs font-bold text-white">
+                    Private adaptive practice
+                  </div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
-                    Questions are generated based on your selected role, claimed skills, and optional Skill Validation focus areas. Type your answers to receive structured practice feedback.
+                    {mode === "VOICE"
+                      ? "Voice answers are transcribed through the approved Whisper worker. Low-confidence transcripts are repeated instead of scored, and raw turn audio is transient rather than stored by this flow."
+                      : "HireGo uses role context and your answers to adapt questions without inferring emotion, personality, or protected traits."}
                   </div>
                 </div>
               </div>
 
-              {/* Start Button */}
               <button
                 type="submit"
-                disabled={isStarting}
-                className="w-full h-12 rounded-xl bg-[#C5221F] hover:bg-[#A31816] text-white font-bold text-sm tracking-wide uppercase flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={startDisabled}
+                className="w-full h-12 rounded-xl bg-[#C5221F] hover:bg-[#A31816] text-white font-bold text-sm tracking-wide uppercase flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isStarting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Preparing Tailored Questions...
+                    Preparing Interview...
+                  </>
+                ) : mode === "VOICE" ? (
+                  <>
+                    Start Voice Interview <Mic2 className="w-4 h-4" />
                   </>
                 ) : (
                   <>
-                    Start Practice Interview <ArrowRight className="w-4 h-4" />
+                    Start Adaptive Interview{" "}
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </form>
-          </div>
+          </section>
 
-          {/* Sidebar / History & Guidelines (Col 3) */}
-          <div className="space-y-6">
-            {/* Guidelines Card */}
+          <aside className="lg:col-span-4 space-y-6">
             <div className="bg-[#161616] border border-white/10 rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-white/70 font-bold">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Practice Evaluation Ethics
+                How calibration works
               </div>
-              <ul className="text-xs text-white/60 space-y-2.5 leading-relaxed">
-                <li className="flex items-start gap-2">
-                  <span className="text-[#C5221F] font-bold">•</span>
-                  <span><strong>Defensible Metrics:</strong> Feedback focuses on technical clarity, answer structure, and conciseness.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[#C5221F] font-bold">•</span>
-                  <span><strong>No Deceptive AI:</strong> We do not infer emotional or psychological states from video/audio.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-[#C5221F] font-bold">•</span>
-                  <span><strong>Private Practice:</strong> Scores are private practice feedback and are not submitted to employers by this practice flow.</span>
-                </li>
-              </ul>
+              <div className="space-y-3 text-xs text-white/60 leading-relaxed">
+                <p>
+                  The interviewer starts around your selected level, then moves
+                  difficulty up or down from demonstrated evidence.
+                </p>
+                <p>
+                  Weak or incomplete evidence triggers a simpler or guided
+                  follow-up rather than an automatic negative judgment.
+                </p>
+                <p>
+                  Final level guidance appears only after enough consistent
+                  evidence across multiple turns.
+                </p>
+              </div>
             </div>
 
-            {/* Past Practice Sessions */}
             <div className="bg-[#161616] border border-white/10 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/70 font-bold">
                   <History className="w-4 h-4 text-[#4285F4]" />
-                  Recent Practice Sessions
+                  Recent Practice
                 </div>
-                <span className="text-[11px] text-white/40">({pastSessions.length})</span>
+                <span className="text-[11px] text-white/40">
+                  {pastSessions.length}
+                </span>
               </div>
 
               {isLoadingHistory ? (
-                <div className="text-xs text-white/40 py-4 text-center">Loading past sessions...</div>
+                <div className="text-xs text-white/40 py-4 text-center">
+                  Loading past sessions...
+                </div>
               ) : historyError ? (
-                <div role="alert" className="text-xs text-red-300 py-4 text-center">{historyError}</div>
+                <div
+                  role="alert"
+                  className="text-xs text-red-300 py-4 text-center"
+                >
+                  {historyError}
+                </div>
               ) : pastSessions.length === 0 ? (
                 <div className="text-xs text-white/40 py-4 text-center leading-relaxed">
                   No previous practice sessions found.
                 </div>
               ) : (
-                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                  {pastSessions.slice(0, 5).map((s: any) => (
-                    <Link
-                      key={s.id}
-                      href={`/ai/mock-interview/summary?sessionId=${s.id}`}
-                      className="block p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/20 transition-all text-left group"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-white group-hover:text-[#4285F4] transition-colors truncate max-w-[140px]">
-                          {s.roleTarget}
-                        </span>
-                        {s.overallScore !== null && (
-                          <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                            {s.overallScore}/100
+                <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                  {pastSessions.slice(0, 6).map((practice) => {
+                    const href =
+                      practice.status === "COMPLETED"
+                        ? `/ai/mock-interview/summary?sessionId=${practice.id}`
+                        : `/ai/mock-interview/active?sessionId=${practice.id}`;
+                    return (
+                      <Link
+                        key={practice.id}
+                        href={href}
+                        className="block p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/20 transition-all text-left group"
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-1">
+                          <span className="text-xs font-semibold text-white group-hover:text-[#4285F4] transition-colors truncate">
+                            {practice.roleTarget}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-white/40">
-                        <span>{s.status === "COMPLETED" ? "Completed" : "In Progress"}</span>
-                        <span>{new Date(s.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </Link>
-                  ))}
+                          <span className="shrink-0 text-[10px] uppercase text-white/35">
+                            {practice.mode}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-white/40">
+                          <span>
+                            {practice.status === "COMPLETED"
+                              ? practice.estimatedLevel
+                                ? practice.estimatedLevel.replace("_", "/")
+                                : "Completed"
+                              : practice.status === "IN_PROGRESS"
+                                ? "Continue"
+                                : "Abandoned"}
+                          </span>
+                          <span>
+                            {new Date(
+                              practice.createdAt,
+                            ).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
-          </div>
+          </aside>
         </div>
       </main>
     </div>

@@ -62,7 +62,8 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
           </div>
         )}
         {kind === "pricing" && <PricingContent />}
-        {(kind === "enterprise" || kind === "post-job-public") && <EnterpriseContent />}
+        {kind === "enterprise" && <EnterpriseContent />}
+        {kind === "post-job-public" && <PostJobPublicContent />}
         {kind === "contact" && <ContactContent />}
         {kind === "about" && <AboutContent />}
         {kind === "company" && <CompanyContent />}
@@ -178,6 +179,57 @@ function PricingContent() {
     <section className="glass-card p-8 sm:p-10"><h2 className="text-3xl font-extrabold text-white">Which option fits your workflow?</h2><div className="mt-7 grid gap-5 md:grid-cols-3"><div><h3 className="font-bold text-white">Employer plans</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want job-posting and plan entitlements from the standard employer catalog.</p></div><div><h3 className="font-bold text-white">AI Hiring Co-Pilot</h3><p className="mt-2 text-sm leading-6 text-slate-400">For teams that want agentic assistance with permitted hiring operations and workflow coordination.</p></div><div><h3 className="font-bold text-white">Managed Hiring</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want HireGo to provide additional operational hiring support under agreed commercial terms.</p></div></div><div className="mt-8 flex flex-wrap gap-3"><Link href="/features" className="btn-primary-blue">Compare platform capabilities</Link><Link href="/contact" className="btn-primary-red">Contact HireGo</Link></div></section>
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-xs leading-6 text-slate-400">Displayed employer plan pricing comes from the current Admin-managed catalog and may change when an administrator updates that catalog. Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>.</div>
   </div>;
+}
+
+function PostJobPublicContent() {
+  return (
+    <div className="space-y-10">
+      <section className="grid gap-5 md:grid-cols-3">
+        {[
+          ["1", "Create your employer account", "Set up your company workspace and complete the required verification steps."],
+          ["2", "Create the role", "Add the title, location, requirements, work mode, openings and hiring process."],
+          ["3", "Publish and manage hiring", "Publish an eligible role, review applicants and keep screening, assessments and interviews in one workflow."],
+        ].map(([number, title, description]) => (
+          <article key={number} className="glass-card p-7">
+            <span className="font-mono text-sm text-[#82b1ff]">{number}</span>
+            <h2 className="mt-4 text-xl font-bold text-white">{title}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
+          </article>
+        ))}
+      </section>
+      <section className="glass-card p-8 text-center sm:p-10">
+        <h2 className="text-3xl font-extrabold text-white">Ready to post your job?</h2>
+        <p className="mx-auto mt-4 max-w-2xl leading-7 text-slate-400">
+          New employers can create a workspace first. Existing employers can sign in and continue directly to the job-creation workflow.
+        </p>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <Link href="/employer/employer-registration-company-info" className="btn-primary-red">
+            Create Employer Account
+          </Link>
+          <Link href="/employer/employer-sign-in?redirect=%2Femployer%2Fcreate-job-basic-info" className="btn-primary-blue">
+            Sign In & Post a Job
+          </Link>
+        </div>
+      </section>
+      <section className="grid gap-5 lg:grid-cols-2">
+        <article className="glass-card p-8">
+          <h2 className="text-2xl font-bold text-white">Structured from the first step</h2>
+          <p className="mt-4 leading-7 text-slate-400">
+            Keep role requirements, candidate evidence, assessments, interviews and progress connected instead of moving the hiring process across disconnected tools.
+          </p>
+        </article>
+        <article className="glass-card p-8">
+          <h2 className="text-2xl font-bold text-white">Need HireGo to operate the hiring workflow?</h2>
+          <p className="mt-4 leading-7 text-slate-400">
+            Employers that need additional recruiting capacity can also use Managed Hiring under agreed Pay Per Hire terms.
+          </p>
+          <Link href="/pay-per-hire" className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">
+            Explore Managed Hiring →
+          </Link>
+        </article>
+      </section>
+    </div>
+  );
 }
 
 function EnterpriseContent() { return <div className="grid gap-8 lg:grid-cols-2"><div className="glass-card p-8"><h2 className="text-2xl font-bold">A hiring system your team can trust</h2><p className="mt-4 leading-7 text-slate-400">Standardise role requirements, keep evaluation evidence together, and give every interviewer the context they need.</p></div><div className="glass-card p-8"><h2 className="text-2xl font-bold">Ready for your workflow</h2><p className="mt-4 leading-7 text-slate-400">Connect your existing process to HireGo through secure APIs and clear permissions. No forced rip-and-replace.</p></div><div className="lg:col-span-2 text-center"><Link href="/contact" className="btn-primary-blue">Talk to our team</Link></div></div>; }
