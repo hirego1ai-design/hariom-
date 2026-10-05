@@ -16,6 +16,16 @@ enum Role {
   ADMIN
 }
 
+enum AiArtifactStage {
+  DRAFT
+  SHADOW
+  EVALUATED
+  APPROVED
+  CANARY
+  PRODUCTION
+  ROLLED_BACK
+}
+
 enum EditorialContentType {
   BLOG
   PRESS_RELEASE
@@ -196,6 +206,7 @@ model User {
   candidateTagsCreated          EmployerCandidateTag[]
   candidateCollectionsCreated   EmployerCandidateCollection[]
   sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
+  aiPreference                 UserAiPreference?
 
   @@index([phoneNumber])
 }
@@ -3058,4 +3069,112 @@ model MockInterviewTurn {
   createdAt                 DateTime             @default(now())
 
   @@unique([sessionId, questionIndex])
+}
+
+
+// ── HireGo Intelligence Foundation ────────────────────────────────────────────
+// Additive only. Existing PostgreSQL hiring/business tables remain authoritative.
+
+model UserAiPreference {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredLanguage    String?
+  autoDetectLanguage   Boolean  @default(true)
+  allowCodeSwitching   Boolean  @default(true)
+  preferredVoiceKey    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([preferredLanguage])
+}
+
+model SemanticMemoryRecord {
+  id                  String           @id @default(uuid())
+  dedupeKey           String           @unique
+  userId              String?
+  companyId           String?
+  scopeLevel          MemoryScopeLevel
+  scopeId             String
+  agentId             String
+  memoryType          MemoryType       @default(KNOWLEDGE)
+  sourceType          String
+  sourceId            String?
+  content             String           @db.Text
+  metadata            Json?
+  embeddingModel      String
+  embeddingDimensions Int
+  embedding           Unsupported("vector")?
+  expiresAt           DateTime?
+  isAnonymized        Boolean          @default(false)
+  consentState        String           @default("NOT_REQUIRED")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([companyId, scopeLevel, scopeId])
+  @@index([userId, scopeLevel, scopeId])
+  @@index([embeddingModel, embeddingDimensions])
+  @@index([expiresAt])
+}
+
+model LearningEvent {
+  id                    String   @id @default(uuid())
+  idempotencyKey        String   @unique
+  correlationId         String
+  actorUserId           String?
+  actorRole             Role?
+  companyId             String?
+  channel               String
+  feature               String
+  task                  String
+  modelProvider         String?
+  modelId               String?
+  promptVersion         String?
+  evidenceRefs          Json?
+  aiOutput              Json?
+  correction            Json?
+  acceptedResult        Json?
+  outcome               Json?
+  explicitRating        Int?
+  consentState          String   @default("NOT_REQUIRED")
+  containsSensitiveData Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  @@index([companyId, feature, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([correlationId])
+  @@index([task, createdAt])
+}
+
+model AiArtifactVersion {
+  id              String          @id @default(uuid())
+  artifactType    String
+  artifactKey     String
+  version         String
+  stage           AiArtifactStage @default(DRAFT)
+  config          Json
+  createdBy       String
+  approvedBy      String?
+  rollbackOf      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  evaluationRuns AiEvaluationRun[]
+
+  @@unique([artifactType, artifactKey, version])
+  @@index([artifactType, artifactKey, stage])
+}
+
+model AiEvaluationRun {
+  id                String            @id @default(uuid())
+  artifactVersionId String
+  artifactVersion   AiArtifactVersion @relation(fields: [artifactVersionId], references: [id], onDelete: Cascade)
+  suite             String
+  scores            Json
+  passed            Boolean
+  notes             String?
+  createdAt         DateTime          @default(now())
+
+  @@index([artifactVersionId, createdAt])
+  @@index([suite, passed, createdAt])
 }
