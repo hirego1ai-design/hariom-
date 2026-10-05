@@ -10,6 +10,11 @@ function EmployerSignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roleParam = searchParams.get("role");
+  const redirectParam = searchParams.get("redirect");
+  const safeRedirect =
+    redirectParam?.startsWith("/employer/") && !redirectParam.startsWith("//")
+      ? redirectParam
+      : "/employer/dashboard";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -59,7 +64,7 @@ function EmployerSignInContent() {
         return;
       }
 
-      router.replace("/employer/dashboard");
+      router.replace(safeRedirect);
       router.refresh();
     } catch {
       setError("Unable to sign in right now. Please try again.");
