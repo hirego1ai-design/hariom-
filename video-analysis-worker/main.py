@@ -7,12 +7,13 @@ import tempfile
 import subprocess
 import requests
 import threading
+import hmac
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, Header, HTTPException, BackgroundTasks, Depends, UploadFile, File
 from pydantic import BaseModel
 
-app = FastAPI(title="HireGo Video Analysis Worker", version="1.0.0")
+app = FastAPI(title="HireGo Video Analysis Worker", version="1.1.0")
 
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
@@ -105,7 +106,7 @@ def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {INTERNAL_TOKEN}"
-    if authorization != expected:
+    if not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.post("/transcribe-turn")
