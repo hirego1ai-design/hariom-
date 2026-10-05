@@ -204,8 +204,8 @@ export async function POST(request: Request) {
             text: evaluation.nextQuestion,
             questionIndex: nextIndex,
             difficulty: evaluation.nextDifficulty,
-            competency: evaluation.competency,
-            skillTags: evaluation.skillTags,
+            competency: evaluation.nextCompetency ?? evaluation.competency,
+            skillTags: evaluation.nextSkillTags.length ? evaluation.nextSkillTags : evaluation.skillTags,
           }
         : undefined;
 
@@ -290,6 +290,8 @@ export async function POST(request: Request) {
         difficultyAdjustment: evaluation.difficultyAdjustment,
         nextDifficulty: evaluation.nextDifficulty,
         supportMode: evaluation.supportMode,
+        nextCompetency: evaluation.nextCompetency,
+        nextSkillTags: evaluation.nextSkillTags,
       },
       acceptedResult: {
         nextQuestionCreated: Boolean(nextQuestionData),
