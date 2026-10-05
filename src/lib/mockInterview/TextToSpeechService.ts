@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/AiRoutingConfig";
 import { assertSafeOutboundNetworkTarget } from "@/lib/security/outboundUrl";
 
-const MAX_TTS_INPUT_CHARS = 5_000;
+const MAX_TTS_INPUT_CHARS = 4_096;
 const MAX_TTS_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 export class TextToSpeechUnavailableError extends Error {
