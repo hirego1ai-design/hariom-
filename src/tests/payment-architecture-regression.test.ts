@@ -345,7 +345,7 @@ test("candidate mock interview is never debited through the generic candidate se
 
   assert.match(credits, /serviceKey: \{ notIn: \["mock-interview", "mock_interview"\] \}/);
   assert.match(genericService, /AI Mock Interview is charged only when an actual interview session starts/);
-  assert.match(mockStart, /mock-interview:\$\{candidateProfile\.id\}:\$\{idempotencyKey\}/);
+  assert.match(mockStart, /mock-interview:\$\{candidateProfile\.id\}:\$\{body\.idempotencyKey\}/);
   assert.match(mockStart, /balance: \{ decrement: mockService\.creditCost \}/);
 });
 
