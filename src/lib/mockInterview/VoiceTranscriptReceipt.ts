@@ -17,12 +17,14 @@ const receiptSchema = z.object({
   questionIndex: z.number().int().min(0).max(50),
   transcript: z.string().trim().min(1).max(10_000),
   detectedLanguage: z.string().trim().min(1).max(32),
-  confidence: z.number().finite().min(0).max(1),
-  durationSeconds: z.number().finite().min(0).max(300),
+  confidence: z.number().finite().min(0).max(1).nullable(),
+  durationSeconds: z.number().finite().min(0).max(300).nullable(),
   provider: z.string().trim().min(1).max(120),
   model: z.string().trim().min(1).max(160),
   versionLabel: z.string().trim().min(1).max(160),
-  workerVersion: z.string().trim().min(1).max(160),
+  workerVersion: z.string().trim().min(1).max(160).nullable(),
+  confirmedByCandidate: z.boolean().default(false),
+  transcriptSource: z.enum(["WORKER_CONFIDENT", "CANDIDATE_CONFIRMED"]),
   createdAt: z.string().datetime(),
 }).strict();
 
