@@ -84,6 +84,17 @@ export async function getMockVoiceReadiness(
         message: "Voice transcription worker is not healthy.",
       };
     }
+    const health = (await response.json().catch(() => null)) as
+      | { voiceTurnSupported?: boolean }
+      | null;
+    if (health?.voiceTurnSupported !== true) {
+      return {
+        ready: false,
+        code: "WORKER_UNAVAILABLE",
+        message:
+          "The transcription worker has not been upgraded for Voice Mock Interview yet.",
+      };
+    }
   } catch {
     return {
       ready: false,
