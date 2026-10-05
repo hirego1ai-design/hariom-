@@ -40,9 +40,12 @@ test("AI entry points enforce zero-trust prompt boundaries", () => {
   assert.match(router, /untrusted data/i);
 
   const interview = read("src/app/api/assessment/mock-interview/turn/route.ts");
-  assert.match(interview, /wrapUntrustedContent/);
-  assert.match(interview, /candidate-answer/);
-  assert.match(interview, /nextQuestionSchema/);
+  const interviewEngine = read("src/lib/mockInterview/MockInterviewEngineV2.ts");
+  assert.match(interview, /MockInterviewEngineV2\.evaluateAndGenerateNext/);
+  assert.match(interviewEngine, /wrapUntrustedContent/);
+  assert.match(interviewEngine, /"candidate-answer"/);
+  assert.match(interviewEngine, /nextQuestion:\s*z\.string/);
+  assert.match(interviewEngine, /schema:\s*mockTurnEvaluationSchema/);
 });
 
 test("critical candidate/admin render surfaces do not use raw HTML sinks", () => {
