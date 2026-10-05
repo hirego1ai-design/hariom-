@@ -17,7 +17,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.6-pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -52,8 +52,10 @@ jobs:
       - name: Build Railway background worker image
         run: docker build -f Dockerfile.recorded-assessment-scheduler -t hirego-background-worker:ci .
 
-      - name: Apply Prisma Migrations
-        run: npx prisma migrate deploy
+      - name: Apply Prisma Migrations to Isolated CI Database
+        run: bash scripts/run-isolated-ci-migrations.sh
+        env:
+          HIREGO_TEST_DATABASE: "1"
 
       - name: Run TypeScript Typecheck
         run: npx tsc --noEmit
@@ -70,7 +72,6 @@ jobs:
         run: npm run test:audit
 
       - name: Upload Production Wiring Audit Artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: production-wiring-audit

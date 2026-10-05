@@ -25,12 +25,12 @@ export class SecurityAuditDeliveryNotConfiguredError extends Error {}
 function getSiemConfiguration() {
   const endpoint = process.env.SIEM_WEBHOOK_URL?.trim();
   const token = process.env.SIEM_WEBHOOK_TOKEN?.trim();
-  if (!endpoint || !token) return null;
+  if (!endpoint || !token) return { mode: "internal" as const };
   const url = new URL(endpoint);
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("SIEM_WEBHOOK_URL must use HTTP or HTTPS.");
   if (url.username || url.password) throw new Error("SIEM_WEBHOOK_URL must not contain credentials.");
   if (process.env.NODE_ENV === "production" && url.protocol !== "https:") throw new Error("SIEM_WEBHOOK_URL must use HTTPS in production.");
-  return { url: url.toString(), token };
+  return { mode: "webhook" as const, url: url.toString(), token };
 }
 
 function isRetryableSiemStatus(status: number) {
@@ -82,19 +82,29 @@ export async function processSecurityAuditDeliveryBatch(
 ): Promise<SecurityAuditDeliveryReport> {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) throw new RangeError("Invalid security audit delivery batch size.");
   const config = getSiemConfiguration();
-  if (!config) {
-    if (options.requireConfiguration) throw new SecurityAuditDeliveryNotConfiguredError("SIEM delivery is not configured.");
-    const pending = await prisma.securityAuditOutboxEvent.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } });
-    return { configured: false, pending, delivered: 0, retried: 0, failed: 0, unclaimed: 0 };
+  if (options.requireConfiguration && config.mode === "internal") {
+    throw new SecurityAuditDeliveryNotConfiguredError("External SIEM delivery is not configured.");
   }
   const { leaseId, events } = await leaseSecurityAuditEvents(prisma, batchSize);
   const results: DeliveryResult[] = [];
   let nextIndex = 0;
   await Promise.all(Array.from({ length: Math.min(DELIVERY_CONCURRENCY, events.length) }, async () => {
-    while (nextIndex < events.length) results.push(await deliverEvent(events[nextIndex++], leaseId, config.url, config.token));
+    while (nextIndex < events.length) {
+      const event = events[nextIndex++];
+      if (!event) continue;
+      if (config.mode === "webhook") {
+        results.push(await deliverEvent(event, leaseId, config.url, config.token));
+        continue;
+      }
+      if (!(await renewSecurityAuditEventLease(prisma, event.id, leaseId))) {
+        results.push("unclaimed");
+        continue;
+      }
+      results.push((await markSecurityAuditEventDelivered(prisma, event.id, leaseId)) ? "delivered" : "unclaimed");
+    }
   }));
   return {
-    configured: true,
+    configured: config.mode === "webhook",
     pending: 0,
     delivered: results.filter((result) => result === "delivered").length,
     retried: results.filter((result) => result === "retried").length,
