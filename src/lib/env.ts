@@ -103,3 +103,68 @@ export function buildPublicAppUrl(path: string): string {
   return new URL(path, host).toString();
 }
 
+
+
+export function getMockInterviewVoiceConfig() {
+  const enabled = process.env.MOCK_INTERVIEW_VOICE_ENABLED === "true";
+  const maxSeconds = Number(process.env.MOCK_INTERVIEW_VOICE_MAX_SECONDS || 120);
+  const maxAudioBytes = Number(
+    process.env.MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES || 15 * 1024 * 1024,
+  );
+  const minTranscriptConfidence = Number(
+    process.env.MOCK_INTERVIEW_VOICE_MIN_TRANSCRIPT_CONFIDENCE || 0.65,
+  );
+
+  let workerUrl = process.env.VIDEO_ANALYSIS_WORKER_URL?.trim() || "http://localhost:8000";
+  let internalToken =
+    process.env.VIDEO_ANALYSIS_INTERNAL_TOKEN?.trim() ||
+    "dev-internal-token-change-in-prod";
+
+  if (enabled && process.env.NODE_ENV === "production") {
+    workerUrl = requireProductionEnv("VIDEO_ANALYSIS_WORKER_URL");
+    internalToken = requireProductionEnv("VIDEO_ANALYSIS_INTERNAL_TOKEN");
+    workerUrl = assertSafeHttpsServiceUrl(
+      "VIDEO_ANALYSIS_WORKER_URL",
+      workerUrl,
+    );
+
+    if (internalToken.length < 32) {
+      throw new Error(
+        "VIDEO_ANALYSIS_INTERNAL_TOKEN must contain at least 32 characters when Mock Interview Voice is enabled.",
+      );
+    }
+  }
+
+  if (!Number.isFinite(maxSeconds) || maxSeconds < 15 || maxSeconds > 300) {
+    throw new Error(
+      "MOCK_INTERVIEW_VOICE_MAX_SECONDS must be between 15 and 300.",
+    );
+  }
+  if (
+    !Number.isInteger(maxAudioBytes) ||
+    maxAudioBytes < 256 * 1024 ||
+    maxAudioBytes > 50 * 1024 * 1024
+  ) {
+    throw new Error(
+      "MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES must be between 256 KiB and 50 MiB.",
+    );
+  }
+  if (
+    !Number.isFinite(minTranscriptConfidence) ||
+    minTranscriptConfidence < 0.4 ||
+    minTranscriptConfidence > 0.95
+  ) {
+    throw new Error(
+      "MOCK_INTERVIEW_VOICE_MIN_TRANSCRIPT_CONFIDENCE must be between 0.4 and 0.95.",
+    );
+  }
+
+  return {
+    enabled,
+    workerUrl: workerUrl.replace(/\/$/, ""),
+    internalToken,
+    maxSeconds,
+    maxAudioBytes,
+    minTranscriptConfidence,
+  };
+}
