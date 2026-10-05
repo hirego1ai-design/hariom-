@@ -16,6 +16,7 @@ import {
   Target,
   Gauge,
   BookOpenCheck,
+  Volume2,
 } from "lucide-react";
 
 type EvidenceRow = {
@@ -73,6 +74,7 @@ type Session = {
   declaredSeniority: string | null;
   roleFamily: string | null;
   status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+  mode: "TEXT" | "VOICE";
   language: string;
   overallScore: number | null;
   estimatedLevel: string | null;
@@ -102,6 +104,8 @@ export default function MockInterviewSummaryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedTurn, setExpandedTurn] = useState<number | null>(0);
+  const [isPlayingFeedback, setIsPlayingFeedback] = useState(false);
+  const [voiceFeedbackError, setVoiceFeedbackError] = useState("");
 
   useEffect(() => {
     if (!sessionId) {
@@ -145,6 +149,53 @@ export default function MockInterviewSummaryPage() {
     void fetchSummary();
     return () => controller.abort();
   }, [sessionId, router]);
+
+  async function hearFinalFeedback() {
+    if (!sessionId || session?.mode !== "VOICE") return;
+    setIsPlayingFeedback(true);
+    setVoiceFeedbackError("");
+    try {
+      const response = await fetch(
+        "/api/assessment/mock-interview/voice/speech",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sessionId,
+            kind: "FINAL_SUMMARY",
+          }),
+        },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(
+          data?.error || "Spoken feedback is temporarily unavailable.",
+        );
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(url);
+          audio.onended = () => resolve();
+          audio.onerror = () =>
+            reject(new Error("Could not play spoken feedback."));
+          void audio.play().catch(reject);
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      setVoiceFeedbackError(
+        error instanceof Error
+          ? error.message
+          : "Spoken feedback is unavailable.",
+      );
+    } finally {
+      setIsPlayingFeedback(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -273,12 +324,30 @@ export default function MockInterviewSummaryPage() {
 
           {reportSummary && (
             <div className="mt-6 pt-6 border-t border-white/5">
-              <h3 className="text-xs uppercase tracking-wider text-white/60 font-bold mb-2">
-                Evidence summary
-              </h3>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-xs uppercase tracking-wider text-white/60 font-bold">
+                  Evidence summary
+                </h3>
+                {session.mode === "VOICE" && (
+                  <button
+                    type="button"
+                    onClick={() => void hearFinalFeedback()}
+                    disabled={isPlayingFeedback}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#4285F4]/30 bg-[#4285F4]/10 px-3 py-2 text-[11px] font-bold text-[#AECBFA] disabled:opacity-50"
+                  >
+                    <Volume2 className="h-3.5 w-3.5" />
+                    {isPlayingFeedback ? "Playing feedback..." : "Hear feedback"}
+                  </button>
+                )}
+              </div>
               <p className="text-sm text-white/80 leading-relaxed bg-white/5 p-4 rounded-xl border border-white/5">
                 {reportSummary}
               </p>
+              {voiceFeedbackError && (
+                <p className="mt-2 text-xs text-amber-300">
+                  {voiceFeedbackError}
+                </p>
+              )}
             </div>
           )}
 
@@ -449,7 +518,9 @@ export default function MockInterviewSummaryPage() {
                     {turn.candidateAnswerTranscript && (
                       <div>
                         <h4 className="text-[11px] uppercase tracking-wider text-white/50 font-bold mb-1.5">
-                          Your typed response
+                          {session.mode === "VOICE"
+                            ? "Your voice transcript"
+                            : "Your typed response"}
                         </h4>
                         <div className="text-xs text-white/80 leading-relaxed bg-white/5 p-3.5 rounded-xl border border-white/5">
                           {turn.candidateAnswerTranscript}

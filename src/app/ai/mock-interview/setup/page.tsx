@@ -11,6 +11,9 @@ import {
   History,
   AlertCircle,
   Search,
+  Mic2,
+  Keyboard,
+  Volume2,
 } from "lucide-react";
 
 type RoleOption = {
@@ -25,13 +28,27 @@ type SessionSummary = {
   declaredSeniority: string | null;
   roleFamily: string | null;
   status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+  mode: "TEXT" | "VOICE";
   overallScore: number | null;
   estimatedLevel: string | null;
   levelConfidence: number | null;
   createdAt: string;
 };
 
-const SENIORITY_OPTIONS = ["Junior", "Mid-Level", "Senior", "Staff/Lead"] as const;
+type VoiceReadiness = {
+  ready: boolean;
+  code: string;
+  message: string;
+  personaName: string | null;
+};
+
+const SENIORITY_OPTIONS = [
+  "Junior",
+  "Mid-Level",
+  "Senior",
+  "Staff/Lead",
+] as const;
+
 const INTERVIEW_LENGTHS = [
   { count: 3, label: "Short", detail: "3 questions" },
   { count: 5, label: "Standard", detail: "5 questions" },
@@ -57,6 +74,10 @@ export default function MockInterviewSetupPage() {
     useState<(typeof SENIORITY_OPTIONS)[number]>("Senior");
   const [totalQuestions, setTotalQuestions] = useState<number>(5);
   const [practiceContext, setPracticeContext] = useState("");
+  const [mode, setMode] = useState<"TEXT" | "VOICE">("TEXT");
+  const [voiceReadiness, setVoiceReadiness] =
+    useState<VoiceReadiness | null>(null);
+  const [checkingVoice, setCheckingVoice] = useState(false);
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState(true);
   const [roleError, setRoleError] = useState("");
@@ -69,7 +90,7 @@ export default function MockInterviewSetupPage() {
 
   useEffect(() => {
     startRequestKey.current = null;
-  }, [roleTarget, seniority, totalQuestions, practiceContext]);
+  }, [roleTarget, seniority, totalQuestions, practiceContext, mode]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,10 +158,85 @@ export default function MockInterviewSetupPage() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (mode !== "VOICE") {
+      setVoiceReadiness(null);
+      setCheckingVoice(false);
+      return;
+    }
+
+    if (!roleTarget.trim()) {
+      setVoiceReadiness({
+        ready: false,
+        code: "ROLE_REQUIRED",
+        message: "Select a target role before checking Voice Mode.",
+        personaName: null,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCheckingVoice(true);
+      try {
+        const params = new URLSearchParams({ role: roleTarget.trim() });
+        const res = await fetch(
+          `/api/assessment/mock-interview/voice/readiness?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        const data = (await res.json().catch(() => null)) as
+          | ({ success?: boolean; error?: string } & Partial<VoiceReadiness>)
+          | null;
+
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.error || "Voice Mode readiness could not be checked.",
+          );
+        }
+
+        setVoiceReadiness({
+          ready: Boolean(data.ready),
+          code: data.code || "UNAVAILABLE",
+          message: data.message || "Voice Mode is unavailable.",
+          personaName: data.personaName || null,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setVoiceReadiness({
+          ready: false,
+          code: "READINESS_ERROR",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Voice Mode readiness could not be checked.",
+          personaName: null,
+        });
+      } finally {
+        if (!controller.signal.aborted) setCheckingVoice(false);
+      }
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mode, roleTarget]);
+
   const handleStartInterview = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!roleTarget.trim()) {
       setErrorMessage("Please enter or select a target role.");
+      return;
+    }
+    if (mode === "VOICE" && !voiceReadiness?.ready) {
+      setErrorMessage(
+        voiceReadiness?.message ||
+          "Voice Mode is not ready for this interviewer.",
+      );
       return;
     }
 
@@ -148,8 +244,10 @@ export default function MockInterviewSetupPage() {
     setErrorMessage(null);
 
     try {
-      const idempotencyKey = startRequestKey.current || crypto.randomUUID();
+      const idempotencyKey =
+        startRequestKey.current || crypto.randomUUID();
       startRequestKey.current = idempotencyKey;
+
       const res = await fetch("/api/assessment/mock-interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,12 +259,16 @@ export default function MockInterviewSetupPage() {
           totalQuestions,
           focusSkills,
           practiceContext: practiceContext.trim() || null,
-          mode: "TEXT",
+          mode,
         }),
       });
 
       const data = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string; session?: { id: string } }
+        | {
+            success?: boolean;
+            error?: string;
+            session?: { id: string };
+          }
         | null;
 
       if (res.status === 402) {
@@ -175,10 +277,14 @@ export default function MockInterviewSetupPage() {
       }
 
       if (!res.ok || !data?.success || !data.session?.id) {
-        throw new Error(data?.error || "Failed to start mock interview session.");
+        throw new Error(
+          data?.error || "Failed to start mock interview session.",
+        );
       }
 
-      router.push(`/ai/mock-interview/active?sessionId=${data.session.id}`);
+      router.push(
+        `/ai/mock-interview/active?sessionId=${data.session.id}`,
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -188,6 +294,12 @@ export default function MockInterviewSetupPage() {
       setIsStarting(false);
     }
   };
+
+  const startDisabled =
+    isStarting ||
+    !roleTarget.trim() ||
+    (mode === "VOICE" &&
+      (checkingVoice || voiceReadiness?.ready !== true));
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col">
@@ -222,9 +334,9 @@ export default function MockInterviewSetupPage() {
             Adaptive Mock Interview
           </h1>
           <p className="text-sm text-white/60 max-w-3xl">
-            Choose your real target role and starting seniority. HireGo calibrates
-            difficulty from your answers, probes the same skill from multiple
-            angles when needed, and keeps the final result private to practice.
+            Practice in Text Mode or, when production voice infrastructure is
+            configured, a real turn-based Voice Mode. HireGo adapts from
+            demonstrated evidence rather than trusting a self-declared level.
           </p>
         </div>
 
@@ -251,8 +363,8 @@ export default function MockInterviewSetupPage() {
                   ))}
                 </div>
                 <p className="mt-3 text-[11px] leading-relaxed text-white/50">
-                  These are practice focus areas. This session does not overwrite
-                  historical skill-validation evidence or employer decisions.
+                  This session cannot overwrite historical skill validation or
+                  employer decisions.
                 </p>
               </div>
             )}
@@ -265,6 +377,71 @@ export default function MockInterviewSetupPage() {
             )}
 
             <form onSubmit={handleStartInterview} className="space-y-6">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
+                  Practice Mode
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setMode("TEXT")}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      mode === "TEXT"
+                        ? "border-[#C5221F]/70 bg-[#C5221F]/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Keyboard className="h-4 w-4 text-[#C5221F]" />
+                      <span className="text-sm font-bold">Text Practice</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-white/50">
+                      Type each answer and receive immediate turn-by-turn
+                      coaching.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMode("VOICE")}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      mode === "VOICE"
+                        ? "border-[#4285F4]/70 bg-[#4285F4]/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Mic2 className="h-4 w-4 text-[#4285F4]" />
+                      <span className="text-sm font-bold">Real Voice Mode</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-white/50">
+                      Hear the interviewer, answer by voice, and receive the
+                      detailed evaluation only after the interview.
+                    </p>
+                  </button>
+                </div>
+
+                {mode === "VOICE" && (
+                  <div
+                    className={`mt-3 rounded-xl border p-3 text-xs ${
+                      voiceReadiness?.ready
+                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200"
+                        : "border-amber-500/20 bg-amber-500/5 text-amber-200"
+                    }`}
+                  >
+                    {checkingVoice
+                      ? "Checking Whisper, interviewer voice, and TTS routing..."
+                      : voiceReadiness?.message ||
+                        "Select a role to check Voice Mode."}
+                    {voiceReadiness?.personaName && (
+                      <span className="ml-1 font-bold">
+                        Interviewer: {voiceReadiness.personaName}.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
                   Target Role
@@ -334,7 +511,7 @@ export default function MockInterviewSetupPage() {
                   ))}
                 </div>
                 <p className="mt-2 text-[11px] text-white/40">
-                  This is a starting hypothesis only. The interview adapts from
+                  This is a starting hypothesis only. Difficulty moves from
                   demonstrated practice evidence.
                 </p>
               </div>
@@ -371,12 +548,15 @@ export default function MockInterviewSetupPage() {
                   htmlFor="practice-context"
                   className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2"
                 >
-                  What do you want help with? <span className="text-white/35">Optional</span>
+                  What do you want help with?{" "}
+                  <span className="text-white/35">Optional</span>
                 </label>
                 <textarea
                   id="practice-context"
                   value={practiceContext}
-                  onChange={(event) => setPracticeContext(event.target.value)}
+                  onChange={(event) =>
+                    setPracticeContext(event.target.value)
+                  }
                   maxLength={2_000}
                   rows={3}
                   placeholder="Example: I struggle to explain system-design trade-offs clearly."
@@ -386,34 +566,42 @@ export default function MockInterviewSetupPage() {
 
               <div className="p-4 rounded-xl bg-black/30 border border-white/5 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <ShieldCheck className="w-4 h-4" />
+                  {mode === "VOICE" ? (
+                    <Volume2 className="w-4 h-4" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4" />
+                  )}
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white">
                     Private adaptive practice
                   </div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
-                    HireGo uses role context, your claimed/validated skill evidence,
-                    and answers from this session to adapt questions. It does not
-                    infer emotion, personality, or protected traits. Practice
-                    results are not employer hiring evidence.
+                    {mode === "VOICE"
+                      ? "Voice answers are transcribed through the approved Whisper worker. Low-confidence transcripts are repeated instead of scored, and raw turn audio is transient rather than stored by this flow."
+                      : "HireGo uses role context and your answers to adapt questions without inferring emotion, personality, or protected traits."}
                   </div>
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={isStarting}
-                className="w-full h-12 rounded-xl bg-[#C5221F] hover:bg-[#A31816] text-white font-bold text-sm tracking-wide uppercase flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={startDisabled}
+                className="w-full h-12 rounded-xl bg-[#C5221F] hover:bg-[#A31816] text-white font-bold text-sm tracking-wide uppercase flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isStarting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Preparing Interview...
                   </>
+                ) : mode === "VOICE" ? (
+                  <>
+                    Start Voice Interview <Mic2 className="w-4 h-4" />
+                  </>
                 ) : (
                   <>
-                    Start Adaptive Interview <ArrowRight className="w-4 h-4" />
+                    Start Adaptive Interview{" "}
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
@@ -433,11 +621,11 @@ export default function MockInterviewSetupPage() {
                 </p>
                 <p>
                   Weak or incomplete evidence triggers a simpler or guided
-                  follow-up instead of an automatic negative judgment.
+                  follow-up rather than an automatic negative judgment.
                 </p>
                 <p>
-                  Final level guidance is shown only when multiple turns provide
-                  enough consistent evidence.
+                  Final level guidance appears only after enough consistent
+                  evidence across multiple turns.
                 </p>
               </div>
             </div>
@@ -470,37 +658,39 @@ export default function MockInterviewSetupPage() {
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
-                  {pastSessions.slice(0, 6).map((session) => {
+                  {pastSessions.slice(0, 6).map((practice) => {
                     const href =
-                      session.status === "COMPLETED"
-                        ? `/ai/mock-interview/summary?sessionId=${session.id}`
-                        : `/ai/mock-interview/active?sessionId=${session.id}`;
+                      practice.status === "COMPLETED"
+                        ? `/ai/mock-interview/summary?sessionId=${practice.id}`
+                        : `/ai/mock-interview/active?sessionId=${practice.id}`;
                     return (
                       <Link
-                        key={session.id}
+                        key={practice.id}
                         href={href}
                         className="block p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/20 transition-all text-left group"
                       >
                         <div className="flex items-center justify-between gap-3 mb-1">
                           <span className="text-xs font-semibold text-white group-hover:text-[#4285F4] transition-colors truncate">
-                            {session.roleTarget}
+                            {practice.roleTarget}
                           </span>
-                          {session.estimatedLevel && (
-                            <span className="shrink-0 text-[10px] font-bold text-emerald-300">
-                              {session.estimatedLevel.replace("_", "/")}
-                            </span>
-                          )}
+                          <span className="shrink-0 text-[10px] uppercase text-white/35">
+                            {practice.mode}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-white/40">
                           <span>
-                            {session.status === "COMPLETED"
-                              ? "Completed"
-                              : session.status === "IN_PROGRESS"
+                            {practice.status === "COMPLETED"
+                              ? practice.estimatedLevel
+                                ? practice.estimatedLevel.replace("_", "/")
+                                : "Completed"
+                              : practice.status === "IN_PROGRESS"
                                 ? "Continue"
                                 : "Abandoned"}
                           </span>
                           <span>
-                            {new Date(session.createdAt).toLocaleDateString()}
+                            {new Date(
+                              practice.createdAt,
+                            ).toLocaleDateString()}
                           </span>
                         </div>
                       </Link>
