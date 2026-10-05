@@ -168,6 +168,17 @@ test("persona voices are admin-configurable and audited", () => {
   assert.ok(page.includes("/api/admin/mock-interview-personas"));
 });
 
+test("live Voice Mode session API redacts per-turn scoring until completion", () => {
+  const route = read(
+    "src/app/api/assessment/mock-interview/session/route.ts",
+  );
+  assert.ok(route.includes("hideLiveVoiceEvaluation"));
+  assert.ok(route.includes('interviewSession.mode === "VOICE"'));
+  assert.ok(route.includes('interviewSession.status === "IN_PROGRESS"'));
+  assert.ok(route.includes("score: hideLiveVoiceEvaluation ? null : turn.score"));
+  assert.ok(route.includes("evaluation: hideLiveVoiceEvaluation ? null : turn.evaluation"));
+});
+
 test("candidate session payload does not expose provider voice identifiers", () => {
   const route = read(
     "src/app/api/assessment/mock-interview/session/route.ts",
