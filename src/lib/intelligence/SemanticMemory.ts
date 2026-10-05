@@ -35,7 +35,7 @@ export class SemanticMemory {
       VALUES
         (${id},${dedupeKey},${params.actor.userId},${params.actor.companyId ?? null},${params.scope.scopeLevel}::"MemoryScopeLevel",${params.scope.scopeId},${params.agentId},
          ${params.memoryType ?? MemoryType.KNOWLEDGE}::"MemoryType",${params.sourceType},${params.sourceId ?? null},${content},${JSON.stringify(metadata)}::jsonb,
-         ${embedding.model},${embedding.dimensions},${vector}::vector,${params.expiresAt ?? null},${params.isAnonymized ?? false},${(params.consentState ?? "NOT_REQUIRED").slice(0,80)},NOW(),NOW())
+         ${embedding.model},${embedding.dimensions},${vector}::extensions.vector,${params.expiresAt ?? null},${params.isAnonymized ?? false},${(params.consentState ?? "NOT_REQUIRED").slice(0,80)},NOW(),NOW())
       ON CONFLICT ("dedupeKey") DO UPDATE SET "content"=EXCLUDED."content","metadata"=EXCLUDED."metadata","embeddingModel"=EXCLUDED."embeddingModel","embeddingDimensions"=EXCLUDED."embeddingDimensions","embedding"=EXCLUDED."embedding","expiresAt"=EXCLUDED."expiresAt","updatedAt"=NOW()
       RETURNING "id"
     `);
@@ -55,13 +55,13 @@ export class SemanticMemory {
 
     return prisma.$queryRaw<SemanticRow[]>(Prisma.sql`
       SELECT "id","scopeLevel","scopeId","agentId","sourceType","sourceId","content","metadata","embeddingModel","embeddingDimensions","expiresAt","createdAt",
-             1 - ("embedding" <=> ${vector}::vector) AS "similarity"
+             1 - ("embedding" <=> ${vector}::extensions.vector) AS "similarity"
       FROM "SemanticMemoryRecord"
       WHERE ${companySql} AND (${scopeSql}) ${agentSql}
         AND "embedding" IS NOT NULL AND "embeddingModel"=${embedding.model} AND "embeddingDimensions"=${embedding.dimensions}
         AND ("expiresAt" IS NULL OR "expiresAt">NOW())
-        AND 1 - ("embedding" <=> ${vector}::vector) >= ${minSimilarity}
-      ORDER BY "embedding" <=> ${vector}::vector
+        AND 1 - ("embedding" <=> ${vector}::extensions.vector) >= ${minSimilarity}
+      ORDER BY "embedding" <=> ${vector}::extensions.vector
       LIMIT ${limit}
     `);
   }
