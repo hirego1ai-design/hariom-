@@ -94,13 +94,24 @@ type VoiceTranscriptionResponse = {
   success?: boolean;
   error?: string;
   requiresRepeat?: boolean;
+  requiresConfirmation?: boolean;
+  draftId?: string;
   receiptId?: string;
   transcript?: string;
   heardText?: string;
-  confidence?: number;
+  confidence?: number | null;
   detectedLanguage?: string;
   durationSeconds?: number;
   message?: string;
+};
+
+type VoiceConfirmationResponse = {
+  success?: boolean;
+  error?: string;
+  receiptId?: string;
+  transcript?: string;
+  confidence?: number | null;
+  detectedLanguage?: string;
 };
 
 type VoiceUiState =
@@ -109,6 +120,7 @@ type VoiceUiState =
   | "LISTENING_READY"
   | "LISTENING"
   | "UNDERSTANDING"
+  | "CONFIRM_TRANSCRIPT"
   | "REPEAT"
   | "FOLLOW_UP_READY"
   | "COMPLETE";
@@ -166,6 +178,7 @@ export default function MockInterviewActivePage() {
     null,
   );
   const [voiceMessage, setVoiceMessage] = useState("");
+  const [voiceDraftId, setVoiceDraftId] = useState<string | null>(null);
   const [openingSpoken, setOpeningSpoken] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -515,7 +528,7 @@ export default function MockInterviewActivePage() {
   async function submitVoiceReceipt(
     receiptId: string,
     transcript: string,
-    confidence: number,
+    confidence: number | null,
   ) {
     if (!sessionId || !session || !currentTurn) return;
     setVoiceState("UNDERSTANDING");
@@ -648,6 +661,7 @@ export default function MockInterviewActivePage() {
             ? data.confidence
             : null,
         );
+        setVoiceDraftId(null);
         setVoiceState("REPEAT");
         setVoiceMessage(
           data.message ||
@@ -657,10 +671,22 @@ export default function MockInterviewActivePage() {
       }
 
       if (
-        !data.receiptId ||
-        !data.transcript ||
-        typeof data.confidence !== "number"
+        data.requiresConfirmation &&
+        data.draftId &&
+        data.transcript
       ) {
+        setVoiceDraftId(data.draftId);
+        setVoiceTranscript(data.transcript);
+        setVoiceConfidence(null);
+        setVoiceState("CONFIRM_TRANSCRIPT");
+        setVoiceMessage(
+          data.message ||
+            "Please confirm the transcript before HireGo evaluates it.",
+        );
+        return;
+      }
+
+      if (!data.receiptId || !data.transcript) {
         throw new Error(
           "Voice transcription returned an incomplete verified result.",
         );
@@ -669,7 +695,9 @@ export default function MockInterviewActivePage() {
       await submitVoiceReceipt(
         data.receiptId,
         data.transcript,
-        data.confidence,
+        typeof data.confidence === "number"
+          ? data.confidence
+          : null,
       );
     } catch (error) {
       setVoiceState("REPEAT");
@@ -677,6 +705,70 @@ export default function MockInterviewActivePage() {
         error instanceof Error
           ? error.message
           : "Voice transcription failed.",
+      );
+    }
+  }
+
+  async function confirmVoiceTranscript() {
+    if (
+      !sessionId ||
+      !currentTurn ||
+      !voiceDraftId ||
+      voiceTranscript.trim().length < 1
+    ) {
+      setErrorMessage("A transcript is required before confirmation.");
+      return;
+    }
+
+    setVoiceState("UNDERSTANDING");
+    setVoiceMessage("Confirming transcript...");
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(
+        "/api/assessment/mock-interview/voice/confirm-transcript",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sessionId,
+            questionIndex: currentTurn.questionIndex,
+            draftId: voiceDraftId,
+            transcript: voiceTranscript.trim(),
+          }),
+        },
+      );
+
+      const data = (await response.json().catch(() => null)) as
+        | VoiceConfirmationResponse
+        | null;
+
+      if (
+        !response.ok ||
+        !data?.success ||
+        !data.receiptId ||
+        !data.transcript
+      ) {
+        throw new Error(
+          data?.error || "Transcript confirmation failed.",
+        );
+      }
+
+      setVoiceDraftId(null);
+      await submitVoiceReceipt(
+        data.receiptId,
+        data.transcript,
+        typeof data.confidence === "number"
+          ? data.confidence
+          : null,
+      );
+    } catch (error) {
+      setVoiceState("CONFIRM_TRANSCRIPT");
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Transcript confirmation failed.",
       );
     }
   }
@@ -696,6 +788,7 @@ export default function MockInterviewActivePage() {
     setVoiceMessage("");
     setVoiceTranscript("");
     setVoiceConfidence(null);
+    setVoiceDraftId(null);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -980,11 +1073,25 @@ export default function MockInterviewActivePage() {
                           ? ` · ${Math.round(
                               voiceConfidence * 100,
                             )}% confidence`
-                          : ""}
+                          : voiceState === "CONFIRM_TRANSCRIPT"
+                            ? " · confirm before scoring"
+                            : ""}
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-white/60">
-                        {voiceTranscript}
-                      </p>
+                      {voiceState === "CONFIRM_TRANSCRIPT" ? (
+                        <textarea
+                          value={voiceTranscript}
+                          onChange={(event) =>
+                            setVoiceTranscript(event.target.value)
+                          }
+                          maxLength={10_000}
+                          rows={5}
+                          className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-white focus:border-[#4285F4] focus:outline-none"
+                        />
+                      ) : (
+                        <p className="mt-1 text-xs leading-relaxed text-white/60">
+                          {voiceTranscript}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1002,6 +1109,36 @@ export default function MockInterviewActivePage() {
                       ? "Start Interview"
                       : "Hear Question"}
                   </button>
+                )}
+
+                {voiceState === "CONFIRM_TRANSCRIPT" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void confirmVoiceTranscript()}
+                      disabled={!voiceDraftId || voiceTranscript.trim().length < 1}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#3367D6] disabled:opacity-40"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Confirm Transcript
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVoiceDraftId(null);
+                        setVoiceTranscript("");
+                        setVoiceConfidence(null);
+                        setVoiceState("REPEAT");
+                        setVoiceMessage(
+                          "Record the answer again if this transcript is not accurate.",
+                        );
+                      }}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 text-xs font-bold uppercase tracking-wider text-white"
+                    >
+                      <Mic2 className="h-4 w-4" />
+                      Record Again
+                    </button>
+                  </>
                 )}
 
                 {["LISTENING_READY", "REPEAT"].includes(voiceState) && (
@@ -1041,11 +1178,12 @@ export default function MockInterviewActivePage() {
               </div>
 
               <p className="mt-6 max-w-xl text-[11px] leading-relaxed text-white/35">
-                Voice Mode does not show per-question scores. If Whisper
-                confidence is too low, HireGo asks you to repeat the answer
-                instead of scoring an uncertain transcript. Raw turn audio is
-                sent for transient transcription and is not saved by this
-                Mock Interview flow.
+                Voice Mode does not show per-question scores. Provider
+                transcripts must be confirmed by you before they can be
+                evaluated; a future self-hosted worker may additionally use
+                confidence-based repeat rules. Raw turn audio is sent only for
+                transient transcription and is not saved by this Mock Interview
+                flow.
               </p>
             </div>
           </section>
