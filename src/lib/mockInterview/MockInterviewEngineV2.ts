@@ -41,6 +41,8 @@ export const mockTurnEvaluationSchema = z.object({
   difficultyAdjustment: z.enum(["DOWN", "SAME", "UP"]),
   nextDifficulty: z.number().int().min(1).max(5),
   supportMode: z.enum(["NONE", "GUIDED", "HINT"]),
+  nextCompetency: z.string().trim().min(1).max(160).nullable(),
+  nextSkillTags: z.array(z.string().trim().min(1).max(120)).max(8),
   nextQuestion: z.string().trim().min(1).max(5_000).nullable(),
 }).strict();
 
@@ -246,7 +248,7 @@ export class MockInterviewEngineV2 {
       }, "current-question"),
       wrapUntrustedContent({ answer: params.answer }, "candidate-answer"),
       params.durationMs === undefined ? "" : `Measured response duration: ${params.durationMs} ms.`,
-      'Output: {"score":integer 0-100,"feedback":string,"evidenceConfidence":integer 0-100,"demonstratedLevel":"JUNIOR"|"MID"|"SENIOR"|"STAFF_LEAD"|"INSUFFICIENT_EVIDENCE","competency":string,"skillTags":string[],"evidence":[{"skill":string,"dimension":"FUNDAMENTAL"|"IMPLEMENTATION"|"DEBUGGING"|"TRADEOFF"|"OWNERSHIP"|"ROLE_SCENARIO","status":"DEMONSTRATED"|"PARTIAL"|"NOT_DEMONSTRATED"|"INSUFFICIENT_EVIDENCE","reason":string}],"difficultyAdjustment":"DOWN"|"SAME"|"UP","nextDifficulty":integer 1-5,"supportMode":"NONE"|"GUIDED"|"HINT","nextQuestion":string|null}.',
+      'Output: {"score":integer 0-100,"feedback":string,"evidenceConfidence":integer 0-100,"demonstratedLevel":"JUNIOR"|"MID"|"SENIOR"|"STAFF_LEAD"|"INSUFFICIENT_EVIDENCE","competency":string,"skillTags":string[],"evidence":[{"skill":string,"dimension":"FUNDAMENTAL"|"IMPLEMENTATION"|"DEBUGGING"|"TRADEOFF"|"OWNERSHIP"|"ROLE_SCENARIO","status":"DEMONSTRATED"|"PARTIAL"|"NOT_DEMONSTRATED"|"INSUFFICIENT_EVIDENCE","reason":string}],"difficultyAdjustment":"DOWN"|"SAME"|"UP","nextDifficulty":integer 1-5,"supportMode":"NONE"|"GUIDED"|"HINT","nextCompetency":string|null,"nextSkillTags":string[],"nextQuestion":string|null}.',
     ].filter(Boolean).join("\n");
 
     return runMockInterviewStructured({
