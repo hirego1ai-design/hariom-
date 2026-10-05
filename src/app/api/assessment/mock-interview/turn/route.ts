@@ -220,13 +220,21 @@ export async function POST(request: Request) {
       }
 
       answer = receipt.transcript;
-      durationMs = Math.max(
-        0,
-        Math.min(3_600_000, Math.round(receipt.durationSeconds * 1_000)),
-      );
+      durationMs =
+        receipt.durationSeconds === null
+          ? undefined
+          : Math.max(
+              0,
+              Math.min(
+                3_600_000,
+                Math.round(receipt.durationSeconds * 1_000),
+              ),
+            );
       transcriptProvider = receipt.provider;
       transcriptModel = receipt.model;
-      transcriptVersion = `${receipt.versionLabel};worker=${receipt.workerVersion}`;
+      transcriptVersion = receipt.workerVersion
+        ? `${receipt.versionLabel};worker=${receipt.workerVersion}`
+        : receipt.versionLabel;
       transcriptConfidence = receipt.confidence;
       conversationLanguage = receipt.detectedLanguage || conversationLanguage;
     } else {
