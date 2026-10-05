@@ -32,9 +32,10 @@ test("eval gate cannot jump from draft to production", () => {
 test("pgvector is enabled without a hard-coded embedding dimension", () => {
   const schema=fs.readFileSync(path.resolve(process.cwd(),"prisma/schema.prisma"),"utf8");
   const migration=fs.readFileSync(path.resolve(process.cwd(),"prisma/migrations/20261005090000_intelligence_foundation/migration.sql"),"utf8");
+  const executableSql = migration.replace(/--.*$/gm, "");
   assert.ok(schema.includes('embedding           Unsupported("vector")?'));
-  assert.ok(migration.includes("CREATE EXTENSION IF NOT EXISTS vector"));
-  assert.ok(!migration.includes("vector(1536)"));
+  assert.ok(executableSql.includes("CREATE EXTENSION IF NOT EXISTS vector"));
+  assert.doesNotMatch(executableSql, /\bvector\s*\(\s*\d+\s*\)/i);
 });
 test("semantic embeddings require an explicitly approved embedding-capable model", () => {
   const config=fs.readFileSync(path.resolve(process.cwd(),"src/lib/ai/AiRoutingConfig.ts"),"utf8");
