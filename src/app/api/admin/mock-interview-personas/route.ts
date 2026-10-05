@@ -24,13 +24,6 @@ const updateSchema = z
       .nullable()
       .optional(),
     tone: z.string().trim().min(3).max(500).optional(),
-    rubricVersion: z
-      .string()
-      .trim()
-      .min(1)
-      .max(80)
-      .regex(/^[A-Za-z0-9._:-]+$/)
-      .optional(),
     isActive: z.boolean().optional(),
     reason: z.string().trim().min(3).max(500),
   })
@@ -40,7 +33,6 @@ const updateSchema = z
       value.displayName === undefined &&
       value.voiceKey === undefined &&
       value.tone === undefined &&
-      value.rubricVersion === undefined &&
       value.isActive === undefined
     ) {
       ctx.addIssue({
@@ -121,9 +113,6 @@ export async function PUT(request: NextRequest) {
             ? { voiceKey: body.voiceKey }
             : {}),
           ...(body.tone !== undefined ? { tone: body.tone } : {}),
-          ...(body.rubricVersion !== undefined
-            ? { rubricVersion: body.rubricVersion }
-            : {}),
           ...(body.isActive !== undefined
             ? { isActive: body.isActive }
             : {}),
