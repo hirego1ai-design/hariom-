@@ -72,7 +72,7 @@ type Telemetry = {
 const providers: ProviderName[] = ["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"];
 const qualityTiers: QualityTier[] = ["ECONOMY", "BALANCED", "PREMIUM"];
 const routingModes: RoutingMode[] = ["MANUAL", "COST_SAVER", "BALANCED", "QUALITY_FIRST", "SMART_AUTO"];
-const capabilities = ["TEXT", "STRUCTURED_OUTPUT", "TOOL_USE", "VISION", "LONG_CONTEXT", "REASONING", "EMBEDDING", "TTS"];
+const capabilities = ["TEXT", "STRUCTURED_OUTPUT", "TOOL_USE", "VISION", "LONG_CONTEXT", "REASONING", "EMBEDDING", "STT", "TTS"];
 
 function nullableNumber(value: string): number | null {
   if (!value.trim()) return null;
