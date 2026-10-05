@@ -89,7 +89,19 @@ export async function processSecurityAuditDeliveryBatch(
   const results: DeliveryResult[] = [];
   let nextIndex = 0;
   await Promise.all(Array.from({ length: Math.min(DELIVERY_CONCURRENCY, events.length) }, async () => {
-    while (nextIndex < events.length) results.push(await deliverEvent(events[nextIndex++], leaseId, config.url, config.token));
+    while (nextIndex < events.length) {
+      const event = events[nextIndex++];
+      if (!event) continue;
+      if (config.mode === "webhook") {
+        results.push(await deliverEvent(event, leaseId, config.url, config.token));
+        continue;
+      }
+      if (!(await renewSecurityAuditEventLease(prisma, event.id, leaseId))) {
+        results.push("unclaimed");
+        continue;
+      }
+      results.push((await markSecurityAuditEventDelivered(prisma, event.id, leaseId)) ? "delivered" : "unclaimed");
+    }
   }));
   return {
     configured: config.mode === "webhook",

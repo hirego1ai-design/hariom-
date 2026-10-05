@@ -72,7 +72,6 @@ jobs:
         run: npm run test:audit
 
       - name: Upload Production Wiring Audit Artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: production-wiring-audit
