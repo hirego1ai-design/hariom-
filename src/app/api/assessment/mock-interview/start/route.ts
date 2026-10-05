@@ -68,6 +68,8 @@ export async function POST(request: Request) {
     const normalized = normalizeLegacyRoleInput(body.roleTarget, body.declaredSeniority);
     const roleTarget = normalized.roleTarget;
     const declaredSeniority = normalized.seniority;
+    const focusSkills = focusSkills ?? [];
+    const totalQuestions = totalQuestions ?? 5;
 
     const candidateProfile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
@@ -192,7 +194,7 @@ export async function POST(request: Request) {
       firstQuestion = await MockInterviewEngineV2.generateFirstQuestion({
         roleTarget,
         declaredSeniority,
-        focusSkills: body.focusSkills,
+        focusSkills: focusSkills,
         candidateSkills: candidateProfile.candidateSkills.map((skill) => ({
           ...skill,
           claimedLevel: skill.claimedLevel,
@@ -201,7 +203,7 @@ export async function POST(request: Request) {
         })),
         practiceContext: body.practiceContext,
         language,
-        totalQuestions: body.totalQuestions,
+        totalQuestions: totalQuestions,
         persona: personaResolution.persona,
       });
     } catch {
@@ -260,8 +262,8 @@ export async function POST(request: Request) {
             mode: "TEXT",
             openingMessage: firstQuestion.openingMessage,
             practiceContext: body.practiceContext ?? null,
-            focusSkills: body.focusSkills,
-            totalQuestions: body.totalQuestions,
+            focusSkills: focusSkills,
+            totalQuestions: totalQuestions,
             currentQuestionIndex: 0,
             status: "IN_PROGRESS",
             calibrationState: {
