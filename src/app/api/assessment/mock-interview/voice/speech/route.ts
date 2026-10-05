@@ -67,13 +67,10 @@ export async function POST(request: NextRequest) {
       where: { id: body.sessionId },
       include: {
         persona: true,
-        turns:
-          body.kind === "QUESTION"
-            ? {
-                where: { questionIndex: body.questionIndex },
-                take: 1,
-              }
-            : false,
+        turns: {
+          orderBy: { questionIndex: "asc" },
+          take: 10,
+        },
       },
     });
 
@@ -109,7 +106,10 @@ export async function POST(request: NextRequest) {
           409,
         );
       }
-      text = interviewSession.turns[0]?.questionText?.trim() || "";
+      text =
+        interviewSession.turns.find(
+          (turn) => turn.questionIndex === body.questionIndex,
+        )?.questionText?.trim() || "";
     } else {
       if (interviewSession.status !== "COMPLETED") {
         throw new ApiError(
