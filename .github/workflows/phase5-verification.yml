@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.6-pg16
         env:
           POSTGRES_USER: phase5
           POSTGRES_PASSWORD: phase5
@@ -47,6 +47,8 @@ jobs:
       - run: npm ci
       - run: npx prisma validate
       - run: npx prisma generate
+      - name: Bootstrap isolated CI admin configuration
+        run: node scripts/bootstrap-ci-admin-config.mjs
       - name: Apply isolated test migrations
         run: npx prisma migrate deploy
       - run: npm run verify:phase5

@@ -52,6 +52,11 @@ jobs:
       - name: Build Railway background worker image
         run: docker build -f Dockerfile.recorded-assessment-scheduler -t hirego-background-worker:ci .
 
+      - name: Bootstrap isolated CI admin configuration
+        run: node scripts/bootstrap-ci-admin-config.mjs
+        env:
+          HIREGO_TEST_DATABASE: "1"
+
       - name: Apply Prisma Migrations
         run: npx prisma migrate deploy
 
