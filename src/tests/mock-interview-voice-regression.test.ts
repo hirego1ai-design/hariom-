@@ -86,7 +86,7 @@ test("voice speech endpoint never accepts arbitrary TTS text", () => {
   assert.ok(route.includes('z.literal("FINAL_SUMMARY")'));
   assert.ok(!route.includes("text: z.string"));
   assert.ok(route.includes("interviewSession.openingMessage"));
-  assert.ok(route.includes("interviewSession.turns[0]?.questionText"));
+  assert.ok(route.includes("turn.questionIndex === body.questionIndex"));
   assert.ok(route.includes("interviewSession.finalReport"));
   assert.ok(route.includes("synthesizeMockInterviewSpeech"));
 });
