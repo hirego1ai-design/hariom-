@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
         throw new ApiError("Session not found or access denied", 404);
       }
 
+      const hideLiveVoiceEvaluation =
+        interviewSession.mode === "VOICE" &&
+        interviewSession.status === "IN_PROGRESS";
+
       return NextResponse.json({
         success: true,
         session: {
@@ -96,10 +100,12 @@ export async function GET(request: NextRequest) {
             transcriptModel: turn.transcriptModel,
             transcriptVersion: turn.transcriptVersion,
             transcriptConfidence: turn.transcriptConfidence,
-            score: turn.score,
-            feedback: turn.feedback,
-            evidenceConfidence: turn.evidenceConfidence,
-            evaluation: turn.evaluation,
+            score: hideLiveVoiceEvaluation ? null : turn.score,
+            feedback: hideLiveVoiceEvaluation ? null : turn.feedback,
+            evidenceConfidence: hideLiveVoiceEvaluation
+              ? null
+              : turn.evidenceConfidence,
+            evaluation: hideLiveVoiceEvaluation ? null : turn.evaluation,
             turnLatencyMs: turn.turnLatencyMs,
           })),
         },
