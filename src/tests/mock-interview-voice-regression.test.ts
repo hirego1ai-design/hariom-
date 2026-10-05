@@ -20,45 +20,65 @@ test("Voice Mode start is fail-closed and persists VOICE only after runtime read
   assert.ok(readinessIndex >= 0 && debitIndex > readinessIndex);
 });
 
-test("Voice transcription uses authenticated transient Whisper worker with strict bounds", () => {
+test("Voice readiness requires routed TTS and STT and does not depend on Railway", () => {
+  const readiness = read(
+    "src/lib/mockInterview/MockInterviewVoiceService.ts",
+  );
+  assert.ok(readiness.includes("assertTextToSpeechRouteConfigured"));
+  assert.ok(readiness.includes("assertSpeechToTextRouteConfigured"));
+  assert.ok(readiness.includes('"TTS_NOT_CONFIGURED"'));
+  assert.ok(readiness.includes('"STT_NOT_CONFIGURED"'));
+  assert.ok(!readiness.includes("VIDEO_ANALYSIS_WORKER_URL"));
+  assert.ok(!readiness.includes("voiceTurnSupported"));
+});
+
+test("provider STT uses approved routed models with no hard-coded transcription model", () => {
+  const stt = read(
+    "src/lib/mockInterview/SpeechToTextService.ts",
+  );
+  assert.ok(stt.includes('taskType: "mock-interview-stt"'));
+  assert.ok(stt.includes('requiredCapabilities: ["STT"]'));
+  assert.ok(stt.includes("endpoint.model"));
+  assert.ok(stt.includes("audio/transcriptions"));
+  assert.ok(stt.includes("Preserve technical terms"));
+  assert.ok(!stt.includes("gpt-4o-transcribe"));
+  assert.ok(!stt.includes("gpt-4o-mini-transcribe"));
+  assert.ok(!stt.includes("whisper-1"));
+});
+
+test("voice transcription is authenticated, bounded, and cannot score directly", () => {
   const route = read(
     "src/app/api/assessment/mock-interview/voice/transcribe/route.ts",
   );
-  const worker = read("video-analysis-worker/main.py");
-
   assert.ok(route.includes('auth.role !== "CANDIDATE"'));
   assert.ok(route.includes('interviewSession.mode !== "VOICE"'));
   assert.ok(route.includes("candidateAnswerTranscript !== null"));
-  assert.ok(route.includes("MAX") || route.includes("maxAudioBytes"));
-  assert.ok(route.includes("requiresRepeat"));
-  assert.ok(route.includes("minTranscriptConfidence"));
-  assert.ok(route.includes("createVoiceTranscriptReceipt"));
+  assert.ok(route.includes("maxAudioBytes"));
+  assert.ok(route.includes("transcribeMockInterviewAudio"));
+  assert.ok(route.includes("createVoiceTranscriptDraft"));
+  assert.ok(route.includes("requiresConfirmation: true"));
+  assert.ok(!route.includes("createVoiceTranscriptReceipt"));
   assert.ok(!route.includes("mockInterviewTurn.update"));
   assert.ok(!route.includes("score:"));
-
-  assert.ok(worker.includes('@app.post("/transcribe-turn")'));
-  assert.ok(worker.includes("tempfile.mkdtemp(prefix=\"mock_voice_\""));
-  assert.ok(worker.includes("shutil.rmtree(work_dir, ignore_errors=True)"));
-  assert.ok(worker.includes("faster-whisper") || worker.includes("get_whisper_model"));
-  assert.ok(worker.includes("vad_filter=True"));
 });
 
-test("low-confidence voice transcript is repeated rather than scored", () => {
-  const route = read(
-    "src/app/api/assessment/mock-interview/voice/transcribe/route.ts",
+test("provider transcript must be candidate-confirmed before scoring receipt exists", () => {
+  const confirm = read(
+    "src/app/api/assessment/mock-interview/voice/confirm-transcript/route.ts",
   );
-  assert.ok(route.includes("result.lowConfidence"));
-  assert.ok(route.includes("result.confidence < config.minTranscriptConfidence"));
-  assert.ok(route.includes("requiresRepeat: true"));
-  assert.ok(route.includes("Please answer again"));
-  const repeatBlock = route.slice(
-    route.indexOf("if (requiresRepeat)"),
-    route.indexOf("const receipt ="),
+  const drafts = read(
+    "src/lib/mockInterview/VoiceTranscriptConfirmation.ts",
   );
-  assert.ok(!repeatBlock.includes("createVoiceTranscriptReceipt"));
+  assert.ok(confirm.includes("takeVoiceTranscriptDraft"));
+  assert.ok(confirm.includes("createVoiceTranscriptReceipt"));
+  assert.ok(confirm.includes("confirmedByCandidate: true"));
+  assert.ok(confirm.includes('transcriptSource: "CANDIDATE_CONFIRMED"'));
+  assert.ok(confirm.includes("TRANSCRIPT_CONFIRMED"));
+  assert.ok(drafts.includes("takeRedisValue"));
+  assert.ok(drafts.includes("DRAFT_TTL_SECONDS"));
 });
 
-test("Voice turn accepts only one-time server transcription receipt and hides turn scores", () => {
+test("Voice turn accepts only one-time server receipt and hides turn scores", () => {
   const route = read(
     "src/app/api/assessment/mock-interview/turn/route.ts",
   );
@@ -103,7 +123,7 @@ test("TTS uses approved routed models and contains no hard-coded production mode
   assert.ok(!tts.includes("tts-1"));
 });
 
-test("voice receipts are one-time and atomically consumed through Redis", () => {
+test("voice receipts are one-time, support candidate-confirmed transcripts, and never fake confidence", () => {
   const receipt = read(
     "src/lib/mockInterview/VoiceTranscriptReceipt.ts",
   );
@@ -111,18 +131,23 @@ test("voice receipts are one-time and atomically consumed through Redis", () => 
   assert.ok(receipt.includes("takeVoiceTranscriptReceipt"));
   assert.ok(receipt.includes("takeRedisValue"));
   assert.ok(receipt.includes("RECEIPT_TTL_SECONDS"));
+  assert.ok(receipt.includes("confidence: z.number().finite().min(0).max(1).nullable()"));
+  assert.ok(receipt.includes("CANDIDATE_CONFIRMED"));
   assert.ok(redis.includes("export async function takeRedisValue"));
   assert.ok(redis.includes("redis.call('GET', KEYS[1])"));
   assert.ok(redis.includes("redis.call('DEL', KEYS[1])"));
 });
 
-test("Voice UI uses MediaRecorder and never browser SpeechRecognition", () => {
+test("Voice UI uses MediaRecorder, transcript confirmation, and never browser SpeechRecognition", () => {
   const active = read(
     "src/app/ai/mock-interview/active/page.tsx",
   );
   assert.ok(active.includes("MediaRecorder"));
   assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
   assert.ok(active.includes("voice/transcribe"));
+  assert.ok(active.includes("voice/confirm-transcript"));
+  assert.ok(active.includes("CONFIRM_TRANSCRIPT"));
+  assert.ok(active.includes("Confirm Transcript"));
   assert.ok(active.includes("transcriptionReceiptId"));
   assert.ok(active.includes("Voice Mode does not show per-question scores"));
   assert.ok(!active.includes("SpeechRecognition"));
@@ -136,6 +161,7 @@ test("setup exposes Voice Mode only through runtime readiness", () => {
   assert.ok(setup.includes("Real Voice Mode"));
   assert.ok(setup.includes("/voice/readiness"));
   assert.ok(setup.includes("voiceReadiness?.ready !== true"));
+  assert.ok(setup.includes("AI-generated interviewer voice"));
   assert.ok(setup.includes("mode,"));
   assert.ok(!setup.includes("Voice Mode is ready by default"));
 });
@@ -186,19 +212,18 @@ test("candidate session payload does not expose provider voice identifiers", () 
   assert.ok(!route.includes("voiceKey: interviewSession.persona.voiceKey"));
 });
 
-test("voice runtime fails closed until worker advertises the deployed voice endpoint", () => {
+test("Railway worker remains optional and fail-closed as a future fallback", () => {
+  const env = read("src/lib/env.ts");
   const worker = read("video-analysis-worker/main.py");
-  const readiness = read(
-    "src/lib/mockInterview/MockInterviewVoiceService.ts",
-  );
+  assert.ok(env.includes("MOCK_INTERVIEW_VOICE_WORKER_FALLBACK_ENABLED"));
+  assert.ok(worker.includes('@app.post("/transcribe-turn")'));
   assert.ok(worker.includes('"voiceTurnSupported": True'));
-  assert.ok(readiness.includes("health?.voiceTurnSupported !== true"));
+  assert.ok(worker.includes("hmac.compare_digest"));
 });
 
-test("voice feature configuration fails closed in production", () => {
+test("voice feature configuration stays disabled unless explicitly enabled", () => {
   const env = read("src/lib/env.ts");
-  assert.ok(env.includes("MOCK_INTERVIEW_VOICE_ENABLED"));
+  assert.ok(env.includes('MOCK_INTERVIEW_VOICE_ENABLED === "true"'));
+  assert.ok(env.includes("MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES"));
   assert.ok(env.includes("MOCK_INTERVIEW_VOICE_MIN_TRANSCRIPT_CONFIDENCE"));
-  assert.ok(env.includes('requireProductionEnv("VIDEO_ANALYSIS_WORKER_URL")'));
-  assert.ok(env.includes('requireProductionEnv("VIDEO_ANALYSIS_INTERNAL_TOKEN")'));
 });
