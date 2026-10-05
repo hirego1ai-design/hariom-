@@ -24,7 +24,9 @@ export const modelCapabilitySchema = z.enum([
   "VISION",
   "LONG_CONTEXT",
   "REASONING",
+  "EMBEDDING",
 ]);
+export type ModelCapability = z.infer<typeof modelCapabilitySchema>;
 
 export const aiModelConfigSchema = z.object({
   key: z.string().trim().min(3).max(160).regex(/^[a-zA-Z0-9._:-]+$/),
