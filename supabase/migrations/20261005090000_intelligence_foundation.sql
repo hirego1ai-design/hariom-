@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS "SemanticMemoryRecord" (
   "id" TEXT NOT NULL, "dedupeKey" TEXT NOT NULL, "userId" TEXT, "companyId" TEXT, "scopeLevel" "MemoryScopeLevel" NOT NULL,
   "scopeId" TEXT NOT NULL, "agentId" TEXT NOT NULL, "memoryType" "MemoryType" NOT NULL DEFAULT 'KNOWLEDGE', "sourceType" TEXT NOT NULL,
   "sourceId" TEXT, "content" TEXT NOT NULL, "metadata" JSONB, "embeddingModel" TEXT NOT NULL, "embeddingDimensions" INTEGER NOT NULL,
-  "embedding" vector, "expiresAt" TIMESTAMP(3), "isAnonymized" BOOLEAN NOT NULL DEFAULT false, "consentState" TEXT NOT NULL DEFAULT 'NOT_REQUIRED',
+  "embedding" extensions.vector, "expiresAt" TIMESTAMP(3), "isAnonymized" BOOLEAN NOT NULL DEFAULT false, "consentState" TEXT NOT NULL DEFAULT 'NOT_REQUIRED',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "SemanticMemoryRecord_pkey" PRIMARY KEY ("id")
 );
@@ -60,3 +60,12 @@ CREATE INDEX IF NOT EXISTS "AiEvaluationRun_artifactVersionId_createdAt_idx" ON 
 CREATE INDEX IF NOT EXISTS "AiEvaluationRun_suite_passed_createdAt_idx" ON "AiEvaluationRun"("suite","passed","createdAt");
 
 -- Dimension intentionally remains provider-configured. No vector(1536) or fake embeddings are introduced.
+
+
+-- Intelligence data is server-only through Prisma/tool boundaries.
+-- No direct anon/authenticated policies are created; RLS therefore fails closed.
+ALTER TABLE "UserAiPreference" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SemanticMemoryRecord" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "LearningEvent" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "AiArtifactVersion" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "AiEvaluationRun" ENABLE ROW LEVEL SECURITY;
