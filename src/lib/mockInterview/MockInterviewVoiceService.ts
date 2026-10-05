@@ -1,11 +1,10 @@
 import { getMockInterviewVoiceConfig } from "@/lib/env";
 import {
+  assertSpeechToTextRouteConfigured,
+} from "@/lib/mockInterview/SpeechToTextService";
+import {
   assertTextToSpeechRouteConfigured,
 } from "@/lib/mockInterview/TextToSpeechService";
-import {
-  assertSafeOutboundNetworkTarget,
-  parseAllowedHosts,
-} from "@/lib/security/outboundUrl";
 
 export type MockVoiceReadiness = {
   ready: boolean;
@@ -14,8 +13,7 @@ export type MockVoiceReadiness = {
     | "DISABLED"
     | "PERSONA_VOICE_MISSING"
     | "TTS_NOT_CONFIGURED"
-    | "WORKER_NOT_CONFIGURED"
-    | "WORKER_UNAVAILABLE";
+    | "STT_NOT_CONFIGURED";
   message: string;
 };
 
@@ -28,8 +26,8 @@ export async function getMockVoiceReadiness(
   } catch {
     return {
       ready: false,
-      code: "WORKER_NOT_CONFIGURED",
-      message: "Voice transcription infrastructure is not configured.",
+      code: "STT_NOT_CONFIGURED",
+      message: "Voice runtime configuration is invalid.",
     };
   }
 
@@ -45,7 +43,8 @@ export async function getMockVoiceReadiness(
     return {
       ready: false,
       code: "PERSONA_VOICE_MISSING",
-      message: "This interviewer does not have an approved voice configured.",
+      message:
+        "This interviewer does not have an approved AI voice configured.",
     };
   }
 
@@ -61,45 +60,13 @@ export async function getMockVoiceReadiness(
   }
 
   try {
-    const healthUrl = `${config.workerUrl}/health`;
-    if (process.env.NODE_ENV === "production") {
-      await assertSafeOutboundNetworkTarget(healthUrl, {
-        label: "Voice transcription worker",
-        requireHttps: true,
-        allowedHosts: parseAllowedHosts(
-          process.env.VIDEO_ANALYSIS_ALLOWED_HOSTS,
-        ),
-      });
-    }
-    const response = await fetch(healthUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(5_000),
-      redirect: "error",
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      return {
-        ready: false,
-        code: "WORKER_UNAVAILABLE",
-        message: "Voice transcription worker is not healthy.",
-      };
-    }
-    const health = (await response.json().catch(() => null)) as
-      | { voiceTurnSupported?: boolean }
-      | null;
-    if (health?.voiceTurnSupported !== true) {
-      return {
-        ready: false,
-        code: "WORKER_UNAVAILABLE",
-        message:
-          "The transcription worker has not been upgraded for Voice Mock Interview yet.",
-      };
-    }
+    await assertSpeechToTextRouteConfigured();
   } catch {
     return {
       ready: false,
-      code: "WORKER_UNAVAILABLE",
-      message: "Voice transcription worker is unreachable.",
+      code: "STT_NOT_CONFIGURED",
+      message:
+        "Speech transcription is not configured in the AI Control Centre for mock-interview-stt.",
     };
   }
 
