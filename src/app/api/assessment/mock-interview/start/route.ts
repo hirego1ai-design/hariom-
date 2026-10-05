@@ -20,6 +20,7 @@ import {
 } from "@/lib/mockInterview/RoleFamily";
 import { LanguagePreferenceService, resolveConversationLanguage } from "@/lib/intelligence/LanguagePreference";
 import { LearningEventStore } from "@/lib/intelligence/LearningEventStore";
+import { assertMockVoiceReady } from "@/lib/mockInterview/MockInterviewVoiceService";
 
 const senioritySchema = z.enum(["Junior", "Mid-Level", "Senior", "Staff/Lead"]);
 
@@ -31,7 +32,7 @@ const mockInterviewStartSchema = z.object({
   focusSkills: z.array(z.string().trim().min(1).max(120)).max(6).optional().default([]),
   practiceContext: z.string().trim().max(2_000).optional().nullable(),
   language: z.string().trim().min(2).max(35).regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/).optional(),
-  mode: z.literal("TEXT").optional().default("TEXT"),
+  mode: z.enum(["TEXT", "VOICE"]).optional().default("TEXT"),
 }).strict();
 
 function normalizeLegacyRoleInput(roleTarget: string, declared?: z.infer<typeof senioritySchema>) {
@@ -189,6 +190,19 @@ export async function POST(request: Request) {
       fallbackLanguage: "en",
     });
 
+    if (body.mode === "VOICE") {
+      try {
+        await assertMockVoiceReady(personaResolution.persona.voiceKey);
+      } catch (error) {
+        throw new ApiError(
+          error instanceof Error
+            ? error.message
+            : "Voice Mock Interview is not available.",
+          503,
+        );
+      }
+    }
+
     let firstQuestion: Awaited<ReturnType<typeof MockInterviewEngineV2.generateFirstQuestion>>;
     try {
       firstQuestion = await MockInterviewEngineV2.generateFirstQuestion({
@@ -259,7 +273,7 @@ export async function POST(request: Request) {
             personaId: personaResolution.persona.id,
             personaVersion: personaResolution.persona.rubricVersion,
             language,
-            mode: "TEXT",
+            mode: body.mode,
             openingMessage: firstQuestion.openingMessage,
             practiceContext: body.practiceContext ?? null,
             focusSkills: focusSkills,
@@ -348,6 +362,7 @@ export async function POST(request: Request) {
         roleFamily: personaResolution.roleFamily,
         personaKey: personaResolution.persona.key,
         rubricVersion: personaResolution.persona.rubricVersion,
+        mode: body.mode,
       },
       acceptedResult: {
         difficulty: firstQuestion.difficulty,
