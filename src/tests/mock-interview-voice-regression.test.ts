@@ -227,3 +227,25 @@ test("voice feature configuration stays disabled unless explicitly enabled", () 
   assert.ok(env.includes("MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES"));
   assert.ok(env.includes("MOCK_INTERVIEW_VOICE_MIN_TRANSCRIPT_CONFIDENCE"));
 });
+
+
+test("voice AI routing migration configures quality-first STT and routed TTS without app fallbacks", () => {
+  const migration = read(
+    "prisma/migrations/20261005100000_voice_ai_routing_defaults/migration.sql",
+  );
+  assert.ok(migration.includes("'openai:gpt-4o-transcribe'"));
+  assert.ok(migration.includes("'openai:gpt-4o-mini-transcribe'"));
+  assert.ok(migration.includes("'openai:gpt-4o-mini-tts'"));
+  assert.ok(migration.includes("'mock-interview-stt'"));
+  assert.ok(migration.includes("'mock-interview-tts'"));
+  assert.ok(migration.includes("'QUALITY_FIRST'"));
+  assert.ok(migration.includes("'semantic-embedding'"));
+});
+
+test("voice provider models are configuration data, not hard-coded runtime fallbacks", () => {
+  const stt = read("src/lib/mockInterview/SpeechToTextService.ts");
+  const tts = read("src/lib/mockInterview/TextToSpeechService.ts");
+  assert.ok(!stt.includes("gpt-4o-transcribe"));
+  assert.ok(!stt.includes("gpt-4o-mini-transcribe"));
+  assert.ok(!tts.includes("gpt-4o-mini-tts"));
+});
