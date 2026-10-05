@@ -68,8 +68,8 @@ export async function POST(request: Request) {
     const normalized = normalizeLegacyRoleInput(body.roleTarget, body.declaredSeniority);
     const roleTarget = normalized.roleTarget;
     const declaredSeniority = normalized.seniority;
-    const focusSkills = focusSkills ?? [];
-    const totalQuestions = totalQuestions ?? 5;
+    const focusSkills = body.focusSkills ?? [];
+    const totalQuestions = body.totalQuestions ?? 5;
 
     const candidateProfile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
