@@ -46,3 +46,29 @@ test("critical factual evaluation has deterministic grounding support", () => {
   const evaluator=fs.readFileSync(path.resolve(process.cwd(),"src/lib/governance/AgentEvaluator.ts"),"utf8");
   assert.ok(evaluator.includes("GroundingVerifier")); assert.ok(evaluator.includes("requireFactualConsistency"));
 });
+
+
+test("semantic memory enforces actor ownership and reconciles privacy state on retries", () => {
+  const memory=fs.readFileSync(path.resolve(process.cwd(),"src/lib/intelligence/SemanticMemory.ts"),"utf8");
+  assert.ok(memory.includes('actor.role === Role.CANDIDATE'));
+  assert.ok(memory.includes('"userId"=${actor.userId}'));
+  assert.ok(memory.includes('"companyId"=${actor.companyId}'));
+  assert.ok(memory.includes('"isAnonymized"=EXCLUDED."isAnonymized"'));
+  assert.ok(memory.includes('"consentState"=EXCLUDED."consentState"'));
+  assert.ok(!memory.includes('("companyId" IS NULL OR "companyId"='));
+});
+
+test("semantic memory re-authorizes after external embedding work", () => {
+  const memory=fs.readFileSync(path.resolve(process.cwd(),"src/lib/intelligence/SemanticMemory.ts"),"utf8");
+  const rememberSection=memory.slice(memory.indexOf("static async remember"), memory.indexOf("static async search"));
+  const firstAuth=rememberSection.indexOf("assertIntelligenceScopeAccess");
+  const embedding=rememberSection.indexOf("createEmbedding");
+  const secondAuth=rememberSection.indexOf("assertIntelligenceScopeAccess", firstAuth + 1);
+  assert.ok(firstAuth >= 0 && embedding > firstAuth && secondAuth > embedding);
+});
+
+test("grounded evaluations cannot silently cross company context", () => {
+  const evaluator=fs.readFileSync(path.resolve(process.cwd(),"src/lib/governance/AgentEvaluator.ts"),"utf8");
+  assert.ok(evaluator.includes("params.grounding.actor.companyId !== params.companyId"));
+  assert.ok(evaluator.includes("Grounding actor company context does not match"));
+});
