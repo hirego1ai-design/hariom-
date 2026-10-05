@@ -72,7 +72,6 @@ export default function MockInterviewPersonasAdminPage() {
           displayName: persona.displayName,
           voiceKey: persona.voiceKey?.trim() || null,
           tone: persona.tone,
-          rubricVersion: persona.rubricVersion,
           isActive: persona.isActive,
           reason: reason.trim(),
         }),
@@ -212,19 +211,12 @@ export default function MockInterviewPersonasAdminPage() {
                     />
                   </label>
 
-                  <label className="block text-xs text-text-muted">
-                    Rubric version
-                    <input
-                      value={persona.rubricVersion}
-                      maxLength={80}
-                      onChange={(event) =>
-                        patchLocal(persona.id, {
-                          rubricVersion: event.target.value,
-                        })
-                      }
-                      className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-2.5 text-white"
-                    />
-                  </label>
+                  <div className="rounded-xl border border-white/5 bg-black/15 p-3 text-xs text-text-muted">
+                    Rubric version: <span className="font-bold text-white">{persona.rubricVersion}</span>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                      Rubric versions are provenance. Change them only through a validated rubric-version workflow, not by relabeling a live persona.
+                    </p>
+                  </div>
 
                   <div className="flex items-center justify-between gap-3">
                     <span
