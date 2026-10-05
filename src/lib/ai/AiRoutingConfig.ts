@@ -25,6 +25,7 @@ export const modelCapabilitySchema = z.enum([
   "LONG_CONTEXT",
   "REASONING",
   "EMBEDDING",
+  "STT",
   "TTS",
 ]);
 export type ModelCapability = z.infer<typeof modelCapabilitySchema>;
