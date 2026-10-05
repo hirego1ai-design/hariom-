@@ -186,6 +186,15 @@ test("candidate session payload does not expose provider voice identifiers", () 
   assert.ok(!route.includes("voiceKey: interviewSession.persona.voiceKey"));
 });
 
+test("voice runtime fails closed until worker advertises the deployed voice endpoint", () => {
+  const worker = read("video-analysis-worker/main.py");
+  const readiness = read(
+    "src/lib/mockInterview/MockInterviewVoiceService.ts",
+  );
+  assert.ok(worker.includes('"voiceTurnSupported": True'));
+  assert.ok(readiness.includes("health?.voiceTurnSupported !== true"));
+});
+
 test("voice feature configuration fails closed in production", () => {
   const env = read("src/lib/env.ts");
   assert.ok(env.includes("MOCK_INTERVIEW_VOICE_ENABLED"));
