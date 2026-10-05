@@ -7,7 +7,7 @@ import {
   recoverWhatsAppInboundEvents,
 } from "../lib/whatsapp-queue";
 import { sendWhatsAppTextMessage } from "../lib/whatsapp";
-import { processSecurityAuditDeliveryBatch } from "../lib/securityAuditDelivery";
+import { processSecurityAuditDeliveryBatch, SecurityAuditDeliveryNotConfiguredError } from "../lib/securityAuditDelivery";
 import { getVideoAnalysisConfig } from "../lib/env";
 import { claimVideoAnalysisJob, recoverStaleVideoAnalysisJobs, releaseVideoAnalysisClaimForRetry } from "../lib/videoAnalysisQueue";
 
@@ -117,20 +117,66 @@ test("ambiguous WhatsApp provider response is not automatically replayed", async
   assert.equal(calls, 1);
 });
 
-test("unconfigured SIEM is visible with its pending durable backlog", async (t) => {
+test("unconfigured external SIEM drains through the durable internal audit sink", async (t) => {
   env(t, { SIEM_WEBHOOK_URL: undefined, SIEM_WEBHOOK_TOKEN: undefined });
-  stubMethod(t, prisma.securityAuditOutboxEvent, "count", async ({ where }: any) => {
-    assert.deepEqual(where.status.in, ["PENDING", "PROCESSING"]);
-    return 7;
+
+  await assert.rejects(
+    () => processSecurityAuditDeliveryBatch(4, { requireConfiguration: true }),
+    SecurityAuditDeliveryNotConfiguredError,
+  );
+
+  const events = Array.from({ length: 4 }, (_, index) => ({
+    id: `audit-event-${index + 1}`,
+    attempts: 1,
+    payload: { schemaVersion: 1, index },
+    payloadSha256: `sha-${index + 1}`,
+  }));
+  let findManyCalls = 0;
+  const delivered = new Set<string>();
+
+  stubMethod(t, prisma.securityAuditOutboxEvent, "findMany", async ({ where }: any) => {
+    findManyCalls += 1;
+    if (findManyCalls === 1) {
+      assert.ok(Array.isArray(where.OR));
+      return events.map(({ id }) => ({ id }));
+    }
+    assert.equal(where.status, "PROCESSING");
+    assert.equal(typeof where.leaseId, "string");
+    return events;
   });
+
+  stubMethod(t, prisma.securityAuditOutboxEvent, "updateMany", async ({ where, data }: any) => {
+    if (data.status === "PROCESSING" && data.leaseId) {
+      return { count: events.length };
+    }
+    if (data.status === "DELIVERED") {
+      delivered.add(where.id);
+      return { count: 1 };
+    }
+    if (data.leasedUntil && where.status === "PROCESSING") {
+      return { count: 1 };
+    }
+    throw new Error("Unexpected security-audit outbox update in internal sink test.");
+  });
+
+  let fetchCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error("Internal audit sink must not call an external SIEM.");
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
   assert.deepEqual(await processSecurityAuditDeliveryBatch(4), {
     configured: false,
-    pending: 7,
-    delivered: 0,
+    pending: 0,
+    delivered: 4,
     retried: 0,
     failed: 0,
     unclaimed: 0,
   });
+  assert.equal(fetchCalls, 0);
+  assert.equal(delivered.size, 4);
 });
 
 test("video analysis claim is atomic and fenced against concurrent ownership", async (t) => {
