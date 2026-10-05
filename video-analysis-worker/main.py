@@ -93,8 +93,10 @@ def health_check():
         "computeType": COMPUTE_TYPE,
         "maxAllowedSeconds": MAX_SECONDS,
         "whisperLoaded": whisper_model is not None,
+        "voiceTurnSupported": True,
         "voiceTurnMaxSeconds": VOICE_MAX_SECONDS,
         "voiceTurnMaxBytes": VOICE_MAX_BYTES,
+        "workerVersion": "1.1.0",
         "faceLandmarkerTaskExists": face_task_exists,
         "poseLandmarkerTaskExists": pose_task_exists,
     }
