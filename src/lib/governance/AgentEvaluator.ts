@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { FairnessAuditor } from './FairnessAuditor';
+import { GroundingVerifier, EvidenceAssertion } from '@/lib/intelligence/GroundingVerifier';
+import { IntelligenceActor } from '@/lib/intelligence/ScopeAuthorization';
+import { Role } from '@prisma/client';
 
 export type EvaluatorVerdict = 'ACCEPT' | 'RETRY' | 'FALLBACK' | 'ESCALATE';
 
@@ -45,21 +48,44 @@ export class AgentEvaluator {
     agentId: string;
     output: unknown;
     outputSchema?: unknown;
+    grounding?: {
+      actor: IntelligenceActor;
+      assertions: EvidenceAssertion[];
+      requireFactualConsistency?: boolean;
+    };
   }): Promise<EvaluationResult> {
+    if (
+      params.grounding &&
+      params.companyId &&
+      params.grounding.actor.role !== Role.ADMIN &&
+      params.grounding.actor.companyId !== params.companyId
+    ) {
+      throw new Error(
+        'Grounding actor company context does not match the evaluation company context.',
+      );
+    }
+
     const outputString = typeof params.output === 'string' ? params.output : JSON.stringify(params.output);
 
     const fairness = FairnessAuditor.audit(outputString);
     const schemaValid = validateSchema(params.output, params.outputSchema);
-    // No factual verifier is implemented; do not attest model claims as true.
-    const factualConsistency = false;
+    const groundingResult = params.grounding
+      ? await GroundingVerifier.verify({
+          actor: params.grounding.actor,
+          assertions: params.grounding.assertions,
+        })
+      : null;
+    const factualConsistency = groundingResult?.factualConsistency ?? false;
+    const requireFactualConsistency = params.grounding?.requireFactualConsistency ?? Boolean(params.grounding);
 
     let score = 0.9; // Base quality score
     if (!schemaValid) score -= 0.5;
     if (!fairness.policyCompliant) score -= 0.4;
+    if (requireFactualConsistency && !factualConsistency) score -= 0.5;
     score = Math.max(0.0, Math.min(1.0, score));
 
     let verdict: EvaluatorVerdict;
-    if (!fairness.policyCompliant) {
+    if (!fairness.policyCompliant || (requireFactualConsistency && !factualConsistency)) {
       verdict = 'ESCALATE';
     } else if (score >= 0.8 && schemaValid) {
       verdict = 'ACCEPT';

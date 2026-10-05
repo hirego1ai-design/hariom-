@@ -1,17 +1,13 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { activePublicJobWhere } from "@/lib/publicJobs";
 import JobsClient, { type Job } from "./JobsClient";
 
 const PAGE_SIZE = 20;
 
 const getInitialJobs = unstable_cache(
   async (): Promise<{ jobs: Job[]; totalPages: number }> => {
-    const now = new Date();
-    const where = {
-      status: "ACTIVE" as const,
-      publishedAt: { not: null },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    };
+    const where = activePublicJobWhere(new Date());
 
     const [jobs, total] = await Promise.all([
       prisma.jobListing.findMany({
@@ -43,7 +39,7 @@ const getInitialJobs = unstable_cache(
       totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     };
   },
-  ["public-jobs-initial-v1"],
+  ["public-jobs-initial-v2"],
   { revalidate: 15 },
 );
 

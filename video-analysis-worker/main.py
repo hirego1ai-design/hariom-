@@ -7,12 +7,13 @@ import tempfile
 import subprocess
 import requests
 import threading
+import hmac
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, Header, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, Header, HTTPException, BackgroundTasks, Depends, UploadFile, File
 from pydantic import BaseModel
 
-app = FastAPI(title="HireGo Video Analysis Worker", version="1.0.0")
+app = FastAPI(title="HireGo Video Analysis Worker", version="1.1.0")
 
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
@@ -22,6 +23,9 @@ INTERNAL_TOKEN = os.getenv("VIDEO_ANALYSIS_INTERNAL_TOKEN", "dev-internal-token-
 MAX_SECONDS = float(os.getenv("VIDEO_ANALYSIS_MAX_SECONDS", "120.0"))
 MAX_DOWNLOAD_BYTES = int(os.getenv("VIDEO_ANALYSIS_MAX_DOWNLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_CONCURRENT_JOBS = int(os.getenv("VIDEO_ANALYSIS_MAX_CONCURRENT_JOBS", "2"))
+VOICE_MAX_SECONDS = float(os.getenv("MOCK_INTERVIEW_VOICE_MAX_SECONDS", "120.0"))
+VOICE_MAX_BYTES = int(os.getenv("MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES", str(15 * 1024 * 1024)))
+VOICE_MAX_CONCURRENT = int(os.getenv("MOCK_INTERVIEW_VOICE_MAX_CONCURRENT", "2"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("NODE_ENV", "development")).lower()
 CALLBACK_ORIGIN = os.getenv("VIDEO_ANALYSIS_CALLBACK_ORIGIN", "").rstrip("/")
 
@@ -36,8 +40,15 @@ if MAX_DOWNLOAD_BYTES < 1024 * 1024 or MAX_DOWNLOAD_BYTES > 500 * 1024 * 1024:
     raise RuntimeError("VIDEO_ANALYSIS_MAX_DOWNLOAD_BYTES must be between 1 MiB and 500 MiB.")
 if MAX_CONCURRENT_JOBS < 1 or MAX_CONCURRENT_JOBS > 16:
     raise RuntimeError("VIDEO_ANALYSIS_MAX_CONCURRENT_JOBS must be between 1 and 16.")
+if VOICE_MAX_SECONDS < 15 or VOICE_MAX_SECONDS > 300:
+    raise RuntimeError("MOCK_INTERVIEW_VOICE_MAX_SECONDS must be between 15 and 300.")
+if VOICE_MAX_BYTES < 256 * 1024 or VOICE_MAX_BYTES > 50 * 1024 * 1024:
+    raise RuntimeError("MOCK_INTERVIEW_VOICE_MAX_AUDIO_BYTES must be between 256 KiB and 50 MiB.")
+if VOICE_MAX_CONCURRENT < 1 or VOICE_MAX_CONCURRENT > 16:
+    raise RuntimeError("MOCK_INTERVIEW_VOICE_MAX_CONCURRENT must be between 1 and 16.")
 
 job_slots = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
+voice_slots = threading.BoundedSemaphore(VOICE_MAX_CONCURRENT)
 active_job_ids = set()
 active_job_ids_lock = threading.Lock()
 
@@ -83,6 +94,10 @@ def health_check():
         "computeType": COMPUTE_TYPE,
         "maxAllowedSeconds": MAX_SECONDS,
         "whisperLoaded": whisper_model is not None,
+        "voiceTurnSupported": True,
+        "voiceTurnMaxSeconds": VOICE_MAX_SECONDS,
+        "voiceTurnMaxBytes": VOICE_MAX_BYTES,
+        "workerVersion": "1.1.0",
         "faceLandmarkerTaskExists": face_task_exists,
         "poseLandmarkerTaskExists": pose_task_exists,
     }
@@ -91,8 +106,128 @@ def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     expected = f"Bearer {INTERNAL_TOKEN}"
-    if authorization != expected:
+    if not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid token")
+
+@app.post("/transcribe-turn")
+async def transcribe_voice_turn(
+    audio: UploadFile = File(...),
+    auth: None = Depends(verify_token),
+):
+    allowed_types = {
+        "audio/webm",
+        "audio/ogg",
+        "audio/mp4",
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "video/webm",
+    }
+    content_type = (audio.content_type or "").split(";")[0].strip().lower()
+    if content_type not in allowed_types:
+        raise HTTPException(status_code=415, detail="Unsupported voice recording content type")
+
+    if not voice_slots.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="Voice transcription worker is at capacity")
+
+    work_dir = tempfile.mkdtemp(prefix="mock_voice_")
+    input_path = os.path.join(work_dir, "voice_input")
+    wav_path = os.path.join(work_dir, "voice_16k.wav")
+
+    try:
+        total_bytes = 0
+        with open(input_path, "wb") as target:
+            while True:
+                chunk = await audio.read(64 * 1024)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > VOICE_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="Voice recording exceeds configured size limit")
+                target.write(chunk)
+
+        if total_bytes < 128:
+            raise HTTPException(status_code=400, detail="Voice recording is empty")
+
+        probe_cmd = [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            input_path,
+        ]
+        probe = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=15)
+        if probe.returncode != 0:
+            raise HTTPException(status_code=400, detail="Voice recording is corrupt or unsupported")
+
+        try:
+            duration_seconds = float(probe.stdout.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Voice recording duration is invalid")
+
+        if duration_seconds < 0.25:
+            raise HTTPException(status_code=400, detail="Voice recording is too short")
+        if duration_seconds > VOICE_MAX_SECONDS + 1.0:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Voice answer exceeds the {int(VOICE_MAX_SECONDS)} second limit",
+            )
+
+        ffmpeg_cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+            wav_path,
+        ]
+        ffmpeg_result = subprocess.run(
+            ffmpeg_cmd,
+            capture_output=True,
+            text=True,
+            timeout=max(30, int(min(VOICE_MAX_SECONDS, duration_seconds) * 1.5)),
+        )
+        if ffmpeg_result.returncode != 0:
+            raise HTTPException(status_code=400, detail="Voice audio extraction failed")
+
+        model = get_whisper_model()
+        if model is None:
+            raise HTTPException(status_code=503, detail="Speech recognition model is unavailable")
+
+        segments, info = model.transcribe(wav_path, beam_size=5, vad_filter=True)
+        transcript_parts = []
+        total_prob = 0.0
+        segment_count = 0
+        for segment in segments:
+            text = segment.text.strip()
+            if text:
+                transcript_parts.append(text)
+            total_prob += getattr(segment, "avg_logprob", -0.2)
+            segment_count += 1
+
+        transcript = " ".join(transcript_parts).strip()
+        if segment_count == 0 or not transcript:
+            raise HTTPException(status_code=422, detail="No audible speech was detected")
+
+        confidence = max(
+            0.4,
+            min(0.99, 1.0 + (total_prob / segment_count) / 2.0),
+        )
+
+        return {
+            "transcript": transcript,
+            "detectedLanguage": info.language,
+            "confidence": round(confidence, 3),
+            "lowConfidence": confidence < 0.65,
+            "durationSeconds": round(duration_seconds, 2),
+            "provider": "faster-whisper",
+            "model": f"whisper-{MODEL_SIZE}",
+            "version": "1.0.0",
+            "workerVersion": "1.1.0",
+        }
+    finally:
+        try:
+            await audio.close()
+        except Exception:
+            pass
+        shutil.rmtree(work_dir, ignore_errors=True)
+        voice_slots.release()
 
 @app.post("/analyze")
 def analyze_video(

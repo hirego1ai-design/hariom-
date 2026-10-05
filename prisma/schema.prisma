@@ -16,6 +16,16 @@ enum Role {
   ADMIN
 }
 
+enum AiArtifactStage {
+  DRAFT
+  SHADOW
+  EVALUATED
+  APPROVED
+  CANARY
+  PRODUCTION
+  ROLLED_BACK
+}
+
 enum EditorialContentType {
   BLOG
   PRESS_RELEASE
@@ -98,6 +108,11 @@ enum MockInterviewStatus {
   IN_PROGRESS
   COMPLETED
   ABANDONED
+}
+
+enum MockInterviewMode {
+  TEXT
+  VOICE
 }
 
 enum AssessmentScope {
@@ -196,6 +211,7 @@ model User {
   candidateTagsCreated          EmployerCandidateTag[]
   candidateCollectionsCreated   EmployerCandidateCollection[]
   sourcingRelationshipsAuthored CandidateSourcingRelationship[] @relation("CandidateSourcedBy")
+  aiPreference                 UserAiPreference?
 
   @@index([phoneNumber])
 }
@@ -3021,28 +3037,63 @@ model TypingPracticePrompt {
 }
 
 // ── AI Mock Interview Engine ──────────────────────────────────────────────────
+model MockInterviewPersona {
+  id                   String   @id @default(uuid())
+  key                  String   @unique
+  roleFamily           String
+  displayName          String
+  voiceKey             String?
+  tone                 String
+  questionMethodology  Json
+  competencyDimensions Json
+  rubricVersion        String
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  sessions MockInterviewSession[]
+
+  @@index([roleFamily, isActive])
+}
+
 model MockInterviewSession {
-  id                   String              @id @default(uuid())
+  id                   String               @id @default(uuid())
   candidateProfileId   String
-  candidateProfile     CandidateProfile    @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
-  idempotencyKey       String?             @unique
+  candidateProfile     CandidateProfile     @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  idempotencyKey       String?              @unique
   roleTarget           String
-  focusSkills          String[]            @default([])
-  status               MockInterviewStatus @default(IN_PROGRESS)
-  totalQuestions       Int                 @default(5)
-  currentQuestionIndex Int                 @default(0)
+  declaredSeniority    String?
+  roleFamily           String?
+  personaId            String?
+  persona              MockInterviewPersona? @relation(fields: [personaId], references: [id], onDelete: SetNull)
+  personaVersion       String?
+  language             String               @default("en")
+  mode                 MockInterviewMode    @default(TEXT)
+  openingMessage       String?
+  practiceContext      String?
+  focusSkills          String[]             @default([])
+  status               MockInterviewStatus  @default(IN_PROGRESS)
+  totalQuestions       Int                  @default(5)
+  currentQuestionIndex Int                  @default(0)
+  calibrationState     Json?
   overallScore         Int?
   communicationScore   Int?
   technicalScore       Int?
   integrityScore       Int?
+  estimatedLevel       String?
+  levelConfidence      Int?
+  missingEvidence      Json?
+  nextPracticePlan     Json?
+  finalReport          Json?
   aiFeedback           String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   turns MockInterviewTurn[]
 
   @@index([candidateProfileId, status])
   @@index([candidateProfileId, createdAt])
+  @@index([personaId])
 }
 
 model MockInterviewTurn {
@@ -3051,11 +3102,129 @@ model MockInterviewTurn {
   session                   MockInterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   questionIndex             Int
   questionText              String
+  difficulty                Int?
+  competency                String?
+  skillTags                 String[]             @default([])
   candidateAnswerTranscript String?
+  transcriptProvider        String?
+  transcriptModel           String?
+  transcriptVersion         String?
+  transcriptConfidence      Float?
   score                     Int?
   feedback                  String?
+  evidenceConfidence        Int?
+  evaluation                Json?
   turnLatencyMs             Int?
   createdAt                 DateTime             @default(now())
 
   @@unique([sessionId, questionIndex])
+  @@index([sessionId, difficulty])
+}
+
+
+// ── HireGo Intelligence Foundation ────────────────────────────────────────────
+// Additive only. Existing PostgreSQL hiring/business tables remain authoritative.
+
+model UserAiPreference {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredLanguage    String?
+  autoDetectLanguage   Boolean  @default(true)
+  allowCodeSwitching   Boolean  @default(true)
+  preferredVoiceKey    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([preferredLanguage])
+}
+
+model SemanticMemoryRecord {
+  id                  String           @id @default(uuid())
+  dedupeKey           String           @unique
+  userId              String?
+  companyId           String?
+  scopeLevel          MemoryScopeLevel
+  scopeId             String
+  agentId             String
+  memoryType          MemoryType       @default(KNOWLEDGE)
+  sourceType          String
+  sourceId            String?
+  content             String           @db.Text
+  metadata            Json?
+  embeddingModel      String
+  embeddingDimensions Int
+  embedding           Unsupported("vector")?
+  expiresAt           DateTime?
+  isAnonymized        Boolean          @default(false)
+  consentState        String           @default("NOT_REQUIRED")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([companyId, scopeLevel, scopeId])
+  @@index([userId, scopeLevel, scopeId])
+  @@index([embeddingModel, embeddingDimensions])
+  @@index([expiresAt])
+}
+
+model LearningEvent {
+  id                    String   @id @default(uuid())
+  idempotencyKey        String   @unique
+  correlationId         String
+  actorUserId           String?
+  actorRole             Role?
+  companyId             String?
+  channel               String
+  feature               String
+  task                  String
+  modelProvider         String?
+  modelId               String?
+  promptVersion         String?
+  evidenceRefs          Json?
+  aiOutput              Json?
+  correction            Json?
+  acceptedResult        Json?
+  outcome               Json?
+  explicitRating        Int?
+  consentState          String   @default("NOT_REQUIRED")
+  containsSensitiveData Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  @@index([companyId, feature, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([correlationId])
+  @@index([task, createdAt])
+}
+
+model AiArtifactVersion {
+  id              String          @id @default(uuid())
+  artifactType    String
+  artifactKey     String
+  version         String
+  stage           AiArtifactStage @default(DRAFT)
+  config          Json
+  createdBy       String
+  approvedBy      String?
+  rollbackOf      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  evaluationRuns AiEvaluationRun[]
+
+  @@unique([artifactType, artifactKey, version])
+  @@index([artifactType, artifactKey, stage])
+}
+
+model AiEvaluationRun {
+  id                String            @id @default(uuid())
+  artifactVersionId String
+  artifactVersion   AiArtifactVersion @relation(fields: [artifactVersionId], references: [id], onDelete: Cascade)
+  suite             String
+  scores            Json
+  passed            Boolean
+  notes             String?
+  createdAt         DateTime          @default(now())
+
+  @@index([artifactVersionId, createdAt])
+  @@index([suite, passed, createdAt])
 }
