@@ -79,7 +79,6 @@ export async function GET(request: NextRequest) {
                 name: interviewSession.persona.displayName,
                 roleFamily: interviewSession.persona.roleFamily,
                 tone: interviewSession.persona.tone,
-                voiceKey: interviewSession.persona.voiceKey,
                 rubricVersion: interviewSession.persona.rubricVersion,
               }
             : null,
