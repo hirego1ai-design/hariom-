@@ -578,7 +578,7 @@ export default function MockInterviewSetupPage() {
                   </div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
                     {mode === "VOICE"
-                      ? "Voice answers are transcribed through the approved Whisper worker. Low-confidence transcripts are repeated instead of scored, and raw turn audio is transient rather than stored by this flow."
+                      ? "Voice answers are transcribed through the approved routed speech-to-text service, and interviewer prompts use the configured AI-generated interviewer voice. Transcripts require candidate confirmation before scoring, and raw turn audio is transient rather than stored by this flow."
                       : "HireGo uses role context and your answers to adapt questions without inferring emotion, personality, or protected traits."}
                   </div>
                 </div>
