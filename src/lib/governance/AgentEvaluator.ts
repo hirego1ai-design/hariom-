@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { FairnessAuditor } from './FairnessAuditor';
 import { GroundingVerifier, EvidenceAssertion } from '@/lib/intelligence/GroundingVerifier';
 import { IntelligenceActor } from '@/lib/intelligence/ScopeAuthorization';
+import { Role } from '@prisma/client';
 
 export type EvaluatorVerdict = 'ACCEPT' | 'RETRY' | 'FALLBACK' | 'ESCALATE';
 
@@ -53,6 +54,17 @@ export class AgentEvaluator {
       requireFactualConsistency?: boolean;
     };
   }): Promise<EvaluationResult> {
+    if (
+      params.grounding &&
+      params.companyId &&
+      params.grounding.actor.role !== Role.ADMIN &&
+      params.grounding.actor.companyId !== params.companyId
+    ) {
+      throw new Error(
+        'Grounding actor company context does not match the evaluation company context.',
+      );
+    }
+
     const outputString = typeof params.output === 'string' ? params.output : JSON.stringify(params.output);
 
     const fairness = FairnessAuditor.audit(outputString);
