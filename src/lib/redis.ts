@@ -115,7 +115,7 @@ export async function takeRedisValue(key: string): Promise<string | null> {
   }
 
   try {
-    const value = await redis.eval<string | null, []>(
+    const value = await redis.eval<[], string | null>(
       "local value = redis.call('GET', KEYS[1])\n" +
         "if value then redis.call('DEL', KEYS[1]) end\n" +
         "return value",
