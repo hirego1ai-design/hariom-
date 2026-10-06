@@ -1,9 +1,0 @@
-fastapi==0.116.1
-uvicorn==0.35.0
-faster-whisper==1.0.3
-numpy>=1.26.4,<3
-soundfile>=0.12.1
-python-multipart>=0.0.20
-pydantic>=2.11.0,<3
-git+https://github.com/Bindkushal/indic-g2p.git@6bc9ca45fb06955bb19057344ac6a4e400ed4c95
-git+https://github.com/Bindkushal/indic-voice.git@57240e779560e8c3d022836f4191e0db6dff9018
