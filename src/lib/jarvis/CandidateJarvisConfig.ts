@@ -12,6 +12,9 @@ export const candidateJarvisConfigSchema = z.object({
   maxApplicationsContext: z.number().int().min(1).max(25).default(8),
   maxInterviewsContext: z.number().int().min(1).max(20).default(5),
   maxJobsContext: z.number().int().min(1).max(20).default(6),
+  maxVoiceAudioBytes: z.number().int().min(262144).max(15728640).default(8388608),
+  defaultLanguage: z.string().trim().min(2).max(16).default("en"),
+  defaultVoiceKey: z.string().trim().min(1).max(80).default("af_heart"),
   deepReasoningKeywords: z.array(z.string().trim().min(1).max(80)).max(40).default([
     "compare",
     "why",
@@ -68,6 +71,7 @@ export function isCandidateJarvisVoiceRuntimeConfigured(): boolean {
   const url = process.env.HIREGO_VOICE_ENGINE_URL?.trim();
   const token = process.env.HIREGO_VOICE_ENGINE_TOKEN?.trim();
   if (!url || !token) return false;
+  if (process.env.NODE_ENV === "production" && token.length < 32) return false;
   try {
     const parsed = new URL(url);
     if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") return false;

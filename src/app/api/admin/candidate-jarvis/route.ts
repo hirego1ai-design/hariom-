@@ -16,6 +16,7 @@ import {
   isCandidateJarvisVoiceRuntimeConfigured,
 } from "@/lib/jarvis/CandidateJarvisConfig";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { getHireGoVoiceCapabilities } from "@/lib/voice/HireGoVoiceEngine";
 
 const updateSchema = z.object({
   config: candidateJarvisConfigSchema,
@@ -37,9 +38,31 @@ export async function GET(request: NextRequest) {
       select: { platformConfig: true, updatedAt: true },
     });
 
+    const config = readCandidateJarvisConfig(row?.platformConfig ?? null);
+    let voiceRuntime: { ready: boolean; stt: boolean; tts: boolean; workerVersion: string | null } = {
+      ready: false,
+      stt: false,
+      tts: false,
+      workerVersion: null,
+    };
+    if (isCandidateJarvisVoiceRuntimeConfigured()) {
+      try {
+        const capabilities = await getHireGoVoiceCapabilities(4_000);
+        voiceRuntime = {
+          ready: capabilities.stt.ready && capabilities.tts.ready,
+          stt: capabilities.stt.ready,
+          tts: capabilities.tts.ready,
+          workerVersion: capabilities.workerVersion,
+        };
+      } catch {
+        voiceRuntime = { ready: false, stt: false, tts: false, workerVersion: null };
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      config: readCandidateJarvisConfig(row?.platformConfig ?? null),
+      config,
+      voiceRuntime,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     });
   } catch (error) {
@@ -53,8 +76,18 @@ export async function PUT(request: NextRequest) {
     await enforceRateLimit(request, `admin_candidate_jarvis_write:${admin.id}`, 12, 60_000);
     const payload = await readValidatedJson(request, updateSchema, 64 * 1024);
     const nextConfig = candidateJarvisConfigSchema.parse(payload.config);
-    if (nextConfig.voiceEnabled && !isCandidateJarvisVoiceRuntimeConfigured()) {
-      throw new ApiError("HireGo Voice Engine is not ready; Candidate Jarvis voice must remain off.", 409);
+    if (nextConfig.voiceEnabled) {
+      if (!isCandidateJarvisVoiceRuntimeConfigured()) {
+        throw new ApiError("HireGo Voice Engine is not configured; Candidate Jarvis voice must remain off.", 409);
+      }
+      try {
+        const capabilities = await getHireGoVoiceCapabilities(5_000);
+        if (!capabilities.stt.ready || !capabilities.tts.ready) {
+          throw new Error("Voice capabilities are incomplete.");
+        }
+      } catch {
+        throw new ApiError("HireGo Voice Engine did not pass live STT/TTS readiness; Candidate Jarvis voice must remain off.", 409);
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {

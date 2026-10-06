@@ -118,6 +118,9 @@ BEGIN
         'maxApplicationsContext',8,
         'maxInterviewsContext',5,
         'maxJobsContext',6,
+        'maxVoiceAudioBytes',8388608,
+        'defaultLanguage','en',
+        'defaultVoiceKey','af_heart',
         'deepReasoningKeywords',jsonb_build_array(
           'compare','why','weakness','improve','strategy','prepare',
           'career','best fit','likely questions','explain deeply'

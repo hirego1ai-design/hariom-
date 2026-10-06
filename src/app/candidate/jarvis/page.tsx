@@ -9,6 +9,7 @@ type JarvisReply = {
   message: string;
   actions: Array<{ label: string; href: string }>;
   model: null | { provider: string; model: string; taskType: string };
+  speechReceiptId?: string | null;
 };
 
 type ChatItem = {
@@ -23,7 +24,12 @@ export default function CandidateJarvisPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [error, setError] = useState("");
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const [items, setItems] = useState<ChatItem[]>([
     {
       id: "welcome",
@@ -50,6 +56,90 @@ export default function CandidateJarvisPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [items, busy]);
+
+  async function toggleRecording() {
+    if (!voiceEnabled || voiceBusy) return;
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const preferredType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg"].find((type) =>
+        typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type),
+      );
+      const recorder = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        setRecording(false);
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        const type = recorder.mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        chunksRef.current = [];
+        if (!blob.size) return;
+        setVoiceBusy(true);
+        try {
+          const form = new FormData();
+          form.append("audio", new File([blob], "jarvis-voice.webm", { type }));
+          const response = await fetch("/api/candidate/jarvis/voice/transcribe", {
+            method: "POST",
+            body: form,
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success || typeof payload.transcript !== "string") {
+            throw new Error(payload.error || "HireGo could not transcribe this recording.");
+          }
+          setInput(payload.transcript);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "HireGo could not transcribe this recording.");
+        } finally {
+          setVoiceBusy(false);
+        }
+      };
+      recorder.start(250);
+      setRecording(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Microphone access is unavailable.");
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setRecording(false);
+    }
+  }
+
+  async function hearReply(receiptId: string) {
+    if (!receiptId || voiceBusy) return;
+    setVoiceBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/candidate/jarvis/voice/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiptId }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "HireGo speech output is unavailable.");
+      }
+      const audioBlob = await response.blob();
+      const url = URL.createObjectURL(audioBlob);
+      const audio = new Audio(url);
+      audio.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+      audio.addEventListener("error", () => URL.revokeObjectURL(url), { once: true });
+      await audio.play();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "HireGo speech output is unavailable.");
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
 
   async function send(event: FormEvent) {
     event.preventDefault();
@@ -145,6 +235,18 @@ export default function CandidateJarvisPage() {
                 <p>{item.text}</p>
                 {item.reply && (
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {item.reply.speechReceiptId && voiceEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => void hearReply(item.reply!.speechReceiptId!)}
+                        disabled={voiceBusy}
+                        className="inline-flex min-h-10 items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40"
+                        style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">volume_up</span>
+                        Hear
+                      </button>
+                    )}
                     {item.reply.actions.map((action) => (
                       <Link
                         key={`${item.id}-${action.href}-${action.label}`}
@@ -185,12 +287,13 @@ export default function CandidateJarvisPage() {
           />
           <button
             type="button"
-            disabled={!voiceEnabled}
-            title={voiceEnabled ? "HireGo voice input" : "Voice stays off until the self-hosted Voice Engine is production-ready"}
+            onClick={() => void toggleRecording()}
+            disabled={!voiceEnabled || voiceBusy}
+            title={voiceEnabled ? (recording ? "Stop recording" : "HireGo voice input") : "Voice stays off until the self-hosted Voice Engine is production-ready"}
             className="min-h-12 min-w-12 rounded-xl border disabled:opacity-40"
-            style={{ borderColor: "var(--outline)" }}
+            style={{ borderColor: recording ? "var(--primary)" : "var(--outline)", backgroundColor: recording ? "var(--primary)" : "transparent", color: recording ? "#fff" : "inherit" }}
           >
-            <span className="material-symbols-outlined">mic</span>
+            <span className="material-symbols-outlined">{recording ? "stop" : voiceBusy ? "hourglass_top" : "mic"}</span>
           </button>
           <button
             type="submit"

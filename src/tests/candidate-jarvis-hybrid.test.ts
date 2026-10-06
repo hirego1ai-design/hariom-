@@ -55,3 +55,32 @@ test("Candidate Jarvis UI exposes actual execution path and does not use browser
   assert.ok(!page.includes("SpeechRecognition"));
   assert.ok(!page.includes("webkitSpeechRecognition"));
 });
+
+
+test("Candidate Jarvis voice uses only the authenticated self-hosted HireGo Voice Engine", () => {
+  const client = read("src/lib/voice/HireGoVoiceEngine.ts");
+  const stt = read("src/app/api/candidate/jarvis/voice/transcribe/route.ts");
+  const tts = read("src/app/api/candidate/jarvis/voice/speech/route.ts");
+  const receipt = read("src/lib/jarvis/CandidateJarvisVoiceReceipt.ts");
+  assert.ok(client.includes("HIREGO_VOICE_ENGINE_URL"));
+  assert.ok(client.includes("HIREGO_VOICE_ENGINE_TOKEN"));
+  assert.ok(!client.includes("OPENAI_API_KEY"));
+  assert.ok(!client.includes("GEMINI_API_KEY"));
+  assert.ok(stt.includes("transcribeHireGoVoice"));
+  assert.ok(stt.includes("requiresConfirmation: true"));
+  assert.ok(tts.includes("takeCandidateJarvisSpeechReceipt"));
+  assert.ok(!tts.includes("text: z.string"));
+  assert.ok(receipt.includes("takeRedisValue"), "speech receipt must be one-time");
+});
+
+test("self-hosted voice worker provides bounded Whisper STT and IndicVoice TTS", () => {
+  const worker = read("voice-engine/main.py");
+  const requirements = read("voice-engine/requirements.txt");
+  assert.ok(worker.includes('app.post("/v1/stt")'));
+  assert.ok(worker.includes('app.post("/v1/tts")'));
+  assert.ok(worker.includes("faster_whisper"));
+  assert.ok(worker.includes("IndicPipeline"));
+  assert.ok(worker.includes("hmac.compare_digest"));
+  assert.ok(requirements.includes("indic-voice.git@57240e779560e8c3d022836f4191e0db6dff9018"));
+  assert.ok(requirements.includes("indic-g2p.git@6bc9ca45fb06955bb19057344ac6a4e400ed4c95"));
+});
