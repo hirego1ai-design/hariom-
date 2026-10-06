@@ -8,7 +8,7 @@ import {
   readValidatedJson,
 } from "@/lib/apiSecurity";
 import { executeCandidateJarvis } from "@/lib/jarvis/CandidateJarvisService";
-import { getCandidateJarvisConfig } from "@/lib/jarvis/CandidateJarvisConfig";
+import { getCandidateJarvisConfig, isCandidateJarvisVoiceRuntimeConfigured } from "@/lib/jarvis/CandidateJarvisConfig";
 
 const requestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       enabled: config.enabled,
-      voiceEnabled: config.voiceEnabled,
+      voiceEnabled: config.voiceEnabled && isCandidateJarvisVoiceRuntimeConfigured(),
       hybridRoutingEnabled: config.hybridRoutingEnabled,
     });
   } catch (error) {
