@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import {
   candidateJarvisConfigSchema,
   readCandidateJarvisConfig,
+  isCandidateJarvisVoiceRuntimeConfigured,
 } from "@/lib/jarvis/CandidateJarvisConfig";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
@@ -52,6 +53,9 @@ export async function PUT(request: NextRequest) {
     await enforceRateLimit(request, `admin_candidate_jarvis_write:${admin.id}`, 12, 60_000);
     const payload = await readValidatedJson(request, updateSchema, 64 * 1024);
     const nextConfig = candidateJarvisConfigSchema.parse(payload.config);
+    if (nextConfig.voiceEnabled && !isCandidateJarvisVoiceRuntimeConfigured()) {
+      throw new ApiError("HireGo Voice Engine is not ready; Candidate Jarvis voice must remain off.", 409);
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       const current = await tx.adminConfiguration.findUnique({
