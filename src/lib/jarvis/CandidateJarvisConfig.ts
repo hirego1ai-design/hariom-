@@ -62,3 +62,17 @@ export function mergeCandidateJarvisConfig(
   current.candidateJarvis = candidateJarvisConfigSchema.parse(config);
   return current as Prisma.InputJsonValue;
 }
+
+
+export function isCandidateJarvisVoiceRuntimeConfigured(): boolean {
+  const url = process.env.HIREGO_VOICE_ENGINE_URL?.trim();
+  const token = process.env.HIREGO_VOICE_ENGINE_TOKEN?.trim();
+  if (!url || !token) return false;
+  try {
+    const parsed = new URL(url);
+    if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
