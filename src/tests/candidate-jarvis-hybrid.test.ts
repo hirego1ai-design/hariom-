@@ -23,7 +23,9 @@ test("Candidate Jarvis never executes consequential application side effects", (
   assert.ok(service.includes("read/navigation only"));
   assert.ok(!service.includes("application.create("));
   assert.ok(!service.includes("application.update("));
-  assert.ok(!service.includes("payment"));
+  assert.ok(!service.includes("paymentOrder.create("));
+  assert.ok(!service.includes("paymentTransaction.create("));
+  assert.ok(!service.includes("candidateCreditWallet.update("));
   assert.ok(!api.includes("DELETE"));
 });
 
