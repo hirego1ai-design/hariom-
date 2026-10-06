@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { activePublicJobWhere } from "@/lib/publicJobs";
@@ -303,7 +304,7 @@ function recommendationsReply(context: CandidateContext): CandidateJarvisReply {
 async function searchJobs(query: string | null, location: string | null): Promise<CandidateJarvisReply> {
   const q = query?.trim() ?? "";
   const loc = location?.trim() ?? "";
-  const where: any = activePublicJobWhere(new Date());
+  const where: Prisma.JobListingWhereInput = activePublicJobWhere(new Date());
 
   if (q) {
     where.AND = [
