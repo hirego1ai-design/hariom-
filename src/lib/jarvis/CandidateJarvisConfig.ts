@@ -14,7 +14,7 @@ export const candidateJarvisConfigSchema = z.object({
   maxJobsContext: z.number().int().min(1).max(20).default(6),
   maxVoiceAudioBytes: z.number().int().min(262144).max(15728640).default(8388608),
   defaultLanguage: z.string().trim().min(2).max(16).default("en"),
-  defaultVoiceKey: z.string().trim().min(1).max(80).default("af_heart"),
+  defaultVoiceKey: z.string().trim().min(1).max(80).default("hfc_female"),
   deepReasoningKeywords: z.array(z.string().trim().min(1).max(80)).max(40).default([
     "compare",
     "why",

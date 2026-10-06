@@ -31,10 +31,10 @@ function runtime() {
   const token = process.env.HIREGO_VOICE_ENGINE_TOKEN?.trim();
   const sttModel =
     process.env.HIREGO_VOICE_STT_MODEL?.trim() ||
-    "Systran/faster-whisper-small";
+    "Systran/faster-whisper-base";
   const ttsModel =
     process.env.HIREGO_VOICE_TTS_MODEL?.trim() ||
-    "speaches-ai/Kokoro-82M-v1.0-ONNX";
+    "speaches-ai/piper-en_US-hfc_female-medium";
 
   if (!baseUrl || !token) {
     throw new Error("HireGo Voice Engine runtime is not configured.");
@@ -120,7 +120,7 @@ export async function getHireGoVoiceCapabilities(
     // can transcribe Hindi/Hinglish, but Hindi speech output stays gated until
     // a Hindi TTS model passes the same production E2E test.
     languages: ["en"],
-    voices: ["af_heart"],
+    voices: ["hfc_female"],
   };
 }
 

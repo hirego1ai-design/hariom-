@@ -79,3 +79,12 @@ test("Candidate Jarvis voice uses only the authenticated self-hosted HireGo Voic
   assert.ok(!tts.includes("text: z.string"));
   assert.ok(receipt.includes("takeRedisValue"), "speech receipt must be one-time");
 });
+
+
+test("self-hosted voice defaults fit the Railway CPU runtime", () => {
+  const client = read("src/lib/voice/HireGoVoiceEngine.ts");
+  const config = read("src/lib/jarvis/CandidateJarvisConfig.ts");
+  assert.ok(client.includes("Systran/faster-whisper-base"));
+  assert.ok(client.includes("speaches-ai/piper-en_US-hfc_female-medium"));
+  assert.ok(config.includes('default("hfc_female")'));
+});
