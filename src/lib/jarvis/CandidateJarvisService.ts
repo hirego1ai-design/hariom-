@@ -474,7 +474,7 @@ async function runAiDecision(params: {
   let currentExecutionLogId: string | null = null;
   const routed = await ModelRouter.executeWithFallback({
     taskType,
-    requiredCapabilities: ["TEXT"],
+    requiredCapabilities: ["TEXT", "STRUCTURED_OUTPUT"],
     fn: async (endpoint, policy, isFallback) => {
       const execution = await dispatchAiTask({
         task: "GENERAL",
@@ -539,7 +539,7 @@ export async function executeCandidateJarvis(params: {
   const context = await loadCandidateContext(params.userId, config);
 
   const direct = directCommand(message, context);
-  if (direct) return direct;
+  if (config.hybridRoutingEnabled && direct) return direct;
 
   const path: "SMART" | "DEEP" = deepReasoningRequested(message, config)
     ? "DEEP"
