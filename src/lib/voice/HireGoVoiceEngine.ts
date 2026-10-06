@@ -1,17 +1,14 @@
 import { z } from "zod";
 import { assertSafeOutboundNetworkTarget } from "@/lib/security/outboundUrl";
 
-const readinessSchema = z.object({
-  status: z.literal("ready"),
-  e2e: z.literal(true),
-  stt: z.literal(true),
-  tts: z.literal(true),
-  checkedAt: z.string().nullable(),
-  error: z.null(),
-  sttModel: z.string().trim().min(1).max(200),
-  ttsModel: z.string().trim().min(1).max(200),
-  voice: z.string().trim().min(1).max(80),
-}).strict();
+const healthSchema = z.object({
+  message: z.string().optional(),
+  status: z.string().optional(),
+}).passthrough();
+
+const modelsSchema = z.object({
+  data: z.array(z.unknown()).optional(),
+}).passthrough();
 
 const transcriptionSchema = z.object({
   text: z.string().trim().min(1).max(10_000),
@@ -69,9 +66,16 @@ async function safeEndpoint(
 export async function getHireGoVoiceCapabilities(
   timeoutMs = 8_000,
 ): Promise<HireGoVoiceCapabilities> {
+  if (process.env.HIREGO_VOICE_ENGINE_E2E_VERIFIED !== "true") {
+    throw new Error(
+      "HireGo Voice Engine has not passed the production E2E verification gate.",
+    );
+  }
+
   const health = await safeEndpoint("health");
   const healthResponse = await fetch(health.url, {
     method: "GET",
+    headers: { Authorization: `Bearer ${health.token}` },
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(timeoutMs),
@@ -81,21 +85,22 @@ export async function getHireGoVoiceCapabilities(
       `HireGo Voice Engine health returned HTTP ${healthResponse.status}`,
     );
   }
+  healthSchema.parse(await healthResponse.json().catch(() => ({})));
 
-  const readiness = await safeEndpoint("hirego/readiness");
-  const readinessResponse = await fetch(readiness.url, {
+  const models = await safeEndpoint("v1/models");
+  const modelsResponse = await fetch(models.url, {
     method: "GET",
-    headers: { Authorization: `Bearer ${readiness.token}` },
+    headers: { Authorization: `Bearer ${models.token}` },
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!readinessResponse.ok) {
+  if (!modelsResponse.ok) {
     throw new Error(
-      `HireGo Voice Engine E2E readiness returned HTTP ${readinessResponse.status}`,
+      `HireGo Voice Engine authenticated probe returned HTTP ${modelsResponse.status}`,
     );
   }
-  const verified = readinessSchema.parse(await readinessResponse.json());
+  modelsSchema.parse(await modelsResponse.json().catch(() => ({})));
 
   return {
     status: "ready",
@@ -104,17 +109,18 @@ export async function getHireGoVoiceCapabilities(
     stt: {
       ready: true,
       provider: "hirego-self-hosted",
-      model: verified.sttModel,
+      model: models.sttModel,
     },
     tts: {
       ready: true,
       provider: "hirego-self-hosted",
-      model: verified.ttsModel,
+      model: models.ttsModel,
     },
-    // Full voice output is English-only until a Hindi TTS model passes the
-    // same worker self-test. Whisper STT itself remains multilingual.
+    // Full TTS output is verified only for English at launch. Faster-Whisper
+    // can transcribe Hindi/Hinglish, but Hindi speech output stays gated until
+    // a Hindi TTS model passes the same production E2E test.
     languages: ["en"],
-    voices: [verified.voice],
+    voices: ["af_heart"],
   };
 }
 

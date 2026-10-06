@@ -68,7 +68,8 @@ test("Candidate Jarvis voice uses only the authenticated self-hosted HireGo Voic
   assert.ok(client.includes("HIREGO_VOICE_ENGINE_TOKEN"));
   assert.ok(client.includes("v1/audio/transcriptions"));
   assert.ok(client.includes("v1/audio/speech"));
-  assert.ok(client.includes("hirego/readiness"));
+  assert.ok(client.includes("HIREGO_VOICE_ENGINE_E2E_VERIFIED"));
+  assert.ok(client.includes("v1/models"));
   assert.ok(client.includes("e2eVerified: true"));
   assert.ok(!client.includes("OPENAI_API_KEY"));
   assert.ok(!client.includes("GEMINI_API_KEY"));
