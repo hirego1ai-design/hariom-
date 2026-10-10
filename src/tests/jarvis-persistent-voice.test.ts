@@ -37,6 +37,8 @@ test("spoken navigation accepts only authorized non-mutating candidate routes", 
   ]), null);
   assert.equal(pickSafeVoiceNavigation("go to admin", [{ label: "Admin", href: "/admin" }]), null);
   assert.equal(pickSafeVoiceNavigation("open profile", [{ label: "bad", href: "javascript:alert(1)" }]), null);
+  assert.equal(isAllowedVoiceActionHref("/jobs/real-job_123"), true);
+  assert.equal(isAllowedVoiceActionHref("/jobs/../../admin"), false);
   assert.equal(isAllowedVoiceActionHref("/admin"), false);
   assert.equal(isAllowedVoiceActionHref("//evil.example"), false);
   assert.equal(isAllowedVoiceActionHref("/profile"), true);
