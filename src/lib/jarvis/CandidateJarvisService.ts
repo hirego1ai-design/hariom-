@@ -545,6 +545,44 @@ export async function executeCandidateJarvis(params: {
       return searchJobs(intent.query, intent.location);
     }
 
+    if (intent.kind === "APPLICATION_COUNT" || intent.kind === "CREDIT_BALANCE") {
+      // Session-to-profile ownership is resolved server-side; the model and
+      // client never get to supply another candidate's profile identifier.
+      const ownedProfile = await prisma.candidateProfile.findUnique({
+        where: { userId: params.userId },
+        select: { id: true },
+      });
+      if (!ownedProfile) {
+        return {
+          path: "FAST", model: null,
+          message: "Complete your profile to view your personal account details.",
+          actions: [{ label: "My profile", href: "/profile" }],
+        };
+      }
+      if (intent.kind === "APPLICATION_COUNT") {
+        const count = await prisma.application.count({
+          where: { candidateProfileId: ownedProfile.id },
+        });
+        return {
+          path: "FAST", model: null,
+          message: count === 0
+            ? "You have not submitted any applications on HireGo yet."
+            : `You have ${count} job application${count === 1 ? "" : "s"} on HireGo.`,
+          actions: [{ label: "View applications", href: "/applications" }],
+        };
+      }
+      const wallet = await prisma.candidateCreditWallet.findUnique({
+        where: { candidateProfileId: ownedProfile.id },
+        select: { balance: true },
+      });
+      return {
+        path: "FAST", model: null,
+        message: wallet ? `You currently have ${wallet.balance} candidate credits.`
+          : "You have no candidate credits recorded in your wallet yet.",
+        actions: [{ label: "View credit history", href: "/credits" }],
+      };
+    }
+
     const scope = intent.kind === "APPLICATION_STATUS" ? "APPLICATIONS"
       : intent.kind === "NEXT_INTERVIEW" ? "INTERVIEWS"
       : intent.kind === "RECOMMENDATIONS" ? "RECOMMENDATIONS"
