@@ -6,6 +6,7 @@ import { computeMatchScore } from "@/lib/matching/JobMatchingEngine";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
 import { dispatchAiTask, markAiExecutionValidationFailure } from "@/utils/aiRouter";
 import { wrapUntrustedContent } from "@/lib/security/untrustedContent";
+import { classifyCandidateDirectIntent } from "@/lib/jarvis/CandidateIntentRouter";
 import {
   CandidateJarvisConfig,
   getCandidateJarvisConfig,
@@ -53,10 +54,6 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function looksLikeAny(text: string, phrases: string[]) {
-  return phrases.some((phrase) => text.includes(phrase));
-}
-
 function deepReasoningRequested(message: string, config: CandidateJarvisConfig) {
   const normalized = normalize(message);
   return config.deepReasoningKeywords.some((keyword) =>
@@ -64,7 +61,7 @@ function deepReasoningRequested(message: string, config: CandidateJarvisConfig) 
   );
 }
 
-async function loadCandidateContext(userId: string, config: CandidateJarvisConfig) {
+async function loadCandidateContext(userId: string, config: CandidateJarvisConfig, scope: "FULL" | "APPLICATIONS" | "INTERVIEWS" | "RECOMMENDATIONS" = "FULL") {
   const candidate = await prisma.candidateProfile.findUnique({
     where: { userId },
     include: {
@@ -91,7 +88,7 @@ async function loadCandidateContext(userId: string, config: CandidateJarvisConfi
   }
 
   const [applications, interviews, jobs] = await Promise.all([
-    prisma.application.findMany({
+    (scope === "FULL" || scope === "APPLICATIONS") ? prisma.application.findMany({
       where: { candidateProfileId: candidate.id },
       select: {
         id: true,
@@ -110,8 +107,8 @@ async function loadCandidateContext(userId: string, config: CandidateJarvisConfi
       },
       orderBy: { createdAt: "desc" },
       take: config.maxApplicationsContext,
-    }),
-    prisma.interview.findMany({
+    }) : Promise.resolve([]),
+    (scope === "FULL" || scope === "INTERVIEWS") ? prisma.interview.findMany({
       where: {
         application: { candidateProfileId: candidate.id },
         status: { in: ["SCHEDULED", "RESCHEDULED", "LIVE"] },
@@ -134,8 +131,8 @@ async function loadCandidateContext(userId: string, config: CandidateJarvisConfi
       },
       orderBy: [{ scheduledAt: "asc" }, { id: "asc" }],
       take: config.maxInterviewsContext,
-    }),
-    prisma.jobListing.findMany({
+    }) : Promise.resolve([]),
+    (scope === "FULL" || scope === "RECOMMENDATIONS") ? prisma.jobListing.findMany({
       where: activePublicJobWhere(new Date()),
       select: {
         id: true,
@@ -152,7 +149,7 @@ async function loadCandidateContext(userId: string, config: CandidateJarvisConfi
       },
       orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
       take: Math.max(config.maxJobsContext * 4, 20),
-    }),
+    }) : Promise.resolve([]),
   ]);
 
   const recommendations = jobs
@@ -337,7 +334,7 @@ async function searchJobs(query: string | null, location: string | null): Promis
 
   if (!jobs.length) {
     return {
-      path: "SMART",
+      path: "FAST",
       message: "I did not find a currently published job matching those filters. You can broaden the search from the jobs page.",
       actions: [{ label: "Browse jobs", href: "/jobs" }],
       model: null,
@@ -345,7 +342,7 @@ async function searchJobs(query: string | null, location: string | null): Promis
   }
 
   return {
-    path: "SMART",
+    path: "FAST",
     message: [
       "I found these currently published jobs:",
       ...jobs.map(
@@ -362,86 +359,75 @@ async function searchJobs(query: string | null, location: string | null): Promis
 }
 
 function directCommand(message: string, context: CandidateContext): CandidateJarvisReply | null {
-  const text = normalize(message);
-
-  // Greetings must not consume a paid AI request or fail during an AI provider outage.
-  if (/^(hi|hello|hey|hey jarvis|namaste|namaskar|good morning|good afternoon|good evening)[.! ]*$/i.test(text)) {
-    return {
-      path: "FAST",
-      message: "Hi! I'm Jarvis, your HireGo career assistant. I can help you explore jobs, check applications, prepare for interviews or review your profile. What would you like to do?",
-      actions: [
-        { label: "Explore jobs", href: "/jobs" },
-        { label: "Mock interview", href: "/ai/mock-interview/setup" },
-        { label: "My profile", href: "/profile" },
-      ],
-      model: null,
-    };
+  const intent = classifyCandidateDirectIntent(message);
+  if (!intent) return null;
+  switch (intent.kind) {
+    case "GREETING":
+      return {
+        path: "FAST",
+        message: "Hi! I'm Jarvis, your HireGo career assistant. I can help you explore jobs, check applications, prepare for interviews or review your profile. What would you like to do?",
+        actions: [
+          { label: "Explore jobs", href: "/jobs" },
+          { label: "Mock interview", href: "/ai/mock-interview/setup" },
+          { label: "My profile", href: "/profile" },
+        ],
+        model: null,
+      };
+    case "APPLICATION_STATUS":
+      return applicationStatusReply(context);
+    case "NEXT_INTERVIEW":
+      return nextInterviewReply(context);
+    case "RECOMMENDATIONS":
+      return recommendationsReply(context);
+    case "OPEN_PROFILE":
+      return {
+        path: "FAST",
+        message: "You can view and edit your profile here.",
+        actions: [{ label: "Open profile", href: "/profile" }],
+        model: null,
+      };
+    case "OPEN_MOCK_INTERVIEW":
+      return {
+        path: "FAST",
+        message: "Open interview practice from here.",
+        actions: [{ label: "Start Mock Interview", href: "/ai/mock-interview/setup" }],
+        model: null,
+      };
+    case "OPEN_CREDITS":
+      return {
+        path: "FAST",
+        message: "See your available credits and transaction history.",
+        actions: [{ label: "Open credits", href: "/credits" }],
+        model: null,
+      };
+    case "OPEN_JOBS":
+      return {
+        path: "FAST",
+        message: "Browse currently published jobs.",
+        actions: [{ label: "Browse jobs", href: "/jobs" }],
+        model: null,
+      };
+    case "OPEN_DASHBOARD":
+      return {
+        path: "FAST",
+        message: "Your candidate dashboard is here.",
+        actions: [{ label: "Open dashboard", href: "/dashboard" }],
+        model: null,
+      };
+    case "CONFIRM_IN_PORTAL":
+      return {
+        path: "FAST",
+        message: "For account, application, scheduling or payment changes, open the relevant HireGo page to review and confirm the action. I haven't submitted or changed anything.",
+        actions: [
+          { label: "Applications", href: "/applications" },
+          { label: "Interviews", href: "/interviews" },
+          { label: "Credits", href: "/credits" },
+        ],
+        model: null,
+      };
+    case "SEARCH_JOBS":
+      return null; // Database query is handled separately, never through an LLM.
   }
-
-  if (
-    looksLikeAny(text, ["my applications", "application status", "applications status", "applied jobs"]) ||
-    (text.includes("application") && looksLikeAny(text, ["show", "open", "status", "track"]))
-  ) {
-    return applicationStatusReply(context);
-  }
-
-  if (
-    looksLikeAny(text, ["next interview", "upcoming interview", "my interview", "interview schedule"]) ||
-    (text.includes("interview") && looksLikeAny(text, ["when", "schedule", "show", "open"]))
-  ) {
-    return nextInterviewReply(context);
-  }
-
-  if (
-    looksLikeAny(text, ["recommended jobs", "matching jobs", "best matching jobs", "jobs for me"])
-  ) {
-    return recommendationsReply(context);
-  }
-
-  if (
-    looksLikeAny(text, ["open profile", "my profile", "edit profile", "profile kholo"])
-  ) {
-    return {
-      path: "FAST",
-      message: "Opening your candidate profile.",
-      actions: [{ label: "Open profile", href: "/profile" }],
-      model: null,
-    };
-  }
-
-  if (
-    looksLikeAny(text, ["mock interview", "practice interview", "interview practice"])
-  ) {
-    return {
-      path: "FAST",
-      message: "Opening Mock Interview practice.",
-      actions: [{ label: "Start Mock Interview", href: "/ai/mock-interview/setup" }],
-      model: null,
-    };
-  }
-
-  if (
-    looksLikeAny(text, ["career credits", "credits", "buy mock", "pricing"])
-  ) {
-    return {
-      path: "FAST",
-      message: "Opening candidate credits and purchase history.",
-      actions: [{ label: "Open credits", href: "/credits" }],
-      model: null,
-    };
-  }
-
-  if (
-    looksLikeAny(text, ["open jobs", "browse jobs", "job list", "jobs kholo"])
-  ) {
-    return {
-      path: "FAST",
-      message: "Opening currently published jobs.",
-      actions: [{ label: "Browse jobs", href: "/jobs" }],
-      model: null,
-    };
-  }
-
   return null;
 }
 
@@ -551,11 +537,65 @@ export async function executeCandidateJarvis(params: {
   }
 
   const message = params.message.trim().slice(0, config.maxInputChars);
+
+  // Hybrid first: classify before querying candidate history or touching a
+  // billable AI provider. Read-only actions stay available during LLM outages.
+  const intent = classifyCandidateDirectIntent(message);
+  if (intent) {
+    if (intent.kind === "SEARCH_JOBS") {
+      return searchJobs(intent.query, intent.location);
+    }
+
+    if (intent.kind === "APPLICATION_COUNT" || intent.kind === "CREDIT_BALANCE") {
+      // Session-to-profile ownership is resolved server-side; the model and
+      // client never get to supply another candidate's profile identifier.
+      const ownedProfile = await prisma.candidateProfile.findUnique({
+        where: { userId: params.userId },
+        select: { id: true },
+      });
+      if (!ownedProfile) {
+        return {
+          path: "FAST", model: null,
+          message: "Complete your profile to view your personal account details.",
+          actions: [{ label: "My profile", href: "/profile" }],
+        };
+      }
+      if (intent.kind === "APPLICATION_COUNT") {
+        const count = await prisma.application.count({
+          where: { candidateProfileId: ownedProfile.id },
+        });
+        return {
+          path: "FAST", model: null,
+          message: count === 0
+            ? "You have not submitted any applications on HireGo yet."
+            : `You have ${count} job application${count === 1 ? "" : "s"} on HireGo.`,
+          actions: [{ label: "View applications", href: "/applications" }],
+        };
+      }
+      const wallet = await prisma.candidateCreditWallet.findUnique({
+        where: { candidateProfileId: ownedProfile.id },
+        select: { balance: true },
+      });
+      return {
+        path: "FAST", model: null,
+        message: wallet ? `You currently have ${wallet.balance} candidate credits.`
+          : "You have no candidate credits recorded in your wallet yet.",
+        actions: [{ label: "View credit history", href: "/credits" }],
+      };
+    }
+
+    const scope = intent.kind === "APPLICATION_STATUS" ? "APPLICATIONS"
+      : intent.kind === "NEXT_INTERVIEW" ? "INTERVIEWS"
+      : intent.kind === "RECOMMENDATIONS" ? "RECOMMENDATIONS"
+      : null;
+    const fastContext: CandidateContext = scope
+      ? await loadCandidateContext(params.userId, config, scope)
+      : { candidate: null, applications: [], interviews: [], recommendations: [] };
+    const direct = directCommand(message, fastContext);
+    if (direct) return direct;
+  }
+
   const context = await loadCandidateContext(params.userId, config);
-
-  const direct = directCommand(message, context);
-  if (config.hybridRoutingEnabled && direct) return direct;
-
   const path: "SMART" | "DEEP" = deepReasoningRequested(message, config)
     ? "DEEP"
     : "SMART";
