@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
       success: true,
       enabled: config.enabled,
       voiceEnabled,
-      hybridRoutingEnabled: config.hybridRoutingEnabled,
     });
   } catch (error) {
     return handleApiError(error);
@@ -102,7 +101,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      reply: { ...reply, speechReceiptId },
+      // The candidate only needs the message, actions and optional playback receipt.
+      // Never send internal model/provider/route telemetry to the browser.
+      reply: { message: reply.message, actions: reply.actions, speechReceiptId },
     }, {
       headers: { "Cache-Control": "no-store" },
     });
