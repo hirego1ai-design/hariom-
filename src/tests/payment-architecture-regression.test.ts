@@ -304,7 +304,9 @@ test("candidate credit commercial values come from the database package catalog"
   assert.match(route, /candidateCreditPackage\.findMany/);
   assert.match(route, /candidateCreditPackage\.findUnique/);
   assert.doesNotMatch(route, /const\s+packages\s*=\s*\[[^\]]+\]/);
-  assert.match(page, /signed gateway webhook/);
+  assert.match(route, /STRIPE_WEBHOOK_SECRET/); // enforce signed webhook configuration server-side
+  assert.match(page, /payment is confirmed/); // candidate sees a plain-language confirmation
+  assert.match(page, /purchaseStatus === "READY" && packages.length > 0/); // no dead checkout offers
   assert.match(page, /submitPayU/);
 });
 
