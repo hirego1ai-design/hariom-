@@ -56,6 +56,31 @@ export async function GET(request: NextRequest) {
   try {
     await enforceRateLimit(request, "candidate_profile", 60, 60_000);
     const session = await requireCandidate(request);
+    // Onboarding screens need only their own fields. Avoid loading every
+    // application and all skill-evidence records just to populate a form.
+    const view = request.nextUrl.searchParams.get("view");
+    if (view === "role") {
+      const profile = await prisma.candidateProfile.findUnique({
+        where: { userId: session.id },
+        select: { preferences: true },
+      });
+      return NextResponse.json({ success: true, profile });
+    }
+    if (view === "skills") {
+      const profile = await prisma.candidateProfile.findUnique({
+        where: { userId: session.id },
+        select: {
+          preferences: true,
+          skills: true,
+          candidateSkills: {
+            where: { isVisible: true },
+            orderBy: { name: "asc" },
+            select: { name: true, claimedLevel: true },
+          },
+        },
+      });
+      return NextResponse.json({ success: true, profile });
+    }
     const profile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
       include: {
