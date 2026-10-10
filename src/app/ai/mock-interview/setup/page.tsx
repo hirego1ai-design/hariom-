@@ -80,6 +80,7 @@ export default function MockInterviewSetupPage() {
   const [voiceReadiness, setVoiceReadiness] =
     useState<VoiceReadiness | null>(null);
   const [checkingVoice, setCheckingVoice] = useState(false);
+  const [voiceCheckAttempt, setVoiceCheckAttempt] = useState(0);
   const roleOptions: RoleOption[] = useMemo(() => searchRoles(roleTarget), [roleTarget]);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -190,7 +191,7 @@ export default function MockInterviewSetupPage() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [mode, roleTarget]);
+  }, [mode, roleTarget, voiceCheckAttempt]);
 
   const handleStartInterview = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -382,19 +383,35 @@ export default function MockInterviewSetupPage() {
 
                 {mode === "VOICE" && (
                   <div
+                    role="status"
+                    aria-live="polite"
                     className={`mt-3 rounded-xl border p-3 text-xs ${
                       voiceReadiness?.ready
                         ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200"
                         : "border-amber-500/20 bg-amber-500/5 text-amber-200"
                     }`}
                   >
-                    {checkingVoice
-                      ? "Checking voice practice availability..."
-                      : !roleTarget.trim()
-                        ? "Choose a job role to use voice practice."
-                        : voiceReadiness?.ready
-                          ? "Voice practice is ready."
-                          : "Voice practice is not available right now. You can continue with text practice."}
+                    <div className="flex items-center justify-between gap-3">
+                      <span>
+                        {checkingVoice || voiceReadiness === null
+                          ? "Checking voice practice availability..."
+                          : !roleTarget.trim()
+                            ? "Choose a job role to use voice practice."
+                            : voiceReadiness?.ready
+                              ? "Voice practice is ready. Use Start Voice Interview to begin."
+                              : "Voice connection could not be verified. Text practice is available."}
+                      </span>
+                      {roleTarget.trim() && voiceReadiness?.ready !== true && !checkingVoice && (
+                        <button
+                          type="button"
+                          onClick={() => setVoiceCheckAttempt((attempt) => attempt + 1)}
+                          className="shrink-0 rounded-lg border border-current/25 px-3 py-2 font-semibold hover:bg-white/10"
+                          aria-label="Retry voice connection check"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
