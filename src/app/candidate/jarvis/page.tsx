@@ -22,6 +22,8 @@ type ChatItem = {
 export default function CandidateJarvisPage() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [transcriptReady, setTranscriptReady] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -58,7 +60,7 @@ export default function CandidateJarvisPage() {
   }, [items, busy]);
 
   async function toggleRecording() {
-    if (!voiceEnabled || voiceBusy) return;
+    if (!voiceEnabled || voiceBusy || busy || enabled !== true) return;
     if (recording) {
       recorderRef.current?.stop();
       return;
@@ -98,6 +100,7 @@ export default function CandidateJarvisPage() {
             throw new Error(payload.error || "HireGo could not transcribe this recording.");
           }
           setInput(payload.transcript);
+          setTranscriptReady(true);
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "HireGo could not transcribe this recording.");
         } finally {
@@ -147,6 +150,7 @@ export default function CandidateJarvisPage() {
     if (!message || busy || enabled !== true) return;
 
     setInput("");
+    setTranscriptReady(false);
     setError("");
     setBusy(true);
     const userId = crypto.randomUUID();
@@ -172,6 +176,11 @@ export default function CandidateJarvisPage() {
           reply,
         },
       ]);
+      // Only play a server-receipt-backed response to a user who chose voice.
+      // The Hear control remains available if browser autoplay is blocked.
+      if (voiceMode && voiceEnabled && reply.speechReceiptId) {
+        void hearReply(reply.speechReceiptId);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Jarvis could not answer this request.");
     } finally {
@@ -190,18 +199,64 @@ export default function CandidateJarvisPage() {
             </p>
             <h1 className="mt-1 text-3xl font-extrabold">Jarvis</h1>
             <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-              Direct HireGo actions run without an LLM. Reasoning uses the Super Admin model routes with provider fallback.
+              Explore jobs, check applications and practise interviews. Type a message or talk to Jarvis.
             </p>
           </div>
           <div className="flex gap-2">
             <span className="rounded-full border px-3 py-1.5 text-xs font-bold" style={{ borderColor: "var(--outline)" }}>
-              {enabled === null ? "Checking…" : enabled ? "Hybrid online" : "Disabled"}
+              {enabled === null ? "Connecting…" : enabled ? "Jarvis ready" : "Unavailable"}
             </span>
             <span className="rounded-full border px-3 py-1.5 text-xs font-bold" style={{ borderColor: "var(--outline)" }}>
-              Voice {voiceEnabled ? "enabled" : "off"}
+              {voiceEnabled ? "Voice ready" : "Voice not connected"}
             </span>
           </div>
         </header>
+
+        <section className="mt-6 rounded-3xl border p-4 sm:p-5" aria-label="Jarvis voice conversation" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-bold">
+                <span className="material-symbols-outlined" aria-hidden="true" style={{ color: "var(--primary)" }}>graphic_eq</span>
+                Voice conversation
+              </h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                Record your question, review what was heard, then send. Play Jarvis&apos;s answer when available.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVoiceMode((current) => !current)}
+              aria-pressed={voiceMode}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold"
+              style={{ borderColor: voiceMode ? "var(--primary)" : "var(--outline)", backgroundColor: voiceMode ? "var(--surface-container-high)" : "transparent" }}
+            >
+              <span className="material-symbols-outlined text-[19px]" aria-hidden="true">{voiceMode ? "keyboard" : "mic"}</span>
+              {voiceMode ? "Text view" : "Use voice"}
+            </button>
+          </div>
+          {voiceMode && (
+            <div className="mt-4 flex flex-col items-center gap-3 rounded-2xl border p-5 text-center" style={{ borderColor: "var(--outline)", backgroundColor: "var(--surface-container-high)" }}>
+              <button
+                type="button"
+                onClick={() => void toggleRecording()}
+                disabled={!voiceEnabled || voiceBusy || busy || enabled !== true}
+                aria-label={recording ? "Stop voice recording" : "Start voice recording"}
+                className="flex h-16 w-16 items-center justify-center rounded-full border-2 text-white shadow-lg transition-transform enabled:hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ borderColor: "var(--primary)", backgroundColor: recording ? "#b91c1c" : "var(--primary)" }}
+              >
+                <span className="material-symbols-outlined text-[30px]" aria-hidden="true">{recording ? "stop" : "mic"}</span>
+              </button>
+              <p className="text-sm font-semibold" aria-live="polite">
+                {!voiceEnabled ? "Voice connection is not ready. You can still use text chat." :
+                  voiceBusy ? "Preparing your words…" :
+                  recording ? "Listening… tap again to finish" :
+                  transcriptReady ? "Review your words in the message box, then press Send." :
+                  "Tap the microphone to speak"}
+              </p>
+              {voiceEnabled && <p className="text-xs" style={{ color: "var(--text-muted)" }}>We show your transcript before sending; nothing is sent until you confirm.</p>}
+            </div>
+          )}
+        </section>
 
         {error && (
           <div role="alert" className="mt-5 rounded-xl border p-4 text-sm" style={{ borderColor: "var(--primary)", backgroundColor: "var(--bg-card)" }}>
@@ -260,10 +315,10 @@ export default function CandidateJarvisPage() {
                   </div>
                 )}
                 {item.reply && (
-                  <p className="mt-2 text-[10px] opacity-60">
+                  <details className="mt-2 text-[10px] opacity-60"><summary className="cursor-pointer">Response details</summary><p>
                     Path: {item.reply.path}
                     {item.reply.model ? ` · hybrid model route ${item.reply.model.taskType}` : " · no LLM"}
-                  </p>
+                  </p></details>
                 )}
               </article>
             ))}
@@ -279,7 +334,7 @@ export default function CandidateJarvisPage() {
         <form onSubmit={send} className="sticky bottom-[72px] md:bottom-4 mt-4 flex gap-2 rounded-2xl border p-2 shadow-xl" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
           <input
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => { setInput(event.target.value); setTranscriptReady(false); }}
             maxLength={4000}
             disabled={busy || enabled !== true}
             placeholder={enabled ? "Ask Jarvis…" : "Jarvis is disabled"}
@@ -289,7 +344,8 @@ export default function CandidateJarvisPage() {
             type="button"
             onClick={() => void toggleRecording()}
             disabled={!voiceEnabled || voiceBusy}
-            title={voiceEnabled ? (recording ? "Stop recording" : "HireGo voice input") : "Voice stays off until the self-hosted Voice Engine is production-ready"}
+            aria-label={recording ? "Stop recording" : "Record a voice message"}
+            title={voiceEnabled ? (recording ? "Stop recording" : "Record a voice message") : "Voice connection is not ready"}
             className="min-h-12 min-w-12 rounded-xl border disabled:opacity-40"
             style={{ borderColor: recording ? "var(--primary)" : "var(--outline)", backgroundColor: recording ? "var(--primary)" : "transparent", color: recording ? "#fff" : "inherit" }}
           >
