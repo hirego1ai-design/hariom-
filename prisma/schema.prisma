@@ -3228,3 +3228,13 @@ model AiEvaluationRun {
   @@index([artifactVersionId, createdAt])
   @@index([suite, passed, createdAt])
 }
+
+
+// Encrypted AI provider credentials. Never exposed via public APIs or JSON platformConfig.
+model AiProviderCredential {
+  provider        String   @id
+  apiKeyEncrypted String?  @db.Text
+  baseUrl         String?
+  updatedBy       String?
+  updatedAt       DateTime @updatedAt
+}
