@@ -334,8 +334,10 @@ export default function JarvisVoiceGlobe() {
     }
   }, [releaseVAD, stopSession]);
 
-  beginListeningRef.current = beginListening;
-  processTurnRef.current = processTurn;
+  useEffect(() => {
+    beginListeningRef.current = beginListening;
+    processTurnRef.current = processTurn;
+  }, [beginListening, processTurn]);
 
   const startSession = useCallback(() => {
     if (!ready) return;
