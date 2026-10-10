@@ -15,11 +15,28 @@ export default function SkillsPage() {
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Saved onboarding data is restored after hydration.
+  // Restore the authenticated candidate's persisted skills rather than another browser user's draft.
   useEffect(() => {
-    setSkills(state.skills || []);
-    setTargetRole(state.targetRole || "");
-  }, [state.skills, state.targetRole]);
+    let cancelled = false;
+    fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        const preferences = body.profile.preferences && typeof body.profile.preferences === "object"
+          && !Array.isArray(body.profile.preferences) ? body.profile.preferences : {};
+        if (typeof preferences.targetRole === "string") setTargetRole(preferences.targetRole);
+        if (Array.isArray(body.profile.candidateSkills) && body.profile.candidateSkills.length > 0) {
+          setSkills(body.profile.candidateSkills.map((skill: { name: string; claimedLevel?: string }) => ({
+            name: skill.name,
+            level: String(skill.claimedLevel || "INTERMEDIATE").toLowerCase() as SkillEntry["level"],
+          })));
+        } else if (Array.isArray(body.profile.skills)) {
+          setSkills(body.profile.skills.map((name: string) => ({ name, level: "intermediate" as const })));
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const saveAndContinue = async (nextSkills: SkillEntry[]) => {
     if (!targetRole.trim() || isSaving) {
