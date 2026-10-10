@@ -364,6 +364,20 @@ async function searchJobs(query: string | null, location: string | null): Promis
 function directCommand(message: string, context: CandidateContext): CandidateJarvisReply | null {
   const text = normalize(message);
 
+  // Greetings are deterministic, safe and work even when a paid AI provider is down.
+  if (/^(hi|hello|hey|namaste|namaskar|good morning|good afternoon|good evening)[!?. ]*$/i.test(message.trim())) {
+    return {
+      path: "FAST",
+      message: "Hello! I can help you explore jobs, review your applications, find your next interview, or start interview practice. What would you like to do?",
+      actions: [
+        { label: "Browse jobs", href: "/jobs" },
+        { label: "My applications", href: "/applications" },
+        { label: "Mock Interview", href: "/ai/mock-interview/setup" },
+      ],
+      model: null,
+    };
+  }
+
   if (
     looksLikeAny(text, ["my applications", "application status", "applications status", "applied jobs"]) ||
     (text.includes("application") && looksLikeAny(text, ["show", "open", "status", "track"]))
@@ -546,12 +560,32 @@ export async function executeCandidateJarvis(params: {
     ? "DEEP"
     : "SMART";
 
-  const ai = await runAiDecision({
-    message,
-    context,
-    config,
-    path,
-  });
+  // Keep honest, read-only navigation available during an upstream LLM outage.
+  // A failed provider must never become a fabricated AI answer or a generic 500.
+  let ai: Awaited<ReturnType<typeof runAiDecision>> | null = null;
+  try {
+    ai = await runAiDecision({
+      message,
+      context,
+      config,
+      path,
+    });
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "";
+    if (!/All configured AI endpoints failed|No enabled, configured model|No AI routing policy/.test(messageText)) {
+      throw error;
+    }
+    return {
+      path: "FAST",
+      message: "My AI answers are temporarily unavailable. You can still browse jobs, check your applications and open interview practice. Please try your question again later.",
+      actions: [
+        { label: "Browse jobs", href: "/jobs" },
+        { label: "My applications", href: "/applications" },
+        { label: "Mock Interview", href: "/ai/mock-interview/setup" },
+      ],
+      model: null,
+    };
+  }
 
   let reply: CandidateJarvisReply;
   switch (ai.decision.intent) {
