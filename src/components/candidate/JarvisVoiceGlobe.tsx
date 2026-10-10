@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AudioLines, Mic2, MicOff, Minimize2, Maximize2, Square, Volume2,
+  AudioLines, Mic2, Minimize2, Maximize2, Square, Volume2,
   VolumeX, LoaderCircle, X, ArrowUpRight,
 } from "lucide-react";
-import { pickSafeVoiceNavigation, type VoiceAction } from "@/lib/jarvis/JarvisVoiceNavigation";
+import { isAllowedVoiceActionHref, pickSafeVoiceNavigation, type VoiceAction } from "@/lib/jarvis/JarvisVoiceNavigation";
 
 type Stage = "idle" | "listening" | "transcribing" | "thinking" | "speaking" | "paused" | "error";
 type JarvisResponse = {
@@ -204,6 +204,7 @@ export default function JarvisVoiceGlobe() {
       const url = URL.createObjectURL(voiceBlob);
       audioUrlRef.current = url;
       const audio = new Audio(url);
+      audio.muted = muted;
       audioRef.current = audio;
       audio.onended = () => {
         silenceAudio();
@@ -238,7 +239,7 @@ export default function JarvisVoiceGlobe() {
       clearTimeout(timeout);
       if (requestRef.current === request) requestRef.current = null;
     }
-  }, [readJson, router, silenceAudio, stopSession]);
+  }, [muted, readJson, router, silenceAudio, stopSession]);
 
   const beginListening = useCallback(async (generation: number) => {
     if (!activeRef.current || sequenceRef.current !== generation) return;
@@ -331,6 +332,9 @@ export default function JarvisVoiceGlobe() {
     activeRef.current = true;
     setSessionActive(true);
     setError("");
+    setHeard("");
+    setAnswer("");
+    setActions([]);
     setStage("listening");
     void beginListeningRef.current(generation);
   }, [ready, stopSession]);
@@ -426,7 +430,7 @@ export default function JarvisVoiceGlobe() {
                 <button type="button" key={action.href + action.label}
                   onClick={() => {
                     // No untrusted or external actions; read-only navigation only.
-                    if (action.href.startsWith("/") && !action.href.startsWith("//")) {
+                    if (isAllowedVoiceActionHref(action.href)) {
                       setDocked(true);
                       router.push(action.href);
                     }
@@ -442,7 +446,7 @@ export default function JarvisVoiceGlobe() {
               aria-label="Interrupt and speak" className="jarvis-voice-primary"><Mic2 size={16} /> Interrupt</button>}
             <button type="button" onClick={() => { stopSession("paused"); setError(""); }}
               aria-label="Pause microphone" className="jarvis-voice-control">
-              {muted ? <MicOff size={16} /> : <Square size={16} />} Pause
+              <Square size={16} /> Pause
             </button>
             <button type="button" onClick={() => { setMuted((value) => !value); if (audioRef.current) audioRef.current.muted = !muted; }}
               aria-label={muted ? "Unmute Jarvis playback" : "Mute Jarvis playback"}
