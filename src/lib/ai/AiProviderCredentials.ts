@@ -86,6 +86,7 @@ export type AiProviderResolution = {
   baseURL: string | undefined;
   source: "admin" | "environment" | "none";
   hasStoredKey: boolean;
+  hasAdminOverride: boolean;
   hasEnvironmentKey: boolean;
   updatedAt: string | null;
   configured: boolean;
@@ -120,7 +121,7 @@ export async function resolveAiProvider(provider: LlmProviderName): Promise<AiPr
     : !baseURL && (provider === "qwen" || provider === "self_hosted")
       ? "Provider endpoint is missing." : null;
   return {
-    provider, apiKey, baseURL, hasStoredKey, hasEnvironmentKey: Boolean(environmentKey),
+    provider, apiKey, baseURL, hasStoredKey, hasAdminOverride: Boolean(record), hasEnvironmentKey: Boolean(environmentKey),
     source: hasStoredKey ? "admin" : environmentKey ? "environment" : "none",
     updatedAt: record?.updatedAt.toISOString() || null, configured, reason,
   };
@@ -135,8 +136,8 @@ export async function getResolvedAiProviderStatuses() {
 
 export async function getAiProviderCredentialAdminView() {
   const results = await Promise.all(llmProviderSchema.options.map(resolveAiProvider));
-  return results.map(({ provider, baseURL, configured, reason, source, hasStoredKey, hasEnvironmentKey, updatedAt }) => ({
+  return results.map(({ provider, baseURL, configured, reason, source, hasStoredKey, hasAdminOverride, hasEnvironmentKey, updatedAt }) => ({
     provider, baseUrl: provider === "qwen" || provider === "self_hosted" ? baseURL || "" : null,
-    configured, reason, source, hasStoredKey, hasEnvironmentKey, updatedAt,
+    configured, reason, source, hasStoredKey, hasAdminOverride, hasEnvironmentKey, updatedAt,
   }));
 }
