@@ -365,7 +365,7 @@ function directCommand(message: string, context: CandidateContext): CandidateJar
   const text = normalize(message);
 
   // Greetings must not consume a paid AI request or fail during an AI provider outage.
-  if (/^(hi|hello|hey|hey jarvis|namaste|namaskar|good morning|good afternoon|good evening)[.!\\s]*$/i.test(text)) {
+  if (/^(hi|hello|hey|hey jarvis|namaste|namaskar|good morning|good afternoon|good evening)[.! ]*$/i.test(text)) {
     return {
       path: "FAST",
       message: "Hi! I'm Jarvis, your HireGo career assistant. I can help you explore jobs, check applications, prepare for interviews or review your profile. What would you like to do?",
