@@ -87,7 +87,7 @@ export default function SkillsPage() {
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
       <CandidateSidebar />
-      <div className="flex-1 ml-0 md:ml-[116px] flex flex-col min-w-0 min-h-screen lg:h-[100dvh] relative lg:overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] pb-20 md:pb-0 flex flex-col min-w-0 min-h-screen lg:h-[100dvh] relative lg:overflow-hidden">
         <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
         <header className="shrink-0 z-20 h-16 backdrop-blur-xl px-4 sm:px-6 flex items-center" style={{ backgroundColor: "var(--bg-page)", borderBottom: "1px solid var(--outline)" }}>
           <div>
