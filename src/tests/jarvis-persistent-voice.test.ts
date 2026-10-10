@@ -6,7 +6,7 @@ import {
   isAllowedVoiceActionHref,
   pickSafeVoiceNavigation,
 } from "../lib/jarvis/JarvisVoiceNavigation";
-import { isCandidateVoiceRoute } from "../components/candidate/JarvisVoiceMount";
+import { isCandidateVoiceRoute } from "../lib/jarvis/JarvisVoiceRoutes";
 
 const read = (relative: string) =>
   fs.readFileSync(path.resolve(process.cwd(), relative), "utf8");
@@ -72,7 +72,7 @@ test("voice is explicitly permission-gated, terminates on hidden/logout and neve
   assert.ok(globe.includes("streamRef.current?.getTracks().forEach((track) => track.stop())"));
   assert.ok(globe.includes("sequenceRef.current += 1"));
   assert.ok(globe.includes("isAllowedVoiceActionHref(action.href)"));
-  assert.ok(root.includes('pathname.startsWith('));
+  assert.ok(root.includes("isCandidateVoiceRoute(pathname)"));
   assert.ok(!globe.includes("OPENAI_API_KEY"));
   assert.ok(!globe.includes("GEMINI_API_KEY"));
   assert.ok(!globe.includes("localStorage"));
