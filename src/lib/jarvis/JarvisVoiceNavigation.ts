@@ -16,7 +16,9 @@ const NAVIGATION_ROUTES = new Set([
 ]);
 
 export function isAllowedVoiceActionHref(href: string): boolean {
-  return NAVIGATION_ROUTES.has(href);
+  // Candidate may click a specific published job result, but it must never
+  // be selected for automatic navigation based on an ambiguous utterance.
+  return NAVIGATION_ROUTES.has(href) || /^\/jobs\/[a-zA-Z0-9_-]{1,96}$/.test(href);
 }
 
 export function pickSafeVoiceNavigation(
@@ -32,7 +34,7 @@ export function pickSafeVoiceNavigation(
   }
 
   const matches = actions.filter(
-    (action) => isAllowedVoiceActionHref(action.href),
+    (action) => NAVIGATION_ROUTES.has(action.href),
   );
   if (matches.length !== 1) return null;
 
