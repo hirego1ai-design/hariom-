@@ -6,6 +6,8 @@
 export type CandidateDirectIntent =
   | { kind: "GREETING" }
   | { kind: "APPLICATION_STATUS" }
+  | { kind: "APPLICATION_COUNT" }
+  | { kind: "CREDIT_BALANCE" }
   | { kind: "NEXT_INTERVIEW" }
   | { kind: "RECOMMENDATIONS" }
   | { kind: "OPEN_PROFILE" }
@@ -67,6 +69,14 @@ export function classifyCandidateDirectIntent(input: string): CandidateDirectInt
 
   if (/\b(?:practice interview|mock interview|interview practice|interview ki practice|मॉक इंटरव्यू)\b/iu.test(text)) {
     return { kind: "OPEN_MOCK_INTERVIEW" };
+  }
+
+  if (/^(?:how many applications|number of (?:my )?applications|kitne applications|मेरे कितने आवेदन)$/iu.test(text)) {
+    return { kind: "APPLICATION_COUNT" };
+  }
+
+  if (/\b(?:what is (?:my )?wallet balance|wallet balance|credit balance|how many credits|my credit balance|mere kitne credits)\b/iu.test(text)) {
+    return { kind: "CREDIT_BALANCE" };
   }
 
   if (/\b(?:application status|applications status|my applications|applied jobs|track application|application dikhao|मेरी एप्लीकेशन|मेरे आवेदन)\b/iu.test(text) ||
