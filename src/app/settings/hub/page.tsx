@@ -46,6 +46,11 @@ export default function PlatformSettingsHubPage() {
             Subscription Plans
           </Link>
           {isAdmin && (
+            <Link href="/admin/settings/ai-provider-credentials" className="rounded-2xl border border-white/10 bg-[#12131A] p-5 text-sm font-bold hover:border-primary/50">
+              LLM API Credentials
+            </Link>
+          )}
+          {isAdmin && (
             <Link href="/admin/ai-command-centre-dashboard" className="rounded-2xl border border-white/10 bg-[#12131A] p-5 text-sm font-bold hover:border-primary/50">
               AI Control Centre
             </Link>
