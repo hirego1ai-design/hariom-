@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
 type Service = { serviceKey: string; name: string; description: string | null; creditCost: number };
@@ -176,6 +177,11 @@ export default function CandidateCreditsPage() {
         <p className="text-primary text-xs font-bold uppercase tracking-wider">Candidate account</p>
         <h1 className="mt-2 text-3xl font-extrabold">Career Credits</h1>
         <p className="mt-3 max-w-3xl text-sm text-text-secondary">Credits are separate from employer credits. They can be used for AI Mock Interviews and career services; they cannot buy an artificial score, badge, or job outcome.</p>
+        {returnTo === "mock-interview" && (
+          <Link href="/ai/mock-interview/setup" className="mt-4 inline-flex min-h-10 items-center text-sm font-semibold text-blue-200 hover:underline">
+            ← Back to Mock Interview
+          </Link>
+        )}
       </header>
 
       {error && <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
