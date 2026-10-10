@@ -7,6 +7,8 @@ const read = (path: string) => fs.readFileSync(new URL(path, import.meta.url), "
 test("mock interview setup uses the HireGo logo and candidate-friendly voice copy", () => {
   const setup = read("../app/ai/mock-interview/setup/page.tsx");
   assert.match(setup, /<Image src="\/marketing\/hirego-logo-hd\.png" alt="HireGo AI"/);
+  const active = read("../app/ai/mock-interview/active/page.tsx");
+  assert.match(active, /<Image src="\/marketing\/hirego-logo-hd\.png" alt="HireGo AI"/);
   assert.match(setup, /Checking voice practice availability/);
   assert.doesNotMatch(setup, /Whisper|TTS routing|speech-to-text service|production voice infrastructure|self-hosted worker/);
 });
