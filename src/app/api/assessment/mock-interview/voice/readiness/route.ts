@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         success: true,
         ready: false,
         code: "PERSONA_NOT_CONFIGURED",
-        message: "Interview persona configuration is not published for this role.",
+        message: "Voice practice is not available for this role right now.",
         personaName: null,
       });
     }
