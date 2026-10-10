@@ -81,6 +81,56 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json({ success: true, profile });
     }
+    // Private profile and dashboard screens need only the candidate's saved
+    // qualifications. No applications or full skill-evidence history is loaded.
+    if (view === "overview" || view === "dashboard") {
+      const profile = await prisma.candidateProfile.findUnique({
+        where: { userId: session.id },
+        select: {
+          id: true,
+          user: { select: { name: true, email: true, avatarUrl: true, phoneNumber: true } },
+          headline: true,
+          bio: true,
+          location: true,
+          skills: true,
+          education: true,
+          experience: true,
+          preferences: true,
+          experienceYears: true,
+          resumeUrl: true,
+          isVerified: true,
+          candidateSkills: {
+            where: { isVisible: true },
+            orderBy: { name: "asc" },
+            select: {
+              id: true, name: true, claimedLevel: true,
+              verifiedLevel: true, verificationStatus: true,
+              latestScore: true, verifiedAt: true, validUntil: true,
+            },
+          },
+        },
+      });
+      const now = new Date();
+      return NextResponse.json({
+        success: true,
+        profile: profile ? {
+          ...profile,
+          name: profile.user.name,
+          email: profile.user.email,
+          avatarUrl: profile.user.avatarUrl,
+          phoneNumber: profile.user.phoneNumber,
+          candidateSkills: profile.candidateSkills.map((skill) => {
+            const expired = !!skill.validUntil && skill.validUntil <= now;
+            return {
+              ...skill,
+              verificationStatus: expired ? "EXPIRED" : skill.verificationStatus,
+              latestScore: expired ? null : skill.latestScore,
+              verifiedAt: expired ? null : skill.verifiedAt,
+            };
+          }),
+        } : null,
+      });
+    }
     const profile = await prisma.candidateProfile.findUnique({
       where: { userId: session.id },
       include: {

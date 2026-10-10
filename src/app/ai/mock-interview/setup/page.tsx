@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { searchRoles } from "@/lib/skill-master";
 import {
   Sparkles,
   ShieldCheck,
@@ -78,9 +80,7 @@ export default function MockInterviewSetupPage() {
   const [voiceReadiness, setVoiceReadiness] =
     useState<VoiceReadiness | null>(null);
   const [checkingVoice, setCheckingVoice] = useState(false);
-  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
-  const [isLoadingRoles, setIsLoadingRoles] = useState(true);
-  const [roleError, setRoleError] = useState("");
+  const roleOptions: RoleOption[] = useMemo(() => searchRoles(roleTarget), [roleTarget]);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<SessionSummary[]>([]);
@@ -91,40 +91,6 @@ export default function MockInterviewSetupPage() {
   useEffect(() => {
     startRequestKey.current = null;
   }, [roleTarget, seniority, totalQuestions, practiceContext, mode]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      try {
-        setIsLoadingRoles(true);
-        setRoleError("");
-        const params = new URLSearchParams({ type: "roles" });
-        if (roleTarget.trim()) params.set("q", roleTarget.trim());
-        const res = await fetch(`/api/skill-master?${params.toString()}`, {
-          signal: controller.signal,
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (!res.ok) throw new Error("Role catalogue is unavailable.");
-        const data = (await res.json()) as { roles?: RoleOption[] };
-        setRoleOptions(Array.isArray(data.roles) ? data.roles : []);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setRoleError(
-          error instanceof Error
-            ? error.message
-            : "Role catalogue could not be loaded.",
-        );
-      } finally {
-        if (!controller.signal.aborted) setIsLoadingRoles(false);
-      }
-    }, roleTarget.trim() ? 250 : 0);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [roleTarget]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -234,8 +200,7 @@ export default function MockInterviewSetupPage() {
     }
     if (mode === "VOICE" && !voiceReadiness?.ready) {
       setErrorMessage(
-        voiceReadiness?.message ||
-          "Voice Mode is not ready for this interviewer.",
+        "Voice practice is unavailable right now. Choose Text Practice or try again later.",
       );
       return;
     }
@@ -278,7 +243,7 @@ export default function MockInterviewSetupPage() {
 
       if (!res.ok || !data?.success || !data.session?.id) {
         throw new Error(
-          data?.error || "Failed to start mock interview session.",
+          res.status >= 500 ? "Interview service is temporarily unavailable. Please try again shortly." : data?.error || "Could not start your interview. Please try again.",
         );
       }
 
@@ -309,10 +274,7 @@ export default function MockInterviewSetupPage() {
             href="/dashboard"
             className="flex items-center gap-1 font-bold text-xl tracking-tight"
           >
-            <span>
-              Hire<span className="text-[#C5221F]">Go</span>
-            </span>
-            <span className="text-[#4285F4]">AI</span>
+            <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={126} height={42} priority className="h-10 w-auto max-w-[126px] object-contain" />
           </Link>
           <span className="text-white/30">|</span>
           <span className="text-xs uppercase tracking-widest text-white/70 font-semibold flex items-center gap-1.5">
@@ -334,9 +296,7 @@ export default function MockInterviewSetupPage() {
             Adaptive Mock Interview
           </h1>
           <p className="text-sm text-white/60 max-w-3xl">
-            Practice in Text Mode or, when production voice infrastructure is
-            configured, a real turn-based Voice Mode. HireGo adapts from
-            demonstrated evidence rather than trusting a self-declared level.
+            Practise for your next opportunity with realistic role-based questions. Choose text or voice, and get practical feedback as you progress.
           </p>
         </div>
 
@@ -363,8 +323,7 @@ export default function MockInterviewSetupPage() {
                   ))}
                 </div>
                 <p className="mt-3 text-[11px] leading-relaxed text-white/50">
-                  This session cannot overwrite historical skill validation or
-                  employer decisions.
+                  Practice feedback is separate from your verified assessments and job applications.
                 </p>
               </div>
             )}
@@ -430,14 +389,12 @@ export default function MockInterviewSetupPage() {
                     }`}
                   >
                     {checkingVoice
-                      ? "Checking Whisper, interviewer voice, and TTS routing..."
-                      : voiceReadiness?.message ||
-                        "Select a role to check Voice Mode."}
-                    {voiceReadiness?.personaName && (
-                      <span className="ml-1 font-bold">
-                        Interviewer: {voiceReadiness.personaName}.
-                      </span>
-                    )}
+                      ? "Checking voice practice availability..."
+                      : !roleTarget.trim()
+                        ? "Choose a job role to use voice practice."
+                        : voiceReadiness?.ready
+                          ? "Voice practice is ready."
+                          : "Voice practice is not available right now. You can continue with text practice."}
                   </div>
                 )}
               </div>
@@ -460,13 +417,7 @@ export default function MockInterviewSetupPage() {
                 </div>
 
                 <div className="mt-3 min-h-[42px]">
-                  {isLoadingRoles ? (
-                    <p className="text-xs text-white/40">
-                      Loading role catalogue...
-                    </p>
-                  ) : roleError ? (
-                    <p className="text-xs text-amber-300">{roleError}</p>
-                  ) : roleOptions.length > 0 ? (
+                  {roleOptions.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {roleOptions.slice(0, 8).map((role) => (
                         <button
@@ -511,8 +462,7 @@ export default function MockInterviewSetupPage() {
                   ))}
                 </div>
                 <p className="mt-2 text-[11px] text-white/40">
-                  This is a starting hypothesis only. Difficulty moves from
-                  demonstrated practice evidence.
+                  Your interview questions adjust to your answers as you practise.
                 </p>
               </div>
 
@@ -578,7 +528,7 @@ export default function MockInterviewSetupPage() {
                   </div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
                     {mode === "VOICE"
-                      ? "Voice answers are transcribed through the approved routed speech-to-text service, and interviewer prompts use the configured AI-generated interviewer voice. Transcripts require candidate confirmation before scoring, and raw turn audio is transient rather than stored by this flow."
+                      ? "We turn your spoken answer into text and let you review it before feedback. Recordings from individual answers are not saved by this practice."
                       : "HireGo uses role context and your answers to adapt questions without inferring emotion, personality, or protected traits."}
                   </div>
                 </div>

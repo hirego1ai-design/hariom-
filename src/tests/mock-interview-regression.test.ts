@@ -22,8 +22,9 @@ test("mock interview v2 uses real setup, active and report pages", () => {
 
 test("setup uses the real role catalogue instead of hard-coded demo role buttons", () => {
   const setup = read("src/app/ai/mock-interview/setup/page.tsx");
-  assert.ok(setup.includes('/api/skill-master?'));
-  assert.ok(setup.includes('type: "roles"'));
+  assert.ok(setup.includes('searchRoles(roleTarget)'));
+  assert.ok(setup.includes('from "@/lib/skill-master"'));
+  assert.ok(!setup.includes('/api/skill-master?'));
   assert.ok(!setup.includes('"Full Stack Engineer"'));
   assert.ok(!setup.includes('"Frontend Architect"'));
   assert.ok(!setup.includes('"Backend Systems"'));

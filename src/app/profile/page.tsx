@@ -8,6 +8,7 @@ interface CandidateProfileData {
   id?: string;
   name?: string;
   email?: string;
+  phoneNumber?: string;
   headline?: string;
   bio?: string;
   location?: string;
@@ -29,6 +30,8 @@ interface CandidateProfileData {
   experience?: Array<{ company: string; role: string; startDate: string; endDate: string; description: string }>;
   preferences?: {
     desiredCategory?: string;
+    targetRole?: string;
+    candidateRole?: string;
     preferredTitles?: string[];
     preferredLocations?: string[];
     salaryExpectation?: string;
@@ -54,7 +57,7 @@ export default function ProfilePage() {
     setLoadError("");
     setSaveError("");
     try {
-      const res = await fetch("/api/candidate/profile", { cache: "no-store" });
+      const res = await fetch("/api/candidate/profile?view=overview", { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success || !data.profile) {
         throw new Error(data.error || "Could not load your profile.");
@@ -111,6 +114,33 @@ export default function ProfilePage() {
   const validatedSkills = (profile?.candidateSkills ?? []).filter(
     (skill) => skill.verificationStatus === "VERIFIED" || skill.verificationStatus === "ASSESSMENT_VALIDATED",
   );
+  const savedEducation = Array.isArray(profile?.education) ? profile.education : [];
+  const savedExperience = Array.isArray(profile?.experience) ? profile.experience : [];
+  const savedSkills = profile?.candidateSkills?.length
+    ? profile.candidateSkills.map((skill) => skill.name)
+    : Array.isArray(profile?.skills) ? profile.skills : [];
+  const targetRole = profile?.preferences?.targetRole?.trim() || "";
+  const candidateRole = profile?.preferences?.candidateRole || "";
+  const careerStage = candidateRole === "fresher" ? "Fresher / Graduate"
+    : candidateRole === "experienced" ? "Experienced professional"
+      : candidateRole === "intern" ? "Internship seeker"
+        : candidateRole ? candidateRole.replace(/-/g, " ") : "Not selected";
+  const savedQualificationCount = [
+    targetRole,
+    savedEducation.length > 0,
+    savedExperience.length > 0 || (profile?.experienceYears || 0) > 0,
+    savedSkills.length > 0,
+  ].filter(Boolean).length;
+  const overviewItems = [
+    { label: "Target job role", value: targetRole || "Not selected", href: "/onboarding/role-select" },
+    { label: "Career stage", value: careerStage, href: "/onboarding/role-select" },
+    { label: "Experience", value: (profile?.experienceYears || 0) > 0
+      ? String(profile?.experienceYears) + " years · " + savedExperience.length + " role(s)"
+      : savedExperience.length > 0 ? savedExperience.length + " role(s)"
+      : candidateRole === "fresher" ? "Fresher" : "Not added", href: "/onboarding/experience" },
+    { label: "Education", value: savedEducation.length ? savedEducation.length + " qualification(s) · " + (savedEducation[0]?.degree || "Added") : "Not added", href: "/onboarding/education" },
+    { label: "Skills", value: savedSkills.length ? savedSkills.length + " self-declared skill(s)" : "Not added", href: "/onboarding/skills" },
+  ];
 
   return (
     <div className="min-h-screen bg-bg-page flex text-text-primary font-sans">
@@ -149,13 +179,13 @@ export default function ProfilePage() {
           {profile && (
             <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-bold text-white">Complete or edit your full candidate profile</p>
+                <p className="text-sm font-bold text-white">{savedQualificationCount > 0 ? "Review or update your saved candidate details" : "Complete your candidate profile"}</p>
                 <p className="mt-1 text-xs text-gray-400">
-                  Add contact details, education, experience, skills, resume and job preferences. Your saved profile will appear here.
+                  Your saved career details are shown below. Update anything that is missing or has changed.
                 </p>
               </div>
               <Link href="/onboarding/personal-details" className="inline-flex min-h-10 items-center justify-center rounded-full bg-primary px-5 text-xs font-bold text-white">
-                Complete profile
+                {savedQualificationCount > 0 ? "Edit details" : "Complete profile"}
               </Link>
             </div>
           )}
@@ -189,7 +219,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs text-gray-400 justify-center md:justify-start">
                 <span className="text-primary font-semibold">
-                  {profile?.headline || "Add a professional headline"}
+                  {profile?.headline || (targetRole ? "Target role: " + targetRole : "Add a professional headline")}
                 </span>
                 <div className="flex items-center gap-1 justify-center md:justify-start">
                   <span className="material-symbols-outlined text-sm text-[#FF5252]">
@@ -215,6 +245,23 @@ export default function ProfilePage() {
               </Link>
             </div>
           </div>
+
+          {profile && (
+            <section aria-label="Your saved onboarding details" className="space-y-3">
+              <div className="flex flex-wrap justify-between items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Your saved onboarding details</h3>
+                <span className="text-[11px] text-gray-400">Information you entered during profile setup</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
+                {overviewItems.map((item) => (
+                  <Link key={item.label} href={item.href} className="rounded-2xl border border-white/10 bg-white/5 p-3 min-w-0 hover:border-primary/40 transition-colors">
+                    <span className="block text-[10px] uppercase tracking-wide text-gray-400 font-bold">{item.label}</span>
+                    <span className="block mt-1.5 text-xs font-bold text-white break-words">{item.value}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Quick Edit Mode Form */}
           {isEditing && (
@@ -309,7 +356,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Professional Summary</h3>
                   <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
-                    {profile?.bio || "Add a professional summary to help employers understand your experience."}
+                    {profile?.bio || "You have not added a professional summary yet. Your saved career details are shown above."}
                   </p>
                 </div>
               )}
@@ -318,7 +365,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-6">
                   <h3 className="text-base font-bold text-white">Work Experience</h3>
                   <div className="space-y-4">
-                    {(profile?.experience || []).length === 0 && (
+                    {savedExperience.length === 0 && (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
                         <p className="text-xs text-gray-400">No work experience has been added yet.</p>
                         <Link href="/onboarding/experience" className="mt-3 inline-flex text-xs font-bold text-primary hover:underline">
@@ -326,7 +373,7 @@ export default function ProfilePage() {
                         </Link>
                       </div>
                     )}
-                    {(profile?.experience || []).map((exp, idx) => (
+                    {savedExperience.map((exp, idx) => (
                       <div
                         key={idx}
                         className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-1.5"
@@ -351,7 +398,7 @@ export default function ProfilePage() {
                 <div className="glass-card p-6 rounded-3xl border border-white/10 bg-white/5 space-y-4">
                   <h3 className="text-base font-bold text-white">Education & Degrees</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(profile?.education || []).length === 0 && (
+                    {savedEducation.length === 0 && (
                       <div className="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
                         <p className="text-xs text-gray-400">No education details have been added yet.</p>
                         <Link href="/onboarding/education" className="mt-3 inline-flex text-xs font-bold text-primary hover:underline">
@@ -359,7 +406,7 @@ export default function ProfilePage() {
                         </Link>
                       </div>
                     )}
-                    {(profile?.education || []).map((edu, idx) => (
+                    {savedEducation.map((edu, idx) => (
                       <div
                         key={idx}
                         className="bg-white/5 p-4 rounded-2xl border border-white/5 space-y-1"

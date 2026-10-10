@@ -1178,12 +1178,7 @@ export default function MockInterviewActivePage() {
               </div>
 
               <p className="mt-6 max-w-xl text-[11px] leading-relaxed text-white/35">
-                Voice Mode does not show per-question scores. Provider
-                transcripts must be confirmed by you before they can be
-                evaluated; a future self-hosted worker may additionally use
-                confidence-based repeat rules. Raw turn audio is sent only for
-                transient transcription and is not saved by this Mock Interview
-                flow.
+                Voice practice gives feedback after the interview, not after every question. You can review and confirm the text of your answers before they are assessed. Individual answer recordings are not saved by this practice.
               </p>
             </div>
           </section>
