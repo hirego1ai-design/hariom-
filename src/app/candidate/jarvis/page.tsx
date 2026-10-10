@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Mic2, Square, Loader2, Volume2 } from "lucide-react";
+import { Mic2, Square, Loader2, Volume2, AudioLines } from "lucide-react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
 type JarvisReply = {
@@ -215,6 +215,31 @@ export default function CandidateJarvisPage() {
         {error && (
           <div role="alert" className="mt-5 rounded-xl border p-4 text-sm" style={{ borderColor: "var(--primary)", backgroundColor: "var(--bg-card)" }}>
             {error}
+          </div>
+        )}
+
+        {voiceEnabled && enabled === true && (
+          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-2xl border p-4 sm:p-5" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: "var(--surface-container-high)" }}>
+              <AudioLines className={`h-6 w-6 ${recording ? "animate-pulse" : ""}`} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold">Talk to Jarvis</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                Tap Speak, record your question, review the transcript and send it. Tap Hear to listen to Jarvis's reply.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void toggleRecording()}
+              disabled={voiceBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)" }}
+              aria-label={recording ? "Stop voice recording" : "Start voice conversation"}
+            >
+              {recording ? <Square className="h-4 w-4" /> : <Mic2 className="h-4 w-4" />}
+              {recording ? "Stop recording" : "Start speaking"}
+            </button>
           </div>
         )}
 
