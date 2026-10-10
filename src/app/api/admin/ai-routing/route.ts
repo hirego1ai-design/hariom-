@@ -12,9 +12,9 @@ import {
 import {
   aiRoutingConfigSchema,
   getAiRoutingConfig,
-  getProviderStatusSummary,
 } from "@/lib/ai/AiRoutingConfig";
 import { getAiUsageStats } from "@/utils/aiRouter";
+import { getResolvedAiProviderStatuses } from "@/lib/ai/AiProviderCredentials";
 import { prisma } from "@/lib/prisma";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       config,
-      providers: getProviderStatusSummary(),
+      providers: await getResolvedAiProviderStatuses(),
       telemetry: {
         totalRequests: usage.totalRequests,
         totalTokens: usage.totalTokens,
@@ -124,7 +124,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       config: nextConfig,
-      providers: getProviderStatusSummary(),
+      providers: await getResolvedAiProviderStatuses(),
     });
   } catch (error) {
     return handleApiError(error);
