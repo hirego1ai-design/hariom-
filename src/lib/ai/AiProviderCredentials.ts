@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import type { AiProviderCredential } from "@prisma/client";
 import { assertSafeOutboundServiceUrl } from "@/lib/security/outboundUrl";
 import { llmProviderSchema, type LlmProviderName } from "./AiRoutingConfig";
 
@@ -98,8 +99,7 @@ export type AiProviderResolution = {
  * so key rotations work across Vercel instances without redeployment.
  * Admin-secret rows supersede environment keys, which remain a fallback.
  */
-export async function resolveAiProvider(provider: LlmProviderName): Promise<AiProviderResolution> {
-  const record = await prisma.aiProviderCredential.findUnique({ where: { provider } });
+function resolveWithRecord(provider: LlmProviderName, record: AiProviderCredential | null): AiProviderResolution {
   const environmentKey = (process.env[envName[provider]] || "").trim();
   const hasStoredKey = Boolean(record?.apiKeyEncrypted);
   let apiKey: string | null = null;
@@ -127,15 +127,28 @@ export async function resolveAiProvider(provider: LlmProviderName): Promise<AiPr
   };
 }
 
+export async function resolveAiProvider(provider: LlmProviderName): Promise<AiProviderResolution> {
+  const record = await prisma.aiProviderCredential.findUnique({ where: { provider } });
+  return resolveWithRecord(provider, record);
+}
+
+async function resolveAllProviders(): Promise<AiProviderResolution[]> {
+  // One database query per routing decision instead of six; no stale cache
+  // across serverless instances after key rotation.
+  const records = await prisma.aiProviderCredential.findMany();
+  const byProvider = new Map(records.map((record) => [record.provider, record]));
+  return llmProviderSchema.options.map((provider) => resolveWithRecord(provider, byProvider.get(provider) || null));
+}
+
 export async function getResolvedAiProviderStatuses() {
-  const results = await Promise.all(llmProviderSchema.options.map(resolveAiProvider));
+  const results = await resolveAllProviders();
   return results.map(({ provider, configured, reason }) => ({
     provider, configured, status: configured ? "CONFIGURED" : "MISSING_CONFIGURATION", reason,
   }));
 }
 
 export async function getAiProviderCredentialAdminView() {
-  const results = await Promise.all(llmProviderSchema.options.map(resolveAiProvider));
+  const results = await resolveAllProviders();
   return results.map(({ provider, baseURL, configured, reason, source, hasStoredKey, hasAdminOverride, hasEnvironmentKey, updatedAt }) => ({
     provider, baseUrl: provider === "qwen" || provider === "self_hosted" ? baseURL || "" : null,
     configured, reason, source, hasStoredKey, hasAdminOverride, hasEnvironmentKey, updatedAt,
