@@ -76,7 +76,8 @@ export function validateAiProviderEndpoint(provider: LlmProviderName, raw: strin
   if (url.protocol !== "https:" || url.username || url.password) {
     throw new Error("AI provider endpoint must use HTTPS without URL credentials.");
   }
-  if (!url.hostname || url.hostname.toLowerCase() === "localhost" ||
+  if (!url.hostname || /^\\d+\\.\\d+\\.\\d+\\.\\d+$/.test(url.hostname) ||
+      url.hostname.includes(":") || url.hostname.toLowerCase() === "localhost" ||
       url.hostname.endsWith(".localhost") || url.hostname.endsWith(".local") ||
       url.hostname.toLowerCase() === "metadata.google.internal") {
     throw new Error("AI provider endpoint cannot target local or metadata hosts.");
