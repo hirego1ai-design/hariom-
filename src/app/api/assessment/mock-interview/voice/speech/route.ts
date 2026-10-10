@@ -136,9 +136,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       throw new ApiError(
-        error instanceof Error
-          ? error.message
-          : "Voice output is temporarily unavailable.",
+        "Voice output is temporarily unavailable.",
         503,
       );
     }
@@ -150,8 +148,6 @@ export async function POST(request: NextRequest) {
         "Content-Length": String(speech.audio.byteLength),
         "Cache-Control": "private, no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
-        "X-HireGo-TTS-Provider": speech.provider,
-        "X-HireGo-TTS-Model": speech.model,
       },
     });
   } catch (error) {
