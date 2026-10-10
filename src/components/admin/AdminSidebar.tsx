@@ -47,6 +47,7 @@ const infrastructureItems: NavRailItem[] = [
 ];
 
 const modelItems: NavRailItem[] = [
+  { id: "candidate-jarvis", label: "Candidate Jarvis", href: "/admin/candidate-jarvis", icon: "assistant" },
   { id: "model-registry", label: "AI Model Registry", href: "/admin/models/registry", icon: "model_training" },
   { id: "mock-interview-personas", label: "Mock Interview Personas", href: "/admin/mock-interview-personas", icon: "record_voice_over" },
   { id: "LM06", label: "LLM Usage Analytics (LM06)", href: "/admin/settings/llm-usage", icon: "analytics" },

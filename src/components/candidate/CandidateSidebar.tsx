@@ -34,6 +34,7 @@ const mobileNavItems: NavRailItem[] = [
 ];
 
 const aiCopilotNavItems: NavRailItem[] = [
+  { id: "jarvis", label: "Jarvis", href: "/candidate/jarvis", icon: "assistant", isAi: true },
   { id: "mcq", label: "Assigned Assessments", href: "/assessment/mcq", icon: "fact_check", isAi: true },
   { id: "typing", label: "Typing Practice", href: "/assessment/typing/active", icon: "keyboard", isAi: true },
 ];

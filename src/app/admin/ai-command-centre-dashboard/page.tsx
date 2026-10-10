@@ -177,6 +177,9 @@ export default function AdminCommandCentrePage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href="/admin/candidate-jarvis" className="rounded-xl border border-primary/40 px-4 py-2.5 text-xs font-extrabold text-primary">
+                Candidate Jarvis
+              </Link>
               <Link href="/admin/models/registry" className="rounded-xl bg-white px-4 py-2.5 text-xs font-extrabold text-black">
                 Change model routing
               </Link>
