@@ -66,13 +66,13 @@ export default function JarvisVoiceGlobe() {
     pollRef.current = null;
     try { sourceRef.current?.disconnect(); } catch { /* browser already closed it */ }
     sourceRef.current = null;
-    const context = contextRef.current;
-    contextRef.current = null;
-    if (context) void context.close().catch(() => undefined);
   }, []);
 
   const releaseMedia = useCallback(() => {
     releaseVAD();
+    const context = contextRef.current;
+    contextRef.current = null;
+    if (context) void context.close().catch(() => undefined);
     if (recorderRef.current?.state === "recording") {
       try { recorderRef.current.stop(); } catch { /* already stopped */ }
     }
@@ -226,8 +226,10 @@ export default function JarvisVoiceGlobe() {
         throw new Error("Your browser blocked automatic audio. Use Resume to continue.");
       }
     } catch (cause) {
-      if (!isCurrent()) return;
-      const message = cause instanceof Error ? cause.message : "Voice processing was interrupted.";
+      if (!activeRef.current || sequenceRef.current !== generation) return;
+      const message = request.signal.aborted
+        ? "Voice response timed out. Please try speaking again."
+        : cause instanceof Error ? cause.message : "Voice processing was interrupted.";
       setError(message);
       // Keep deterministic voice input usable if LLM or TTS fails.
       if (/blocked automatic audio/.test(message)) {
@@ -262,7 +264,7 @@ export default function JarvisVoiceGlobe() {
       if (!AudioContextClass || typeof MediaRecorder === "undefined") {
         throw new Error("This browser does not support continuous audio capture.");
       }
-      const context = new AudioContextClass();
+      const context = contextRef.current ?? new AudioContextClass();
       contextRef.current = context;
       if (context.state === "suspended") await context.resume();
       const source = context.createMediaStreamSource(stream);
