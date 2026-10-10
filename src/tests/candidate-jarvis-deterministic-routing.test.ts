@@ -7,6 +7,12 @@ import { classifyCandidateDirectIntent } from "../lib/jarvis/CandidateIntentRout
 test("basic navigation, application status, schedules and recommendations do not require a model", () => {
   const cases: Array<[string, string]> = [
     ["hi", "GREETING"],
+    ["नमस्ते", "GREETING"],
+    ["मुझे मेरी एप्लीकेशन दिखाओ", "APPLICATION_STATUS"],
+    ["मेरा अगला इंटरव्यू कब है", "NEXT_INTERVIEW"],
+    ["मेरा प्रोफाइल खोलो", "OPEN_PROFILE"],
+    ["मेरा वॉलेट दिखाओ", "OPEN_CREDITS"],
+    ["मॉक इंटरव्यू शुरू करें", "OPEN_MOCK_INTERVIEW"],
     ["Namaste!", "GREETING"],
     ["show my applications", "APPLICATION_STATUS"],
     ["what is my application status", "APPLICATION_STATUS"],
