@@ -242,7 +242,7 @@ export default function CandidateCreditsPage() {
             </button>
           </article>)}
         </div>
-        {balance !== null && services.length === 0 && <p className="mt-4 text-sm text-text-secondary">No paid career service has been published by an administrator.</p>}
+        
       </section>
 
       <section className="mt-10">
