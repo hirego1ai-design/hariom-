@@ -1,64 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HireGo AI
 
-## Getting Started
+HireGo AI is an end-to-end hiring operating system built with Next.js, Prisma/PostgreSQL, private Cloudflare R2 storage, Redis-backed distributed controls, Vercel, and Railway workers.
 
-First, run the development server:
+## Production architecture
+
+- **Web/API:** Vercel
+- **Database:** PostgreSQL / Supabase
+- **Object storage:** private Cloudflare R2
+- **Background recovery worker:** Railway
+- **Recorded-assessment scheduler:** Railway cron every 5 minutes
+- **Payments:** Stripe + PayU only
+- **Email:** SendGrid + Zoho/ZeptoMail
+- **WhatsApp:** Meta WhatsApp Business API
+- **AI providers:** configured server-side/admin-side; no provider secret belongs in the repository
+
+## Local development
 
 ```bash
+npm ci
+cp .env.example .env.local
+npx prisma generate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Never commit credentials. Production secrets belong in the deployment secret manager.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verification
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npx tsc --noEmit
+npm test
+npm run verify:phase5
+npm audit --omit=dev --audit-level=high
+npm run build
+```
 
-## Learn More
+`npm run test:audit` generates temporary production-wiring audit artifacts. Those outputs are intentionally gitignored and should not be committed.
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Production changes must pass validation/security gates before merge.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- App deployment: Vercel from `main`
+- Recovery worker: `Dockerfile.scheduler` on Railway
+- Recorded-assessment scheduler: `Dockerfile.recorded-assessment-scheduler` on Railway
+- Vercel cron: daily referral reconciliation only
 
-## Deploy on Vercel
+Operational guidance lives in:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `DEPLOYMENT.md`
+- `DEPLOYMENT_CHECKLIST.md`
+- `EXTERNAL_SERVICES_SETUP.md`
+- `MIGRATION_RECONCILIATION_RUNBOOK.md`
+- `docs/runbooks/`
+- `docs/RECORDED_ASSESSMENT_SCHEDULER.md`
+- `docs/WORKFLOW_RECOVERY_WORKER.md`
+- `VIDEO_ANALYSIS_RUNBOOK.md`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Production rules
 
-## Payment Architecture Overview
-HireGo AI uses a streamlined, two-provider payment architecture supporting only **Stripe** and **PayU**.
-- **Stripe**: Handles primary credit card processing and international payments.
-- **PayU**: Handles domestic (India) transactions and local payment methods.
-- *Note*: Legacy providers (PhonePe and Razorpay) have been completely purged from the codebase and database schema. Do not attempt to use them.
-
-## Development Setup Instructions
-1. **Clone the repository** and install dependencies using `npm install`.
-2. **Environment Variables**: Copy `.env.example` to `.env.local` and fill in the required database, custom JWT/session, Redis, storage, and provider values.
-3. **Database Setup**: Run `npx prisma migrate dev` to apply the latest database schema to your local PostgreSQL instance.
-4. **Start Development Server**: Run `npm run dev` and navigate to `http://localhost:3000`.
-
-## Testing Instructions
-HireGo AI includes a comprehensive suite of tests to ensure production readiness.
-- **Offline Tests**: Run `npm run test:audit` (contains ~175 tests validating core logic and payments).
-- **Phase 5 Tests**: Run `npm run test:phase5` for integration testing of recent architectural phases.
-- Ensure all tests pass before proposing a pull request.
-
-## CI and deployment
-The repository uses GitHub Actions for validation and security checks:
-- `phase5-verification.yml`: Runs the Phase 5 tests and type-checking on pull requests.
-- `security.yml`: Runs dependency review on pull requests plus CodeQL and secret scanning.
-- `deploy.yml`: Validates Prisma migrations against disposable PostgreSQL, typechecks, lints, tests, audits dependencies, and builds the application.
-
-The workflow does **not** deploy Vercel or Railway. Follow `DEPLOYMENT.md` and
-`DEPLOYMENT_CHECKLIST.md` for controlled deployment, provider verification,
-worker health, and release sign-off.
+- No mock/demo/localStorage data may act as production authority.
+- Consequential hiring actions require the configured human-approval gates.
+- Uploaded candidate files stay private and must pass upload validation/security scanning before downstream processing.
+- Payment success must be server-verified and idempotent.
+- Do not move Railway background workers or the recorded-assessment scheduler to Vercel.
