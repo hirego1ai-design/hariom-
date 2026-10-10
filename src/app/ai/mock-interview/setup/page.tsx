@@ -274,7 +274,7 @@ export default function MockInterviewSetupPage() {
             href="/dashboard"
             className="flex items-center gap-1 font-bold text-xl tracking-tight"
           >
-            <Image src="/marketing/hirego-logo.png" alt="HireGo AI" width={128} height={36} priority className="h-9 w-auto max-w-[130px] object-contain" />
+            <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={126} height={42} priority className="h-10 w-auto max-w-[126px] object-contain" />
           </Link>
           <span className="text-white/30">|</span>
           <span className="text-xs uppercase tracking-widest text-white/70 font-semibold flex items-center gap-1.5">
