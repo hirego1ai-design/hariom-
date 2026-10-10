@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Send,
   Clock,
@@ -920,10 +921,7 @@ export default function MockInterviewActivePage() {
             href="/dashboard"
             className="flex shrink-0 items-center gap-1 font-bold text-xl tracking-tight"
           >
-            <span>
-              Hire<span className="text-[#C5221F]">Go</span>
-            </span>
-            <span className="text-[#4285F4]">AI</span>
+            <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={126} height={42} priority className="h-10 w-auto max-w-[126px] object-contain" />
           </Link>
           <span className="text-white/30">|</span>
           <div className="min-w-0">
