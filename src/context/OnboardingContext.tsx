@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,30 +108,14 @@ const defaultState: OnboardingState = {
   companyName: null,
 };
 
-const STORAGE_KEY = "hirego_onboarding_v1";
-
 const OnboardingContext = createContext<OnboardingContextValue | undefined>(undefined);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  // localStorage is only a convenience draft cache for partially completed forms.
-  // Authoritative profile, assessment, verification, and hiring state is server-side.
+  // Keep only an in-memory navigation draft. Every onboarding step persists its
+  // durable fields to the authenticated candidate profile before navigation.
+  // This avoids leaking a previous candidate's draft into another account on
+  // a shared browser.
   const [state, setState] = useState<OnboardingState>(defaultState);
-  const [hasRestoredSavedState, setHasRestoredSavedState] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setState(JSON.parse(saved));
-    } catch {}
-    setHasRestoredSavedState(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hasRestoredSavedState) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
-  }, [hasRestoredSavedState, state]);
 
   const updateState = (partial: Partial<OnboardingState>) => {
     setState((prev) => {
@@ -155,9 +139,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const resetOnboarding = () => {
     setState(defaultState);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {}
   };
 
   return (
