@@ -304,7 +304,17 @@ test("candidate credit commercial values come from the database package catalog"
   assert.match(route, /candidateCreditPackage\.findMany/);
   assert.match(route, /candidateCreditPackage\.findUnique/);
   assert.doesNotMatch(route, /const\s+packages\s*=\s*\[[^\]]+\]/);
-  assert.match(page, /signed gateway webhook/);
+  // The storefront is hidden until payment credentials and admin routing are
+  // ready. Signed webhook security is enforced server-side, not advertised
+  // as technical copy on candidate purchase cards.
+  assert.match(route, /hasStripeCredentials/);
+  assert.match(route, /hasPayUCredentials/);
+  assert.match(page, /purchaseStatus === "READY" && packages.length > 0/);
+  assert.doesNotMatch(page, /Credit purchase is temporarily unavailable because no production payment route is enabled/);
+  const stripe = fs.readFileSync(new URL("../lib/payments/StripeGateway.ts", import.meta.url), "utf8");
+  const payu = fs.readFileSync(new URL("../lib/payments/PayUGateway.ts", import.meta.url), "utf8");
+  assert.match(stripe, /STRIPE_WEBHOOK_SECRET/);
+  assert.match(payu, /PAYU_MERCHANT_SALT/);
   assert.match(page, /submitPayU/);
 });
 
