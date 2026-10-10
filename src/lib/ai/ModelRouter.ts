@@ -5,9 +5,9 @@ import {
   LlmProviderName,
   ModelCapability,
   getAiRoutingConfig,
-  getProviderRuntime,
 } from "./AiRoutingConfig";
 import { prisma } from "@/lib/prisma";
+import { getResolvedAiProviderStatuses } from "./AiProviderCredentials";
 
 export interface ProviderModel {
   key: string;
@@ -35,10 +35,6 @@ function costWeight(model: AiModelConfig) {
 
 function qualityWeight(model: AiModelConfig) {
   return model.qualityTier === "PREMIUM" ? 3 : model.qualityTier === "BALANCED" ? 2 : 1;
-}
-
-function providerReady(model: AiModelConfig) {
-  return getProviderRuntime(model.provider).configured;
 }
 
 async function smartOrder(taskType: string, candidates: ProviderModel[], configuredPrimary: string | null) {
@@ -137,6 +133,8 @@ export class ModelRouter {
       [policy.primaryModelKey, ...policy.fallbackModelKeys].filter(Boolean) as string[],
     ));
 
+    const availableProviders = new Map((await getResolvedAiProviderStatuses()).map((item) => [item.provider, item.configured]));
+
     let candidates: ProviderModel[] = allowedKeys
       .map((key) => modelByKey.get(key))
       .filter((model): model is AiModelConfig =>
@@ -145,7 +143,7 @@ export class ModelRouter {
           model.enabled &&
           supportsTask(model, params.taskType) &&
           (params.requiredCapabilities ?? []).every((capability) => model.capabilities.includes(capability)) &&
-          providerReady(model)
+          Boolean(availableProviders.get(model.provider))
         )
       )
       .map((model) => ({
