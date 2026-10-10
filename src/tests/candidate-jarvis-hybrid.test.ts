@@ -60,6 +60,10 @@ test("Candidate Jarvis UI presents discoverable voice controls without internal 
   assert.ok(!page.includes("Path:"));
   assert.ok(!page.includes("no LLM"));
   assert.ok(!page.includes("Super Admin model routes"));
+  const api = read("src/app/api/candidate/jarvis/route.ts");
+  assert.ok(api.includes("reply: { message: reply.message, actions: reply.actions, speechReceiptId }"));
+  assert.ok(!api.includes("reply: { ...reply, speechReceiptId }"));
+  assert.ok(!api.includes("hybridRoutingEnabled: config.hybridRoutingEnabled"));
   assert.ok(!page.includes("SpeechRecognition"));
   assert.ok(!page.includes("webkitSpeechRecognition"));
 });
