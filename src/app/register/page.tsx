@@ -145,7 +145,7 @@ export default function RegisterPage() {
                   Step 3
                 </p>
                 <p className="font-body-md text-xs text-text-secondary">
-                  AI Practice & Mock
+                  Candidate Profile
                 </p>
                 <p className="auth-step-description">Add role, contact and education</p>
               </div>
@@ -160,7 +160,7 @@ export default function RegisterPage() {
                   Step 4
                 </p>
                 <p className="font-body-md text-xs text-text-secondary">
-                  Job Match Vectoring
+                  Skills & Resume
                 </p>
                 <p className="auth-step-description">Add skills and optional resume</p>
               </div>
