@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAiUsageStats } from "@/utils";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
-import { getAiRoutingConfig, getProviderStatusSummary } from "@/lib/ai/AiRoutingConfig";
+import { getAiRoutingConfig } from "@/lib/ai/AiRoutingConfig";
+import { getResolvedAiProviderStatuses } from "@/lib/ai/AiProviderCredentials";
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       config,
-      providers: getProviderStatusSummary(),
+      providers: await getResolvedAiProviderStatuses(),
       telemetry: {
         totalRequests: stats.totalRequests,
         totalTokens: stats.totalTokens,
