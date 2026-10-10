@@ -71,7 +71,8 @@ test("Candidate Jarvis UI presents discoverable voice controls without internal 
 test("Jarvis basic greetings do not depend on AI provider credentials", () => {
   const service = read("src/lib/jarvis/CandidateJarvisService.ts");
   const api = read("src/app/api/candidate/jarvis/route.ts");
-  assert.ok(service.includes("good morning|good afternoon|good evening"));
+  const intents = read("src/lib/jarvis/CandidateIntentRouter.ts");
+  assert.ok(intents.includes("good morning|good afternoon|good evening"));
   assert.ok(service.includes("Hi! I'm Jarvis"));
   assert.ok(api.includes("All configured AI endpoints failed"));
   assert.ok(api.includes("503"));
