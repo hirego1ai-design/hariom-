@@ -111,7 +111,23 @@ export async function GET(request: NextRequest) {
       PaymentGatewayController.getConfig().catch(() => null),
     ]);
 
-    const hasGateway = Boolean(gatewayConfig && Object.values(gatewayConfig.gatewaysStatus).some(status => status !== "DISABLED"));
+    // Never show a payable checkout for an admin-enabled gateway whose live
+    // credentials or signed-verification secret are absent. A configured
+    // gateway becomes visible automatically on subsequent wallet refreshes.
+    const hasStripeCredentials = Boolean(
+      process.env.STRIPE_SECRET_KEY?.trim() &&
+      (process.env.STRIPE_WEBHOOK_SECRET?.trim() || process.env.PAYMENT_WEBHOOK_SECRET?.trim()) &&
+      (process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim())
+    );
+    const hasPayUCredentials = Boolean(
+      process.env.PAYU_MERCHANT_KEY?.trim() &&
+      process.env.PAYU_MERCHANT_SALT?.trim() &&
+      process.env.PAYU_ENVIRONMENT !== "test"
+    );
+    const hasGateway = Boolean(gatewayConfig && (
+      (gatewayConfig.gatewaysStatus.STRIPE !== "DISABLED" && hasStripeCredentials) ||
+      (gatewayConfig.gatewaysStatus.PAYU !== "DISABLED" && hasPayUCredentials)
+    ));
     const purchaseStatus = !hasGateway
       ? "PAYMENT_CONFIGURATION_UNAVAILABLE"
       : packages.length === 0
