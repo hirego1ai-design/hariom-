@@ -6,10 +6,8 @@ import { Mic2, Square, Loader2, Volume2, AudioLines } from "lucide-react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
 type JarvisReply = {
-  path: "FAST" | "SMART" | "DEEP";
   message: string;
   actions: Array<{ label: string; href: string }>;
-  model: null | { provider: string; model: string; taskType: string };
   speechReceiptId?: string | null;
 };
 
