@@ -5,9 +5,9 @@ import { enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 import { AgentRegistry } from "@/lib/agents/AgentRegistry";
 import {
   getAiRoutingConfig,
-  getProviderStatusSummary,
 } from "@/lib/ai/AiRoutingConfig";
 import { prisma } from "@/lib/prisma";
+import { getResolvedAiProviderStatuses } from "@/lib/ai/AiProviderCredentials";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const agents = registry.getRegisteredAgents();
     const config = await getAiRoutingConfig();
     const providerStatus = new Map(
-      getProviderStatusSummary().map((item) => [item.provider, item]),
+      (await getResolvedAiProviderStatuses()).map((item) => [item.provider, item]),
     );
     const modelByKey = new Map(config.models.map((model) => [model.key, model]));
 
