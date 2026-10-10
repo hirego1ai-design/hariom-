@@ -13,6 +13,7 @@ export default function CandidateDashboardPage() {
   const [themeOpen, setThemeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("Candidate");
+  const [profileNeedsSetup, setProfileNeedsSetup] = useState(false);
   const [appliedCount, setAppliedCount] = useState(0);
   const [interviews, setInterviews] = useState<Array<{
     id: string;
@@ -59,10 +60,20 @@ export default function CandidateDashboardPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.profile) {
-          setCandidateName(data.profile.name || "Candidate");
+          setCandidateName(data.profile.name || data.profile.user?.name || "Candidate");
+          const education = Array.isArray(data.profile.education) ? data.profile.education : [];
+          const experience = Array.isArray(data.profile.experience) ? data.profile.experience : [];
+          const skills = Array.isArray(data.profile.skills) ? data.profile.skills : [];
+          setProfileNeedsSetup(
+            !data.profile.location && !data.profile.headline &&
+            education.length === 0 && experience.length === 0 && skills.length === 0
+          );
           if (data.profile.applications) {
             setAppliedCount(data.profile.applications.length);
           }
+        } else if (data.success && !data.profile) {
+          // Account exists without a candidate profile: show the setup entry point.
+          setProfileNeedsSetup(true);
         }
       })
       .catch(() => {});
@@ -349,6 +360,21 @@ export default function CandidateDashboardPage() {
 
         {/* Dashboard Main Canvas */}
         <main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1600px] w-full mx-auto overflow-y-auto">
+          {profileNeedsSetup && (
+            <section className="rounded-2xl p-5 sm:p-6" style={{ backgroundColor: "var(--primary-container-bg)", border: "1px solid var(--primary)", boxShadow: "var(--shadow-card)" }}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--primary)" }}>Profile setup incomplete</p>
+                  <h2 className="mt-1 text-lg font-bold" style={{ color: "var(--text-primary)" }}>Add your education, experience and skills</h2>
+                  <p className="mt-1 max-w-2xl text-xs" style={{ color: "var(--text-muted)" }}>Complete your profile so employers can see your qualifications and work preferences.</p>
+                </div>
+                <Link href="/onboarding/personal-details" className="inline-flex min-h-11 items-center justify-center rounded-full px-5 text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))" }}>
+                  Complete profile
+                </Link>
+              </div>
+            </section>
+          )}
+
           
           <section className="rounded-2xl p-5 sm:p-6" style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--outline)", boxShadow: "var(--shadow-card)" }}>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
