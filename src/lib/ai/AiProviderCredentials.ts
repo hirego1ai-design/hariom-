@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import type { AiProviderCredential } from "@prisma/client";
-import { assertSafeOutboundServiceUrl } from "@/lib/security/outboundUrl";
 import { llmProviderSchema, type LlmProviderName } from "./AiRoutingConfig";
 
 const envName: Record<LlmProviderName, string> = {
@@ -66,7 +65,22 @@ export function validateAiProviderEndpoint(provider: LlmProviderName, raw: strin
   if (provider !== "qwen" && provider !== "self_hosted") {
     throw new Error("This provider uses its audited server endpoint; custom endpoints are not editable here.");
   }
-  const url = assertSafeOutboundServiceUrl(raw, { label: "AI provider endpoint", requireHttps: true });
+  // Keep this synchronous validation dependency-free. The connection-test API
+  // separately performs a DNS/private-network check before provider I/O.
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("AI provider endpoint must be a valid absolute HTTPS URL.");
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new Error("AI provider endpoint must use HTTPS without URL credentials.");
+  }
+  if (!url.hostname || url.hostname.toLowerCase() === "localhost" ||
+      url.hostname.endsWith(".localhost") || url.hostname.endsWith(".local") ||
+      url.hostname.toLowerCase() === "metadata.google.internal") {
+    throw new Error("AI provider endpoint cannot target local or metadata hosts.");
+  }
   if (url.search || url.hash) throw new Error("AI provider endpoint cannot contain query or fragment.");
   const host = url.hostname.toLowerCase();
   if (provider === "qwen" && !["dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com", "dashscope-us.aliyuncs.com"].includes(host)) {
