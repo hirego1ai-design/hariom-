@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AudioLines, Mic2, Minimize2, Maximize2, Square, Volume2,
   VolumeX, LoaderCircle, X, ArrowUpRight,
@@ -38,6 +38,7 @@ function voiceStageLabel(stage: Stage) {
 
 export default function JarvisVoiceGlobe() {
   const router = useRouter();
+  const pathname = usePathname();
   const [ready, setReady] = useState<boolean | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const [docked, setDocked] = useState(false);
@@ -52,6 +53,7 @@ export default function JarvisVoiceGlobe() {
   const sequenceRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const manualFinishRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -111,10 +113,18 @@ export default function JarvisVoiceGlobe() {
         if (!response.ok || !data.success) return false;
         return Boolean(data.enabled && data.voiceEnabled);
       })
-      .then((available) => { if (!controller.signal.aborted) setReady(available); })
-      .catch(() => { if (!controller.signal.aborted) setReady(false); });
+      .then((available) => {
+        if (controller.signal.aborted) return;
+        setReady(available);
+        if (!available && activeRef.current) stopSession("paused");
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setReady(false);
+        if (activeRef.current) stopSession("paused");
+      });
     return () => controller.abort();
-  }, []);
+  }, [pathname, stopSession]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -280,6 +290,7 @@ export default function JarvisVoiceGlobe() {
       const chunks: Blob[] = [];
       let sawVoice = false;
       let lastSpeech = 0;
+      manualFinishRef.current = false;
       const started = Date.now();
       recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
       recorder.onerror = () => {
@@ -292,7 +303,7 @@ export default function JarvisVoiceGlobe() {
         releaseVAD();
         if (!activeRef.current || sequenceRef.current !== generation) return;
         const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-        if (!sawVoice || blob.size < 128) {
+        if ((!sawVoice && !manualFinishRef.current) || blob.size < 128) {
           void beginListeningRef.current(generation);
         } else {
           void processTurnRef.current(blob, generation);
@@ -444,6 +455,17 @@ export default function JarvisVoiceGlobe() {
             </div>
           )}
           <div className="jarvis-voice-controls">
+            {stage === "listening" && (
+              <button type="button"
+                onClick={() => {
+                  manualFinishRef.current = true;
+                  if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+                }}
+                aria-label="Finish speaking now"
+                className="jarvis-voice-primary">
+                <Square size={16} /> Finish speaking
+              </button>
+            )}
             {canInterrupt && <button type="button" onClick={interrupt}
               aria-label="Interrupt and speak" className="jarvis-voice-primary"><Mic2 size={16} /> Interrupt</button>}
             <button type="button" onClick={() => { stopSession("paused"); setError(""); }}
