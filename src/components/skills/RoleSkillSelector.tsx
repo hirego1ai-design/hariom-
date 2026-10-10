@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { SkillLevel, SkillPriority, RoleDefinition, RoleSkillSuggestion } from "@/lib/skill-master";
+import { useMemo, useState } from "react";
+import { findRole, getCanonicalSkillName, getRoleSkillSuggestions, searchRoles, searchSkills, type SkillLevel, type SkillPriority, type RoleSkillSuggestion } from "@/lib/skill-master";
 
 export type SelectedRoleSkill = {
   name: string;
@@ -29,46 +29,22 @@ export default function RoleSkillSelector({
   mode,
   roleEditable = true,
 }: RoleSkillSelectorProps) {
-  const [roles, setRoles] = useState<RoleDefinition[]>([]);
-  const [suggestions, setSuggestions] = useState<RoleSkillSuggestion[]>([]);
   const [skillSearch, setSkillSearch] = useState("");
-  const [skillResults, setSkillResults] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [customError, setCustomError] = useState("");
   const [isSubmittingCustom, setIsSubmittingCustom] = useState(false);
+  const [roleSearchOpen, setRoleSearchOpen] = useState(false);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/skill-master?type=roles&q=${encodeURIComponent(role)}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : { roles: [] })
-      .then((data) => setRoles(data.roles || []))
-      .catch(() => {});
-    return () => controller.abort();
-  }, [role]);
-
-  useEffect(() => {
-    if (!role.trim()) {
-      setSuggestions([]);
-      return;
-    }
-    const controller = new AbortController();
-    setIsLoading(true);
-    fetch(`/api/skill-master?type=suggestions&role=${encodeURIComponent(role)}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : { skills: [] })
-      .then((data) => setSuggestions(data.skills || []))
-      .catch(() => setSuggestions([]))
-      .finally(() => setIsLoading(false));
-    return () => controller.abort();
-  }, [role]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/skill-master?type=skills&q=${encodeURIComponent(skillSearch)}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : { skills: [] })
-      .then((data) => setSkillResults(data.skills || []))
-      .catch(() => {});
-    return () => controller.abort();
-  }, [skillSearch]);
+  // Instant lookups: this catalog is static, so typing does not need API calls.
+  const roles = useMemo(() => role.trim() ? searchRoles(role) : [], [role]);
+  const suggestions: RoleSkillSuggestion[] = useMemo(
+    () => findRole(role) ? getRoleSkillSuggestions(role) : [],
+    [role],
+  );
+  const skillResults = useMemo(
+    () => skillSearch.trim() ? searchSkills(skillSearch) : [],
+    [skillSearch],
+  );
 
   const selectedNames = useMemo(() => new Set(selectedSkills.map((skill) => skill.name.toLowerCase())), [selectedSkills]);
 
@@ -88,18 +64,37 @@ export default function RoleSkillSelector({
   };
 
   const addCustomSkill = async () => {
-    const name = customSkill.trim();
-    if (!name || selectedNames.has(name.toLowerCase())) return;
+    const name = customSkill.trim().replace(/\s+/g, " ");
+    if (!name || selectedNames.has(name.toLowerCase()) || isSubmittingCustom) return;
+    setCustomError("");
+
+    // Canonical skills can be selected immediately; only unknown skills
+    // require a tracked admin-review request.
+    const canonical = getCanonicalSkillName(name);
+    if (canonical) {
+      toggleSkill(canonical);
+      setCustomSkill("");
+      setSkillSearch("");
+      return;
+    }
+
     setIsSubmittingCustom(true);
     try {
-      await fetch("/api/skill-master", {
+      const response = await fetch("/api/skill-master", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, role }),
       });
-    } finally {
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(typeof body.error === "string" ? body.error : "Could not add skill. Try again.");
+      }
       toggleSkill(name, { isCustom: true });
       setCustomSkill("");
+      setSkillSearch("");
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : "Could not add skill. Try again.");
+    } finally {
       setIsSubmittingCustom(false);
     }
   };
@@ -137,12 +132,12 @@ export default function RoleSkillSelector({
         </label>
         <div className="relative">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "var(--text-muted)" }}>work</span>
-          <input value={role} readOnly={!roleEditable} onChange={(event) => onRoleChange(event.target.value)} placeholder="Search a role, e.g. Software Developer" className="w-full h-11 pl-10 pr-4 rounded-xl text-sm outline-none" style={{ backgroundColor: "var(--bg-input)", border: "1px solid var(--outline)", color: "var(--text-primary)" }} />
+          <input value={role} readOnly={!roleEditable} onChange={(event) => { onRoleChange(event.target.value); setRoleSearchOpen(true); }} onFocus={() => setRoleSearchOpen(true)} onBlur={() => setRoleSearchOpen(false)} placeholder="Start typing a role, e.g. Software Developer" autoComplete="off" className="w-full h-11 pl-10 pr-4 rounded-xl text-sm outline-none" style={{ backgroundColor: "var(--bg-input)", border: "1px solid var(--outline)", color: "var(--text-primary)" }} />
         </div>
-        {roleEditable && role.trim() && roles.length > 0 && (
+        {roleEditable && roleSearchOpen && role.trim() && roles.length > 0 && (
           <div className="absolute z-20 w-full max-h-48 overflow-y-auto rounded-xl border shadow-xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--outline)" }}>
             {roles.map((item) => (
-              <button key={item.title} type="button" onClick={() => onRoleChange(item.title)} className="w-full text-left px-4 py-3 hover:opacity-80 border-b last:border-b-0" style={{ borderColor: "var(--outline)" }}>
+              <button key={item.title} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { onRoleChange(item.title); setRoleSearchOpen(false); }} className="w-full text-left px-4 py-3 hover:opacity-80 border-b last:border-b-0" style={{ borderColor: "var(--outline)" }}>
                 <span className="block text-sm font-bold" style={{ color: "var(--text-primary)" }}>{item.title}</span>
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>{item.department} · {item.industry}</span>
               </button>
@@ -151,32 +146,33 @@ export default function RoleSkillSelector({
         )}
       </div>
 
-      {isLoading && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Loading role-specific skills…</p>}
-      {!isLoading && role.trim() && suggestions.length === 0 && <p className="text-xs" style={{ color: "var(--text-muted)" }}>No mapped skills yet. Search or add a skill below; new suggestions are reviewed by an admin.</p>}
+      {role.trim() && !findRole(role) && <p className="text-xs" style={{ color: "var(--text-muted)" }}>Pick a matching job role above for tailored skills, or add your own skills below.</p>}
 
       {mode === "candidate" ? (
         <>
-          {suggestions.length > 0 && <section className="rounded-2xl p-5 space-y-4" style={{ backgroundColor: "var(--surface-container-high)", border: "1px solid var(--outline)" }}>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#35d07f" }}>check_circle</span>
-              <h3 className="text-sm font-extrabold" style={{ color: "var(--text-primary)" }}>Suggested Skills</h3>
+          <div className="space-y-2 rounded-xl border p-3 sm:p-4" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)" }}>
+            <label htmlFor="custom-candidate-skill" className="text-xs font-extrabold" style={{ color: "var(--text-primary)" }}>Add Custom Skill</label>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Can't find your skill? Type it here. New skills are sent for review.</p>
+            <div className="flex gap-2">
+              <input id="custom-candidate-skill" value={customSkill} onChange={(event) => { setCustomSkill(event.target.value); setSkillSearch(event.target.value); setCustomError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addCustomSkill(); } }} placeholder="e.g. React, Python…" className="min-w-0 flex-1 h-10 px-3 rounded-xl text-sm outline-none" style={{ backgroundColor: "var(--bg-input)", border: "1px solid var(--outline)", color: "var(--text-primary)" }} />
+              <button type="button" onClick={() => void addCustomSkill()} disabled={!customSkill.trim() || isSubmittingCustom} className="px-4 rounded-xl text-xs font-extrabold text-white disabled:opacity-50" style={{ backgroundColor: "var(--primary)" }}>{isSubmittingCustom ? "Adding…" : "Add Skill"}</button>
             </div>
-            <div className="flex flex-wrap gap-2.5">
+            {customError && <p role="alert" className="text-xs" style={{ color: "var(--primary)" }}>{customError}</p>}
+            {customSkill && skillResults.length > 0 && <div className="flex flex-wrap gap-2 pt-1">{skillResults.map((name) => <button key={name} type="button" onClick={() => { if (!selectedNames.has(name.toLowerCase())) toggleSkill(name); setCustomSkill(""); setSkillSearch(""); }} className="px-3 py-1.5 rounded-full text-xs font-bold border" style={{ color: "var(--text-primary)", borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>+ {name}</button>)}</div>}
+          </div>
+
+          {suggestions.length > 0 && <section className="rounded-xl p-3 sm:p-4 space-y-3" style={{ backgroundColor: "var(--surface-container-high)", border: "1px solid var(--outline)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-extrabold" style={{ color: "var(--text-primary)" }}>Recommended skills</h3>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Tap a skill to select or remove it</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
               {suggestions.map((skill) => {
                 const isSelected = selectedNames.has(skill.name.toLowerCase());
-                return <button key={skill.name} type="button" onClick={() => toggleSkill(skill.name, { level: skill.recommendedLevel, priority: skill.priority })} className="px-3.5 h-9 rounded-full border text-xs font-bold transition-colors" style={{ color: isSelected ? "#fff" : "var(--text-primary)", borderColor: isSelected ? "var(--primary)" : "var(--outline)", backgroundColor: isSelected ? "var(--primary)" : "var(--bg-card)" }}>{isSelected ? "✓ " : "+ "}{skill.name}</button>;
+                return <button key={skill.name} type="button" aria-pressed={isSelected} onClick={() => toggleSkill(skill.name, { level: skill.recommendedLevel, priority: skill.priority })} className="px-3 h-8 rounded-full border text-xs font-bold transition-colors" style={{ color: isSelected ? "#fff" : "var(--text-primary)", borderColor: isSelected ? "var(--primary)" : "var(--outline)", backgroundColor: isSelected ? "var(--primary)" : "var(--bg-card)" }}>{isSelected ? "✓ " : "+ "}{skill.name}</button>;
               })}
             </div>
           </section>}
-
-          <div className="space-y-2">
-            <label className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Add Custom Skill</label>
-            <div className="flex gap-2">
-              <input value={customSkill} onChange={(event) => { setCustomSkill(event.target.value); setSkillSearch(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addCustomSkill(); } }} placeholder="e.g., React, Python…" className="flex-1 h-11 px-4 rounded-xl text-sm outline-none" style={{ backgroundColor: "var(--bg-input)", border: "1px solid var(--outline)", color: "var(--text-primary)" }} />
-              <button type="button" onClick={() => void addCustomSkill()} disabled={!customSkill.trim() || isSubmittingCustom} className="px-6 rounded-xl text-xs font-extrabold text-white disabled:opacity-50" style={{ backgroundColor: "var(--primary)" }}>{isSubmittingCustom ? "Adding…" : "Add"}</button>
-            </div>
-            {customSkill && skillResults.length > 0 && <div className="flex flex-wrap gap-2 pt-1">{skillResults.map((name) => <button key={name} type="button" onClick={() => { toggleSkill(name); setCustomSkill(""); setSkillSearch(""); }} className="px-3 py-1.5 rounded-full text-xs font-bold border" style={{ color: "var(--text-primary)", borderColor: "var(--outline)", backgroundColor: "var(--surface-container-high)" }}>+ {name}</button>)}</div>}
-          </div>
         </>
       ) : (
         <>
