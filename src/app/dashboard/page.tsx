@@ -14,6 +14,14 @@ export default function CandidateDashboardPage() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("Candidate");
   const [profileNeedsSetup, setProfileNeedsSetup] = useState(false);
+  const [careerSnapshot, setCareerSnapshot] = useState<{
+    targetRole: string;
+    location: string;
+    educationCount: number;
+    experienceCount: number;
+    experienceYears: number;
+    skillCount: number;
+  } | null>(null);
   const [appliedCount, setAppliedCount] = useState(0);
   const [interviews, setInterviews] = useState<Array<{
     id: string;
@@ -56,16 +64,27 @@ export default function CandidateDashboardPage() {
   };
 
   React.useEffect(() => {
-    fetch("/api/candidate/profile")
+    fetch("/api/candidate/profile?view=dashboard")
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.profile) {
           setCandidateName(data.profile.name || data.profile.user?.name || "Candidate");
           const education = Array.isArray(data.profile.education) ? data.profile.education : [];
           const experience = Array.isArray(data.profile.experience) ? data.profile.experience : [];
-          const skills = Array.isArray(data.profile.skills) ? data.profile.skills : [];
+          const skills = Array.isArray(data.profile.candidateSkills) && data.profile.candidateSkills.length
+            ? data.profile.candidateSkills : Array.isArray(data.profile.skills) ? data.profile.skills : [];
+          const pref = data.profile.preferences && typeof data.profile.preferences === "object" && !Array.isArray(data.profile.preferences)
+            ? data.profile.preferences : {};
+          setCareerSnapshot({
+            targetRole: typeof pref.targetRole === "string" ? pref.targetRole : "",
+            location: typeof data.profile.location === "string" ? data.profile.location : "",
+            educationCount: education.length,
+            experienceCount: experience.length,
+            experienceYears: typeof data.profile.experienceYears === "number" ? data.profile.experienceYears : 0,
+            skillCount: skills.length,
+          });
           setProfileNeedsSetup(
-            !data.profile.location && !data.profile.headline &&
+            !data.profile.location && !data.profile.headline && !pref.targetRole &&
             education.length === 0 && experience.length === 0 && skills.length === 0
           );
           if (data.profile.applications) {
@@ -360,6 +379,32 @@ export default function CandidateDashboardPage() {
 
         {/* Dashboard Main Canvas */}
         <main className="flex-1 p-gutter pt-24 pb-12 space-y-6 max-w-[1600px] w-full mx-auto overflow-y-auto">
+          {careerSnapshot && (
+            <section aria-label="Saved profile overview" className="rounded-2xl border p-4 sm:p-5" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--outline)" }}>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-sm font-extrabold" style={{ color: "var(--text-primary)" }}>Your career profile</h2>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Saved details from onboarding</p>
+                </div>
+                <Link href="/profile" className="text-xs font-bold" style={{ color: "var(--primary)" }}>View full profile →</Link>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                {[
+                  { label: "Target role", value: careerSnapshot.targetRole || "Not selected" },
+                  { label: "Location", value: careerSnapshot.location || "Not added" },
+                  { label: "Education", value: careerSnapshot.educationCount ? String(careerSnapshot.educationCount) + " qualification(s)" : "Not added" },
+                  { label: "Experience", value: careerSnapshot.experienceYears > 0 ? String(careerSnapshot.experienceYears) + " years" : careerSnapshot.experienceCount ? String(careerSnapshot.experienceCount) + " role(s)" : "Not added" },
+                  { label: "Skills", value: careerSnapshot.skillCount ? String(careerSnapshot.skillCount) + " self-declared skill(s)" : "Not added" },
+                ].map((item) => (
+                  <div key={item.label} className="p-3 rounded-xl" style={{ backgroundColor: "var(--surface-container-high)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wide block" style={{ color: "var(--text-muted)" }}>{item.label}</span>
+                    <span className="text-xs font-bold block mt-1.5 break-words" style={{ color: "var(--text-primary)" }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {profileNeedsSetup && (
             <section className="rounded-2xl p-5 sm:p-6" style={{ backgroundColor: "var(--primary-container-bg)", border: "1px solid var(--primary)", boxShadow: "var(--shadow-card)" }}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
