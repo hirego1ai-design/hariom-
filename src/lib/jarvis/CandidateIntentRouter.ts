@@ -48,7 +48,7 @@ export function classifyCandidateDirectIntent(input: string): CandidateDirectInt
 
   // These operations require the candidate to confirm in the actual authorized UI;
   // Jarvis must not infer consent or execute side effects from natural language.
-  if (/\b(?:apply for|apply to|submit application|withdraw application|cancel interview|reschedule interview|book interview|schedule interview|delete account|delete profile|make payment|pay now|purchase credits|buy credits)\b/i.test(text)) {
+  if (/\b(?:apply for|apply to|submit application|withdraw application|cancel interview|reschedule interview|book interview|schedule interview|delete account|delete profile|make payment|pay now|purchase credits|buy credits|send application|submit resume)\b/i.test(text)) {
     return { kind: "CONFIRM_IN_PORTAL" };
   }
 
@@ -79,12 +79,12 @@ export function classifyCandidateDirectIntent(input: string): CandidateDirectInt
     return { kind: "CREDIT_BALANCE" };
   }
 
-  if (/\b(?:application status|applications status|my applications|applied jobs|track application|application dikhao|मेरी एप्लीकेशन|मेरे आवेदन)\b/iu.test(text) ||
+  if (/\b(?:application status|applications status|my applications|show applications|open applications|check applications|track my applications|applied jobs|track application|application dikhao|मेरी एप्लीकेशन|मेरे आवेदन)\b/iu.test(text) ||
     /^(?:how many applications|what is my application status)/i.test(text)) {
     return { kind: "APPLICATION_STATUS" };
   }
 
-  if (/\b(?:next interview|upcoming interview|my interview schedule|interview status|interview kab hai|agla interview|अगला इंटरव्यू)\b/iu.test(text)) {
+  if (/\b(?:next interview|upcoming interview|my interview schedule|interview schedule|show interviews|my interviews|when is my interview|interview status|interview kab hai|agla interview|अगला इंटरव्यू)\b/iu.test(text)) {
     return { kind: "NEXT_INTERVIEW" };
   }
 
@@ -92,7 +92,7 @@ export function classifyCandidateDirectIntent(input: string): CandidateDirectInt
     return { kind: "OPEN_PROFILE" };
   }
 
-  if (/\b(?:career credits|my credits|credit balance|credit history|wallet|pricing|credit wallet|mere credits|मेरा वॉलेट)\b/iu.test(text)) {
+  if (/\b(?:career credits|my credits|show credits|open credits|credit balance|credit history|wallet|pricing|credit wallet|mere credits|मेरा वॉलेट)\b/iu.test(text)) {
     return { kind: "OPEN_CREDITS" };
   }
 
