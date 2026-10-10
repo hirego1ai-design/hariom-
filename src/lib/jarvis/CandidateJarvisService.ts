@@ -54,10 +54,6 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function looksLikeAny(text: string, phrases: string[]) {
-  return phrases.some((phrase) => text.includes(phrase));
-}
-
 function deepReasoningRequested(message: string, config: CandidateJarvisConfig) {
   const normalized = normalize(message);
   return config.deepReasoningKeywords.some((keyword) =>
