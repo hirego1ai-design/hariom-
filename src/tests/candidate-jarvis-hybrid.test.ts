@@ -88,3 +88,18 @@ test("self-hosted voice defaults fit the Railway CPU runtime", () => {
   assert.ok(client.includes("speaches-ai/piper-en_US-hfc_female-medium"));
   assert.ok(config.includes('default("hfc_female")'));
 });
+
+test("Jarvis exposes clear voice controls and truthful AI outage responses", () => {
+  const page = read("src/app/candidate/jarvis/page.tsx");
+  const service = read("src/lib/jarvis/CandidateJarvisService.ts");
+  assert.ok(page.includes("Voice conversation"));
+  assert.ok(page.includes("Use voice"));
+  assert.ok(page.includes("Start voice recording"));
+  assert.ok(page.includes("transcriptReady"));
+  assert.ok(page.includes("Review your words"));
+  assert.ok(page.includes("Voice connection is not ready"));
+  assert.ok(page.includes("Response details"));
+  assert.ok(service.includes("My AI answers are temporarily unavailable"));
+  assert.ok(service.includes("All configured AI endpoints failed"));
+  assert.ok(service.includes("Greetings are deterministic"));
+});
