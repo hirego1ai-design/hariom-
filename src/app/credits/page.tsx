@@ -186,47 +186,49 @@ export default function CandidateCreditsPage() {
         <p className="mt-2 text-4xl font-extrabold text-primary">{balance === null ? "—" : balance}</p>
       </section>
 
-      <section className="mb-10">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold">Buy credits</h2>
-            <p className="mt-1 text-sm text-text-secondary">Payment is completed on Stripe or PayU secure checkout. Credits are added only after HireGo verifies the signed gateway webhook.</p>
+      {purchaseStatus === "READY" && packages.length > 0 && (
+        <section className="mb-10" aria-label="Buy candidate credits">
+          <h2 className="text-lg font-bold">Buy credits</h2>
+          <p className="mt-1 text-sm text-text-secondary">
+            Choose a credit pack and pay securely. Your credits will appear after payment is confirmed.
+          </p>
+          {returnTo === "mock-interview" && (
+            <p className="mt-3 text-sm text-blue-100">
+              After successful payment, you can return to your mock interview.
+            </p>
+          )}
+          <div className="mt-4 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {packages.map((pkg) => (
+              <article key={pkg.id} className="glass-card rounded-3xl border border-white/10 p-6">
+                <h3 className="font-bold">{pkg.name}</h3>
+                {pkg.description && <p className="mt-2 text-sm text-text-secondary">{pkg.description}</p>}
+                <p className="mt-5 text-3xl font-extrabold">
+                  {pkg.credits} <span className="text-sm font-semibold text-text-secondary">credits</span>
+                </p>
+                <p className="mt-2 text-sm font-semibold">
+                  {pkg.currency.toUpperCase()} {pkg.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                </p>
+                <button
+                  onClick={() => void buyCredits(pkg)}
+                  disabled={purchasing !== ""}
+                  className="mt-5 w-full rounded-xl btn-3d-red px-4 py-3 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {purchasing === pkg.id ? "Opening secure checkout…" : "Buy securely"}
+                </button>
+              </article>
+            ))}
           </div>
+        </section>
+      )}
+
+      {returnTo === "mock-interview" && purchaseStatus !== "READY" && balance !== null && (
+        <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-text-secondary">
+          Your available credits can be used for interview practice.{" "}
+          <a href="/ai/mock-interview/setup" className="font-bold text-white underline underline-offset-4">
+            Back to mock interview
+          </a>
         </div>
-
-        {returnTo === "mock-interview" && (
-          <div className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-400/5 p-4 text-sm text-blue-100">
-            You came here for AI Mock Interview. Buy enough credits through secure checkout; after the signed payment confirmation updates your wallet, HireGo will return you to Mock Interview setup.
-          </div>
-        )}
-
-        {purchaseStatus === "PAYMENT_CONFIGURATION_UNAVAILABLE" && (
-          <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-200">
-            Credit purchase is temporarily unavailable because no production payment route is enabled. Existing credits remain usable.
-          </div>
-        )}
-        {purchaseStatus === "NO_ACTIVE_PACKAGES" && (
-          <div className="mt-4 rounded-2xl border border-white/10 p-4 text-sm text-text-secondary">
-            No candidate credit package is currently published. Existing credits remain usable.
-          </div>
-        )}
-
-        {packages.length > 0 && <div className="mt-4 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {packages.map((pkg) => <article key={pkg.id} className="glass-card rounded-3xl border border-white/10 p-6">
-            <h3 className="font-bold">{pkg.name}</h3>
-            {pkg.description && <p className="mt-2 text-sm text-text-secondary">{pkg.description}</p>}
-            <p className="mt-5 text-3xl font-extrabold">{pkg.credits} <span className="text-sm font-semibold text-text-secondary">credits</span></p>
-            <p className="mt-2 text-sm font-semibold">{pkg.currency.toUpperCase()} {pkg.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</p>
-            <button
-              onClick={() => void buyCredits(pkg)}
-              disabled={purchaseStatus !== "READY" || purchasing !== ""}
-              className="mt-5 w-full rounded-xl btn-3d-red px-4 py-3 text-xs font-bold text-white disabled:opacity-50"
-            >
-              {purchasing === pkg.id ? "Opening secure checkout…" : "Buy securely"}
-            </button>
-          </article>)}
-        </div>}
-      </section>
+      )}
 
       <section>
         <h2 className="text-lg font-bold">Available career services</h2>
@@ -240,7 +242,7 @@ export default function CandidateCreditsPage() {
             </button>
           </article>)}
         </div>
-        {balance !== null && services.length === 0 && <p className="mt-4 text-sm text-text-secondary">No paid career service has been published by an administrator.</p>}
+        
       </section>
 
       <section className="mt-10">

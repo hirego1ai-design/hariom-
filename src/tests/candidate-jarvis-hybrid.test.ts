@@ -50,12 +50,44 @@ test("Jarvis remains Super Admin controlled and voice defaults fail closed", () 
   assert.ok(adminPage.includes("self-hosted HireGo Voice Engine"));
 });
 
-test("Candidate Jarvis UI exposes actual execution path and does not use browser speech recognition", () => {
+test("Candidate Jarvis UI presents discoverable voice controls without internal AI metadata", () => {
   const page = read("src/app/candidate/jarvis/page.tsx");
-  assert.ok(page.includes("Path:"));
-  assert.ok(page.includes("no LLM"));
+  assert.ok(page.includes("Speak to Jarvis"));
+  assert.ok(page.includes("<Mic2"));
+  assert.ok(page.includes("<Volume2"));
+  assert.ok(page.includes("Tap Speak to record"));
+  assert.ok(page.includes("chatScrollRef.current.scrollTo"));
+  assert.ok(!page.includes("Path:"));
+  assert.ok(!page.includes("no LLM"));
+  assert.ok(!page.includes("Super Admin model routes"));
+  const api = read("src/app/api/candidate/jarvis/route.ts");
+  assert.ok(api.includes("reply: { message: reply.message, actions: reply.actions, speechReceiptId }"));
+  assert.ok(!api.includes("reply: { ...reply, speechReceiptId }"));
+  assert.ok(!api.includes("hybridRoutingEnabled: config.hybridRoutingEnabled"));
   assert.ok(!page.includes("SpeechRecognition"));
   assert.ok(!page.includes("webkitSpeechRecognition"));
+});
+
+test("Jarvis basic greetings do not depend on AI provider credentials", () => {
+  const service = read("src/lib/jarvis/CandidateJarvisService.ts");
+  const api = read("src/app/api/candidate/jarvis/route.ts");
+  assert.ok(service.includes("good morning|good afternoon|good evening"));
+  assert.ok(service.includes("Hi! I'm Jarvis"));
+  assert.ok(api.includes("All configured AI endpoints failed"));
+  assert.ok(api.includes("503"));
+  assert.ok(!api.includes("Incorrect API key provided"));
+});
+
+test("Candidate wallet never advertises disabled checkout but automatically shows verified checkout when ready", () => {
+  const page = read("src/app/credits/page.tsx");
+  const api = read("src/app/api/candidate/credits/route.ts");
+  assert.ok(page.includes('purchaseStatus === "READY" && packages.length > 0'));
+  assert.ok(!page.includes("Credit purchase is temporarily unavailable because no production payment route is enabled"));
+  assert.ok(api.includes("stripeConfigured"));
+  assert.ok(api.includes("payuConfigured"));
+  assert.ok(api.includes('gatewayConfig.gatewaysStatus.STRIPE !== "DISABLED"'));
+  assert.ok(api.includes('gatewayConfig.gatewaysStatus.PAYU !== "DISABLED"'));
+  assert.ok(api.includes('purchaseStatus,'));
 });
 
 

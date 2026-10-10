@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
       success: true,
       enabled: config.enabled,
       voiceEnabled,
-      hybridRoutingEnabled: config.hybridRoutingEnabled,
     });
   } catch (error) {
     return handleApiError(error);
@@ -56,10 +55,29 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(request, "candidate_jarvis_message", 30, 60_000);
     const payload = await readValidatedJson(request, requestSchema, 8 * 1024);
 
-    const reply = await executeCandidateJarvis({
-      userId: session.id,
-      message: payload.message,
-    });
+    let reply;
+    try {
+      reply = await executeCandidateJarvis({
+        userId: session.id,
+        message: payload.message,
+      });
+    } catch (cause) {
+      // Keep provider diagnostics on the server; do not expose model names,
+      // configuration, API credentials or raw errors in the candidate UI.
+      const diagnostic = cause instanceof Error ? cause.message : "";
+      if (
+        diagnostic.includes("All configured AI endpoints failed") ||
+        diagnostic.includes("No enabled, configured model") ||
+        diagnostic.includes("No AI routing policy is configured")
+      ) {
+        console.warn("Candidate Jarvis AI routing is unavailable; provider details withheld.");
+        throw new ApiError(
+          "Jarvis couldn't connect to its AI service. Please try again shortly. You can still browse jobs and check applications.",
+          503,
+        );
+      }
+      throw cause;
+    }
 
     const config = await getCandidateJarvisConfig();
     let speechReceiptId: string | null = null;
@@ -83,7 +101,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      reply: { ...reply, speechReceiptId },
+      // The candidate only needs the message, actions and optional playback receipt.
+      // Never send internal model/provider/route telemetry to the browser.
+      reply: { message: reply.message, actions: reply.actions, speechReceiptId },
     }, {
       headers: { "Cache-Control": "no-store" },
     });

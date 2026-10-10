@@ -111,7 +111,23 @@ export async function GET(request: NextRequest) {
       PaymentGatewayController.getConfig().catch(() => null),
     ]);
 
-    const hasGateway = Boolean(gatewayConfig && Object.values(gatewayConfig.gatewaysStatus).some(status => status !== "DISABLED"));
+    // Only advertise a live purchase route when it is administratively enabled
+    // AND checkout + signed webhook credentials are configured. Adding the
+    // credentials alone must not bypass the production payment release gate.
+    const stripeConfigured = Boolean(
+      process.env.STRIPE_SECRET_KEY?.trim() &&
+      (process.env.STRIPE_WEBHOOK_SECRET?.trim() || process.env.PAYMENT_WEBHOOK_SECRET?.trim()) &&
+      process.env.NEXT_PUBLIC_APP_URL?.trim()
+    );
+    const payuConfigured = Boolean(
+      process.env.PAYU_MERCHANT_KEY?.trim() &&
+      process.env.PAYU_MERCHANT_SALT?.trim() &&
+      process.env.PAYU_ENVIRONMENT !== "test"
+    );
+    const hasGateway = Boolean(gatewayConfig && (
+      (gatewayConfig.gatewaysStatus.STRIPE !== "DISABLED" && stripeConfigured) ||
+      (gatewayConfig.gatewaysStatus.PAYU !== "DISABLED" && payuConfigured)
+    ));
     const purchaseStatus = !hasGateway
       ? "PAYMENT_CONFIGURATION_UNAVAILABLE"
       : packages.length === 0

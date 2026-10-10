@@ -298,6 +298,26 @@ export default function MockInterviewSetupPage() {
           <p className="text-sm text-white/60 max-w-3xl">
             Practise for your next opportunity with realistic role-based questions. Choose text or voice, and get practical feedback as you progress.
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3" aria-label="Choose how to practise">
+            <button
+              type="button"
+              onClick={() => setMode("VOICE")}
+              aria-pressed={mode === "VOICE"}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${mode === "VOICE" ? "border-[#4285F4] bg-[#4285F4]/20 text-white" : "border-[#4285F4]/30 bg-[#4285F4]/10 text-blue-100 hover:bg-[#4285F4]/20"}`}
+            >
+              <Mic2 className="h-4 w-4" aria-hidden="true" />
+              Practise with voice
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("TEXT")}
+              aria-pressed={mode === "TEXT"}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${mode === "TEXT" ? "border-[#C5221F] bg-[#C5221F]/20 text-white" : "border-white/20 bg-white/5 text-white/70 hover:bg-white/10"}`}
+            >
+              <Keyboard className="h-4 w-4" aria-hidden="true" />
+              Practise by typing
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

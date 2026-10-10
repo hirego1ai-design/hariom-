@@ -1,3 +1,13 @@
+test("Mock Interview voice entry is visible before opening the form", () => {
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  const hero = setup.indexOf("Practise with voice");
+  const form = setup.indexOf("<form onSubmit={handleStartInterview}");
+  assert.ok(hero !== -1 && form > hero);
+  assert.ok(setup.includes('aria-pressed={mode === "VOICE"}'));
+  assert.ok(setup.includes("<Mic2"));
+  assert.ok(setup.includes("voiceReadiness?.ready !== true"));
+});
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

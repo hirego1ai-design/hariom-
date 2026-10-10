@@ -364,6 +364,20 @@ async function searchJobs(query: string | null, location: string | null): Promis
 function directCommand(message: string, context: CandidateContext): CandidateJarvisReply | null {
   const text = normalize(message);
 
+  // Greetings must not consume a paid AI request or fail during an AI provider outage.
+  if (/^(hi|hello|hey|hey jarvis|namaste|namaskar|good morning|good afternoon|good evening)[.! ]*$/i.test(text)) {
+    return {
+      path: "FAST",
+      message: "Hi! I'm Jarvis, your HireGo career assistant. I can help you explore jobs, check applications, prepare for interviews or review your profile. What would you like to do?",
+      actions: [
+        { label: "Explore jobs", href: "/jobs" },
+        { label: "Mock interview", href: "/ai/mock-interview/setup" },
+        { label: "My profile", href: "/profile" },
+      ],
+      model: null,
+    };
+  }
+
   if (
     looksLikeAny(text, ["my applications", "application status", "applications status", "applied jobs"]) ||
     (text.includes("application") && looksLikeAny(text, ["show", "open", "status", "track"]))

@@ -2,13 +2,12 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Mic2, Square, Loader2, Volume2, AudioLines } from "lucide-react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
 type JarvisReply = {
-  path: "FAST" | "SMART" | "DEEP";
   message: string;
   actions: Array<{ label: string; href: string }>;
-  model: null | { provider: string; model: string; taskType: string };
   speechReceiptId?: string | null;
 };
 
@@ -37,7 +36,7 @@ export default function CandidateJarvisPage() {
       text: "Ask me to open jobs, check applications, show your next interview, find matching jobs, or reason about your career and interview preparation.",
     },
   ]);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     fetch("/api/candidate/jarvis", { cache: "no-store" })
@@ -54,13 +53,19 @@ export default function CandidateJarvisPage() {
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (items.length > 1 && chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [items, busy]);
 
   async function toggleRecording() {
     if (!voiceEnabled || voiceBusy) return;
     if (recording) {
       recorderRef.current?.stop();
+      return;
+    }
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("This browser does not support microphone recording. You can still type a message.");
       return;
     }
 
@@ -174,6 +179,8 @@ export default function CandidateJarvisPage() {
       ]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Jarvis could not answer this request.");
+      setInput(message); // Keep the question available for a retry.
+      setItems((current) => current.filter((item) => item.id !== userId));
     } finally {
       setBusy(false);
     }
@@ -190,15 +197,15 @@ export default function CandidateJarvisPage() {
             </p>
             <h1 className="mt-1 text-3xl font-extrabold">Jarvis</h1>
             <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-              Direct HireGo actions run without an LLM. Reasoning uses the Super Admin model routes with provider fallback.
+              Your career companion for jobs, applications and interview preparation. Ask a question or speak to Jarvis.
             </p>
           </div>
           <div className="flex gap-2">
             <span className="rounded-full border px-3 py-1.5 text-xs font-bold" style={{ borderColor: "var(--outline)" }}>
-              {enabled === null ? "Checking…" : enabled ? "Hybrid online" : "Disabled"}
+              {enabled === null ? "Connecting…" : enabled ? "Ready to help" : "Unavailable"}
             </span>
             <span className="rounded-full border px-3 py-1.5 text-xs font-bold" style={{ borderColor: "var(--outline)" }}>
-              Voice {voiceEnabled ? "enabled" : "off"}
+              {voiceEnabled ? "Voice ready" : "Voice unavailable"}
             </span>
           </div>
         </header>
@@ -206,6 +213,31 @@ export default function CandidateJarvisPage() {
         {error && (
           <div role="alert" className="mt-5 rounded-xl border p-4 text-sm" style={{ borderColor: "var(--primary)", backgroundColor: "var(--bg-card)" }}>
             {error}
+          </div>
+        )}
+
+        {voiceEnabled && enabled === true && (
+          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-2xl border p-4 sm:p-5" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: "var(--surface-container-high)" }}>
+              <AudioLines className={`h-6 w-6 ${recording ? "animate-pulse" : ""}`} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-bold">Talk to Jarvis</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                Tap Speak, record your question, review the transcript and send it. Tap Hear to listen to Jarvis's reply.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void toggleRecording()}
+              disabled={voiceBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)" }}
+              aria-label={recording ? "Stop voice recording" : "Start voice conversation"}
+            >
+              {recording ? <Square className="h-4 w-4" /> : <Mic2 className="h-4 w-4" />}
+              {recording ? "Stop recording" : "Start speaking"}
+            </button>
           </div>
         )}
 
@@ -221,7 +253,7 @@ export default function CandidateJarvisPage() {
           </div>
         )}
 
-        <section className="mt-6 min-h-[55vh] rounded-3xl border p-4 sm:p-6" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
+        <section ref={chatScrollRef} aria-label="Jarvis conversation" className="mt-6 h-[clamp(360px,55vh,680px)] overflow-y-auto rounded-3xl border p-4 sm:p-6" style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}>
           <div className="space-y-4">
             {items.map((item) => (
               <article
@@ -243,7 +275,7 @@ export default function CandidateJarvisPage() {
                         className="inline-flex min-h-10 items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40"
                         style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}
                       >
-                        <span className="material-symbols-outlined text-[16px]">volume_up</span>
+                        <Volume2 className="h-4 w-4" aria-hidden="true" />
                         Hear
                       </button>
                     )}
@@ -259,12 +291,7 @@ export default function CandidateJarvisPage() {
                     ))}
                   </div>
                 )}
-                {item.reply && (
-                  <p className="mt-2 text-[10px] opacity-60">
-                    Path: {item.reply.path}
-                    {item.reply.model ? ` · hybrid model route ${item.reply.model.taskType}` : " · no LLM"}
-                  </p>
-                )}
+
               </article>
             ))}
             {busy && (
@@ -272,7 +299,7 @@ export default function CandidateJarvisPage() {
                 Working…
               </div>
             )}
-            <div ref={endRef} />
+            
           </div>
         </section>
 
@@ -288,12 +315,14 @@ export default function CandidateJarvisPage() {
           <button
             type="button"
             onClick={() => void toggleRecording()}
-            disabled={!voiceEnabled || voiceBusy}
-            title={voiceEnabled ? (recording ? "Stop recording" : "HireGo voice input") : "Voice stays off until the self-hosted Voice Engine is production-ready"}
-            className="min-h-12 min-w-12 rounded-xl border disabled:opacity-40"
+            disabled={!voiceEnabled || voiceBusy || enabled !== true}
+            aria-label={recording ? "Stop recording" : voiceEnabled ? "Speak to Jarvis" : "Voice unavailable"}
+            title={recording ? "Stop recording" : voiceEnabled ? "Speak to Jarvis" : "Voice is not ready yet. You can still type your message."}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 font-semibold disabled:opacity-40"
             style={{ borderColor: recording ? "var(--primary)" : "var(--outline)", backgroundColor: recording ? "var(--primary)" : "transparent", color: recording ? "#fff" : "inherit" }}
           >
-            <span className="material-symbols-outlined">{recording ? "stop" : voiceBusy ? "hourglass_top" : "mic"}</span>
+            {recording ? <Square className="h-4 w-4" aria-hidden="true" /> : voiceBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Mic2 className="h-4 w-4" aria-hidden="true" />}
+            <span className="text-xs">{recording ? "Stop" : voiceBusy ? "Working" : "Speak"}</span>
           </button>
           <button
             type="submit"
@@ -304,6 +333,15 @@ export default function CandidateJarvisPage() {
             Send
           </button>
         </form>
+        {voiceEnabled && (
+          <p role="status" className="mt-2 px-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            {recording
+              ? "Listening… tap Stop to review your words before sending."
+              : voiceBusy
+                ? "Preparing your voice message…"
+                : "Tap Speak to record. Review and edit the transcript before sending."}
+          </p>
+        )}
       </main>
     </div>
   );
