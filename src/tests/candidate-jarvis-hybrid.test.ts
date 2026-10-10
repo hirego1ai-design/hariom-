@@ -9,7 +9,7 @@ const read = (relative: string) =>
 test("Candidate Jarvis is hybrid: deterministic actions bypass LLM and reasoning is routed", () => {
   const service = read("src/lib/jarvis/CandidateJarvisService.ts");
   assert.ok(service.includes('path: "FAST"'));
-  assert.ok(service.includes("directCommand(message, context)"));
+  assert.ok(service.includes("directCommand(message, fastContext)"));
   assert.ok(service.includes("ModelRouter.executeWithFallback"));
   assert.ok(service.includes('taskType ='));
   assert.ok(service.includes('"candidate-jarvis"') || read("src/lib/jarvis/CandidateJarvisConfig.ts").includes('"candidate-jarvis"'));
