@@ -428,6 +428,7 @@ function directCommand(message: string, context: CandidateContext): CandidateJar
     case "SEARCH_JOBS":
       return null; // Database query is handled separately, never through an LLM.
   }
+  return null;
 }
 
 async function runAiDecision(params: {
