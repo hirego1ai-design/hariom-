@@ -27,7 +27,7 @@ export async function getMockVoiceReadiness(
     return {
       ready: false,
       code: "STT_NOT_CONFIGURED",
-      message: "Voice runtime configuration is invalid.",
+      message: "Voice practice is temporarily unavailable.",
     };
   }
 
@@ -35,7 +35,7 @@ export async function getMockVoiceReadiness(
     return {
       ready: false,
       code: "DISABLED",
-      message: "Voice Mock Interview is not enabled yet.",
+      message: "Voice practice is not available right now.",
     };
   }
 
@@ -44,7 +44,7 @@ export async function getMockVoiceReadiness(
       ready: false,
       code: "PERSONA_VOICE_MISSING",
       message:
-        "This interviewer does not have an approved AI voice configured.",
+        "Voice practice is not available for this interviewer right now.",
     };
   }
 
@@ -55,7 +55,7 @@ export async function getMockVoiceReadiness(
       ready: false,
       code: "TTS_NOT_CONFIGURED",
       message:
-        "Voice output is not configured in the AI Control Centre for mock-interview-tts.",
+        "Voice practice is temporarily unavailable.",
     };
   }
 
@@ -66,14 +66,14 @@ export async function getMockVoiceReadiness(
       ready: false,
       code: "STT_NOT_CONFIGURED",
       message:
-        "Speech transcription is not configured in the AI Control Centre for mock-interview-stt.",
+        "Voice practice is temporarily unavailable.",
     };
   }
 
   return {
     ready: true,
     code: "READY",
-    message: "Voice Mock Interview is available.",
+    message: "Voice practice is ready.",
   };
 }
 
