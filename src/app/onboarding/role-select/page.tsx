@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOnboarding, type CandidateRole } from "@/context/OnboardingContext";
@@ -101,9 +100,8 @@ export default function RoleSelectPage() {
 
   return (
     <div className="min-h-[100dvh] flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
-      <CandidateSidebar />
-      <div className="flex-1 ml-0 md:ml-[116px] min-w-0 min-h-[100dvh] relative">
-        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
+      <div className="flex-1 min-w-0 min-h-[100dvh] relative">
+        <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35" />
         <main className="min-h-[100dvh] max-w-[1080px] w-full mx-auto flex flex-col justify-center px-4 py-5 sm:px-6 lg:px-8 lg:py-4">
           <header className="text-center mx-auto mb-4 lg:mb-5">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--primary)" }}>Your career profile · Step 2</p>
