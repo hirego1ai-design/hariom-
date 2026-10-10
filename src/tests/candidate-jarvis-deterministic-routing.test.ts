@@ -10,14 +10,15 @@ test("basic navigation, application status, schedules and recommendations do not
     ["Namaste!", "GREETING"],
     ["show my applications", "APPLICATION_STATUS"],
     ["what is my application status", "APPLICATION_STATUS"],
-    ["how many applications", "APPLICATION_STATUS"],
+    ["how many applications", "APPLICATION_COUNT"],
     ["next interview", "NEXT_INTERVIEW"],
     ["interview kab hai", "NEXT_INTERVIEW"],
     ["find matching jobs", "RECOMMENDATIONS"],
     ["jobs for me", "RECOMMENDATIONS"],
     ["open profile", "OPEN_PROFILE"],
     ["practice interview", "OPEN_MOCK_INTERVIEW"],
-    ["credit balance", "OPEN_CREDITS"],
+    ["credit balance", "CREDIT_BALANCE"],
+    ["what is my wallet balance", "CREDIT_BALANCE"],
     ["open dashboard", "OPEN_DASHBOARD"],
     ["browse jobs", "OPEN_JOBS"],
   ];
@@ -69,6 +70,9 @@ test("fast intent classification precedes candidate queries and billable provide
   assert.ok(service.includes('scope === "FULL" || scope === "INTERVIEWS"'));
   assert.ok(service.includes('scope === "FULL" || scope === "RECOMMENDATIONS"'));
   assert.ok(service.includes("activePublicJobWhere(new Date())"));
+  assert.ok(service.includes("prisma.application.count("));
+  assert.ok(service.includes("prisma.candidateCreditWallet.findUnique("));
+  assert.ok(service.includes("candidateProfileId: ownedProfile.id"));
   assert.ok(service.includes('path: "FAST"'));
   assert.ok(!endpoint.includes("paymentOrder.create("));
   assert.ok(!endpoint.includes("application.create("));
