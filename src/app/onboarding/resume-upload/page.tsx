@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,22 @@ export default function ResumeUploadPage() {
   const { updateState, markStepComplete } = useOnboarding();
 
   const [fileName, setFileName] = useState<string | null>(null);
+  const [existingResume, setExistingResume] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        if (body.profile.resumeUrl) {
+          setExistingResume(true);
+          setFileName("Resume already saved to your profile");
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -61,6 +77,7 @@ export default function ResumeUploadPage() {
 
         // Upload success means only that the private resume file was stored and
         // attached to the candidate profile. No resume score is synthesized.
+        setExistingResume(true);
         updateState({ resumeUploaded: true });
       } catch (err) {
         setFileName(null);
@@ -78,7 +95,7 @@ export default function ResumeUploadPage() {
   };
 
   const handleSkip = () => {
-    updateState({ resumeUploaded: false });
+    updateState({ resumeUploaded: existingResume });
     markStepComplete(7);
     router.push("/onboarding/video-resume");
   };

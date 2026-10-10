@@ -76,6 +76,11 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const presentedProfile = profile ? {
       ...profile,
+      // Identity belongs to the account; include explicit aliases for existing candidate UI consumers.
+      name: profile.user.name,
+      email: profile.user.email,
+      avatarUrl: profile.user.avatarUrl,
+      phoneNumber: profile.user.phoneNumber,
       candidateSkills: profile.candidateSkills.map((skill) => {
         const expired = !!skill.validUntil && skill.validUntil <= now;
         return {

@@ -26,12 +26,16 @@ export default function PersonalDetailsPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.profile) {
+          const preferences = data.profile.preferences && typeof data.profile.preferences === "object"
+            && !Array.isArray(data.profile.preferences) ? data.profile.preferences : {};
           setFormData((prev) => ({
             ...prev,
-            fullName: prev.fullName || data.profile.user?.name || data.profile.name || "",
-            email: prev.email || data.profile.user?.email || data.profile.email || "",
-            location: prev.location || data.profile.location || "",
-            dateOfBirth: prev.dateOfBirth || (typeof data.profile.preferences?.dateOfBirth === "string" ? data.profile.preferences.dateOfBirth : ""),
+            fullName: data.profile.name || data.profile.user?.name || prev.fullName || "",
+            email: data.profile.email || data.profile.user?.email || prev.email || "",
+            phone: data.profile.phoneNumber || data.profile.user?.phoneNumber || prev.phone || "",
+            location: data.profile.location || prev.location || "",
+            dateOfBirth: typeof preferences.dateOfBirth === "string" ? preferences.dateOfBirth : prev.dateOfBirth,
+            linkedinUrl: typeof preferences.linkedinUrl === "string" ? preferences.linkedinUrl : prev.linkedinUrl,
           }));
         }
       })
@@ -49,9 +53,11 @@ export default function PersonalDetailsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          fullName: formData.fullName,
           phone: formData.phone,
           location: formData.location,
           linkedinUrl: formData.linkedinUrl,
+          ...(formData.dateOfBirth ? { preferences: { dateOfBirth: formData.dateOfBirth } } : {}),
         }),
       });
       const body = await response.json().catch(() => ({}));

@@ -23,9 +23,21 @@ export default function RoleSelectPage() {
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
-    setSelectedRole(state.candidateRole);
-    setTargetRole(state.targetRole);
-  }, [state.candidateRole, state.targetRole]);
+    let cancelled = false;
+    fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        const preferences = body.profile.preferences && typeof body.profile.preferences === "object"
+          && !Array.isArray(body.profile.preferences) ? body.profile.preferences : {};
+        const savedRole = preferences.candidateRole;
+        const savedTargetRole = preferences.targetRole;
+        if (roles.some((option) => option.id === savedRole)) setSelectedRole(savedRole as CandidateRole);
+        if (typeof savedTargetRole === "string") setTargetRole(savedTargetRole);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!targetRole.trim()) {
