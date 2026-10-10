@@ -14,6 +14,8 @@ test("mock interview setup uses the HireGo logo and candidate-friendly voice cop
 test("voice playback never discloses internal provider or model response headers", () => {
   const speech = read("../app/api/assessment/mock-interview/voice/speech/route.ts");
   const active = read("../app/ai/mock-interview/active/page.tsx");
+  const session = read("../app/api/assessment/mock-interview/session/route.ts");
+  assert.doesNotMatch(session, /transcriptProvider: turn\.transcriptProvider|transcriptModel: turn\.transcriptModel|transcriptVersion: turn\.transcriptVersion/);
   assert.doesNotMatch(speech, /X-HireGo-TTS-(Provider|Model)/);
   assert.doesNotMatch(active, /future self-hosted worker|Provider\s+transcripts/);
 });
