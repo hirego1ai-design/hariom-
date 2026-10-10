@@ -11,6 +11,7 @@ type ProviderView = {
   configured: boolean;
   source: "admin" | "environment" | "none";
   hasStoredKey: boolean;
+  hasAdminOverride: boolean;
   hasEnvironmentKey: boolean;
   baseUrl: string | null;
   reason: string | null;
@@ -212,7 +213,7 @@ export default function AiProviderCredentialsPage() {
                       className="rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-black disabled:opacity-50">
                       {working === provider ? "Working…" : "Save / Rotate"}
                     </button>
-                    <button disabled={busy || !view.hasStoredKey} type="button" onClick={() => void submit(provider, "clear", view)}
+                    <button disabled={busy || !view.hasAdminOverride} type="button" onClick={() => void submit(provider, "clear", view)}
                       className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold disabled:opacity-40">
                       Clear Admin override
                     </button>
