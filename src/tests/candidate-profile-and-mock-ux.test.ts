@@ -36,3 +36,20 @@ test("private profile and dashboard show persisted onboarding qualifications", (
   assert.match(api, /where: \{ isVisible: true \}/);
   assert.match(page, /ASSESSMENT_VALIDATED/);
 });
+
+test("credit checkout is visible only when a signed payment route is ready", () => {
+  const page = read("../app/credits/page.tsx");
+  const api = read("../app/api/candidate/credits/route.ts");
+  assert.match(page, /purchaseStatus === "READY" && packages.length > 0/);
+  assert.doesNotMatch(page, /Credit purchase is temporarily unavailable because no production payment route is enabled/);
+  assert.match(api, /hasStripeCredentials/);
+  assert.match(api, /hasPayUCredentials/);
+  assert.match(api, /PAYMENT_CONFIGURATION_UNAVAILABLE/);
+});
+
+test("mock interview voice can retry a readiness failure without selecting another mode", () => {
+  const setup = read("../app/ai/mock-interview/setup/page.tsx");
+  assert.match(setup, /voiceCheckAttempt/);
+  assert.match(setup, /Retry voice connection check/);
+  assert.match(setup, /aria-live="polite"/);
+});
