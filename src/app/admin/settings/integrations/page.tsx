@@ -23,6 +23,10 @@ export default function AdminIntegrationsPage() {
           </section>
 
           <section className="grid gap-4 sm:grid-cols-2" aria-label="Authoritative integration controls">
+            <Link href="/admin/settings/ai-provider-credentials" className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 hover:bg-white/[0.07]">
+              <h2 className="font-bold text-white">AI / LLM provider credentials</h2>
+              <p className="mt-2 text-xs text-text-muted">Encrypted Gemini, OpenAI, DeepSeek, Kimi, Qwen, and self-hosted API keys, key rotation and live connection tests.</p>
+            </Link>
             <Link href="/admin/settings/smtp" className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 hover:bg-white/[0.07]">
               <h2 className="font-bold text-white">Transactional email</h2>
               <p className="mt-2 text-xs text-text-muted">SendGrid and ZeptoMail routing, write-only credentials, and allowlisted provider tests.</p>

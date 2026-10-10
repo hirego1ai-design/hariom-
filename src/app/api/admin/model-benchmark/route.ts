@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { enforceRateLimit, handleApiError, readValidatedJson, ApiError } from "@/lib/apiSecurity";
-import { getAiRoutingConfig, getProviderRuntime } from "@/lib/ai/AiRoutingConfig";
+import { getAiRoutingConfig } from "@/lib/ai/AiRoutingConfig";
+import { getResolvedAiProviderStatuses } from "@/lib/ai/AiProviderCredentials";
 import { dispatchAiTask } from "@/utils/aiRouter";
 
 const requestSchema = z.object({
@@ -38,11 +39,12 @@ export async function POST(request: NextRequest) {
     const config = await getAiRoutingConfig();
     const byKey = new Map(config.models.map((model) => [model.key, model]));
 
+    const providerReady = new Map((await getResolvedAiProviderStatuses()).map((item) => [item.provider, item.configured]));
     const selected = modelKeys.map((key) => {
       const model = byKey.get(key);
       if (!model) throw new ApiError(`Unknown model key: ${key}`, 400);
       if (!model.enabled) throw new ApiError(`Model '${key}' is disabled.`, 409);
-      if (!getProviderRuntime(model.provider).configured) {
+      if (!providerReady.get(model.provider)) {
         throw new ApiError(`Provider '${model.provider}' is not configured.`, 409);
       }
       return model;
