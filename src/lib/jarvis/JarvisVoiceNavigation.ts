@@ -15,6 +15,10 @@ const NAVIGATION_ROUTES = new Set([
   "/ai/mock-interview/setup",
 ]);
 
+export function isAllowedVoiceActionHref(href: string): boolean {
+  return NAVIGATION_ROUTES.has(href);
+}
+
 export function pickSafeVoiceNavigation(
   utterance: string,
   actions: VoiceAction[],
@@ -28,7 +32,7 @@ export function pickSafeVoiceNavigation(
   }
 
   const matches = actions.filter(
-    (action) => NAVIGATION_ROUTES.has(action.href),
+    (action) => isAllowedVoiceActionHref(action.href),
   );
   if (matches.length !== 1) return null;
 
