@@ -81,7 +81,12 @@ export default function ExperiencePage() {
     }
     void persistExperienceAndContinue(expList, years);
   };
-  const handleSkip = () => void persistExperienceAndContinue([], 0);
+  const handleSkip = () => {
+    if (isSaving) return;
+    // Leave the existing experience and years untouched when this step is skipped.
+    markStepComplete(5);
+    router.push("/onboarding/skills");
+  };
 
 
   return (

@@ -51,3 +51,21 @@ test("public post-job funnel sends employers to account or job creation", () => 
   assert.match(signIn, /router\.replace\(safeRedirect\)/);
   assert.match(freePosting, /Sign In & Post/);
 });
+
+test("skipping candidate onboarding steps does not clear persisted qualifications", () => {
+  const education = read("../app/onboarding/education/page.tsx");
+  const experience = read("../app/onboarding/experience/page.tsx");
+  const skills = read("../app/onboarding/skills/page.tsx");
+
+  assert.doesNotMatch(education, /handleSkip = \(\) => persistEducationAndContinue\(\[\]\)/);
+  assert.doesNotMatch(experience, /handleSkip = \(\) => void persistExperienceAndContinue\(\[\], 0\)/);
+  assert.doesNotMatch(skills, /onClick=\{\(\) => void saveAndContinue\(\[\]\)\}/);
+  for (const [source, expectedStep, nextRoute] of [
+    [education, 4, "experience"],
+    [experience, 5, "skills"],
+    [skills, 6, "resume-upload"],
+  ] as const) {
+    assert.match(source, /const handleSkip = \(\) => \{/);
+    assert.match(source, new RegExp(`markStepComplete\\(${expectedStep}\\);\\s*router\\.push\\("\\/onboarding\\/${nextRoute}"\\)`));
+  }
+});
