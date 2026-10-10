@@ -149,7 +149,7 @@ test("Voice UI uses MediaRecorder, transcript confirmation, and never browser Sp
   assert.ok(active.includes("CONFIRM_TRANSCRIPT"));
   assert.ok(active.includes("Confirm Transcript"));
   assert.ok(active.includes("transcriptionReceiptId"));
-  assert.ok(active.includes("Voice Mode does not show per-question scores"));
+  assert.ok(active.includes("Voice practice gives feedback after the interview"));
   assert.ok(!active.includes("SpeechRecognition"));
   assert.ok(!active.includes("webkitSpeechRecognition"));
 });
@@ -161,7 +161,7 @@ test("setup exposes Voice Mode only through runtime readiness", () => {
   assert.ok(setup.includes("Real Voice Mode"));
   assert.ok(setup.includes("/voice/readiness"));
   assert.ok(setup.includes("voiceReadiness?.ready !== true"));
-  assert.ok(setup.includes("AI-generated interviewer voice"));
+  assert.ok(setup.includes("Checking voice practice availability"));
   assert.ok(setup.includes("mode,"));
   assert.ok(!setup.includes("Voice Mode is ready by default"));
 });
