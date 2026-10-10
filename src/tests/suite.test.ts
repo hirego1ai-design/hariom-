@@ -139,7 +139,8 @@ async function runIsolatedTests() {
     const pass =
       aiRouterSource.includes("AI_SECURITY_SYSTEM_POLICY") &&
       aiRouterSource.includes('{ role: "system", content: AI_SECURITY_SYSTEM_POLICY }') &&
-      aiRouterSource.includes("getProviderRuntime") &&
+      aiRouterSource.includes("resolveAiProvider") &&
+      aiRouterSource.includes("!resolved.configured") &&
       aiRouterSource.includes("assertSafeConfiguredKey") &&
       aiRouterSource.includes("maxRetries: 0") &&
       aiRouterSource.includes("is not configured with a production-eligible API key") &&
