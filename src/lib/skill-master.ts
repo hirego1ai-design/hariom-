@@ -321,10 +321,38 @@ export function findRole(role: string) {
 }
 
 export function searchRoles(query = "") {
-  const normalized = query.trim().toLowerCase();
-  return ROLE_MASTER.filter((role) =>
-    !normalized || [role.title, role.department, ...(role.aliases || [])].some((value) => value.toLowerCase().includes(normalized))
-  ).slice(0, 12);
+  const normalized = query.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!normalized) return ROLE_MASTER.slice(0, 12);
+
+  const tokens = normalized.split(" ");
+  return ROLE_MASTER
+    .map((role, order) => {
+      const title = role.title.toLowerCase();
+      const aliases = (role.aliases || []).map((alias) => alias.toLowerCase());
+      const fields = [title, role.department.toLowerCase(), ...aliases];
+
+      // Role/alias titles rank ahead of departments and inferred skill matches.
+      let rank: number | null =
+        title === normalized ? 0 :
+        aliases.includes(normalized) ? 1 :
+        title.startsWith(normalized) ? 2 :
+        aliases.some((alias) => alias.startsWith(normalized)) ? 3 :
+        title.includes(normalized) ? 4 :
+        aliases.some((alias) => alias.includes(normalized)) ? 5 :
+        tokens.every((token) => fields.some((field) => field.includes(token))) ? 6 : null;
+
+      // Typing an associated skill (e.g. React, Excel, Docker) can also find
+      // relevant roles. Require three letters so short queries stay useful.
+      if (rank === null && normalized.length >= 3) {
+        const mapped = ROLE_SKILL_MAPPINGS[role.title] || DEPARTMENT_SKILL_FALLBACKS[role.department] || [];
+        if (mapped.some((skill) => skill.name.toLowerCase().includes(normalized))) rank = 7;
+      }
+      return rank === null ? null : { role, rank, order };
+    })
+    .filter((match): match is { role: RoleDefinition; rank: number; order: number } => match !== null)
+    .sort((a, b) => a.rank - b.rank || a.order - b.order)
+    .slice(0, 12)
+    .map((match) => match.role);
 }
 
 export function getRoleSkillSuggestions(role: string): RoleSkillSuggestion[] {
