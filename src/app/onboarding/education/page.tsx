@@ -72,7 +72,12 @@ export default function EducationPage() {
   };
 
   const handleNext = () => persistEducationAndContinue(eduList);
-  const handleSkip = () => persistEducationAndContinue([]);
+  const handleSkip = () => {
+    if (isSaving) return;
+    // Skipping an optional step must never erase education already saved on the server.
+    markStepComplete(4);
+    router.push("/onboarding/experience");
+  };
 
 
   return (

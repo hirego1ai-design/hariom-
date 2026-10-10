@@ -66,6 +66,13 @@ export default function SkillsPage() {
     }
   };
 
+  const handleSkip = () => {
+    if (isSaving) return;
+    // Keep previously saved skills instead of replacing them with an empty set.
+    markStepComplete(6);
+    router.push("/onboarding/resume-upload");
+  };
+
   const selectedSkills: SelectedRoleSkill[] = skills.map((skill) => ({ ...skill, priority: "preferred" }));
   const updateSelectedSkills = (nextSkills: SelectedRoleSkill[]) => {
     setSkills(nextSkills.map(({ name, level }) => ({ name, level })));
@@ -99,7 +106,7 @@ export default function SkillsPage() {
               <span className="material-symbols-outlined text-[16px]">arrow_back</span>Back
             </Link>
             <div className="flex gap-3">
-              <button type="button" onClick={() => void saveAndContinue([])} disabled={isSaving} className="px-5 h-11 rounded-full font-bold text-xs border disabled:opacity-50" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}>Skip skills for now</button>
+              <button type="button" onClick={handleSkip} disabled={isSaving} className="px-5 h-11 rounded-full font-bold text-xs border disabled:opacity-50" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-secondary)" }}>Skip skills for now</button>
               <button type="button" onClick={() => void saveAndContinue(skills)} disabled={!targetRole.trim() || isSaving} className="px-8 h-11 rounded-full text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 disabled:opacity-50" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))", boxShadow: "var(--shadow-btn-red)" }}>
                 {isSaving ? "Saving…" : "Next: Upload Resume"}<span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
