@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useOnboarding, CandidateRole } from "@/context/OnboardingContext";
-import type { RoleDefinition } from "@/lib/skill-master";
+import { useOnboarding, type CandidateRole } from "@/context/OnboardingContext";
+import { searchRoles } from "@/lib/skill-master";
 
 const roles: { id: CandidateRole; title: string; desc: string; icon: string; color: string }[] = [
-  { id: "fresher", title: "Fresher / Graduate", desc: "Recently graduated and looking for entry-level opportunities.", icon: "workspace_premium", color: "#EA4335" },
-  { id: "experienced", title: "Experienced Professional", desc: "A working professional ready for the next career move.", icon: "work", color: "#FBBC05" },
-  { id: "intern", title: "Internship Seeker", desc: "Looking for practical industry experience and mentorship.", icon: "badge", color: "#AB47BC" },
+  { id: "fresher", title: "Fresher / Graduate", desc: "Starting my professional career", icon: "workspace_premium", color: "#EA4335" },
+  { id: "experienced", title: "Experienced Professional", desc: "Ready for my next career move", icon: "work", color: "#FBBC05" },
+  { id: "intern", title: "Internship Seeker", desc: "Looking for hands-on experience", icon: "badge", color: "#AB47BC" },
 ];
 
 export default function RoleSelectPage() {
@@ -18,55 +18,80 @@ export default function RoleSelectPage() {
   const { state, updateState, markStepComplete } = useOnboarding();
   const [selectedRole, setSelectedRole] = useState<CandidateRole | null>(state.candidateRole);
   const [targetRole, setTargetRole] = useState(state.targetRole);
-  const [roleOptions, setRoleOptions] = useState<RoleDefinition[]>([]);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [activeOption, setActiveOption] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const hasEdited = useRef(false);
 
+  // Only fetch the small role preferences, not applications or assessment evidence.
+  // Never overwrite a field the candidate has already started editing.
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" })
+    const controller = new AbortController();
+    fetch("/api/candidate/profile?view=role", { credentials: "include", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
-        if (!response.ok || !body.success || !body.profile || cancelled) return;
+        if (!response.ok || !body.success || !body.profile || hasEdited.current) return;
         const preferences = body.profile.preferences && typeof body.profile.preferences === "object"
           && !Array.isArray(body.profile.preferences) ? body.profile.preferences : {};
-        const savedRole = preferences.candidateRole;
-        const savedTargetRole = preferences.targetRole;
-        if (roles.some((option) => option.id === savedRole)) setSelectedRole(savedRole as CandidateRole);
-        if (typeof savedTargetRole === "string") setTargetRole(savedTargetRole);
+        if (roles.some((option) => option.id === preferences.candidateRole)) {
+          setSelectedRole(preferences.candidateRole as CandidateRole);
+        }
+        if (typeof preferences.targetRole === "string") setTargetRole(preferences.targetRole);
       })
       .catch(() => undefined);
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (!targetRole.trim()) {
-      setRoleOptions([]);
+  // The catalog is already bundled with the skill mapping. Search it instantly
+  // in the browser instead of starting a request for every keystroke.
+  const roleOptions = useMemo(
+    () => targetRole.trim() ? searchRoles(targetRole) : [],
+    [targetRole],
+  );
+
+  const chooseRole = (value: string) => {
+    hasEdited.current = true;
+    setTargetRole(value);
+    setRoleMenuOpen(false);
+    setActiveOption(0);
+  };
+
+  const handleRoleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      setRoleMenuOpen(false);
       return;
     }
-
-    const controller = new AbortController();
-    fetch(`/api/skill-master?type=roles&q=${encodeURIComponent(targetRole)}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : { roles: [] })
-      .then((data) => setRoleOptions(data.roles || []))
-      .catch(() => setRoleOptions([]));
-    return () => controller.abort();
-  }, [targetRole]);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!roleOptions.length) return;
+      event.preventDefault();
+      setRoleMenuOpen(true);
+      setActiveOption((index) => event.key === "ArrowDown"
+        ? (index + 1) % roleOptions.length
+        : (index - 1 + roleOptions.length) % roleOptions.length);
+    }
+    if (event.key === "Enter" && roleMenuOpen && roleOptions.length) {
+      event.preventDefault();
+      chooseRole(roleOptions[Math.min(activeOption, roleOptions.length - 1)].title);
+    }
+  };
 
   const handleNext = async () => {
     if (!selectedRole || !targetRole.trim() || isSaving) return;
     const normalizedTargetRole = targetRole.trim();
     setIsSaving(true);
     setSaveError("");
-    updateState({ candidateRole: selectedRole, targetRole: normalizedTargetRole });
-    markStepComplete(2);
+    setRoleMenuOpen(false);
     try {
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preferences: { candidateRole: selectedRole, targetRole: normalizedTargetRole } }),
       });
-      if (!response.ok) throw new Error("Profile save failed");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.success) throw new Error("Profile save failed");
+      updateState({ candidateRole: selectedRole, targetRole: normalizedTargetRole });
+      markStepComplete(2);
       router.push("/onboarding/personal-details");
     } catch {
       setSaveError("We could not save your role. Please try again.");
@@ -75,86 +100,102 @@ export default function RoleSelectPage() {
   };
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
+    <div className="min-h-[100dvh] flex" style={{ backgroundColor: "var(--bg-page)", color: "var(--text-primary)" }}>
       <CandidateSidebar />
-      <div className="flex-1 ml-0 md:ml-[116px] min-w-0 min-h-screen relative overflow-hidden">
+      <div className="flex-1 ml-0 md:ml-[116px] min-w-0 min-h-[100dvh] relative">
         <div className="fixed inset-0 pointer-events-none -z-10 grid-bg opacity-35 ml-0 md:ml-[116px]" />
-        <div className="fixed inset-0 pointer-events-none -z-10 ml-0 md:ml-[116px]" style={{ background: "radial-gradient(ellipse at 82% 16%, rgba(66,133,244,0.12) 0%, transparent 52%), radial-gradient(ellipse at 15% 85%, rgba(234,67,53,0.1) 0%, transparent 48%)" }} />
-
-        <main className="min-h-screen px-6 py-10 lg:px-12 lg:py-14 max-w-[1120px] w-full mx-auto flex flex-col justify-center">
-          <header className="text-center max-w-2xl mx-auto mb-9">
-            <div className="w-16 h-16 rounded-[22px] mx-auto mb-5 flex items-center justify-center border" style={{ background: "linear-gradient(145deg, var(--primary-container-bg), var(--surface-container-high))", borderColor: "var(--outline)", boxShadow: "0 12px 26px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.14)" }}>
-              <span className="material-symbols-outlined text-[30px]" style={{ color: "var(--primary)" }}>person_search</span>
-            </div>
-            <p className="text-xs font-extrabold uppercase tracking-[0.18em] mb-3" style={{ color: "var(--primary)" }}>Your career profile</p>
-            <h1 className="text-3xl lg:text-4xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>Where are you in your career?</h1>
-            <p className="text-sm mt-3" style={{ color: "var(--text-secondary)" }}>Choose the option that best describes you today.</p>
+        <main className="min-h-[100dvh] max-w-[1080px] w-full mx-auto flex flex-col justify-center px-4 py-5 sm:px-6 lg:px-8 lg:py-4">
+          <header className="text-center mx-auto mb-4 lg:mb-5">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--primary)" }}>Your career profile · Step 2</p>
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)", color: "var(--text-primary)" }}>Where are you in your career?</h1>
+            <p className="text-xs sm:text-sm mt-1.5" style={{ color: "var(--text-secondary)" }}>Choose your career stage and search for your job role.</p>
           </header>
 
-          <section className="rounded-[32px] p-5 sm:p-7 lg:p-8 relative overflow-hidden" style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--outline)", boxShadow: "0 22px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.07)" }}>
-            <div className="absolute top-0 left-0 right-0 h-1.5" style={{ background: "linear-gradient(90deg, #4285F4, #EA4335, #FBBC05, #34A853)" }} />
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <section className="rounded-[24px] p-4 sm:p-5 lg:p-6 relative" style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--outline)", boxShadow: "0 14px 35px rgba(0,0,0,0.2)" }}>
+            <div className="absolute top-0 left-4 right-4 h-1 rounded-full" style={{ background: "linear-gradient(90deg, #4285F4, #EA4335, #FBBC05, #34A853)" }} />
+            <p className="text-xs font-extrabold mb-3" style={{ color: "var(--text-secondary)" }}>1. Select your career stage</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 lg:gap-3">
               {roles.map((role) => {
                 const isSelected = selectedRole === role.id;
                 return (
-                  <button key={role.id} type="button" onClick={() => setSelectedRole(role.id)} className="min-h-[270px] p-6 rounded-[28px] border transition-all relative overflow-hidden group hover:-translate-y-1 focus:outline-none focus-visible:ring-2 text-center flex flex-col items-center justify-center" style={{ backgroundColor: isSelected ? "var(--primary-container-bg)" : "var(--surface-container-high)", borderColor: isSelected ? "var(--primary)" : "var(--outline)", boxShadow: isSelected ? "0 18px 34px rgba(230,57,70,0.2), inset 0 1px 0 rgba(255,255,255,0.12)" : "0 13px 26px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)" }}>
-                    {isSelected && <><div className="absolute top-0 left-0 right-0 h-1" style={{ background: "var(--primary)" }} /><span className="material-symbols-outlined absolute top-4 right-4 text-[22px]" style={{ color: "var(--primary)" }}>check_circle</span></>}
-                    <span className="w-[76px] h-[76px] rounded-[26px] flex items-center justify-center mb-5 border transition-transform group-hover:scale-105" style={{ background: isSelected ? "linear-gradient(145deg, var(--primary), var(--primary-dim))" : "linear-gradient(145deg, var(--bg-card), var(--surface-container-high))", color: isSelected ? "#fff" : role.color, borderColor: isSelected ? "rgba(255,255,255,0.18)" : "var(--outline)", boxShadow: isSelected ? "0 12px 20px rgba(230,57,70,0.28), inset 0 1px 0 rgba(255,255,255,0.25)" : "0 10px 18px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.1)" }}>
-                      <span className="material-symbols-outlined text-[35px]">{role.icon}</span>
+                  <button
+                    key={role.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => { hasEdited.current = true; setSelectedRole(role.id); }}
+                    className="min-h-[74px] sm:min-h-[146px] lg:min-h-[150px] p-3 sm:p-4 rounded-[18px] border transition-colors relative focus:outline-none focus-visible:ring-2 text-left sm:text-center flex sm:flex-col items-center sm:justify-center gap-3"
+                    style={{ backgroundColor: isSelected ? "var(--primary-container-bg)" : "var(--surface-container-high)", borderColor: isSelected ? "var(--primary)" : "var(--outline)" }}
+                  >
+                    {isSelected && <span className="material-symbols-outlined absolute top-2 right-2 text-[18px]" style={{ color: "var(--primary)" }}>check_circle</span>}
+                    <span className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl flex items-center justify-center border" style={{ background: isSelected ? "var(--primary)" : "var(--bg-card)", borderColor: "var(--outline)", color: isSelected ? "#fff" : role.color }}>
+                      <span className="material-symbols-outlined text-[25px]">{role.icon}</span>
                     </span>
-                    <span>
-                      <span className="block font-extrabold text-base" style={{ color: "var(--text-primary)" }}>{role.title}</span>
-                      <span className="block text-xs leading-relaxed mt-2 max-w-[210px]" style={{ color: "var(--text-secondary)" }}>{role.desc}</span>
+                    <span className="min-w-0">
+                      <span className="block font-extrabold text-sm" style={{ color: "var(--text-primary)" }}>{role.title}</span>
+                      <span className="block text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{role.desc}</span>
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-7 pt-7 border-t relative" style={{ borderColor: "var(--outline)" }}>
-              <label htmlFor="target-job-role" className="block text-center text-sm font-extrabold mb-2" style={{ color: "var(--text-primary)" }}>
-                What job role should your profile target?
+            <div className="mt-4 pt-4 border-t relative" style={{ borderColor: "var(--outline)" }}>
+              <label htmlFor="target-job-role" className="block text-xs font-extrabold mb-1.5" style={{ color: "var(--text-primary)" }}>
+                2. Target or current job role
               </label>
-              <p className="text-center text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-                This role will automatically prepare relevant skill suggestions later in onboarding.
+              <p className="text-xs mb-2.5" style={{ color: "var(--text-muted)" }}>
+                Start typing (e.g. “software”, “HR”, “sales”). Pick a suggested role to prepare relevant skills automatically.
               </p>
-              <div className="relative max-w-xl mx-auto">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px]" style={{ color: "var(--text-muted)" }}>work</span>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[19px]" style={{ color: "var(--text-muted)" }}>search</span>
                 <input
                   id="target-job-role"
+                  type="text"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="target-role-options"
+                  aria-expanded={roleMenuOpen && roleOptions.length > 0}
+                  aria-activedescendant={roleMenuOpen && roleOptions.length ? "target-role-option-" + Math.min(activeOption, roleOptions.length - 1) : undefined}
                   value={targetRole}
-                  onChange={(event) => setTargetRole(event.target.value)}
-                  placeholder="Search a role, e.g. Customer Support Executive"
+                  onChange={(event) => { hasEdited.current = true; setTargetRole(event.target.value); setRoleMenuOpen(true); setActiveOption(0); }}
+                  onFocus={() => setRoleMenuOpen(true)}
+                  onBlur={() => setRoleMenuOpen(false)}
+                  onKeyDown={handleRoleKeyDown}
+                  placeholder="Start typing a job role"
                   autoComplete="off"
-                  className="w-full h-12 pl-12 pr-4 rounded-2xl text-sm outline-none focus:ring-2"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl text-sm outline-none focus:ring-2"
                   style={{ backgroundColor: "var(--bg-input)", border: "1px solid var(--outline)", color: "var(--text-primary)" }}
                 />
-                {targetRole.trim() && roleOptions.length > 0 && (
-                  <div className="absolute z-30 top-[54px] left-0 right-0 max-h-52 overflow-y-auto rounded-2xl border shadow-2xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--outline)" }}>
-                    {roleOptions.map((option) => (
+                {roleMenuOpen && targetRole.trim() && (
+                  <div id="target-role-options" role="listbox" aria-label="Matching job roles" className="absolute z-30 top-[48px] left-0 right-0 max-h-48 overflow-y-auto rounded-xl border shadow-2xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--outline)" }}>
+                    {roleOptions.length ? roleOptions.map((option, index) => (
                       <button
-                        key={`${option.title}-${option.department}`}
+                        id={"target-role-option-" + index}
+                        key={option.title}
+                        role="option"
+                        aria-selected={activeOption === index}
                         type="button"
-                        onClick={() => { setTargetRole(option.title); setRoleOptions([]); }}
-                        className="w-full px-4 py-3 text-left border-b last:border-b-0 hover:opacity-80"
-                        style={{ borderColor: "var(--outline)" }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => chooseRole(option.title)}
+                        className="w-full px-4 py-2.5 text-left border-b last:border-b-0 focus:outline-none"
+                        style={{ borderColor: "var(--outline)", backgroundColor: activeOption === index ? "var(--surface-container-high)" : "var(--bg-card)" }}
                       >
                         <span className="block text-sm font-bold" style={{ color: "var(--text-primary)" }}>{option.title}</span>
                         <span className="text-xs" style={{ color: "var(--text-muted)" }}>{option.department} · {option.industry}</span>
                       </button>
-                    ))}
+                    )) : <p className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>No exact match. You can still enter your own job title.</p>}
                   </div>
                 )}
               </div>
-              {saveError && <p role="alert" className="text-center text-xs font-semibold mt-3" style={{ color: "var(--primary)" }}>{saveError}</p>}
+              {saveError && <p role="alert" className="text-xs font-semibold mt-2" style={{ color: "var(--primary)" }}>{saveError}</p>}
             </div>
           </section>
 
-          <footer className="flex items-center justify-between pt-7 mt-7">
-            <Link href="/onboarding/welcome" className="px-6 h-12 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all border hover:-translate-y-0.5" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-primary)", boxShadow: "0 7px 14px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
+          <footer className="flex items-center justify-between gap-3 pt-4">
+            <Link href="/onboarding/welcome" className="px-5 h-11 rounded-xl font-bold text-xs flex items-center gap-2 border" style={{ backgroundColor: "var(--surface-container-high)", borderColor: "var(--outline)", color: "var(--text-primary)" }}>
               <span className="material-symbols-outlined text-[16px]">arrow_back</span>Back
             </Link>
-            <button onClick={() => void handleNext()} disabled={!selectedRole || !targetRole.trim() || isSaving} className="px-8 h-12 rounded-2xl text-white text-xs font-extrabold uppercase tracking-wider transition-all flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-45 disabled:hover:translate-y-0" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))", boxShadow: "0 9px 0 rgba(126,20,29,0.95), 0 14px 25px rgba(230,57,70,0.22), inset 0 1px 0 rgba(255,255,255,0.25)" }}>
+            <button type="button" onClick={() => void handleNext()} disabled={!selectedRole || !targetRole.trim() || isSaving} className="px-6 h-11 rounded-xl text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 disabled:opacity-45 focus-visible:ring-2" style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-dim))" }}>
               {isSaving ? "Saving…" : "Continue"}<span className="material-symbols-outlined text-[16px]">arrow_forward</span>
             </button>
           </footer>
