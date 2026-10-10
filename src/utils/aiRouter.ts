@@ -5,9 +5,8 @@ import { ModelRouter } from "../lib/ai/ModelRouter";
 import {
   AiModelConfig,
   LlmProviderName,
-  getProviderApiKey,
-  getProviderRuntime,
 } from "../lib/ai/AiRoutingConfig";
+import { resolveAiProvider } from "../lib/ai/AiProviderCredentials";
 
 export type LlmProvider = LlmProviderName;
 
@@ -112,17 +111,17 @@ function assertCostMetadata(model: AiModelConfig) {
   }
 }
 
-function createProviderClient(provider: LlmProvider, timeoutMs: number) {
-  const runtime = getProviderRuntime(provider);
-  if (!runtime.configured) {
-    throw new Error(runtime.reason || `AI provider ${provider} is not configured.`);
+async function createProviderClient(provider: LlmProvider, timeoutMs: number) {
+  const resolved = await resolveAiProvider(provider);
+  if (!resolved.configured) {
+    throw new Error(resolved.reason || `AI provider ${provider} is not configured.`);
   }
-  const apiKey = getProviderApiKey(provider);
+  const apiKey = resolved.apiKey;
   assertSafeConfiguredKey(provider, apiKey);
 
   return new OpenAI({
     apiKey,
-    ...(runtime.baseURL ? { baseURL: runtime.baseURL } : {}),
+    ...(resolved.baseURL ? { baseURL: resolved.baseURL } : {}),
     timeout: timeoutMs,
     // Provider calls are never blindly replayed by the SDK: a timed-out request
     // may already have been billed and completed upstream.
@@ -215,7 +214,7 @@ export async function dispatchAiTask(request: AiTaskRequest): Promise<{
     }
   }
 
-  const client = createProviderClient(request.provider, timeoutMs);
+  const client = await createProviderClient(request.provider, timeoutMs);
 
   let responseText = "";
   let actualPromptTokens: number | null = null;
