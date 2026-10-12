@@ -7,6 +7,10 @@ import { classifyCandidateDirectIntent } from "../lib/jarvis/CandidateIntentRout
 test("basic navigation, application status, schedules and recommendations do not require a model", () => {
   const cases: Array<[string, string]> = [
     ["hi", "GREETING"],
+    ["Hi Jarvis", "GREETING"],
+    ["Hello Jarvis!", "GREETING"],
+    ["Hey HireGo AI", "GREETING"],
+    ["नमस्ते जार्विस", "GREETING"],
     ["नमस्ते", "GREETING"],
     ["मुझे मेरी एप्लीकेशन दिखाओ", "APPLICATION_STATUS"],
     ["मेरा अगला इंटरव्यू कब है", "NEXT_INTERVIEW"],
@@ -52,6 +56,7 @@ test("AI reasoning is never mislabeled as a deterministic lookup", () => {
     "How should I prepare for a backend interview?",
     "Find remote jobs with a salary above 25L",
     "Help me negotiate a better salary",
+    "Hi Jarvis, please help me compare job offers",
   ]) {
     assert.equal(classifyCandidateDirectIntent(prompt), null, prompt);
   }
