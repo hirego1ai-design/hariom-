@@ -1054,7 +1054,13 @@ html.light .badge-muted  { background: var(--surface-container); color: var(--te
 
 
 /* Persistent HireGo Jarvis globe. Pure CSS, no 3D assets or expensive canvas loop. */
-.jarvis-voice-root { position: relative; isolation: isolate; font-family: inherit; }
+/* Keep the globe in a top-level viewport layer without blocking the page.
+   Interactive controls opt back in to pointer input. */
+.jarvis-voice-root {
+  position: fixed; inset: 0; z-index: 1000; pointer-events: none;
+  font-family: inherit;
+}
+.jarvis-voice-root > * { pointer-events: auto; }
 .jarvis-voice-launch, .jarvis-voice-resume {
   position: fixed; right: 18px; bottom: 90px; z-index: 75;
   display: flex; align-items: center; gap: 10px; min-height: 52px;
