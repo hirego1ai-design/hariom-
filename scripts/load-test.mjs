@@ -148,7 +148,7 @@ report.totals = report.stages.reduce((acc, stage) => {
   return acc;
 }, { requests: 0, failed: 0, serverErrors: 0, networkErrors: 0 });
 
-await writeFile("load-test-results.json", JSON.stringify(report, null, 2) + "\\n");
+await writeFile("load-test-results.json", JSON.stringify(report, null, 2) + "\n");
 
 const allStagesRan = report.stages.length === stages.length;
 const failedThreshold = report.stages.some(exceedsSafetyThreshold) || !allStagesRan;
