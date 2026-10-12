@@ -89,12 +89,20 @@ jobs:
             (1,'candidate-no-pii'),(2,'employer-no-pii');
           SQL
 
-          pg_dump -d hirego_dr_source --schema=public --format=custom \
-            --no-owner --no-privileges --file=dr-evidence/synthetic-hirego.dump
+          # Use the same PostgreSQL major version for dump and restore;
+          # GitHub-hosted runners may ship older psql/pg_dump clients.
+          docker run --rm --network host -e PGPASSWORD=postgres \
+            -v "$PWD/dr-evidence:/evidence" pgvector/pgvector:pg17 \
+            pg_dump -h 127.0.0.1 -U postgres -d hirego_dr_source \
+              --schema=public --format=custom --no-owner --no-privileges \
+              --file=/evidence/synthetic-hirego.dump
           test -s dr-evidence/synthetic-hirego.dump
           createdb hirego_dr_restored
-          pg_restore -d hirego_dr_restored --no-owner --no-privileges \
-            --exit-on-error dr-evidence/synthetic-hirego.dump
+          docker run --rm --network host -e PGPASSWORD=postgres \
+            -v "$PWD/dr-evidence:/evidence" pgvector/pgvector:pg17 \
+            pg_restore -h 127.0.0.1 -U postgres -d hirego_dr_restored \
+              --no-owner --no-privileges --exit-on-error \
+              /evidence/synthetic-hirego.dump
 
           schema_fingerprint() {
             psql -Atq -d "$1" -c "
