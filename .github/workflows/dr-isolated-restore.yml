@@ -49,8 +49,30 @@ jobs:
         run: npm ci
 
       - name: Create realistic HireGo schema from Prisma migrations
+        shell: bash
         run: |
+          set -euo pipefail
           npx prisma validate
+
+          # The voice-routing migration requires the global AdminConfiguration
+          # row normally seeded by application onboarding. Bootstrap a synthetic
+          # row at the correct migration boundary on this throwaway database.
+          later="$(mktemp -d)"
+          for migration in prisma/migrations/[0-9]*; do
+            [ -d "$migration" ] || continue
+            if [[ "$(basename "$migration")" > "20261005093000" ]]; then
+              mv "$migration" "$later/"
+            fi
+          done
+          npx prisma migrate deploy
+
+          psql -v ON_ERROR_STOP=1 -d hirego_dr_source <<'SQL'
+          INSERT INTO public."AdminConfiguration" ("id", "platformConfig", "updatedAt")
+          VALUES ('global-admin-config', '{"aiRouting":{"version":1,"models":[],"routes":[]}}'::jsonb, now())
+          ON CONFLICT ("id") DO NOTHING;
+          SQL
+
+          mv "$later"/* prisma/migrations/
           npx prisma migrate deploy
 
       - name: Backup and restore complete schema with disposable synthetic data
