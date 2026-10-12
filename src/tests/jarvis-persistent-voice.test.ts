@@ -65,6 +65,20 @@ test("globe offers automatic VAD turns, spoken output, docking and interruption"
   assert.ok(css.includes("prefers-reduced-motion"));
 });
 
+test("no-device microphone errors keep a visible and dismissible voice globe", () => {
+  const globe = read("src/components/candidate/JarvisVoiceGlobe.tsx");
+  const css = read("src/app/globals.css");
+  assert.ok(globe.includes('const showPanel = sessionActive || stage === "paused"'));
+  assert.ok(globe.includes('{showPanel && ('));
+  assert.ok(globe.includes("setError(message);"));
+  assert.ok(globe.includes('stopSession("paused")'));
+  assert.ok(globe.includes('aria-label="Retry Jarvis microphone"'));
+  assert.ok(globe.includes('aria-label="End Jarvis voice session"'));
+  assert.ok(globe.includes("Check your device or permission, then tap Retry"));
+  assert.ok(css.includes("z-index: 1000; pointer-events: none"));
+  assert.ok(css.includes(".jarvis-voice-root > * { pointer-events: auto; }"));
+});
+
 test("voice is explicitly permission-gated, terminates on hidden/logout and never trusts external actions", () => {
   const globe = read("src/components/candidate/JarvisVoiceGlobe.tsx");
   const root = read("src/components/candidate/JarvisVoiceMount.tsx");

@@ -368,12 +368,15 @@ export default function JarvisVoiceGlobe() {
   // accounts without a verified self-hosted STT/TTS backend.
   if (ready !== true) return null;
 
-  const isExpanded = sessionActive && !docked;
+  // Keep the panel visible after a mic/device failure so the user can see
+  // why speech stopped, retry with an explicit tap, or close it.
+  const showPanel = sessionActive || stage === "paused";
+  const isExpanded = showPanel && !docked;
   const canInterrupt = stage === "speaking" || stage === "thinking" || stage === "transcribing";
 
   return (
     <aside aria-label="HireGo Jarvis continuous voice assistant" className="jarvis-voice-root">
-      {!sessionActive && (
+      {!showPanel && (
         <button
           type="button"
           onClick={() => { setDocked(false); startSession(); }}
@@ -386,11 +389,11 @@ export default function JarvisVoiceGlobe() {
         </button>
       )}
 
-      {sessionActive && isExpanded && (
+      {isExpanded && (
         <div className="jarvis-voice-backdrop" aria-hidden="true" />
       )}
 
-      {sessionActive && (
+      {showPanel && (
         <section
           className={"jarvis-voice-panel " + (docked ? "jarvis-voice-panel--docked" : "jarvis-voice-panel--center")}
           aria-label="Active Jarvis voice session"
@@ -429,6 +432,7 @@ export default function JarvisVoiceGlobe() {
           <p className="jarvis-voice-hint">
             {stage === "listening" ? "Speak naturally. Jarvis detects when you finish."
               : stage === "speaking" ? "Jarvis is answering. You can interrupt."
+              : stage === "paused" ? "Microphone is stopped. Check your device or permission, then tap Retry."
               : "Voice stays connected while you explore HireGo."}
           </p>
 
@@ -470,10 +474,17 @@ export default function JarvisVoiceGlobe() {
             )}
             {canInterrupt && <button type="button" onClick={interrupt}
               aria-label="Interrupt and speak" className="jarvis-voice-primary"><Mic2 size={16} /> Interrupt</button>}
-            <button type="button" onClick={() => { stopSession("paused"); setError(""); }}
-              aria-label="Pause microphone" className="jarvis-voice-control">
-              <Square size={16} /> Pause
-            </button>
+            {stage === "paused" ? (
+              <button type="button" onClick={startSession}
+                aria-label="Retry Jarvis microphone" className="jarvis-voice-primary">
+                <Mic2 size={16} /> Retry microphone
+              </button>
+            ) : (
+              <button type="button" onClick={() => { stopSession("paused"); setError(""); }}
+                aria-label="Pause microphone" className="jarvis-voice-control">
+                <Square size={16} /> Pause
+              </button>
+            )}
             <button type="button" onClick={() => { setMuted((value) => !value); if (audioRef.current) audioRef.current.muted = !muted; }}
               aria-label={muted ? "Unmute Jarvis playback" : "Mute Jarvis playback"}
               className="jarvis-voice-control">
@@ -483,12 +494,6 @@ export default function JarvisVoiceGlobe() {
         </section>
       )}
 
-      {!sessionActive && stage === "paused" && (
-        <button type="button" className="jarvis-voice-resume"
-          onClick={() => { setDocked(true); startSession(); }}>
-          Resume hands-free voice
-        </button>
-      )}
     </aside>
   );
 }
