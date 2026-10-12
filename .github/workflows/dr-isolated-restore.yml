@@ -2,6 +2,8 @@ name: Isolated Database Restore Verification
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   isolated-restore-drill:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[dr-sandbox-test]')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[dr-sandbox-test]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
