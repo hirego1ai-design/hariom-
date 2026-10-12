@@ -55,7 +55,7 @@ export function classifyCandidateDirectIntent(input: string): CandidateDirectInt
     return { kind: "CONFIRM_IN_PORTAL" };
   }
 
-  if (/^(?:hi|hello|hey|hey jarvis|namaste|namaskar|good morning|good afternoon|good evening|नमस्ते|नमस्कार)$/iu.test(text)) {
+  if (/^(?:(?:hi|hello|hey|namaste|namaskar|good morning|good afternoon|good evening)(?:\s+(?:jarvis|hirego(?:\s+ai)?))?|(?:नमस्ते|नमस्कार)(?:\s+जार्विस)?)$/iu.test(text)) {
     return { kind: "GREETING" };
   }
 
