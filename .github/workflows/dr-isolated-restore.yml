@@ -98,9 +98,13 @@ jobs:
               --file=/evidence/synthetic-hirego.dump
           test -s dr-evidence/synthetic-hirego.dump
           createdb hirego_dr_restored
-          # The brand-new disposable target has PostgreSQL's empty public schema;
-          # the archive owns and recreates that schema. Never run on production.
-          psql -v ON_ERROR_STOP=1 -d hirego_dr_restored -c 'DROP SCHEMA public CASCADE;'
+          # Public-only backups reference extension types such as extensions.vector.
+          # Bootstrap the non-public extension schema in this throwaway target.
+          psql -v ON_ERROR_STOP=1 -d hirego_dr_restored <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS extensions;
+          CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+          DROP SCHEMA public CASCADE;
+          SQL
           docker run --rm --network host -e PGPASSWORD=postgres \
             -v "$PWD/dr-evidence:/evidence" pgvector/pgvector:pg17 \
             pg_restore -h 127.0.0.1 -U postgres -d hirego_dr_restored \
