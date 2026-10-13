@@ -261,14 +261,13 @@ test("live voice routing migration replaces failing model mappings without reset
   const migration = read(
     "prisma/migrations/20261013170000_fix_live_voice_model_routes/migration.sql",
   );
-  assert.ok(migration.includes("'candidate-jarvis'"));
-  assert.ok(migration.includes("'candidate-jarvis-quality'"));
-  assert.ok(migration.includes("'mock-interview'"));
-  assert.ok(migration.includes("'assessment-feedback'"));
-  assert.ok(migration.includes('"openai:gpt-5.6-luna"'));
-  assert.ok(migration.includes('"openai:gpt-5.6-sol"'));
-  assert.ok(migration.includes('"gemini:3.8-flash"'));
-  assert.ok(migration.includes("jsonb_array_elements(routes)"));
+  assert.ok(migration.includes("'openai:gpt-6-luna'"));
+  assert.ok(migration.includes("'openai:gpt-6-sol'"));
+  assert.ok(migration.includes("'openai:gpt-5.6-luna'"));
+  assert.ok(migration.includes("'openai:gpt-5.6-sol'"));
+  assert.ok(migration.includes("'gemini:3.8-flash'"));
+  assert.ok(migration.includes("jsonb_set(model, '{enabled}', 'false'::jsonb)"));
+  assert.ok(migration.includes("jsonb_array_elements(COALESCE(cfg->'routes'"));
 });
 
 test("voice provider models are configuration data, not hard-coded runtime fallbacks", () => {
