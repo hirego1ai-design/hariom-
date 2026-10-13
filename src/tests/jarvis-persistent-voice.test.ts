@@ -55,6 +55,10 @@ test("globe offers automatic VAD turns, spoken output, docking and interruption"
   assert.ok(globe.includes('"/api/candidate/jarvis/voice/speech"'));
   assert.ok(globe.includes('"/api/candidate/jarvis"'));
   assert.ok(globe.includes("audio.onended"));
+  assert.ok(globe.includes("SERVER_TTS_FALLBACK_AFTER_MS = 5_000"));
+  assert.ok(globe.includes("window.speechSynthesis.speak(utterance)"));
+  assert.ok(globe.includes("window.speechSynthesis.cancel()"));
+  assert.ok(globe.includes("signal: speechRequest.signal"));
   assert.ok(globe.includes("beginListeningRef.current(generation)"));
   assert.ok(globe.includes("setDocked(true)"));
   assert.ok(globe.includes("router.push(navigation)"));

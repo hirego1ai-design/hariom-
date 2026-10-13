@@ -114,6 +114,8 @@ type VoiceConfirmationResponse = {
   detectedLanguage?: string;
 };
 
+const SERVER_TTS_FALLBACK_AFTER_MS = 5_000;
+
 type VoiceUiState =
   | "READY"
   | "SPEAKING"
@@ -187,6 +189,7 @@ export default function MockInterviewActivePage() {
   const chunksRef = useRef<BlobPart[]>([]);
   const recordingStartedAtRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
@@ -198,7 +201,10 @@ export default function MockInterviewActivePage() {
         recorderRef.current.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      speechRequestRef.current?.abort();
+      speechRequestRef.current = null;
       audioRef.current?.pause();
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     };
   }, []);
 
@@ -460,44 +466,79 @@ export default function MockInterviewActivePage() {
     setVoiceState("SPEAKING");
     setErrorMessage(null);
 
-    const response = await fetch(
-      "/api/assessment/mock-interview/voice/speech",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId,
-          kind,
-          ...(kind === "QUESTION"
-            ? { questionIndex: questionIndex ?? 0 }
-            : {}),
-        }),
-      },
+    const fallbackText = (
+      kind === "OPENING" ? session?.openingMessage : currentTurn?.questionText
+    )?.trim() || "";
+    speechRequestRef.current?.abort();
+    const controller = new AbortController();
+    speechRequestRef.current = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      SERVER_TTS_FALLBACK_AFTER_MS,
     );
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      throw new Error(
-        data?.error || "Interviewer voice is temporarily unavailable.",
-      );
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
+    let objectUrl: string | null = null;
 
     try {
+      const response = await fetch(
+        "/api/assessment/mock-interview/voice/speech",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sessionId,
+            kind,
+            ...(kind === "QUESTION"
+              ? { questionIndex: questionIndex ?? 0 }
+              : {}),
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Server interviewer speech is unavailable.");
+      }
+
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("Server interviewer speech was empty.");
+      window.clearTimeout(timeout);
+      objectUrl = URL.createObjectURL(blob);
+
       await new Promise<void>((resolve, reject) => {
-        const audio = new Audio(objectUrl);
+        const audio = new Audio(objectUrl!);
         audioRef.current = audio;
         audio.onended = () => resolve();
         audio.onerror = () =>
           reject(new Error("Could not play interviewer audio."));
         void audio.play().catch(reject);
       });
+    } catch (cause) {
+      if (
+        !fallbackText ||
+        !("speechSynthesis" in window) ||
+        typeof SpeechSynthesisUtterance === "undefined"
+      ) {
+        throw cause;
+      }
+
+      // Keep the interviewer speaking promptly when a provider TTS request
+      // is slow or unavailable; only the already-approved question text is read.
+      window.speechSynthesis.cancel();
+      await new Promise<void>((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(fallbackText);
+        const language = session?.language?.toLowerCase() || "en";
+        utterance.lang = language === "hi" ? "hi-IN" : language.includes("-") ? language : "en-IN";
+        utterance.onend = () => resolve();
+        utterance.onerror = () =>
+          reject(new Error("Device speech could not read the interviewer text."));
+        window.speechSynthesis.speak(utterance);
+      });
     } finally {
+      window.clearTimeout(timeout);
+      if (speechRequestRef.current === controller) speechRequestRef.current = null;
       audioRef.current = null;
-      URL.revokeObjectURL(objectUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
   }
 

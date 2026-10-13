@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
         text: receipt.text,
         voiceKey: receipt.voiceKey,
         language: receipt.language,
+        signal: request.signal,
       });
     } catch {
       throw new ApiError("HireGo speech output is temporarily unavailable.", 503);

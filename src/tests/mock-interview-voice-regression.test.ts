@@ -153,6 +153,10 @@ test("Voice UI uses MediaRecorder, transcript confirmation, and never browser Sp
     "src/app/ai/mock-interview/active/page.tsx",
   );
   assert.ok(active.includes("MediaRecorder"));
+  assert.ok(active.includes("SERVER_TTS_FALLBACK_AFTER_MS = 5_000"));
+  assert.ok(active.includes("window.speechSynthesis.speak(utterance)"));
+  assert.ok(active.includes("speechRequestRef.current?.abort()"));
+  assert.ok(active.includes("window.speechSynthesis.cancel()"));
   assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
   assert.ok(active.includes("voice/transcribe"));
   assert.ok(active.includes("voice/confirm-transcript"));
@@ -250,6 +254,25 @@ test("voice AI routing migration configures quality-first STT and routed TTS wit
   assert.ok(migration.includes("'mock-interview-tts'"));
   assert.ok(migration.includes("'QUALITY_FIRST'"));
   assert.ok(migration.includes("'semantic-embedding'"));
+});
+
+
+test("live voice routing migration replaces failing model mappings without resetting route policy", () => {
+  const migration = read(
+    "prisma/migrations/20261013170000_fix_live_voice_model_routes/migration.sql",
+  );
+  assert.ok(migration.includes("'openai:gpt-6-luna'"));
+  assert.ok(migration.includes("'openai:gpt-6-sol'"));
+  assert.ok(migration.includes("openai:gpt-5.6-luna"));
+  assert.ok(migration.includes("openai:gpt-5.6-sol"));
+  assert.ok(migration.includes("gemini:3.8-flash"));
+  assert.ok(migration.includes("'gemini:3.5-flash-lite'"));
+  assert.ok(migration.includes("'openai:gpt-5.6-sol'"));
+  assert.ok(migration.includes("'openai:gpt-5.6-luna'"));
+  assert.ok(migration.includes("'mock-interview-stt', 'mock-interview-tts', 'semantic-embedding'"));
+  assert.ok(migration.includes("'inputUsdPerMillion}', '0.30'::jsonb"));
+  assert.ok(migration.includes("jsonb_set(model, '{enabled}', 'false'::jsonb)"));
+  assert.ok(migration.includes("jsonb_array_elements(COALESCE(cfg->'routes'"));
 });
 
 test("voice provider models are configuration data, not hard-coded runtime fallbacks", () => {
