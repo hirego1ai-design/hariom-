@@ -189,6 +189,7 @@ export default function MockInterviewActivePage() {
   const chunksRef = useRef<BlobPart[]>([]);
   const recordingStartedAtRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
