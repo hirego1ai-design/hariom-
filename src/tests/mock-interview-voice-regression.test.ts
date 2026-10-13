@@ -263,7 +263,7 @@ test("live voice routing migration replaces failing model mappings without reset
   );
   assert.ok(migration.includes("'openai:gpt-6-luna'"));
   assert.ok(migration.includes("'openai:gpt-6-sol'"));
-  assert.ok(migration.includes("'openai:gpt-5.6-luna'"));
+  assert.ok(migration.includes("openai:gpt-5.6-luna"));
   assert.ok(migration.includes("'openai:gpt-5.6-sol'"));
   assert.ok(migration.includes("'gemini:3.8-flash'"));
   assert.ok(migration.includes("jsonb_set(model, '{enabled}', 'false'::jsonb)"));
