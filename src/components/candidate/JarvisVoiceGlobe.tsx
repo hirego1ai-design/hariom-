@@ -9,6 +9,8 @@ import {
 import { isAllowedVoiceActionHref, pickSafeVoiceNavigation, type VoiceAction } from "@/lib/jarvis/JarvisVoiceNavigation";
 
 type Stage = "idle" | "listening" | "transcribing" | "thinking" | "speaking" | "paused" | "error";
+const SERVER_TTS_FALLBACK_AFTER_MS = 5_000;
+
 type JarvisResponse = {
   success?: boolean;
   error?: string;
@@ -92,6 +94,9 @@ export default function JarvisVoiceGlobe() {
     }
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     audioUrlRef.current = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   const stopSession = useCallback((reason: "idle" | "paused" = "idle") => {
@@ -199,41 +204,82 @@ export default function JarvisVoiceGlobe() {
       }
 
       setStage("speaking");
-      const speechResponse = await fetch("/api/candidate/jarvis/voice/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiptId: reply.speechReceiptId }),
-        signal: request.signal,
-      });
-      if (!speechResponse.ok) {
-        const problem = await readJson(speechResponse);
-        throw new Error(problem.error || "Spoken response is temporarily unavailable.");
-      }
-      const voiceBlob = await speechResponse.blob();
-      if (!isCurrent()) return;
-      const url = URL.createObjectURL(voiceBlob);
-      audioUrlRef.current = url;
-      const audio = new Audio(url);
-      audio.muted = muted;
-      audioRef.current = audio;
-      audio.onended = () => {
-        silenceAudio();
-        if (activeRef.current && sequenceRef.current === generation) {
-          void beginListeningRef.current(generation);
-        }
-      };
-      audio.onerror = () => {
-        silenceAudio();
-        setError("Couldn't play audio. You can read the response and continue.");
-        if (activeRef.current && sequenceRef.current === generation) {
-          void beginListeningRef.current(generation);
-        }
-      };
+      const speechRequest = new AbortController();
+      const abortSpeechWithTurn = () => speechRequest.abort();
+      request.signal.addEventListener("abort", abortSpeechWithTurn, { once: true });
+      const speechTimeout = setTimeout(
+        () => speechRequest.abort(),
+        SERVER_TTS_FALLBACK_AFTER_MS,
+      );
       try {
-        await audio.play();
-      } catch {
-        silenceAudio();
-        throw new Error("Your browser blocked automatic audio. Use Resume to continue.");
+        const speechResponse = await fetch("/api/candidate/jarvis/voice/speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ receiptId: reply.speechReceiptId }),
+          signal: speechRequest.signal,
+        });
+        if (!speechResponse.ok) {
+          throw new Error("Server speech output is unavailable.");
+        }
+        const voiceBlob = await speechResponse.blob();
+        clearTimeout(speechTimeout);
+        request.signal.removeEventListener("abort", abortSpeechWithTurn);
+        if (!isCurrent()) return;
+        const url = URL.createObjectURL(voiceBlob);
+        audioUrlRef.current = url;
+        const audio = new Audio(url);
+        audio.muted = muted;
+        audioRef.current = audio;
+        audio.onended = () => {
+          silenceAudio();
+          if (activeRef.current && sequenceRef.current === generation) {
+            void beginListeningRef.current(generation);
+          }
+        };
+        audio.onerror = () => {
+          silenceAudio();
+          setError("Couldn't play audio. You can read the response and continue.");
+          if (activeRef.current && sequenceRef.current === generation) {
+            void beginListeningRef.current(generation);
+          }
+        };
+        try {
+          await audio.play();
+        } catch {
+          silenceAudio();
+          throw new Error("Your browser blocked automatic audio. Use Resume to continue.");
+        }
+      } catch (speechCause) {
+        clearTimeout(speechTimeout);
+        request.signal.removeEventListener("abort", abortSpeechWithTurn);
+        if (!isCurrent()) return;
+        if (muted) {
+          if (activeRef.current && sequenceRef.current === generation) {
+            void beginListeningRef.current(generation);
+          }
+          return;
+        }
+        if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+          throw speechCause;
+        }
+        // Self-hosted CPU TTS has been observed taking ~80 seconds for a short
+        // reply. Fall back to device speech so the conversation remains live.
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(reply.message);
+        utterance.lang = /[\u0900-\u097F]/.test(reply.message) ? "hi-IN" : "en-IN";
+        utterance.rate = 1;
+        utterance.onend = () => {
+          if (activeRef.current && sequenceRef.current === generation) {
+            void beginListeningRef.current(generation);
+          }
+        };
+        utterance.onerror = () => {
+          if (activeRef.current && sequenceRef.current === generation) {
+            setError("Device speech failed. The response is still available to read.");
+            void beginListeningRef.current(generation);
+          }
+        };
+        window.speechSynthesis.speak(utterance);
       }
     } catch (cause) {
       if (!activeRef.current || sequenceRef.current !== generation) return;
