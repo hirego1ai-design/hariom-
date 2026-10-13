@@ -11,6 +11,8 @@ import { isAllowedVoiceActionHref, pickSafeVoiceNavigation, type VoiceAction } f
 type Stage = "idle" | "listening" | "transcribing" | "thinking" | "speaking" | "paused" | "error";
 const SERVER_TTS_FALLBACK_AFTER_MS = 5_000;
 
+const SERVER_TTS_FALLBACK_AFTER_MS = 5_000;
+
 type JarvisResponse = {
   success?: boolean;
   error?: string;
