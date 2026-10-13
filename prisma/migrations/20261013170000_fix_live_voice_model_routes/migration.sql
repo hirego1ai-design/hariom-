@@ -26,6 +26,7 @@ BEGIN
       CASE model->>'key'
         WHEN 'openai:gpt-6-luna' THEN jsonb_set(model, '{enabled}', 'false'::jsonb)
         WHEN 'openai:gpt-6-sol' THEN jsonb_set(model, '{enabled}', 'false'::jsonb)
+        WHEN 'gemini:2.5-flash-lite' THEN jsonb_set(model, '{enabled}', 'false'::jsonb)
         ELSE model
       END
       ORDER BY ordinality
