@@ -201,7 +201,10 @@ export default function MockInterviewActivePage() {
         recorderRef.current.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      speechRequestRef.current?.abort();
+      speechRequestRef.current = null;
       audioRef.current?.pause();
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     };
   }, []);
 
