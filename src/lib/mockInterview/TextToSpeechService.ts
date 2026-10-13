@@ -51,6 +51,7 @@ export async function synthesizeMockInterviewSpeech(params: {
   text: string;
   voiceKey: string;
   language: string;
+  signal?: AbortSignal;
 }): Promise<{
   audio: Uint8Array;
   contentType: string;
@@ -106,7 +107,9 @@ export async function synthesizeMockInterviewSpeech(params: {
             input: text,
             response_format: "mp3",
           }),
-          signal: AbortSignal.timeout(policy.timeoutMs),
+          signal: params.signal
+            ? AbortSignal.any([params.signal, AbortSignal.timeout(policy.timeoutMs)])
+            : AbortSignal.timeout(policy.timeoutMs),
           redirect: "error",
         });
 
