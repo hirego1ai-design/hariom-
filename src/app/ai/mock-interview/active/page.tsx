@@ -536,6 +536,7 @@ export default function MockInterviewActivePage() {
       });
     } finally {
       window.clearTimeout(timeout);
+      if (speechRequestRef.current === controller) speechRequestRef.current = null;
       audioRef.current = null;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
