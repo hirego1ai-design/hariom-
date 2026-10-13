@@ -65,6 +65,45 @@ BEGIN
       WITH ORDINALITY AS route_item(route, route_ordinality)
   );
 
+  -- Make Gemini Flash-Lite the only primary LLM route. OpenAI is a fallback
+  -- only, and only through valid GPT-5.6 Sol/Luna model IDs.
+  models := (
+    SELECT jsonb_agg(
+      CASE model->>'key'
+        WHEN 'gemini:3.5-flash-lite' THEN
+          jsonb_set(
+            jsonb_set(
+              jsonb_set(model, '{enabled}', 'true'::jsonb),
+              '{inputUsdPerMillion}', '0.30'::jsonb
+            ),
+            '{outputUsdPerMillion}', '2.50'::jsonb
+          )
+        WHEN 'openai:gpt-6-luna' THEN jsonb_set(model, '{enabled}', 'false'::jsonb)
+        WHEN 'openai:gpt-6-sol' THEN jsonb_set(model, '{enabled}', 'false'::jsonb)
+        ELSE model
+      END
+      ORDER BY ordinality
+    )
+    FROM jsonb_array_elements(COALESCE(cfg->'models', '[]'::jsonb))
+      WITH ORDINALITY AS item(model, ordinality)
+  );
+
+  routes := (
+    SELECT jsonb_agg(
+      CASE
+        WHEN route->>'taskType' IN ('mock-interview-stt', 'mock-interview-tts', 'semantic-embedding')
+          THEN route
+        ELSE jsonb_set(
+          jsonb_set(route, '{primaryModelKey}', '"gemini:3.5-flash-lite"'::jsonb),
+          '{fallbackModelKeys}', '["openai:gpt-5.6-sol","openai:gpt-5.6-luna"]'::jsonb
+        )
+      END
+      ORDER BY route_ordinality
+    )
+    FROM jsonb_array_elements(COALESCE(cfg->'routes', '[]'::jsonb))
+      WITH ORDINALITY AS route_item(route, route_ordinality)
+  );
+
   cfg := jsonb_set(cfg, '{models}', COALESCE(models, '[]'::jsonb), false);
   cfg := jsonb_set(cfg, '{routes}', COALESCE(routes, '[]'::jsonb), false);
   pc := jsonb_set(pc, '{aiRouting}', cfg, false);
