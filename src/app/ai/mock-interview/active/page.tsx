@@ -469,7 +469,9 @@ export default function MockInterviewActivePage() {
     const fallbackText = (
       kind === "OPENING" ? session?.openingMessage : currentTurn?.questionText
     )?.trim() || "";
+    speechRequestRef.current?.abort();
     const controller = new AbortController();
+    speechRequestRef.current = controller;
     const timeout = window.setTimeout(
       () => controller.abort(),
       SERVER_TTS_FALLBACK_AFTER_MS,
