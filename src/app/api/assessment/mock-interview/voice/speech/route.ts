@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
         text,
         voiceKey: interviewSession.persona.voiceKey,
         language: interviewSession.language || "en",
+        signal: request.signal,
       });
     } catch (error) {
       throw new ApiError(
