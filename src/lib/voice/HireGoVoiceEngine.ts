@@ -174,6 +174,7 @@ export async function synthesizeHireGoVoice(params: {
   voiceKey: string;
   language: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<{ audio: Uint8Array; contentType: string }> {
   const text = params.text.trim().slice(0, 2_000);
   if (!text) throw new Error("Voice response text is empty.");
@@ -201,7 +202,9 @@ export async function synthesizeHireGoVoice(params: {
     }),
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(params.timeoutMs ?? 90_000),
+    signal: params.signal
+      ? AbortSignal.any([params.signal, AbortSignal.timeout(params.timeoutMs ?? 90_000)])
+      : AbortSignal.timeout(params.timeoutMs ?? 90_000),
   });
   if (!response.ok) {
     throw new Error(
