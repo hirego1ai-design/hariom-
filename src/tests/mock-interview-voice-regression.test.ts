@@ -153,6 +153,8 @@ test("Voice UI uses MediaRecorder, transcript confirmation, and never browser Sp
     "src/app/ai/mock-interview/active/page.tsx",
   );
   assert.ok(active.includes("MediaRecorder"));
+  assert.ok(active.includes("SERVER_TTS_FALLBACK_AFTER_MS = 5_000"));
+  assert.ok(active.includes("window.speechSynthesis.speak(utterance)"));
   assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
   assert.ok(active.includes("voice/transcribe"));
   assert.ok(active.includes("voice/confirm-transcript"));
