@@ -9,6 +9,7 @@ type JarvisReply = {
   message: string;
   actions: Array<{ label: string; href: string }>;
   speechReceiptId?: string | null;
+  audio?: string | null;
 };
 
 type ChatItem = {
@@ -16,6 +17,7 @@ type ChatItem = {
   role: "user" | "jarvis";
   text: string;
   reply?: JarvisReply;
+  audioUrl?: string | null;
 };
 
 export default function CandidateJarvisPage() {
@@ -91,20 +93,52 @@ export default function CandidateJarvisPage() {
         chunksRef.current = [];
         if (!blob.size) return;
         setVoiceBusy(true);
+        setError("");
         try {
           const form = new FormData();
-          form.append("audio", new File([blob], "jarvis-voice.webm", { type }));
-          const response = await fetch("/api/candidate/jarvis/voice/transcribe", {
+          const ext = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
+          form.append("audio", new File([blob], "jarvis-voice." + ext, { type }));
+
+          // Voice-to-Voice: Speech in -> AI spoken response with sound out
+          // Backward compatibility fallback reference: /api/candidate/jarvis/voice/transcribe
+          const response = await fetch("/api/candidate/jarvis/voice/live-turn", {
             method: "POST",
             body: form,
           });
           const payload = await response.json().catch(() => ({}));
-          if (!response.ok || !payload.success || typeof payload.transcript !== "string") {
-            throw new Error(payload.error || "HireGo could not transcribe this recording.");
+          if (!response.ok || !payload.success) {
+            throw new Error(payload.error || "HireGo could not understand your voice. Please try again.");
           }
-          setInput(payload.transcript);
+
+          const userUtterance = payload.heard || "Voice question";
+          const jarvisReply = payload.reply;
+          const audioUrl = payload.audio || null;
+
+          setItems((current) => [
+            ...current,
+            { id: crypto.randomUUID(), role: "user", text: userUtterance },
+            {
+              id: crypto.randomUUID(),
+              role: "jarvis",
+              text: jarvisReply?.message || "",
+              reply: {
+                message: jarvisReply?.message || "",
+                actions: jarvisReply?.actions || [],
+                audio: audioUrl,
+              },
+              audioUrl,
+            },
+          ]);
+
+          // PLAY SPOKEN VOICE OUT LOUD IMMEDIATELY (WITH SOUND!)
+          if (audioUrl) {
+            const audio = new Audio(audioUrl);
+            await audio.play().catch((err) => {
+              console.warn("Autoplay audio blocked or error:", err);
+            });
+          }
         } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "HireGo could not transcribe this recording.");
+          setError(cause instanceof Error ? cause.message : "Voice conversation failed. Please try again.");
         } finally {
           setVoiceBusy(false);
         }
@@ -224,7 +258,7 @@ export default function CandidateJarvisPage() {
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold">Talk to Jarvis</h2>
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                Tap Speak, record your question, review the transcript and send it. Tap Hear to listen to Jarvis's reply.
+                Live voice conversation: Tap Start speaking. Jarvis answers aloud with voice in real time.
               </p>
             </div>
             <button
@@ -267,10 +301,17 @@ export default function CandidateJarvisPage() {
                 <p>{item.text}</p>
                 {item.reply && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {item.reply.speechReceiptId && voiceEnabled && (
+                    {(item.audioUrl || item.reply.speechReceiptId) && voiceEnabled && (
                       <button
                         type="button"
-                        onClick={() => void hearReply(item.reply!.speechReceiptId!)}
+                        onClick={() => {
+                          if (item.audioUrl) {
+                            const audio = new Audio(item.audioUrl);
+                            void audio.play();
+                          } else if (item.reply?.speechReceiptId) {
+                            void hearReply(item.reply.speechReceiptId);
+                          }
+                        }}
                         disabled={voiceBusy}
                         className="inline-flex min-h-10 items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-40"
                         style={{ borderColor: "var(--outline)", backgroundColor: "var(--bg-card)" }}

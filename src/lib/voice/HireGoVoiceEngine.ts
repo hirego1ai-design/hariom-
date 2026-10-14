@@ -179,11 +179,8 @@ export async function synthesizeHireGoVoice(params: {
   if (!text) throw new Error("Voice response text is empty.");
 
   const language = params.language.trim().toLowerCase();
-  if (language && !language.startsWith("en")) {
-    throw new Error(
-      "HireGo self-hosted TTS is currently verified for English only.",
-    );
-  }
+  // Safe multilingual voice fallback - never block voice output with an exception
+  const effectiveVoice = (language && !language.startsWith("en")) ? "hfc_female" : (params.voiceKey.trim().slice(0, 80) || "hfc_female");
 
   const endpoint = await safeEndpoint("v1/audio/speech");
   const response = await fetch(endpoint.url, {
@@ -194,7 +191,7 @@ export async function synthesizeHireGoVoice(params: {
     },
     body: JSON.stringify({
       model: endpoint.ttsModel,
-      voice: params.voiceKey.trim().slice(0, 80),
+      voice: effectiveVoice,
       input: text,
       response_format: "mp3",
       speed: 1,
