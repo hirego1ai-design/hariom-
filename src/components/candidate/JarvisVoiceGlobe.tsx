@@ -15,7 +15,14 @@ type JarvisResponse = {
   transcript?: string;
   enabled?: boolean;
   voiceEnabled?: boolean;
-  reply?: { message: string; actions: VoiceAction[]; speechReceiptId?: string | null };
+  heard?: string;
+  audio?: string | null;
+  reply?: {
+    message: string;
+    actions: VoiceAction[];
+    speechReceiptId?: string | null;
+    navigation?: string | null;
+  };
 };
 
 function preferredAudioType() {
