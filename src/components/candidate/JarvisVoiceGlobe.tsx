@@ -59,6 +59,7 @@ export default function JarvisVoiceGlobe() {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const orbRef = useRef<HTMLDivElement | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const beginListeningRef = useRef<(generation: number) => Promise<void>>(async () => undefined);
   const processTurnRef = useRef<(blob: Blob, generation: number) => Promise<void>>(async () => undefined);
@@ -66,6 +67,7 @@ export default function JarvisVoiceGlobe() {
   const releaseVAD = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
+    if (orbRef.current) orbRef.current.style.setProperty("--voice-level", "0");
     try { sourceRef.current?.disconnect(); } catch { /* browser already closed it */ }
     sourceRef.current = null;
   }, []);
@@ -295,6 +297,10 @@ export default function JarvisVoiceGlobe() {
         let power = 0;
         for (let i = 0; i < samples.length; i += 1) power += samples[i] * samples[i];
         const level = Math.sqrt(power / samples.length);
+        if (orbRef.current) {
+          const normalizedLevel = Math.min(1.0, Math.max(0, (level - 0.012) * 8));
+          orbRef.current.style.setProperty("--voice-level", normalizedLevel.toFixed(3));
+        }
         const now = Date.now();
         if (level > 0.035) {
           sawVoice = true;
@@ -394,6 +400,7 @@ export default function JarvisVoiceGlobe() {
 
           <div className={"jarvis-voice-globe-container " + (docked ? "jarvis-voice-globe-container--compact" : "")}>
             <div
+              ref={orbRef}
               className={"jarvis-voice-orb jarvis-voice-orb--" + stage + " cursor-pointer"}
               role="button"
               tabIndex={0}
