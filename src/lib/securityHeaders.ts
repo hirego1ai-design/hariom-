@@ -31,7 +31,7 @@ export function contentSecurityPolicy(isDevelopment = false): string {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https:",
     "connect-src 'self' https: wss:",
-    "media-src 'self' blob: https:",
+    "media-src 'self' data: blob: https:",
     "worker-src 'self' blob:",
     "frame-src 'self' https://js.stripe.com https://checkout.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com",
     "object-src 'none'",

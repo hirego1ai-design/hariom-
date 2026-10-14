@@ -101,6 +101,9 @@ export default function JarvisVoiceGlobe() {
     }
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     audioUrlRef.current = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   const stopSession = useCallback((reason: "idle" | "paused" = "idle") => {
@@ -194,34 +197,83 @@ export default function JarvisVoiceGlobe() {
       const navigation = data.reply?.navigation || pickSafeVoiceNavigation(utterance, data.reply?.actions || []);
       if (navigation) router.push(navigation);
 
-      if (!data.audio) {
-        if (isCurrent()) void beginListeningRef.current(generation);
-        return;
-      }
-
       setStage("speaking");
-      const audio = new Audio(data.audio);
-      audio.muted = muted;
-      audioRef.current = audio;
+      const messageToSpeak = data.reply?.message || "";
 
-      audio.onended = () => {
-        silenceAudio();
+      // Ensure voice is ALWAYS heard: play neural audio Blob or fall back to browser Web Speech API
+      const fallbackSpeak = () => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window && messageToSpeak && !muted) {
+          try {
+            window.speechSynthesis.cancel();
+            const utteranceObj = new SpeechSynthesisUtterance(messageToSpeak);
+            utteranceObj.rate = 1.05;
+            const voices = window.speechSynthesis.getVoices();
+            const preferred = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Neural") || v.name.includes("Ava") || v.name.includes("Jenny"))) || voices.find((v) => v.lang.startsWith("en"));
+            if (preferred) utteranceObj.voice = preferred;
+            utteranceObj.onend = () => {
+              if (activeRef.current && sequenceRef.current === generation) {
+                void beginListeningRef.current(generation);
+              }
+            };
+            utteranceObj.onerror = () => {
+              if (activeRef.current && sequenceRef.current === generation) {
+                void beginListeningRef.current(generation);
+              }
+            };
+            window.speechSynthesis.speak(utteranceObj);
+            return;
+          } catch {
+            // fallback
+          }
+        }
         if (activeRef.current && sequenceRef.current === generation) {
           void beginListeningRef.current(generation);
         }
       };
-      audio.onerror = () => {
-        silenceAudio();
+
+      if (data.audio && !muted) {
+        try {
+          let playableUrl = data.audio;
+          if (data.audio.startsWith("data:")) {
+            const parts = data.audio.split(",");
+            const mime = parts[0].match(/:(.*?);/)?.[1] || "audio/mpeg";
+            const bin = atob(parts[1]);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const blob = new Blob([arr], { type: mime });
+            playableUrl = URL.createObjectURL(blob);
+            audioUrlRef.current = playableUrl;
+          }
+          const audio = new Audio(playableUrl);
+          audio.muted = muted;
+          audioRef.current = audio;
+
+          audio.onended = () => {
+            silenceAudio();
+            if (activeRef.current && sequenceRef.current === generation) {
+              void beginListeningRef.current(generation);
+            }
+          };
+          audio.onerror = () => {
+            silenceAudio();
+            fallbackSpeak();
+          };
+
+          try {
+            await audio.play();
+          } catch {
+            silenceAudio();
+            fallbackSpeak();
+          }
+        } catch {
+          fallbackSpeak();
+        }
+      } else if (!muted && messageToSpeak) {
+        fallbackSpeak();
+      } else {
         if (activeRef.current && sequenceRef.current === generation) {
           void beginListeningRef.current(generation);
         }
-      };
-
-      try {
-        await audio.play();
-      } catch {
-        silenceAudio();
-        throw new Error("Your browser blocked automatic audio. Use Resume to continue.");
       }
     } catch (cause) {
       if (!activeRef.current || sequenceRef.current !== generation) return;
@@ -334,6 +386,14 @@ export default function JarvisVoiceGlobe() {
 
   const startSession = useCallback(() => {
     if (!ready) return;
+    try {
+      const silent = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+      silent.volume = 0.01;
+      void silent.play().catch(() => {});
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.getVoices();
+      }
+    } catch {}
     // This method runs from a real user click; mic permission is never requested on mount.
     stopSession();
     const generation = sequenceRef.current;
