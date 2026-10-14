@@ -13,9 +13,6 @@ import {
   History,
   AlertCircle,
   Search,
-  Mic2,
-  Keyboard,
-  Volume2,
 } from "lucide-react";
 
 type RoleOption = {
@@ -37,12 +34,7 @@ type SessionSummary = {
   createdAt: string;
 };
 
-type VoiceReadiness = {
-  ready: boolean;
-  code: string;
-  message: string;
-  personaName: string | null;
-};
+
 
 const SENIORITY_OPTIONS = [
   "Junior",
@@ -76,10 +68,7 @@ export default function MockInterviewSetupPage() {
     useState<(typeof SENIORITY_OPTIONS)[number]>("Senior");
   const [totalQuestions, setTotalQuestions] = useState<number>(5);
   const [practiceContext, setPracticeContext] = useState("");
-  const [mode, setMode] = useState<"TEXT" | "VOICE">("TEXT");
-  const [voiceReadiness, setVoiceReadiness] =
-    useState<VoiceReadiness | null>(null);
-  const [checkingVoice, setCheckingVoice] = useState(false);
+  const mode = "TEXT" as const;
   const roleOptions: RoleOption[] = useMemo(() => searchRoles(roleTarget), [roleTarget]);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -124,87 +113,12 @@ export default function MockInterviewSetupPage() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (mode !== "VOICE") {
-      setVoiceReadiness(null);
-      setCheckingVoice(false);
-      return;
-    }
-
-    if (!roleTarget.trim()) {
-      setVoiceReadiness({
-        ready: false,
-        code: "ROLE_REQUIRED",
-        message: "Select a target role before checking Voice Mode.",
-        personaName: null,
-      });
-      return;
-    }
-
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setCheckingVoice(true);
-      try {
-        const params = new URLSearchParams({ role: roleTarget.trim() });
-        const res = await fetch(
-          `/api/assessment/mock-interview/voice/readiness?${params.toString()}`,
-          {
-            credentials: "include",
-            cache: "no-store",
-            signal: controller.signal,
-          },
-        );
-        const data = (await res.json().catch(() => null)) as
-          | ({ success?: boolean; error?: string } & Partial<VoiceReadiness>)
-          | null;
-
-        if (!res.ok || !data?.success) {
-          throw new Error(
-            data?.error || "Voice Mode readiness could not be checked.",
-          );
-        }
-
-        setVoiceReadiness({
-          ready: Boolean(data.ready),
-          code: data.code || "UNAVAILABLE",
-          message: data.message || "Voice Mode is unavailable.",
-          personaName: data.personaName || null,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setVoiceReadiness({
-          ready: false,
-          code: "READINESS_ERROR",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Voice Mode readiness could not be checked.",
-          personaName: null,
-        });
-      } finally {
-        if (!controller.signal.aborted) setCheckingVoice(false);
-      }
-    }, 300);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [mode, roleTarget]);
-
   const handleStartInterview = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!roleTarget.trim()) {
       setErrorMessage("Please enter or select a target role.");
       return;
     }
-    if (mode === "VOICE" && !voiceReadiness?.ready) {
-      setErrorMessage(
-        "Voice practice is unavailable right now. Choose Text Practice or try again later.",
-      );
-      return;
-    }
-
     setIsStarting(true);
     setErrorMessage(null);
 
@@ -260,11 +174,7 @@ export default function MockInterviewSetupPage() {
     }
   };
 
-  const startDisabled =
-    isStarting ||
-    !roleTarget.trim() ||
-    (mode === "VOICE" &&
-      (checkingVoice || voiceReadiness?.ready !== true));
+  const startDisabled = isStarting || !roleTarget.trim();
 
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col">
@@ -296,28 +206,9 @@ export default function MockInterviewSetupPage() {
             Adaptive Mock Interview
           </h1>
           <p className="text-sm text-white/60 max-w-3xl">
-            Practise for your next opportunity with realistic role-based questions. Choose text or voice, and get practical feedback as you progress.
+            Practise for your next opportunity with realistic role-based text questions and get practical feedback as you progress.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3" aria-label="Choose how to practise">
-            <button
-              type="button"
-              onClick={() => setMode("VOICE")}
-              aria-pressed={mode === "VOICE"}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${mode === "VOICE" ? "border-[#4285F4] bg-[#4285F4]/20 text-white" : "border-[#4285F4]/30 bg-[#4285F4]/10 text-blue-100 hover:bg-[#4285F4]/20"}`}
-            >
-              <Mic2 className="h-4 w-4" aria-hidden="true" />
-              Practise with voice
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("TEXT")}
-              aria-pressed={mode === "TEXT"}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${mode === "TEXT" ? "border-[#C5221F] bg-[#C5221F]/20 text-white" : "border-white/20 bg-white/5 text-white/70 hover:bg-white/10"}`}
-            >
-              <Keyboard className="h-4 w-4" aria-hidden="true" />
-              Practise by typing
-            </button>
-          </div>
+          
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -356,69 +247,6 @@ export default function MockInterviewSetupPage() {
             )}
 
             <form onSubmit={handleStartInterview} className="space-y-6">
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Practice Mode
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setMode("TEXT")}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      mode === "TEXT"
-                        ? "border-[#C5221F]/70 bg-[#C5221F]/10"
-                        : "border-white/10 bg-white/5 hover:border-white/20"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Keyboard className="h-4 w-4 text-[#C5221F]" />
-                      <span className="text-sm font-bold">Text Practice</span>
-                    </div>
-                    <p className="mt-2 text-xs leading-relaxed text-white/50">
-                      Type each answer and receive immediate turn-by-turn
-                      coaching.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMode("VOICE")}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      mode === "VOICE"
-                        ? "border-[#4285F4]/70 bg-[#4285F4]/10"
-                        : "border-white/10 bg-white/5 hover:border-white/20"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Mic2 className="h-4 w-4 text-[#4285F4]" />
-                      <span className="text-sm font-bold">Real Voice Mode</span>
-                    </div>
-                    <p className="mt-2 text-xs leading-relaxed text-white/50">
-                      Hear the interviewer, answer by voice, and receive the
-                      detailed evaluation only after the interview.
-                    </p>
-                  </button>
-                </div>
-
-                {mode === "VOICE" && (
-                  <div
-                    className={`mt-3 rounded-xl border p-3 text-xs ${
-                      voiceReadiness?.ready
-                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200"
-                        : "border-amber-500/20 bg-amber-500/5 text-amber-200"
-                    }`}
-                  >
-                    {checkingVoice
-                      ? "Checking voice practice availability..."
-                      : !roleTarget.trim()
-                        ? "Choose a job role to use voice practice."
-                        : voiceReadiness?.ready
-                          ? "Voice practice is ready."
-                          : "Voice practice is not available right now. You can continue with text practice."}
-                  </div>
-                )}
-              </div>
-
               <div>
                 <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
                   Target Role
@@ -536,20 +364,14 @@ export default function MockInterviewSetupPage() {
 
               <div className="p-4 rounded-xl bg-black/30 border border-white/5 flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                  {mode === "VOICE" ? (
-                    <Volume2 className="w-4 h-4" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4" />
-                  )}
+                  <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white">
                     Private adaptive practice
                   </div>
                   <div className="text-[11px] text-white/50 leading-relaxed mt-0.5">
-                    {mode === "VOICE"
-                      ? "We turn your spoken answer into text and let you review it before feedback. Recordings from individual answers are not saved by this practice."
-                      : "HireGo uses role context and your answers to adapt questions without inferring emotion, personality, or protected traits."}
+                    HireGo uses role context and your typed answers to adapt questions without inferring emotion, personality, or protected traits.
                   </div>
                 </div>
               </div>
@@ -563,10 +385,6 @@ export default function MockInterviewSetupPage() {
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Preparing Interview...
-                  </>
-                ) : mode === "VOICE" ? (
-                  <>
-                    Start Voice Interview <Mic2 className="w-4 h-4" />
                   </>
                 ) : (
                   <>
@@ -644,7 +462,7 @@ export default function MockInterviewSetupPage() {
                             {practice.roleTarget}
                           </span>
                           <span className="shrink-0 text-[10px] uppercase text-white/35">
-                            {practice.mode}
+                            Text practice
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-[11px] text-white/40">
