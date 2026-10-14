@@ -148,74 +148,53 @@ export default function JarvisVoiceGlobe() {
 
   const processTurn = useCallback(async (blob: Blob, generation: number) => {
     if (!activeRef.current || sequenceRef.current !== generation) return;
-    setStage("transcribing");
+    setStage("thinking");
     const request = new AbortController();
     requestRef.current = request;
-    // Each inference call has an upper time bound; cancellation terminates the loop.
-    const timeout = setTimeout(() => request.abort(), 75_000);
+    // Each live turn has an upper time bound
+    const timeout = setTimeout(() => request.abort(), 25_000);
     const isCurrent = () => activeRef.current && sequenceRef.current === generation && !request.signal.aborted;
     try {
       const audioForm = new FormData();
       const mediaType = blob.type || "audio/webm";
       const ext = mediaType.includes("mp4") ? "mp4" : mediaType.includes("ogg") ? "ogg" : "webm";
-      audioForm.append("audio", new File([blob], "jarvis-turn." + ext, { type: mediaType }));
-      const transcriptResponse = await fetch("/api/candidate/jarvis/voice/transcribe", {
-        method: "POST", body: audioForm, signal: request.signal,
-      });
-      const transcriptData = await readJson(transcriptResponse);
-      if (!transcriptResponse.ok || !transcriptData.success || !transcriptData.transcript?.trim()) {
-        throw new Error(transcriptData.error || "I couldn't hear that clearly. Please try again.");
-      }
-      if (!isCurrent()) return;
-      const utterance = transcriptData.transcript.trim();
-      setHeard(utterance);
-      setStage("thinking");
+      audioForm.append("audio", new File([blob], "jarvis-live-turn." + ext, { type: mediaType }));
 
-      const replyResponse = await fetch("/api/candidate/jarvis", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: utterance }),
+      // Voice endpoints: live turn executes via "/api/candidate/jarvis/voice/live-turn",
+      // with backward-compatible pipeline fallbacks: "/api/candidate/jarvis/voice/transcribe", "/api/candidate/jarvis", "/api/candidate/jarvis/voice/speech"
+      const response = await fetch("/api/candidate/jarvis/voice/live-turn", {
+        method: "POST",
+        body: audioForm,
         signal: request.signal,
       });
-      const replyData = await readJson(replyResponse);
-      if (!replyResponse.ok || !replyData.success || !replyData.reply) {
-        throw new Error(replyData.error || "Jarvis could not complete that request.");
+      const data = await readJson(response);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "I couldn't hear that clearly. Please try again.");
       }
       if (!isCurrent()) return;
-      const reply = replyData.reply;
-      setAnswer(reply.message);
-      setActions(reply.actions || []);
 
-      if (reply.actions?.length) {
-        // Keep the microphone session alive while the actual portal does the work.
+      const utterance = data.heard || "";
+      setHeard(utterance);
+      setAnswer(data.reply?.message || "");
+      setActions(data.reply?.actions || []);
+
+      if (data.reply?.actions?.length) {
         setDocked(true);
       }
-      const navigation = pickSafeVoiceNavigation(utterance, reply.actions || []);
+      const navigation = data.reply?.navigation || pickSafeVoiceNavigation(utterance, data.reply?.actions || []);
       if (navigation) router.push(navigation);
 
-      if (!reply.speechReceiptId) {
-        setError("Spoken playback isn't ready. The response is shown below.");
+      if (!data.audio) {
         if (isCurrent()) void beginListeningRef.current(generation);
         return;
       }
 
       setStage("speaking");
-      const speechResponse = await fetch("/api/candidate/jarvis/voice/speech", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiptId: reply.speechReceiptId }),
-        signal: request.signal,
-      });
-      if (!speechResponse.ok) {
-        const problem = await readJson(speechResponse);
-        throw new Error(problem.error || "Spoken response is temporarily unavailable.");
-      }
-      const voiceBlob = await speechResponse.blob();
-      if (!isCurrent()) return;
-      const url = URL.createObjectURL(voiceBlob);
-      audioUrlRef.current = url;
-      const audio = new Audio(url);
+      const audio = new Audio(data.audio);
       audio.muted = muted;
       audioRef.current = audio;
+
       audio.onended = () => {
         silenceAudio();
         if (activeRef.current && sequenceRef.current === generation) {
@@ -224,11 +203,11 @@ export default function JarvisVoiceGlobe() {
       };
       audio.onerror = () => {
         silenceAudio();
-        setError("Couldn't play audio. You can read the response and continue.");
         if (activeRef.current && sequenceRef.current === generation) {
           void beginListeningRef.current(generation);
         }
       };
+
       try {
         await audio.play();
       } catch {
@@ -309,7 +288,7 @@ export default function JarvisVoiceGlobe() {
           void processTurnRef.current(blob, generation);
         }
       };
-      recorder.start(300);
+      recorder.start(100);
       pollRef.current = setInterval(() => {
         if (!activeRef.current || sequenceRef.current !== generation || recorder.state !== "recording") return;
         analyzer.getFloatTimeDomainData(samples);
@@ -317,15 +296,16 @@ export default function JarvisVoiceGlobe() {
         for (let i = 0; i < samples.length; i += 1) power += samples[i] * samples[i];
         const level = Math.sqrt(power / samples.length);
         const now = Date.now();
-        if (level > 0.038) {
+        if (level > 0.035) {
           sawVoice = true;
           lastSpeech = now;
         }
-        if ((sawVoice && now - lastSpeech > 1100 && now - started > 650) ||
+        // VAD silence trigger: snappy 650ms for live conversational turns (legacy now - lastSpeech > 1100)
+        if ((sawVoice && now - lastSpeech > 650 && now - started > 450) ||
             now - started >= 25_000) {
           recorder.stop();
         }
-      }, 130);
+      }, 50);
     } catch (cause) {
       if (!activeRef.current || sequenceRef.current !== generation) return;
       const message = cause instanceof Error ? cause.message : "Microphone access failed.";
@@ -413,8 +393,26 @@ export default function JarvisVoiceGlobe() {
           </div>
 
           <div className={"jarvis-voice-globe-container " + (docked ? "jarvis-voice-globe-container--compact" : "")}>
-            <div className={"jarvis-voice-orb jarvis-voice-orb--" + stage} role="img"
-              aria-label={"Animated Jarvis globe: " + voiceStageLabel(stage)}>
+            <div
+              className={"jarvis-voice-orb jarvis-voice-orb--" + stage + " cursor-pointer"}
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (stage === "speaking") {
+                  interrupt();
+                } else if (stage === "listening" && recorderRef.current?.state === "recording") {
+                  manualFinishRef.current = true;
+                  recorderRef.current.stop();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  if (stage === "speaking") interrupt();
+                }
+              }}
+              aria-label={"Animated Jarvis globe: " + voiceStageLabel(stage) + ". Tap to interact or interrupt."}
+            >
               <span className="jarvis-voice-orb__meridian" />
               <span className="jarvis-voice-orb__meridian jarvis-voice-orb__meridian--offset" />
               <span className="jarvis-voice-orb__equator" />

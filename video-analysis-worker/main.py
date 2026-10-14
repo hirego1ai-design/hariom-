@@ -10,7 +10,7 @@ import threading
 import hmac
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, Header, HTTPException, BackgroundTasks, Depends, UploadFile, File
+from fastapi import FastAPI, Header, HTTPException, BackgroundTasks, Depends, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from pydantic import BaseModel
 
 app = FastAPI(title="HireGo Video Analysis Worker", version="1.1.0")
@@ -309,6 +309,70 @@ async def openai_synthesize_speech(
             "Content-Length": str(len(audio_bytes)),
         },
     )
+
+@app.websocket("/ws/voice")
+async def voice_websocket(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+):
+    # Authenticate token from query parameter or Authorization header
+    auth_token = token
+    if not auth_token:
+        for h_name, h_val in websocket.scope.get("headers", []):
+            if h_name.lower() == b"authorization":
+                val = h_val.decode("utf-8", errors="ignore")
+                if val.startswith("Bearer "):
+                    auth_token = val[7:]
+                break
+
+    if not auth_token or not hmac.compare_digest(auth_token, INTERNAL_TOKEN):
+        await websocket.close(code=1008, reason="Unauthorized")
+        return
+
+    await websocket.accept()
+    try:
+        await websocket.send_json({
+            "type": "connected",
+            "message": "HireGo Self-Hosted Real-Time Voice WebSocket Ready",
+            "model": f"whisper-{MODEL_SIZE}",
+            "tts": "edge-tts",
+        })
+
+        while True:
+            raw_msg = await websocket.receive()
+            if raw_msg.get("type") == "websocket.disconnect":
+                break
+
+            if "text" in raw_msg and raw_msg["text"]:
+                try:
+                    payload = json.loads(raw_msg["text"])
+                except Exception:
+                    continue
+
+                action = payload.get("action")
+                if action == "ping":
+                    await websocket.send_json({"type": "pong", "time": time.time()})
+
+                elif action == "synthesize":
+                    # Real-time TTS chunk streaming
+                    text = (payload.get("text") or "").strip()
+                    voice = payload.get("voice", "en-US-AvaNeural")
+                    if text:
+                        import edge_tts
+                        communicate = edge_tts.Communicate(text, voice)
+                        async for chunk in communicate.stream():
+                            if chunk["type"] == "audio":
+                                await websocket.send_bytes(chunk["data"])
+                        await websocket.send_json({"type": "speech_done"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WebSocket session exception: {e}", file=sys.stderr)
+        try:
+            await websocket.close(code=1011, reason=str(e))
+        except Exception:
+            pass
 
 @app.post("/analyze")
 def analyze_video(
