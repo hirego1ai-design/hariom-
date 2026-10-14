@@ -257,7 +257,12 @@ export default function MockInterviewActivePage() {
           );
         }
 
-        setSession({ ...data.session, mode: "TEXT" });
+        if (data.session.mode === "VOICE") {
+          router.replace("/ai/mock-interview/setup");
+          return;
+        }
+
+        setSession(data.session);
         setCurrentTurn(active);
         setShowOpening(
           Boolean(
