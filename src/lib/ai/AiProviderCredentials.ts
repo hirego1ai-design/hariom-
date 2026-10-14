@@ -155,11 +155,26 @@ async function resolveAllProviders(): Promise<AiProviderResolution[]> {
   return llmProviderSchema.options.map((provider) => resolveWithRecord(provider, byProvider.get(provider) || null));
 }
 
+let _providerStatusCache: {
+  data: { provider: LlmProviderName; configured: boolean; status: string; reason: string | null }[];
+  expiresAt: number;
+} | null = null;
+
+export function invalidateAiProviderStatusCache(): void {
+  _providerStatusCache = null;
+}
+
 export async function getResolvedAiProviderStatuses() {
+  const now = Date.now();
+  if (_providerStatusCache && now < _providerStatusCache.expiresAt) {
+    return _providerStatusCache.data;
+  }
   const results = await resolveAllProviders();
-  return results.map(({ provider, configured, reason }) => ({
+  const data = results.map(({ provider, configured, reason }) => ({
     provider, configured, status: configured ? "CONFIGURED" : "MISSING_CONFIGURATION", reason,
   }));
+  _providerStatusCache = { data, expiresAt: now + 30_000 };
+  return data;
 }
 
 export async function getAiProviderCredentialAdminView() {

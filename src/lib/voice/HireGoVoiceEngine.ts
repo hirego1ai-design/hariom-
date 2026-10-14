@@ -149,7 +149,7 @@ export async function transcribeHireGoVoice(params: {
     body: form,
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(params.timeoutMs ?? 90_000),
+    signal: AbortSignal.timeout(params.timeoutMs ?? 20_000),
   });
   if (!response.ok) {
     throw new Error(
@@ -196,12 +196,12 @@ export async function synthesizeHireGoVoice(params: {
       model: endpoint.ttsModel,
       voice: params.voiceKey.trim().slice(0, 80),
       input: text,
-      response_format: "wav",
+      response_format: "mp3",
       speed: 1,
     }),
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(params.timeoutMs ?? 90_000),
+    signal: AbortSignal.timeout(params.timeoutMs ?? 15_000),
   });
   if (!response.ok) {
     throw new Error(
@@ -222,6 +222,6 @@ export async function synthesizeHireGoVoice(params: {
   return {
     audio,
     contentType:
-      response.headers.get("content-type")?.split(";")[0] || "audio/wav",
+      response.headers.get("content-type")?.split(";")[0] || "audio/mpeg",
   };
 }

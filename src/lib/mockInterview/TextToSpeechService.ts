@@ -129,7 +129,7 @@ export async function synthesizeMockInterviewSpeech(params: {
           throw new Error("TTS provider returned invalid audio.");
         }
 
-        await prisma.aiExecutionLog.create({
+        void prisma.aiExecutionLog.create({
           data: {
             id: logId,
             task: "mock-interview-tts",
@@ -143,7 +143,7 @@ export async function synthesizeMockInterviewSpeech(params: {
             status: isFallback ? "FALLBACK" : "SUCCESS",
             timestamp: new Date(),
           },
-        });
+        }).catch(() => {});
 
         return {
           audio: bytes,

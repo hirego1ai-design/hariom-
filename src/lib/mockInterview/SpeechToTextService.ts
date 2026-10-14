@@ -165,7 +165,7 @@ export async function transcribeMockInterviewAudio(params: {
           params.expectedLanguage?.trim() ||
           "und";
 
-        await prisma.aiExecutionLog.create({
+        void prisma.aiExecutionLog.create({
           data: {
             id: logId,
             task: "mock-interview-stt",
@@ -179,7 +179,7 @@ export async function transcribeMockInterviewAudio(params: {
             status: isFallback ? "FALLBACK" : "SUCCESS",
             timestamp: new Date(),
           },
-        });
+        }).catch(() => {});
 
         return {
           transcript,

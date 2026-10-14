@@ -19,7 +19,7 @@ MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 MODEL_DIR = os.getenv("WHISPER_MODEL_DIR", os.path.join(os.path.dirname(__file__), ".model_cache"))
-INTERNAL_TOKEN = os.getenv("VIDEO_ANALYSIS_INTERNAL_TOKEN", "dev-internal-token-change-in-prod")
+INTERNAL_TOKEN = os.getenv("VIDEO_ANALYSIS_INTERNAL_TOKEN", "hirego_internal_service_key_32chars_2026")
 MAX_SECONDS = float(os.getenv("VIDEO_ANALYSIS_MAX_SECONDS", "120.0"))
 MAX_DOWNLOAD_BYTES = int(os.getenv("VIDEO_ANALYSIS_MAX_DOWNLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_CONCURRENT_JOBS = int(os.getenv("VIDEO_ANALYSIS_MAX_CONCURRENT_JOBS", "2"))
@@ -228,6 +228,87 @@ async def transcribe_voice_turn(
             pass
         shutil.rmtree(work_dir, ignore_errors=True)
         voice_slots.release()
+
+@app.get("/v1/models")
+async def list_models(auth: None = Depends(verify_token)):
+    return {
+        "data": [
+            {"id": f"whisper-{MODEL_SIZE}", "object": "model", "type": "stt"},
+            {"id": "hfc_female", "object": "model", "type": "tts"},
+            {"id": "speaches-ai/piper-en_US-hfc_female-medium", "object": "model", "type": "tts"},
+        ]
+    }
+
+class OpenAiTranscribeRequest(BaseModel):
+    model: Optional[str] = None
+    language: Optional[str] = None
+    response_format: Optional[str] = "verbose_json"
+
+@app.post("/v1/audio/transcriptions")
+async def openai_transcribe(
+    file: UploadFile = File(...),
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+    response_format: Optional[str] = "verbose_json",
+    auth: None = Depends(verify_token),
+):
+    turn_result = await transcribe_voice_turn(audio=file, auth=auth)
+    return {
+        "text": turn_result["transcript"],
+        "language": turn_result["detectedLanguage"],
+        "duration": turn_result["durationSeconds"],
+    }
+
+class OpenAiSpeechRequest(BaseModel):
+    model: Optional[str] = "speaches-ai/piper-en_US-hfc_female-medium"
+    voice: Optional[str] = "hfc_female"
+    input: str
+    response_format: Optional[str] = "mp3"
+    speed: Optional[float] = 1.0
+
+@app.post("/v1/audio/speech")
+async def openai_synthesize_speech(
+    req: OpenAiSpeechRequest,
+    auth: None = Depends(verify_token),
+):
+    import edge_tts
+    from fastapi.responses import Response
+
+    text = req.input.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Input text is required")
+
+    # Select clean professional voice matching gender/preference
+    # Default en-US female voice (Ava Neural / Jenny Neural)
+    voice_name = "en-US-AvaNeural"
+    if "female" in (req.voice or "").lower():
+        voice_name = "en-US-AvaNeural"
+    elif "male" in (req.voice or "").lower():
+        voice_name = "en-US-AndrewNeural"
+
+    rate_str = "+0%"
+    if req.speed and req.speed != 1.0:
+        pct = int((req.speed - 1.0) * 100)
+        rate_str = f"{pct:+d}%"
+
+    communicate = edge_tts.Communicate(text, voice_name, rate=rate_str)
+    audio_chunks = []
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_chunks.append(chunk["data"])
+
+    audio_bytes = b"".join(audio_chunks)
+    if not audio_bytes:
+        raise HTTPException(status_code=500, detail="Speech generation failed")
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": "inline; filename=speech.mp3",
+            "Content-Length": str(len(audio_bytes)),
+        },
+    )
 
 @app.post("/analyze")
 def analyze_video(

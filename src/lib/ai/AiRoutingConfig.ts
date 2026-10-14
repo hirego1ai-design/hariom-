@@ -105,23 +105,32 @@ export type AiRoutingConfig = z.infer<typeof aiRoutingConfigSchema>;
 
 const CONFIG_ID = "global-admin-config";
 
+let _configCache: { data: AiRoutingConfig; expiresAt: number } | null = null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function getAiRoutingConfig(): Promise<AiRoutingConfig> {
+  if (_configCache && Date.now() < _configCache.expiresAt) {
+    return _configCache.data;
+  }
+
   const row = await prisma.adminConfiguration.findUnique({
     where: { id: CONFIG_ID },
     select: { platformConfig: true },
   });
   if (!row || !isRecord(row.platformConfig) || !("aiRouting" in row.platformConfig)) {
-    return { version: 1, models: [], routes: [] };
+    const fallback: AiRoutingConfig = { version: 1, models: [], routes: [] };
+    _configCache = { data: fallback, expiresAt: Date.now() + 30_000 };
+    return fallback;
   }
 
   const parsed = aiRoutingConfigSchema.safeParse(row.platformConfig.aiRouting);
   if (!parsed.success) {
     throw new Error("Stored AI routing configuration is invalid. Refusing to route an AI request.");
   }
+  _configCache = { data: parsed.data, expiresAt: Date.now() + 30_000 };
   return parsed.data;
 }
 
@@ -151,6 +160,8 @@ export async function saveAiRoutingConfig(config: AiRoutingConfig): Promise<void
       data: { platformConfig: platformConfig as Prisma.InputJsonValue },
     });
   });
+
+  _configCache = null;
 }
 
 type ProviderRuntime = {
