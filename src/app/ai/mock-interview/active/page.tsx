@@ -257,19 +257,14 @@ export default function MockInterviewActivePage() {
           );
         }
 
-        setSession(data.session);
+        setSession({ ...data.session, mode: "TEXT" });
         setCurrentTurn(active);
-        if (data.session.mode === "VOICE") {
-          setVoiceState("READY");
-          setShowOpening(false);
-        } else {
-          setShowOpening(
-            Boolean(
-              data.session.openingMessage &&
-                active.questionIndex === 0,
-            ),
-          );
-        }
+        setShowOpening(
+          Boolean(
+            data.session.openingMessage &&
+              active.questionIndex === 0,
+          ),
+        );
       } catch (error) {
         if (controller.signal.aborted) return;
         setErrorMessage(
@@ -907,7 +902,6 @@ export default function MockInterviewActivePage() {
     );
   }
 
-  const isVoice = session.mode === "VOICE";
   const progress = Math.round(
     ((currentTurn.questionIndex + 1) / session.totalQuestions) * 100,
   );
@@ -933,7 +927,7 @@ export default function MockInterviewActivePage() {
             </div>
             <div className="text-[10px] uppercase tracking-wider text-white/35">
               {session.declaredSeniority || "Adaptive"} start ·{" "}
-              {isVoice ? "Real Voice" : "Text"} · {session.language}
+              Text practice · {session.language}
             </div>
           </div>
         </div>
@@ -1009,180 +1003,6 @@ export default function MockInterviewActivePage() {
           </h2>
         </div>
 
-        {isVoice ? (
-          <section className="flex-1 rounded-3xl border border-white/10 bg-[#121216] p-5 md:p-8 shadow-2xl">
-            <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-              <div
-                className={`relative flex h-44 w-44 items-center justify-center rounded-full border transition-all duration-500 ${
-                  voiceState === "SPEAKING"
-                    ? "border-[#4285F4]/70 shadow-[0_0_70px_rgba(66,133,244,0.25)]"
-                    : voiceState === "LISTENING"
-                      ? "border-[#C5221F]/70 shadow-[0_0_70px_rgba(197,34,31,0.28)]"
-                      : voiceState === "UNDERSTANDING"
-                        ? "border-[#4285F4]/50 shadow-[0_0_45px_rgba(66,133,244,0.18)]"
-                        : "border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.05)]"
-                }`}
-              >
-                <div className="absolute inset-4 rounded-full bg-gradient-to-br from-[#4285F4]/25 via-black/50 to-[#C5221F]/25 backdrop-blur-xl" />
-                <div
-                  className={`absolute inset-8 rounded-full border border-white/10 ${
-                    ["SPEAKING", "LISTENING", "UNDERSTANDING"].includes(
-                      voiceState,
-                    )
-                      ? "animate-pulse"
-                      : ""
-                  }`}
-                />
-                {voiceState === "LISTENING" ? (
-                  <Mic2 className="relative z-10 h-12 w-12 text-[#C5221F]" />
-                ) : voiceState === "SPEAKING" ? (
-                  <Volume2 className="relative z-10 h-12 w-12 text-[#4285F4]" />
-                ) : (
-                  <AudioLines className="relative z-10 h-12 w-12 text-white/80" />
-                )}
-              </div>
-
-              <div className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-white/55">
-                {voiceState === "SPEAKING"
-                  ? "Interviewer speaking"
-                  : voiceState === "LISTENING"
-                    ? "Listening"
-                    : voiceState === "UNDERSTANDING"
-                      ? "Understanding"
-                      : voiceState === "FOLLOW_UP_READY"
-                        ? "Follow-up ready"
-                        : voiceState === "REPEAT"
-                          ? "Please repeat"
-                          : voiceState === "COMPLETE"
-                            ? "Interview complete"
-                            : "Ready"}
-              </div>
-
-              {(voiceMessage || voiceTranscript) && (
-                <div className="mt-5 w-full rounded-2xl border border-white/5 bg-white/5 p-4 text-left">
-                  {voiceMessage && (
-                    <p className="text-sm leading-relaxed text-white/70">
-                      {voiceMessage}
-                    </p>
-                  )}
-                  {voiceTranscript && (
-                    <div className="mt-3 border-t border-white/5 pt-3">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                        Transcript
-                        {voiceConfidence !== null
-                          ? ` · ${Math.round(
-                              voiceConfidence * 100,
-                            )}% confidence`
-                          : voiceState === "CONFIRM_TRANSCRIPT"
-                            ? " · confirm before scoring"
-                            : ""}
-                      </div>
-                      {voiceState === "CONFIRM_TRANSCRIPT" ? (
-                        <textarea
-                          value={voiceTranscript}
-                          onChange={(event) =>
-                            setVoiceTranscript(event.target.value)
-                          }
-                          maxLength={10_000}
-                          rows={5}
-                          className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-white focus:border-[#4285F4] focus:outline-none"
-                        />
-                      ) : (
-                        <p className="mt-1 text-xs leading-relaxed text-white/60">
-                          {voiceTranscript}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
-                {["READY", "FOLLOW_UP_READY"].includes(voiceState) && (
-                  <button
-                    type="button"
-                    onClick={() => void hearCurrentQuestion()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#3367D6]"
-                  >
-                    <Volume2 className="h-4 w-4" />
-                    {currentTurn.questionIndex === 0 && !openingSpoken
-                      ? "Start Interview"
-                      : "Hear Question"}
-                  </button>
-                )}
-
-                {voiceState === "CONFIRM_TRANSCRIPT" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void confirmVoiceTranscript()}
-                      disabled={!voiceDraftId || voiceTranscript.trim().length < 1}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#3367D6] disabled:opacity-40"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Confirm Transcript
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceDraftId(null);
-                        setVoiceTranscript("");
-                        setVoiceConfidence(null);
-                        setVoiceState("REPEAT");
-                        setVoiceMessage(
-                          "Record the answer again if this transcript is not accurate.",
-                        );
-                      }}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 text-xs font-bold uppercase tracking-wider text-white"
-                    >
-                      <Mic2 className="h-4 w-4" />
-                      Record Again
-                    </button>
-                  </>
-                )}
-
-                {["LISTENING_READY", "REPEAT"].includes(voiceState) && (
-                  <button
-                    type="button"
-                    onClick={() => void startRecording()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#C5221F] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#A31816]"
-                  >
-                    <Mic2 className="h-4 w-4" />
-                    {voiceState === "REPEAT"
-                      ? "Record Again"
-                      : "Record Answer"}
-                  </button>
-                )}
-
-                {voiceState === "LISTENING" && (
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-xs font-black uppercase tracking-wider text-black"
-                  >
-                    <Square className="h-4 w-4" />
-                    Finish Answer
-                  </button>
-                )}
-
-                {voiceState === "COMPLETE" && errorMessage && (
-                  <button
-                    type="button"
-                    onClick={() => void finishInterview()}
-                    disabled={isSubmitting}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white disabled:opacity-50"
-                  >
-                    Prepare Report
-                  </button>
-                )}
-              </div>
-
-              <p className="mt-6 max-w-xl text-[11px] leading-relaxed text-white/35">
-                Voice practice gives feedback after the interview, not after every question. You can review and confirm the text of your answers before they are assessed. Individual answer recordings are not saved by this practice.
-              </p>
-            </div>
-          </section>
-        ) : (
           <section className="flex-1 flex flex-col bg-[#161616] border border-white/10 rounded-2xl p-5 md:p-6 relative">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/70 font-bold">
@@ -1236,7 +1056,6 @@ export default function MockInterviewActivePage() {
               </button>
             </div>
           </section>
-        )}
 
         <div className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-white/35">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
@@ -1245,7 +1064,7 @@ export default function MockInterviewActivePage() {
           select/reject you.
         </div>
 
-        {!isVoice && showOpening && session.openingMessage && (
+        {showOpening && session.openingMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div className="max-w-lg w-full rounded-2xl border border-white/10 bg-[#181818] p-6 shadow-2xl">
               <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-widest font-bold text-[#4285F4]">
@@ -1266,7 +1085,7 @@ export default function MockInterviewActivePage() {
           </div>
         )}
 
-        {!isVoice && turnEvaluation && (
+        {turnEvaluation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
             <div className="bg-[#181818] border border-white/10 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 my-6">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
