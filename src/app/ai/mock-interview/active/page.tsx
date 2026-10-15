@@ -13,10 +13,6 @@ import {
   BookOpen,
   Gauge,
   ShieldCheck,
-  Mic2,
-  Square,
-  Volume2,
-  AudioLines,
 } from "lucide-react";
 
 type Persona = {
@@ -81,7 +77,6 @@ type NextQuestion = {
 type TurnResponse = {
   success?: boolean;
   error?: string;
-  voiceMode?: boolean;
   turnScore?: number;
   feedback?: string;
   evidenceConfidence?: number;
@@ -89,41 +84,6 @@ type TurnResponse = {
   nextQuestion?: NextQuestion;
   isComplete?: boolean;
 };
-
-type VoiceTranscriptionResponse = {
-  success?: boolean;
-  error?: string;
-  requiresRepeat?: boolean;
-  requiresConfirmation?: boolean;
-  draftId?: string;
-  receiptId?: string;
-  transcript?: string;
-  heardText?: string;
-  confidence?: number | null;
-  detectedLanguage?: string;
-  durationSeconds?: number;
-  message?: string;
-};
-
-type VoiceConfirmationResponse = {
-  success?: boolean;
-  error?: string;
-  receiptId?: string;
-  transcript?: string;
-  confidence?: number | null;
-  detectedLanguage?: string;
-};
-
-type VoiceUiState =
-  | "READY"
-  | "SPEAKING"
-  | "LISTENING_READY"
-  | "LISTENING"
-  | "UNDERSTANDING"
-  | "CONFIRM_TRANSCRIPT"
-  | "REPEAT"
-  | "FOLLOW_UP_READY"
-  | "COMPLETE";
 
 const difficultyLabel = (
   difficulty: number | null | undefined,
@@ -140,19 +100,6 @@ const difficultyLabel = (
     ][difficulty] ?? "Adaptive"
   );
 };
-
-function preferredRecorderMimeType() {
-  if (typeof MediaRecorder === "undefined") return "";
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  return (
-    candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ""
-  );
-}
 
 export default function MockInterviewActivePage() {
   const router = useRouter();
@@ -172,33 +119,10 @@ export default function MockInterviewActivePage() {
   const [isFinalQuestion, setIsFinalQuestion] = useState(false);
   const [showOpening, setShowOpening] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [voiceState, setVoiceState] = useState<VoiceUiState>("READY");
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [voiceConfidence, setVoiceConfidence] = useState<number | null>(
-    null,
-  );
-  const [voiceMessage, setVoiceMessage] = useState("");
-  const [voiceDraftId, setVoiceDraftId] = useState<string | null>(null);
-  const [openingSpoken, setOpeningSpoken] = useState(false);
-
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const recordingStartedAtRef = useRef<number>(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (
-        recorderRef.current &&
-        recorderRef.current.state !== "inactive"
-      ) {
-        recorderRef.current.stop();
-      }
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      audioRef.current?.pause();
     };
   }, []);
 
@@ -288,13 +212,7 @@ export default function MockInterviewActivePage() {
 
   useEffect(() => {
     setElapsedSeconds(0);
-    const isVoice = session?.mode === "VOICE";
-    const timerBlocked = isVoice
-      ? voiceState !== "LISTENING" &&
-        voiceState !== "LISTENING_READY"
-      : showOpening || Boolean(turnEvaluation);
-
-    if (!currentTurn || timerBlocked) return;
+    if (!currentTurn || showOpening || turnEvaluation) return;
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((previous) => previous + 1);
@@ -308,8 +226,6 @@ export default function MockInterviewActivePage() {
     currentTurn?.questionIndex,
     showOpening,
     turnEvaluation,
-    session?.mode,
-    voiceState,
   ]);
 
   async function finishInterview() {
@@ -340,7 +256,6 @@ export default function MockInterviewActivePage() {
           ? error.message
           : "Could not complete this practice session.",
       );
-      setVoiceState("COMPLETE");
     } finally {
       setIsSubmitting(false);
     }
@@ -451,415 +366,6 @@ export default function MockInterviewActivePage() {
     setAnswerText("");
     setElapsedSeconds(0);
   };
-
-  async function playSpeech(
-    kind: "OPENING" | "QUESTION",
-    questionIndex?: number,
-  ) {
-    if (!sessionId) return;
-    setVoiceState("SPEAKING");
-    setErrorMessage(null);
-
-    const response = await fetch(
-      "/api/assessment/mock-interview/voice/speech",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId,
-          kind,
-          ...(kind === "QUESTION"
-            ? { questionIndex: questionIndex ?? 0 }
-            : {}),
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      throw new Error(
-        data?.error || "Interviewer voice is temporarily unavailable.",
-      );
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const audio = new Audio(objectUrl);
-        audioRef.current = audio;
-        audio.onended = () => resolve();
-        audio.onerror = () =>
-          reject(new Error("Could not play interviewer audio."));
-        void audio.play().catch(reject);
-      });
-    } finally {
-      audioRef.current = null;
-      URL.revokeObjectURL(objectUrl);
-    }
-  }
-
-  async function hearCurrentQuestion() {
-    if (!session || !currentTurn) return;
-    try {
-      if (
-        currentTurn.questionIndex === 0 &&
-        session.openingMessage &&
-        !openingSpoken
-      ) {
-        await playSpeech("OPENING");
-        setOpeningSpoken(true);
-      }
-      await playSpeech("QUESTION", currentTurn.questionIndex);
-      setVoiceState("LISTENING_READY");
-      setVoiceMessage("Your turn. Record your answer when ready.");
-    } catch (error) {
-      setVoiceState("READY");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Interviewer voice is unavailable.",
-      );
-    }
-  }
-
-  async function submitVoiceReceipt(
-    receiptId: string,
-    transcript: string,
-    confidence: number | null,
-  ) {
-    if (!sessionId || !session || !currentTurn) return;
-    setVoiceState("UNDERSTANDING");
-    setVoiceTranscript(transcript);
-    setVoiceConfidence(confidence);
-    setVoiceMessage("Understanding your answer and preparing the next step...");
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/turn",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            sessionId,
-            questionIndex: currentTurn.questionIndex,
-            transcriptionReceiptId: receiptId,
-          }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | TurnResponse
-        | null;
-      if (!response.ok || !data?.success || data.voiceMode !== true) {
-        throw new Error(
-          data?.error ||
-            "The voice answer could not be processed safely.",
-        );
-      }
-
-      if (data.isComplete) {
-        setVoiceState("COMPLETE");
-        setVoiceMessage(
-          "Interview complete. Preparing your evidence-based practice report...",
-        );
-        await finishInterview();
-        return;
-      }
-
-      if (!data.nextQuestion) {
-        throw new Error("The next adaptive question is unavailable.");
-      }
-
-      const nextTurn: Turn = {
-        id: `pending-${data.nextQuestion.questionIndex}`,
-        questionIndex: data.nextQuestion.questionIndex,
-        questionText: data.nextQuestion.text,
-        difficulty: data.nextQuestion.difficulty,
-        competency: data.nextQuestion.competency,
-        skillTags: data.nextQuestion.skillTags,
-        candidateAnswerTranscript: null,
-        score: null,
-        feedback: null,
-        evidenceConfidence: null,
-      };
-
-      setSession({
-        ...session,
-        currentQuestionIndex: nextTurn.questionIndex,
-        turns: [
-          ...session.turns.filter(
-            (turn) =>
-              turn.questionIndex !== nextTurn.questionIndex,
-          ),
-          nextTurn,
-        ],
-      });
-      setCurrentTurn(nextTurn);
-      setElapsedSeconds(0);
-      setVoiceState("FOLLOW_UP_READY");
-      setVoiceMessage(
-        "I have understood your answer. The next question is ready.",
-      );
-    } catch (error) {
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "The voice answer could not be processed.",
-      );
-    }
-  }
-
-  async function transcribeVoiceBlob(blob: Blob) {
-    if (!sessionId || !currentTurn) return;
-    setVoiceState("UNDERSTANDING");
-    setVoiceMessage("Transcribing your answer...");
-    setErrorMessage(null);
-
-    const form = new FormData();
-    form.append(
-      "audio",
-      blob,
-      blob.type.includes("mp4")
-        ? "voice-answer.mp4"
-        : blob.type.includes("ogg")
-          ? "voice-answer.ogg"
-          : "voice-answer.webm",
-    );
-    form.append("sessionId", sessionId);
-    form.append("questionIndex", String(currentTurn.questionIndex));
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/voice/transcribe",
-        {
-          method: "POST",
-          credentials: "include",
-          body: form,
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | VoiceTranscriptionResponse
-        | null;
-
-      if (!response.ok || !data?.success) {
-        throw new Error(
-          data?.error || "Voice transcription failed.",
-        );
-      }
-
-      if (data.requiresRepeat) {
-        setVoiceTranscript(data.heardText || "");
-        setVoiceConfidence(
-          typeof data.confidence === "number"
-            ? data.confidence
-            : null,
-        );
-        setVoiceDraftId(null);
-        setVoiceState("REPEAT");
-        setVoiceMessage(
-          data.message ||
-            "I could not hear that confidently enough. Please answer again.",
-        );
-        return;
-      }
-
-      if (
-        data.requiresConfirmation &&
-        data.draftId &&
-        data.transcript
-      ) {
-        setVoiceDraftId(data.draftId);
-        setVoiceTranscript(data.transcript);
-        setVoiceConfidence(null);
-        setVoiceState("CONFIRM_TRANSCRIPT");
-        setVoiceMessage(
-          data.message ||
-            "Please confirm the transcript before HireGo evaluates it.",
-        );
-        return;
-      }
-
-      if (!data.receiptId || !data.transcript) {
-        throw new Error(
-          "Voice transcription returned an incomplete verified result.",
-        );
-      }
-
-      await submitVoiceReceipt(
-        data.receiptId,
-        data.transcript,
-        typeof data.confidence === "number"
-          ? data.confidence
-          : null,
-      );
-    } catch (error) {
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Voice transcription failed.",
-      );
-    }
-  }
-
-  async function confirmVoiceTranscript() {
-    if (
-      !sessionId ||
-      !currentTurn ||
-      !voiceDraftId ||
-      voiceTranscript.trim().length < 1
-    ) {
-      setErrorMessage("A transcript is required before confirmation.");
-      return;
-    }
-
-    setVoiceState("UNDERSTANDING");
-    setVoiceMessage("Confirming transcript...");
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/voice/confirm-transcript",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            sessionId,
-            questionIndex: currentTurn.questionIndex,
-            draftId: voiceDraftId,
-            transcript: voiceTranscript.trim(),
-          }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | VoiceConfirmationResponse
-        | null;
-
-      if (
-        !response.ok ||
-        !data?.success ||
-        !data.receiptId ||
-        !data.transcript
-      ) {
-        throw new Error(
-          data?.error || "Transcript confirmation failed.",
-        );
-      }
-
-      setVoiceDraftId(null);
-      await submitVoiceReceipt(
-        data.receiptId,
-        data.transcript,
-        typeof data.confidence === "number"
-          ? data.confidence
-          : null,
-      );
-    } catch (error) {
-      setVoiceState("CONFIRM_TRANSCRIPT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Transcript confirmation failed.",
-      );
-    }
-  }
-
-  async function startRecording() {
-    if (
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setErrorMessage(
-        "This browser does not support secure microphone recording for Voice Mode.",
-      );
-      return;
-    }
-
-    setErrorMessage(null);
-    setVoiceMessage("");
-    setVoiceTranscript("");
-    setVoiceConfidence(null);
-    setVoiceDraftId(null);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
-      streamRef.current = stream;
-
-      const mimeType = preferredRecorderMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-
-      chunksRef.current = [];
-      recorderRef.current = recorder;
-      recordingStartedAtRef.current = Date.now();
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-
-      recorder.onerror = () => {
-        setErrorMessage("Microphone recording failed.");
-        setVoiceState("REPEAT");
-      };
-
-      recorder.onstop = () => {
-        const recordedType =
-          recorder.mimeType || mimeType || "audio/webm";
-        const blob = new Blob(chunksRef.current, {
-          type: recordedType,
-        });
-        chunksRef.current = [];
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
-        void transcribeVoiceBlob(blob);
-      };
-
-      recorder.start(250);
-      setVoiceState("LISTENING");
-      setElapsedSeconds(0);
-      recordingStartedAtRef.current = Date.now();
-    } catch (error) {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Microphone permission is required for Voice Mode.",
-      );
-    }
-  }
-
-  function stopRecording() {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-    const duration = Date.now() - recordingStartedAtRef.current;
-    if (duration < 500) {
-      setErrorMessage(
-        "Keep recording a little longer before submitting your answer.",
-      );
-      return;
-    }
-    recorder.stop();
-  }
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
