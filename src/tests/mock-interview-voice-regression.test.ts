@@ -1,11 +1,12 @@
-test("Mock Interview voice entry is visible before opening the form", () => {
+test("Mock Interview setup is text-only and starts text sessions", () => {
   const setup = read("src/app/ai/mock-interview/setup/page.tsx");
-  const hero = setup.indexOf("Practise with voice");
-  const form = setup.indexOf("<form onSubmit={handleStartInterview}");
-  assert.ok(hero !== -1 && form > hero);
-  assert.ok(setup.includes('aria-pressed={mode === "VOICE"}'));
-  assert.ok(setup.includes("<Mic2"));
-  assert.ok(setup.includes("voiceReadiness?.ready !== true"));
+  assert.ok(setup.includes("role-based text questions"));
+  assert.ok(setup.includes('<form onSubmit={handleStartInterview}'));
+  assert.ok(setup.includes('const mode = "TEXT" as const'));
+  assert.ok(!setup.includes("Practise with voice"));
+  assert.ok(!setup.includes("Real Voice Mode"));
+  assert.ok(!setup.includes("<Mic2"));
+  assert.ok(!setup.includes("/voice/readiness"));
 });
 
 import test from "node:test";
@@ -148,32 +149,27 @@ test("voice receipts are one-time, support candidate-confirmed transcripts, and 
   assert.ok(redis.includes("redis.call('DEL', KEYS[1])"));
 });
 
-test("Voice UI uses MediaRecorder, transcript confirmation, and never browser SpeechRecognition", () => {
-  const active = read(
-    "src/app/ai/mock-interview/active/page.tsx",
-  );
-  assert.ok(active.includes("MediaRecorder"));
-  assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
-  assert.ok(active.includes("voice/transcribe"));
-  assert.ok(active.includes("voice/confirm-transcript"));
-  assert.ok(active.includes("CONFIRM_TRANSCRIPT"));
-  assert.ok(active.includes("Confirm Transcript"));
-  assert.ok(active.includes("transcriptionReceiptId"));
-  assert.ok(active.includes("Voice practice gives feedback after the interview"));
-  assert.ok(!active.includes("SpeechRecognition"));
-  assert.ok(!active.includes("webkitSpeechRecognition"));
+test("Mock Interview active page exposes typed answers and no voice controls", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  assert.ok(active.includes("handleSubmitAnswer"));
+  assert.ok(active.includes("setAnswerText"));
+  assert.ok(active.includes("answerText"));
+  assert.ok(!active.includes("MediaRecorder"));
+  assert.ok(!active.includes("navigator.mediaDevices.getUserMedia"));
+  assert.ok(!active.includes("voice/transcribe"));
+  assert.ok(!active.includes("voice/confirm-transcript"));
+  assert.ok(!active.includes("<Mic2"));
+  assert.ok(!active.includes("<Volume2"));
 });
 
-test("setup exposes Voice Mode only through runtime readiness", () => {
-  const setup = read(
-    "src/app/ai/mock-interview/setup/page.tsx",
-  );
-  assert.ok(setup.includes("Real Voice Mode"));
-  assert.ok(setup.includes("/voice/readiness"));
-  assert.ok(setup.includes("voiceReadiness?.ready !== true"));
-  assert.ok(setup.includes("Checking voice practice availability"));
+test("Mock Interview setup defaults to text mode without voice readiness UI", () => {
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  assert.ok(setup.includes('const mode = "TEXT" as const'));
   assert.ok(setup.includes("mode,"));
-  assert.ok(!setup.includes("Voice Mode is ready by default"));
+  assert.ok(!setup.includes("Real Voice Mode"));
+  assert.ok(!setup.includes("/voice/readiness"));
+  assert.ok(!setup.includes("voiceReadiness?.ready !== true"));
+  assert.ok(!setup.includes("Checking voice practice availability"));
 });
 
 test("spoken final feedback is available only after a completed Voice session", () => {
