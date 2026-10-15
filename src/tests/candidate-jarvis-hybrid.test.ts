@@ -47,15 +47,16 @@ test("Jarvis remains Super Admin controlled and voice defaults fail closed", () 
   assert.ok(adminApi.includes("requireAdminSession"));
   assert.ok(adminApi.includes("CANDIDATE_JARVIS_CONFIG_UPDATED"));
   assert.ok(config.includes("voiceEnabled: z.boolean().default(false)"));
-  assert.ok(adminPage.includes("self-hosted HireGo Voice Engine"));
+  assert.ok(!adminPage.includes("self-hosted HireGo Voice Engine"), "admin UI must not expose voice-engine controls");
 });
 
-test("Candidate Jarvis UI presents discoverable voice controls without internal AI metadata", () => {
+test("Candidate Jarvis UI is text-only and hides internal AI metadata", () => {
   const page = read("src/app/candidate/jarvis/page.tsx");
-  assert.ok(page.includes("Speak to Jarvis"));
-  assert.ok(page.includes("<Mic2"));
-  assert.ok(page.includes("<Volume2"));
-  assert.ok(page.includes("Tap Speak to record"));
+  assert.ok(page.includes("Type a message to get started."));
+  assert.ok(page.includes("Send"));
+  assert.ok(!page.includes("<Mic2"));
+  assert.ok(!page.includes("<Volume2"));
+  assert.ok(!page.includes("Tap Speak to record"));
   assert.ok(page.includes("chatScrollRef.current.scrollTo"));
   assert.ok(!page.includes("Path:"));
   assert.ok(!page.includes("no LLM"));
@@ -66,6 +67,8 @@ test("Candidate Jarvis UI presents discoverable voice controls without internal 
   assert.ok(!api.includes("hybridRoutingEnabled: config.hybridRoutingEnabled"));
   assert.ok(!page.includes("SpeechRecognition"));
   assert.ok(!page.includes("webkitSpeechRecognition"));
+  assert.ok(!page.includes("getUserMedia"));
+  assert.ok(!page.includes("MediaRecorder"));
 });
 
 test("Jarvis basic greetings do not depend on AI provider credentials", () => {
