@@ -11,18 +11,12 @@ import { isCandidateVoiceRoute } from "../lib/jarvis/JarvisVoiceRoutes";
 const read = (relative: string) =>
   fs.readFileSync(path.resolve(process.cwd(), relative), "utf8");
 
-test("voice assistant persists inside candidate routes, not login/admin/employer", () => {
-  for (const route of [
-    "/candidate/jarvis", "/dashboard", "/profile", "/jobs", "/jobs/1",
-    "/applications", "/interviews", "/credits", "/ai/mock-interview/setup",
-  ]) {
-    assert.equal(isCandidateVoiceRoute(route), true, route);
-  }
-  for (const route of ["/", "/login", "/register", "/employer", "/employer/jobs", "/admin", "/ai/mock-interview/active"]) {
-    assert.equal(isCandidateVoiceRoute(route), false, route);
-  }
+test("global voice assistant is not mounted anywhere in the text-only application", () => {
   const layout = read("src/app/layout.tsx");
-  assert.ok(layout.includes("<JarvisVoiceMount />"));
+  assert.ok(!layout.includes("<JarvisVoiceMount />"));
+  const mount = read("src/components/candidate/JarvisVoiceMount.tsx");
+  assert.ok(!layout.includes("JarvisVoiceMount"));
+  assert.ok(mount.includes("JarvisVoiceGlobe"));
 });
 
 test("spoken navigation accepts only authorized non-mutating candidate routes", () => {
@@ -44,7 +38,7 @@ test("spoken navigation accepts only authorized non-mutating candidate routes", 
   assert.equal(isAllowedVoiceActionHref("/profile"), true);
 });
 
-test("globe offers automatic VAD turns, spoken output, docking and interruption", () => {
+test("legacy voice component remains isolated and is not mounted by the application shell", () => {
   const globe = read("src/components/candidate/JarvisVoiceGlobe.tsx");
   const css = read("src/app/globals.css");
   assert.ok(globe.includes("getUserMedia"));
