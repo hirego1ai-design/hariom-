@@ -4,10 +4,12 @@ import fs from "node:fs";
 
 const read = (path: string) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("mock interview setup uses the HireGo logo and candidate-friendly voice copy", () => {
+test("mock interview setup uses the HireGo logo and text-only practice copy", () => {
   const setup = read("../app/ai/mock-interview/setup/page.tsx");
-  assert.match(setup, /<Image src="\/marketing\/hirego-logo-hd\.png" alt="HireGo AI"/);
-  assert.match(setup, /Checking voice practice availability/);
+  assert.match(setup, /<Image src="\\/marketing\\/hirego-logo-hd\\.png" alt="HireGo AI"/);
+  assert.match(setup, /role-based text questions/);
+  assert.match(setup, /const mode = "TEXT" as const/);
+  assert.doesNotMatch(setup, /Checking voice practice availability|Practise with voice|Real Voice Mode|\\/voice\\/readiness/);
   assert.doesNotMatch(setup, /Whisper|TTS routing|speech-to-text service|production voice infrastructure|self-hosted worker/);
 });
 
