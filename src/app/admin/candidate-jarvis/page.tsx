@@ -28,7 +28,6 @@ export default function CandidateJarvisAdminPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [voiceRuntime, setVoiceRuntime] = useState<{ ready: boolean; stt: boolean; tts: boolean; workerVersion: string | null } | null>(null);
 
   async function load() {
     setError("");
@@ -38,7 +37,6 @@ export default function CandidateJarvisAdminPage() {
       if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load Candidate Jarvis configuration.");
       setConfig(payload.config);
       setUpdatedAt(payload.updatedAt ?? null);
-      setVoiceRuntime(payload.voiceRuntime ?? null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load Candidate Jarvis configuration.");
     }
@@ -87,7 +85,7 @@ export default function CandidateJarvisAdminPage() {
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-primary">Hybrid runtime control</p>
               <h1 className="mt-1 text-3xl font-extrabold text-white">Candidate Jarvis</h1>
               <p className="mt-2 max-w-3xl text-sm text-text-muted">
-                FAST commands bypass LLMs. SMART and DEEP requests use the task routes configured in the AI Model Registry. Voice stays independently feature-flagged for the self-hosted HireGo Voice Engine.
+                FAST commands bypass LLMs. SMART and DEEP requests use the task routes configured in the AI Model Registry.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -120,15 +118,6 @@ export default function CandidateJarvisAdminPage() {
                     <input type="checkbox" checked={config.hybridRoutingEnabled} onChange={(event) => setConfig({ ...config, hybridRoutingEnabled: event.target.checked })} />
                   </div>
                 </label>
-                <label className="rounded-2xl border border-white/10 bg-[#121215] p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-bold text-white">Voice</p>
-                      <p className="mt-1 text-xs text-text-muted">Self-hosted STT/TTS only. Runtime: {voiceRuntime?.ready ? "READY" : "NOT READY"}.</p>
-                    </div>
-                    <input type="checkbox" checked={config.voiceEnabled} onChange={(event) => setConfig({ ...config, voiceEnabled: event.target.checked })} />
-                  </div>
-                </label>
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-[#121215] p-6 space-y-5">
@@ -143,21 +132,6 @@ export default function CandidateJarvisAdminPage() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-[#121215] p-6 space-y-5">
-                <div><h2 className="text-lg font-bold text-white">Self-hosted voice defaults</h2><p className="mt-1 text-xs text-text-muted">Candidate preferences may override these safe defaults.</p></div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <label className="text-xs text-text-muted">Default language
-                    <input value={config.defaultLanguage} onChange={(event) => setConfig({ ...config, defaultLanguage: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" />
-                  </label>
-                  <label className="text-xs text-text-muted">Default voice key
-                    <input value={config.defaultVoiceKey} onChange={(event) => setConfig({ ...config, defaultVoiceKey: event.target.value })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" />
-                  </label>
-                  <label className="text-xs text-text-muted">Max voice upload bytes
-                    <input type="number" min={262144} max={15728640} value={config.maxVoiceAudioBytes} onChange={(event) => setConfig({ ...config, maxVoiceAudioBytes: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-white" />
-                  </label>
-                </div>
-                <p className="text-xs text-text-muted">Worker: {voiceRuntime?.workerVersion || "not connected"} · STT {voiceRuntime?.stt ? "ready" : "off"} · TTS {voiceRuntime?.tts ? "ready" : "off"}</p>
-              </section>
 
               <section className="rounded-2xl border border-white/10 bg-[#121215] p-6 space-y-5">
                 <div><h2 className="text-lg font-bold text-white">Context & cost limits</h2><p className="mt-1 text-xs text-text-muted">These caps bound the context Jarvis may load into reasoning requests.</p></div>
