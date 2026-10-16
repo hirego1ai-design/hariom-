@@ -28,6 +28,7 @@ type LiveStage = "listening" | "thinking" | "speaking" | "paused";
 export default function CandidateJarvisPage() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [userName, setUserName] = useState("");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -88,6 +89,9 @@ export default function CandidateJarvisPage() {
         if (!response.ok || !payload.success) throw new Error(payload.error || "Jarvis readiness unavailable.");
         setEnabled(Boolean(payload.enabled));
         setVoiceEnabled(Boolean(payload.voiceEnabled));
+        if (payload.userName && typeof payload.userName === "string") {
+          setUserName(payload.userName);
+        }
       })
       .catch((cause) => {
         setEnabled(false);
@@ -316,7 +320,7 @@ export default function CandidateJarvisPage() {
       setLiveStage("listening");
       void startLiveListeningRef.current(generation);
     }
-  }, [playSpokenVoice]); // startLiveListening is hoisted via ref or inline
+  }, [playSpokenVoice]);
 
   const executeLiveTurnRef = useRef(executeLiveTurn);
   useEffect(() => { executeLiveTurnRef.current = executeLiveTurn; }, [executeLiveTurn]);
@@ -368,11 +372,11 @@ export default function CandidateJarvisPage() {
         }
       };
 
-      // VAD tracking
+      // VAD tracking with tuned 500ms responsiveness
       const pcmData = new Float32Array(analyser.fftSize);
       let speechStartedAt = 0;
       let lastSpeechAt = 0;
-      const SILENCE_THRESHOLD_MS = 650;
+      const SILENCE_THRESHOLD_MS = 500;
       const POWER_THRESHOLD = 0.035;
 
       livePollRef.current = setInterval(() => {
@@ -394,7 +398,7 @@ export default function CandidateJarvisPage() {
           lastSpeechAt = now;
         } else if (speechStartedAt && lastSpeechAt && (now - lastSpeechAt > SILENCE_THRESHOLD_MS)) {
           // Candidate finished speaking! Trigger automatic turn.
-          if (now - speechStartedAt >= 400 && recorder.state === "recording") {
+          if (now - speechStartedAt >= 350 && recorder.state === "recording") {
             recorder.stop();
           }
         }
@@ -412,7 +416,7 @@ export default function CandidateJarvisPage() {
     startLiveListeningRef.current = startLiveListening;
   }, [startLiveListening]);
 
-  // Launch Live Voice Mode (Gemini Live / GPT-4o style)
+  // Launch Live Voice Mode with instant personalized greeting (< 1s)
   const startLiveVoiceSession = useCallback(() => {
     unlockAudio();
     silenceLiveAudio();
@@ -421,13 +425,27 @@ export default function CandidateJarvisPage() {
     liveSequenceRef.current = generation;
     liveActiveRef.current = true;
     setLiveMode(true);
-    setLiveStage("listening");
     setLiveHeard("");
-    setLiveAnswer("");
     setLiveActions([]);
     setError("");
-    void startLiveListening(generation);
-  }, [releaseLiveMedia, silenceLiveAudio, startLiveListening, unlockAudio]);
+
+    // Instant personalized greeting (< 1s speech latency)
+    const firstName = userName ? userName.trim().split(/\s+/)[0] : "";
+    const greeting = firstName
+      ? `Hi ${firstName}! How can I help you today?`
+      : "Hi! How can I help you today?";
+
+    setLiveAnswer(greeting);
+    setLiveStage("speaking");
+
+    playSpokenVoice(null, greeting, () => {
+      // Transition to active listening once greeting completes
+      if (liveActiveRef.current && liveSequenceRef.current === generation) {
+        setLiveStage("listening");
+        void startLiveListeningRef.current(generation);
+      }
+    });
+  }, [playSpokenVoice, releaseLiveMedia, silenceLiveAudio, unlockAudio, userName]);
 
   // Barge-in Interrupt (if Jarvis is speaking or thinking)
   const interruptLiveVoice = useCallback(() => {

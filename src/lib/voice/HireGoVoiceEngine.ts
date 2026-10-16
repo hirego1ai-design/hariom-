@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { assertSafeOutboundNetworkTarget } from "@/lib/security/outboundUrl";
+import { resolveAiProvider } from "@/lib/ai/AiProviderCredentials";
 
 const healthSchema = z.object({
   message: z.string().optional(),
@@ -129,44 +130,120 @@ export async function transcribeHireGoVoice(params: {
   expectedLanguage?: string | null;
   timeoutMs?: number;
 }) {
-  const endpoint = await safeEndpoint("v1/audio/transcriptions");
-  const form = new FormData();
-  form.append("file", params.audio, params.audio.name || "jarvis-voice.webm");
-  form.append("model", endpoint.sttModel);
-  form.append("response_format", "verbose_json");
-
   const requestedLanguage = params.expectedLanguage
     ?.trim()
     .toLowerCase()
     .split("-")[0];
-  if (requestedLanguage && /^[a-z]{2,3}$/.test(requestedLanguage)) {
-    form.append("language", requestedLanguage);
+
+  // 1. Primary: Self-hosted Voice Engine (if configured)
+  try {
+    const endpoint = await safeEndpoint("v1/audio/transcriptions");
+    const form = new FormData();
+    form.append("file", params.audio, params.audio.name || "jarvis-voice.webm");
+    form.append("model", endpoint.sttModel);
+    form.append("response_format", "verbose_json");
+
+    if (requestedLanguage && /^[a-z]{2,3}$/.test(requestedLanguage)) {
+      form.append("language", requestedLanguage);
+    }
+
+    const response = await fetch(endpoint.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${endpoint.token}` },
+      body: form,
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(params.timeoutMs ?? 20_000),
+    });
+    if (response.ok) {
+      const parsed = transcriptionSchema.parse(await response.json());
+      return {
+        transcript: parsed.text,
+        detectedLanguage: parsed.language || requestedLanguage || "auto",
+        confidence: null as number | null,
+        durationSeconds: parsed.duration ?? null,
+        provider: "hirego-self-hosted" as const,
+        model: endpoint.sttModel,
+        workerVersion: "speaches" as const,
+      };
+    }
+  } catch {
+    // Self-hosted not configured or unreachable; smoothly proceed to cloud fallbacks
   }
 
-  const response = await fetch(endpoint.url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${endpoint.token}` },
-    body: form,
-    cache: "no-store",
-    redirect: "error",
-    signal: AbortSignal.timeout(params.timeoutMs ?? 20_000),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `HireGo Voice Engine STT returned HTTP ${response.status}`,
-    );
+  // 2. High-speed Groq Whisper fallback (~200ms ultra-low latency)
+  try {
+    const groq = await resolveAiProvider("groq").catch(() => null);
+    if (groq?.apiKey) {
+      const groqForm = new FormData();
+      groqForm.append("file", params.audio, params.audio.name || "audio.webm");
+      groqForm.append("model", "whisper-large-v3-turbo");
+      if (requestedLanguage && /^[a-z]{2,3}$/.test(requestedLanguage)) {
+        groqForm.append("language", requestedLanguage);
+      }
+      const groqRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groq.apiKey}` },
+        body: groqForm,
+        cache: "no-store",
+        signal: AbortSignal.timeout(params.timeoutMs ?? 15_000),
+      });
+      if (groqRes.ok) {
+        const groqData = await groqRes.json().catch(() => ({}));
+        if (typeof groqData.text === "string" && groqData.text.trim()) {
+          return {
+            transcript: groqData.text.trim(),
+            detectedLanguage: requestedLanguage || "auto",
+            confidence: 0.95,
+            durationSeconds: null,
+            provider: "groq" as any,
+            model: "whisper-large-v3-turbo",
+            workerVersion: "groq-whisper" as any,
+          };
+        }
+      }
+    }
+  } catch {
+    // Proceed to OpenAI fallback
   }
-  const parsed = transcriptionSchema.parse(await response.json());
 
-  return {
-    transcript: parsed.text,
-    detectedLanguage: parsed.language || requestedLanguage || "auto",
-    confidence: null as number | null,
-    durationSeconds: parsed.duration ?? null,
-    provider: "hirego-self-hosted" as const,
-    model: endpoint.sttModel,
-    workerVersion: "speaches" as const,
-  };
+  // 3. OpenAI Whisper fallback
+  try {
+    const oai = await resolveAiProvider("openai").catch(() => null);
+    if (oai?.apiKey) {
+      const oaiForm = new FormData();
+      oaiForm.append("file", params.audio, params.audio.name || "audio.webm");
+      oaiForm.append("model", "whisper-1");
+      if (requestedLanguage && /^[a-z]{2,3}$/.test(requestedLanguage)) {
+        oaiForm.append("language", requestedLanguage);
+      }
+      const oaiRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${oai.apiKey}` },
+        body: oaiForm,
+        cache: "no-store",
+        signal: AbortSignal.timeout(params.timeoutMs ?? 15_000),
+      });
+      if (oaiRes.ok) {
+        const oaiData = await oaiRes.json().catch(() => ({}));
+        if (typeof oaiData.text === "string" && oaiData.text.trim()) {
+          return {
+            transcript: oaiData.text.trim(),
+            detectedLanguage: requestedLanguage || "auto",
+            confidence: 0.95,
+            durationSeconds: null,
+            provider: "openai" as any,
+            model: "whisper-1",
+            workerVersion: "openai-whisper" as any,
+          };
+        }
+      }
+    }
+  } catch {
+    // Fall through
+  }
+
+  throw new Error("No voice transcription service is currently available. Please speak again or type your message.");
 }
 
 export async function synthesizeHireGoVoice(params: {
