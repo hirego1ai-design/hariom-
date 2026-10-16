@@ -10,7 +10,7 @@ const originalKey = process.env.AI_PROVIDER_CREDENTIALS_ENCRYPTION_KEY;
 const originalHosts = process.env.AI_SELF_HOSTED_ALLOWED_HOSTS;
 
 test("every Model Registry provider can be configured from Admin", () => {
-  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"]);
+  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "groq", "self_hosted"]);
 });
 
 test("AES-GCM encrypts AI keys with a provider-specific authenticated binding", () => {
