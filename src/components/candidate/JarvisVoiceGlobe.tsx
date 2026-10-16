@@ -344,7 +344,6 @@ export default function JarvisVoiceGlobe() {
   const beginListening = useCallback(async (generation: number) => {
     if (!activeRef.current || sequenceRef.current !== generation) return;
     setStage("listening");
-    liveTranscriptRef.current = "";
 
     try {
       let stream = streamRef.current;
