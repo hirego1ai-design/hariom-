@@ -34,7 +34,6 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "**/*.mts",
-    ".next-audit/types/**/*.ts",
     ".next-audit/types/**/*.ts"
   ],
   "exclude": [
