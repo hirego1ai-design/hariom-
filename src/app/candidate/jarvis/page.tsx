@@ -52,6 +52,7 @@ export default function CandidateJarvisPage() {
   const liveAudioRef = useRef<HTMLAudioElement | null>(null);
   const liveBlobUrlRef = useRef<string | null>(null);
   const liveOrbRef = useRef<HTMLDivElement | null>(null);
+  const liveUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Standard Turn-based recording refs
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -108,14 +109,56 @@ export default function CandidateJarvisPage() {
       if (typeof window !== "undefined" && "speechSynthesis" in window && text) {
         try {
           window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 1.05;
-          const voices = window.speechSynthesis.getVoices();
-          const preferred = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Neural") || v.name.includes("Ava") || v.name.includes("Jenny"))) || voices.find((v) => v.lang.startsWith("en"));
-          if (preferred) utterance.voice = preferred;
-          utterance.onend = () => { onEnded?.(); };
-          utterance.onerror = () => { onEnded?.(); };
-          window.speechSynthesis.speak(utterance);
+          setTimeout(() => {
+            try {
+              window.speechSynthesis.resume();
+              const utterance = new SpeechSynthesisUtterance(text);
+              liveUtteranceRef.current = utterance;
+              utterance.lang = "en-US";
+              utterance.rate = 1.0;
+              utterance.pitch = 1.0;
+              utterance.volume = 1.0;
+
+              const voices = window.speechSynthesis.getVoices();
+              if (voices.length > 0) {
+                const preferred = voices.find(
+                  (v) =>
+                    v.lang.startsWith("en") &&
+                    (v.name.includes("Natural") ||
+                      v.name.includes("Google") ||
+                      v.name.includes("Neural") ||
+                      v.name.includes("Online") ||
+                      v.name.includes("Ava") ||
+                      v.name.includes("Jenny") ||
+                      v.name.includes("David") ||
+                      v.name.includes("Zira")),
+                ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+                if (preferred) utterance.voice = preferred;
+              }
+
+              let finished = false;
+              const done = () => {
+                if (finished) return;
+                finished = true;
+                liveUtteranceRef.current = null;
+                onEnded?.();
+              };
+
+              utterance.onend = done;
+              utterance.onerror = (e) => {
+                if (e.error !== "canceled" && e.error !== "interrupted") {
+                  console.warn("Jarvis TTS voice error:", e.error);
+                }
+                done();
+              };
+
+              window.speechSynthesis.speak(utterance);
+              window.speechSynthesis.resume();
+            } catch (err) {
+              console.warn("Web Speech failed:", err);
+              onEnded?.();
+            }
+          }, 60);
           return;
         } catch {}
       }
@@ -173,6 +216,11 @@ export default function CandidateJarvisPage() {
     if (liveBlobUrlRef.current) {
       URL.revokeObjectURL(liveBlobUrlRef.current);
       liveBlobUrlRef.current = null;
+    }
+    if (liveUtteranceRef.current) {
+      liveUtteranceRef.current.onend = null;
+      liveUtteranceRef.current.onerror = null;
+      liveUtteranceRef.current = null;
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -816,7 +864,7 @@ export default function CandidateJarvisPage() {
                 <p>{item.text}</p>
                 {item.reply && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {voiceEnabled && (
+                    {(voiceEnabled || (typeof window !== "undefined" && "speechSynthesis" in window)) && (
                       <button
                         type="button"
                         onClick={() => void hearReply(item.reply?.speechReceiptId || "", item.audioUrl, item.reply?.message)}

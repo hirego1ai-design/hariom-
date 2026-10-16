@@ -66,6 +66,7 @@ export default function JarvisVoiceGlobe() {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const orbRef = useRef<HTMLDivElement | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const beginListeningRef = useRef<(generation: number) => Promise<void>>(async () => undefined);
@@ -101,6 +102,11 @@ export default function JarvisVoiceGlobe() {
     }
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     audioUrlRef.current = null;
+    if (activeUtteranceRef.current) {
+      activeUtteranceRef.current.onend = null;
+      activeUtteranceRef.current.onerror = null;
+      activeUtteranceRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -205,22 +211,61 @@ export default function JarvisVoiceGlobe() {
         if (typeof window !== "undefined" && "speechSynthesis" in window && messageToSpeak && !muted) {
           try {
             window.speechSynthesis.cancel();
-            const utteranceObj = new SpeechSynthesisUtterance(messageToSpeak);
-            utteranceObj.rate = 1.05;
-            const voices = window.speechSynthesis.getVoices();
-            const preferred = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Neural") || v.name.includes("Ava") || v.name.includes("Jenny"))) || voices.find((v) => v.lang.startsWith("en"));
-            if (preferred) utteranceObj.voice = preferred;
-            utteranceObj.onend = () => {
-              if (activeRef.current && sequenceRef.current === generation) {
-                void beginListeningRef.current(generation);
+            setTimeout(() => {
+              if (!activeRef.current || sequenceRef.current !== generation) return;
+              try {
+                window.speechSynthesis.resume();
+                const utteranceObj = new SpeechSynthesisUtterance(messageToSpeak);
+                activeUtteranceRef.current = utteranceObj;
+                utteranceObj.lang = "en-US";
+                utteranceObj.rate = 1.0;
+                utteranceObj.pitch = 1.0;
+                utteranceObj.volume = 1.0;
+
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                  const preferred = voices.find(
+                    (v) =>
+                      v.lang.startsWith("en") &&
+                      (v.name.includes("Natural") ||
+                        v.name.includes("Google") ||
+                        v.name.includes("Neural") ||
+                        v.name.includes("Online") ||
+                        v.name.includes("Ava") ||
+                        v.name.includes("Jenny") ||
+                        v.name.includes("David") ||
+                        v.name.includes("Zira")),
+                  ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+                  if (preferred) utteranceObj.voice = preferred;
+                }
+
+                let completed = false;
+                const finish = () => {
+                  if (completed) return;
+                  completed = true;
+                  activeUtteranceRef.current = null;
+                  if (activeRef.current && sequenceRef.current === generation) {
+                    void beginListeningRef.current(generation);
+                  }
+                };
+
+                utteranceObj.onend = finish;
+                utteranceObj.onerror = (e) => {
+                  if (e.error !== "canceled" && e.error !== "interrupted") {
+                    console.warn("Jarvis TTS voice error:", e.error);
+                  }
+                  finish();
+                };
+
+                window.speechSynthesis.speak(utteranceObj);
+                window.speechSynthesis.resume();
+              } catch (err) {
+                console.warn("Jarvis Web Speech failed:", err);
+                if (activeRef.current && sequenceRef.current === generation) {
+                  void beginListeningRef.current(generation);
+                }
               }
-            };
-            utteranceObj.onerror = () => {
-              if (activeRef.current && sequenceRef.current === generation) {
-                void beginListeningRef.current(generation);
-              }
-            };
-            window.speechSynthesis.speak(utteranceObj);
+            }, 60);
             return;
           } catch {
             // fallback
