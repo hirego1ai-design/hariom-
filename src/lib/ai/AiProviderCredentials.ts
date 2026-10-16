@@ -6,7 +6,7 @@ import { llmProviderSchema, type LlmProviderName } from "./AiRoutingConfig";
 const envName: Record<LlmProviderName, string> = {
   openai: "OPENAI_API_KEY", gemini: "GEMINI_API_KEY",
   deepseek: "DEEPSEEK_API_KEY", kimi: "KIMI_API_KEY",
-  qwen: "QWEN_API_KEY", self_hosted: "SELF_HOSTED_LLM_API_KEY",
+  qwen: "QWEN_API_KEY", groq: "GROQ_API_KEY", self_hosted: "SELF_HOSTED_LLM_API_KEY",
 };
 
 const defaultEndpoints: Record<LlmProviderName, string | undefined> = {
@@ -15,6 +15,7 @@ const defaultEndpoints: Record<LlmProviderName, string | undefined> = {
   deepseek: "https://api.deepseek.com",
   kimi: "https://api.moonshot.cn/v1",
   qwen: undefined,
+  groq: "https://api.groq.com/openai/v1",
   self_hosted: undefined,
 };
 
