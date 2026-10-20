@@ -25,6 +25,15 @@ const requestSchema = z.object({
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function cleanSpokenWords(raw: string): string {
+  return raw
+    .replace(/^(\*.*?\*|Sara:|Interviewer:)/gi, "")
+    .replace(/[\*\_\[\]\#]/g, "")
+    .replace(/["""]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await getCurrentSession(request.headers);
@@ -69,55 +78,98 @@ export async function POST(request: NextRequest) {
     }
 
     const personaName = session.persona?.displayName || "Sara";
-    const roleTarget = session.roleTarget || "Software Engineer";
+    const roleTarget = session.roleTarget || "Candidate";
     const seniority = session.declaredSeniority || "Mid-Level";
 
-    const promptMessages = [
-      `You are ${personaName}, an elite Senior Executive and Technical/Behavioral Interviewer conducting a LIVE voice interview call with a candidate for the role of "${roleTarget}" (${seniority}).`,
-      "",
-      "CRITICAL VOICE CONVERSATION RULES:",
-      "1. You are talking out loud on a real-time call (like Gemini Live or a live Zoom call).",
-      "2. Respond naturally in 2 to 3 spoken sentences maximum. Never speak in long monologues or paragraphs.",
-      "3. Acknowledge what the candidate just said with genuine human reaction, then follow up with a pointed question, scenario, or deeper technical inquiry.",
-      "4. If the candidate interrupted you, asked a question, or clarified something, answer them directly before steering the conversation forward.",
-      "5. NEVER use markdown, bullet points, asterisks, emoji, quotes around speech, or stage directions like *smiles* or *nods*. Output ONLY plain text sentences that can be spoken directly by text-to-speech.",
-      "",
-      "RECENT CONVERSATION HISTORY:",
-      ...body.history.slice(-6).map((h) => `${h.role === "assistant" ? personaName : "Candidate"}: ${h.content}`),
-      `Candidate: ${body.candidateSpeech}`,
-      `${personaName}:`,
-    ].join("\n");
+    const systemPrompt = `You are ${personaName}, an experienced Executive & Technical Interviewer conducting a live spoken first-round interview call with a candidate for "${roleTarget}" (${seniority}).
 
-    const { result } = await ModelRouter.executeWithFallback({
-      taskType: "mock-interview",
-      fn: async (endpoint, policy, isFallback) => {
-        const execution = await dispatchAiTask({
-          task: "INTERVIEW_EVALUATION",
-          taskType: "mock-interview",
-          prompt: promptMessages,
-          provider: endpoint.provider,
-          model: endpoint.model,
-          modelConfig: endpoint.config,
-          timeoutMs: Math.min(policy.timeoutMs || 10000, 10000),
-          temperature: 0.7,
-          maxTokens: 150,
-          isFallback,
+CRITICAL LIVE VOICE RULES:
+1. You are speaking out loud on a real-time voice call.
+2. Respond in 2 spoken sentences maximum. Be concise, sharp, and natural.
+3. React directly to what the candidate just answered (give authentic feedback, validate a good point, or follow up with a deeper practical question).
+4. If the candidate asked a question or interrupted you, address it immediately.
+5. NEVER use markdown, bullet points, asterisks, emojis, quotes, or emotion tags like *nods*. Output ONLY plain spoken words.`;
+
+    let cleanedReply = "";
+
+    // 1. FAST PATH: Groq (responds in ~500ms)
+    const groqKey = process.env.GROQ_API_KEY?.trim();
+    if (groqKey) {
+      try {
+        const groqMessages = [
+          { role: "system", content: systemPrompt },
+          ...body.history.slice(-4).map((h) => ({
+            role: h.role,
+            content: h.content,
+          })),
+          { role: "user", content: body.candidateSpeech },
+        ];
+
+        const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${groqKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "qwen/qwen3.8-27b",
+            messages: groqMessages,
+            max_tokens: 100,
+            temperature: 0.7,
+          }),
+          signal: AbortSignal.timeout(4_000),
         });
-        return execution.resultText;
-      },
-    });
 
-    let cleanedReply = result.trim()
-      .replace(/^(\*.*?\*|Sara:|Interviewer:)/gi, "")
-      .replace(/[\*\_\[\]\#]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!cleanedReply) {
-      cleanedReply = "I see your point. Could you elaborate a bit more on how you handled that?";
+        if (groqResponse.ok) {
+          const json = await groqResponse.json();
+          const content = json.choices?.[0]?.message?.content?.trim();
+          if (content) {
+            cleanedReply = cleanSpokenWords(content);
+          }
+        }
+      } catch (groqErr) {
+        console.warn("[LiveTurn] Groq fast-path skipped, using router fallback:", groqErr);
+      }
     }
 
-    // Save this turn interaction to the database
+    // 2. FALLBACK PATH: ModelRouter
+    if (!cleanedReply) {
+      const promptMessages = [
+        systemPrompt,
+        "",
+        "RECENT CONVERSATION:",
+        ...body.history.slice(-4).map((h) => `${h.role === "assistant" ? personaName : "Candidate"}: ${h.content}`),
+        `Candidate: ${body.candidateSpeech}`,
+        `${personaName}:`,
+      ].join("\n");
+
+      const { result } = await ModelRouter.executeWithFallback({
+        taskType: "mock-interview",
+        fn: async (endpoint, policy, isFallback) => {
+          const execution = await dispatchAiTask({
+            task: "INTERVIEW_EVALUATION",
+            taskType: "mock-interview",
+            prompt: promptMessages,
+            provider: endpoint.provider,
+            model: endpoint.model,
+            modelConfig: endpoint.config,
+            timeoutMs: Math.min(policy.timeoutMs || 8000, 8000),
+            temperature: 0.7,
+            maxTokens: 100,
+            isFallback,
+          });
+          return execution.resultText;
+        },
+      });
+
+      cleanedReply = cleanSpokenWords(result);
+    }
+
+    if (!cleanedReply) {
+      cleanedReply = "That makes sense. Can you walk me through a specific challenge you faced while implementing that?";
+    }
+
+    // Record turn in database
     const nextQuestionIndex = (session.turns.length > 0
       ? Math.max(...session.turns.map((t) => t.questionIndex)) + 1
       : 1);
@@ -129,7 +181,7 @@ export async function POST(request: NextRequest) {
         questionText: cleanedReply,
         candidateAnswerTranscript: body.candidateSpeech,
         score: 75,
-        feedback: "Live conversation turn recorded.",
+        feedback: "Live spoken turn recorded.",
       },
     });
 

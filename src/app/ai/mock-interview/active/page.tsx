@@ -405,14 +405,14 @@ export default function MockInterviewActivePage() {
       }
       setInterimUserText(interim || accumulatedSpeechRef.current);
 
-      // Debounce: detect when candidate pauses speaking (~850ms)
+      // Debounce: detect when candidate pauses speaking (~550ms for snappy natural response)
       if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
       speechTimerRef.current = setTimeout(() => {
         const fullCandidateSpeech = (accumulatedSpeechRef.current + " " + interim).trim();
-        if (fullCandidateSpeech.split(" ").length >= 2) {
+        if (fullCandidateSpeech.length >= 4) {
           void handleCandidateFinishedSpeaking(fullCandidateSpeech);
         }
-      }, 850);
+      }, 550);
     };
 
     recognition.onerror = (e: any) => {
