@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(
       request,
       `mock_interview_voice_speech:${auth.id}`,
-      30,
+      60,
       60_000,
     );
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         persona: true,
         turns: {
           orderBy: { questionIndex: "asc" },
-          take: 10,
+          take: 20,
         },
       },
     });
@@ -86,12 +86,7 @@ export async function POST(request: NextRequest) {
       throw new ApiError("This session is not in Voice Mode.", 409);
     }
 
-    if (!interviewSession.persona?.voiceKey?.trim()) {
-      throw new ApiError(
-        "This interviewer does not have an approved voice configured.",
-        503,
-      );
-    }
+    const voiceKey = interviewSession.persona?.voiceKey?.trim() || "sarah";
 
     let text = "";
     if (body.kind === "OPENING") {
@@ -131,10 +126,11 @@ export async function POST(request: NextRequest) {
     try {
       speech = await synthesizeMockInterviewSpeech({
         text,
-        voiceKey: interviewSession.persona.voiceKey,
+        voiceKey,
         language: interviewSession.language || "en",
       });
     } catch (error) {
+      console.error("[MockInterviewVoice] Error during speech synthesis:", error);
       throw new ApiError(
         "Voice output is temporarily unavailable.",
         503,
