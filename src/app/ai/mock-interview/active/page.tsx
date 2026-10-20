@@ -477,6 +477,24 @@ export default function MockInterviewActivePage() {
     );
 
     if (!response.ok) {
+      // Fallback: If server audio TTS is unavailable, speak naturally using browser Web Speech API
+      const textToSpeak = kind === "OPENING" ? session?.openingMessage : currentTurn?.questionText;
+      if (typeof window !== "undefined" && "speechSynthesis" in window && textToSpeak) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.lang = "en-US";
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Female") || v.name.includes("Samantha") || v.name.includes("Zira") || v.name.includes("Google US English") || v.name.includes("Natural")));
+        if (preferredVoice) utterance.voice = preferredVoice;
+        await new Promise<void>((resolve) => {
+          utterance.onend = () => resolve();
+          utterance.onerror = () => resolve();
+          window.speechSynthesis.speak(utterance);
+        });
+        return;
+      }
       const data = await response.json().catch(() => null);
       throw new Error(
         data?.error || "Interviewer voice is temporarily unavailable.",
