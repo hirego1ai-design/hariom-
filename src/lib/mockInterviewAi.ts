@@ -2,6 +2,12 @@ import { z } from "zod";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
 import { dispatchAiTask, markAiExecutionValidationFailure } from "@/utils/aiRouter";
 
+function cleanJsonString(raw: string): string {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/\{[\s\S]*\}/);
+  return match ? match[0] : trimmed;
+}
+
 export async function runMockInterviewStructured<TSchema extends z.ZodTypeAny>(params: {
   prompt: string;
   schema: TSchema;
@@ -29,7 +35,8 @@ export async function runMockInterviewStructured<TSchema extends z.ZodTypeAny>(p
     },
     validateResult: async (raw) => {
       try {
-        params.schema.parse(JSON.parse(raw));
+        const cleaned = cleanJsonString(raw);
+        params.schema.parse(JSON.parse(cleaned));
       } catch (error) {
         if (currentExecutionLogId) {
           await markAiExecutionValidationFailure(currentExecutionLogId);
@@ -41,5 +48,6 @@ export async function runMockInterviewStructured<TSchema extends z.ZodTypeAny>(p
     },
   });
 
-  return params.schema.parse(JSON.parse(result));
+  const parsedJson = JSON.parse(cleanJsonString(result));
+  return params.schema.parse(parsedJson);
 }
