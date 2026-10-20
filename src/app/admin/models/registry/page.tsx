@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
-type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen" | "groq" | "self_hosted";
+type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen" | "groq" | "openrouter" | "self_hosted";
 type QualityTier = "ECONOMY" | "BALANCED" | "PREMIUM";
 type RoutingMode = "MANUAL" | "COST_SAVER" | "BALANCED" | "QUALITY_FIRST" | "SMART_AUTO";
 
