@@ -214,11 +214,9 @@ export default function MockInterviewSetupPage() {
         return;
       }
 
-      if (!res.ok || !data?.success || !data.session?.id) {
+      if (!res.ok || !data?.success || !data?.session?.id) {
         throw new Error(
-          res.status >= 500
-            ? "Interview service is temporarily unavailable. Please try again shortly."
-            : data?.error || "Could not start your interview. Please try again.",
+          data?.error || (res.status >= 500 ? `Service error (${res.status}): Please try again shortly.` : "Could not start your interview. Please try again.")
         );
       }
 
