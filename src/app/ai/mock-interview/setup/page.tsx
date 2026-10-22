@@ -14,6 +14,8 @@ import {
   Mic2,
   Radio,
   CheckCircle2,
+  Edit3,
+  UserCheck,
 } from "lucide-react";
 
 type RoleOption = {
@@ -71,6 +73,10 @@ export default function MockInterviewSetupPage() {
   const [voiceReadiness, setVoiceReadiness] = useState<VoiceReadiness | null>(null);
   const [checkingVoice, setCheckingVoice] = useState(false);
   const roleOptions: RoleOption[] = useMemo(() => searchRoles(roleTarget), [roleTarget]);
+  const [profileSkills, setProfileSkills] = useState<string[]>([]);
+  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
+  const [isEditingRole, setIsEditingRole] = useState(false);
+  const [hasProfileData, setHasProfileData] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<SessionSummary[]>([]);
@@ -78,9 +84,64 @@ export default function MockInterviewSetupPage() {
   const [historyError, setHistoryError] = useState("");
   const startRequestKey = useRef<string | null>(null);
 
+  const activeInProgressSession = useMemo(
+    () => pastSessions.find((s) => s.status === "IN_PROGRESS"),
+    [pastSessions],
+  );
+
   useEffect(() => {
     startRequestKey.current = null;
   }, [roleTarget, seniority, practiceContext]);
+
+  // Auto-populate from Candidate Profile
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadProfile() {
+      try {
+        const res = await fetch("/api/candidate/profile?view=overview", {
+          signal: controller.signal,
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.success && data.profile) {
+          const prof = data.profile;
+          const target =
+            prof.preferences?.targetRole ||
+            prof.headline ||
+            (Array.isArray(prof.experience) && prof.experience[0]?.role) ||
+            "";
+
+          if (target && !roleFromAssessment) {
+            setRoleTarget(target);
+            setHasProfileData(true);
+          }
+
+          const years = typeof prof.experienceYears === "number" ? prof.experienceYears : 2;
+          if (years <= 1) setSeniority("Junior");
+          else if (years <= 4) setSeniority("Mid-Level");
+          else if (years <= 8) setSeniority("Senior");
+          else setSeniority("Staff / Lead");
+
+          const extractedSkills = Array.isArray(prof.candidateSkills)
+            ? prof.candidateSkills.map((s: { name: string }) => s.name).filter(Boolean)
+            : Array.isArray(prof.skills)
+            ? prof.skills
+            : [];
+          if (extractedSkills.length > 0) {
+            setProfileSkills(extractedSkills.slice(0, 8));
+          }
+        }
+      } catch {
+        // Non-blocking fallback
+      } finally {
+        if (!controller.signal.aborted) setIsProfileLoaded(true);
+      }
+    }
+    void loadProfile();
+    return () => controller.abort();
+  }, [roleFromAssessment]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -197,7 +258,7 @@ export default function MockInterviewSetupPage() {
           roleTarget: roleTarget.trim(),
           declaredSeniority: seniority,
           totalQuestions: 8,
-          focusSkills,
+          focusSkills: focusSkills.length > 0 ? focusSkills : profileSkills.slice(0, 6),
           practiceContext: practiceContext.trim() || null,
           mode: "VOICE", // Always live voice-to-voice for mock interview
         }),
@@ -263,6 +324,35 @@ export default function MockInterviewSetupPage() {
 
         <div className="grid gap-8 lg:grid-cols-3">
           <section className="lg:col-span-2 bg-[#141416] border border-white/10 rounded-2xl p-6 md:p-8 shadow-xl">
+            {activeInProgressSession && (
+              <div className="mb-6 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5 shadow-lg flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      Active Interview Session In Progress
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-normal">
+                        Zero Credits
+                      </span>
+                    </h4>
+                    <p className="text-xs text-emerald-200/80 mt-0.5">
+                      Role: <strong className="text-white">{activeInProgressSession.roleTarget}</strong> • {activeInProgressSession.declaredSeniority || "Mid-Level"}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/ai/mock-interview/active?sessionId=${activeInProgressSession.id}`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-black hover:bg-emerald-400 transition-all shadow-md"
+                >
+                  Resume Interview
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
+
             {errorMessage && (
               <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center gap-3">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -292,64 +382,124 @@ export default function MockInterviewSetupPage() {
                 </div>
               </div>
 
-              {/* Target Role Input */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Target Job Role
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-white/35" />
-                  <input
-                    type="text"
-                    value={roleTarget}
-                    onChange={(event) => setRoleTarget(event.target.value)}
-                    placeholder="e.g. Frontend Developer, Sales Executive, Product Manager"
-                    maxLength={120}
-                    className="w-full text-sm bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#4285F4] transition-colors"
-                    required
-                  />
-                </div>
+              {/* Profile Auto-Populate Summary Card */}
+              {hasProfileData && !isEditingRole ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4285F4]">
+                      <UserCheck className="w-4 h-4" />
+                      Auto-Detected From Your Profile
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRole(true)}
+                      className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-3 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Change Role / Custom
+                    </button>
+                  </div>
 
-                <div className="mt-3 min-h-[36px]">
-                  {roleOptions.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {roleOptions.slice(0, 6).map((role) => (
+                  <div>
+                    <div className="text-lg font-bold text-white">{roleTarget}</div>
+                    <div className="text-xs text-white/60 mt-0.5">
+                      Target Seniority: <span className="text-emerald-400 font-semibold">{seniority}</span>
+                    </div>
+                  </div>
+
+                  {profileSkills.length > 0 && (
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-white/50 block mb-1.5">
+                        Assessed Profile Skills
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {profileSkills.map((skill) => (
+                          <span
+                            key={skill}
+                            className="text-[11px] px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/80"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Target Role Input & Seniority (Shown when customizing or no profile) */}
+              {(!hasProfileData || isEditingRole) && (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs uppercase tracking-wider text-white/70 font-bold">
+                        Target Job Role
+                      </label>
+                      {hasProfileData && (
                         <button
-                          key={role.title}
                           type="button"
-                          onClick={() => setRoleTarget(role.title)}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/75 hover:border-[#4285F4]/50 hover:text-white transition"
+                          onClick={() => setIsEditingRole(false)}
+                          className="text-xs text-[#4285F4] hover:underline"
                         >
-                          {role.title}
+                          Use Profile Role
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-white/35" />
+                      <input
+                        type="text"
+                        value={roleTarget}
+                        onChange={(event) => setRoleTarget(event.target.value)}
+                        placeholder="e.g. Frontend Developer, Sales Executive, Product Manager"
+                        maxLength={120}
+                        className="w-full text-sm bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-[#4285F4] transition-colors"
+                        required
+                      />
+                    </div>
+
+                    <div className="mt-3 min-h-[36px]">
+                      {roleOptions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {roleOptions.slice(0, 6).map((role) => (
+                            <button
+                              key={role.title}
+                              type="button"
+                              onClick={() => setRoleTarget(role.title)}
+                              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/75 hover:border-[#4285F4]/50 hover:text-white transition"
+                            >
+                              {role.title}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Seniority Picker */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
+                      Target Seniority Level
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {SENIORITY_OPTIONS.map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setSeniority(level)}
+                          className={`text-center text-xs py-2.5 rounded-xl border transition-all ${
+                            seniority === level
+                              ? "border-[#4285F4] bg-[#4285F4]/20 text-white font-bold"
+                              : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
+                          }`}
+                        >
+                          {level}
                         </button>
                       ))}
                     </div>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Seniority Picker */}
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2">
-                  Target Seniority Level
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {SENIORITY_OPTIONS.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setSeniority(level)}
-                      className={`text-center text-xs py-2.5 rounded-xl border transition-all ${
-                        seniority === level
-                          ? "border-[#4285F4] bg-[#4285F4]/20 text-white font-bold"
-                          : "border-white/5 bg-white/5 text-white/70 hover:border-white/20"
-                      }`}
-                    >
-                      {level}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                </>
+              )}
 
               {/* Optional Context */}
               <div>

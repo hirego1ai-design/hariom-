@@ -246,44 +246,7 @@ export default function CandidateCreditsPage() {
           </section>
         )}
 
-        {/* 60/40 Ecosystem Transparency Banner */}
         <section className="mt-10">
-          <div className="mb-6 rounded-3xl border border-white/10 bg-gradient-to-br from-[#121216] via-[#16161C] to-black p-6 shadow-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-              <div>
-                <h3 className="font-bold text-white text-base">Ecosystem Credit Utilization (60/40 Model)</h3>
-                <p className="text-xs text-white/50 mt-1">
-                  Transparent breakdown of how each practice session powers AI infrastructure and evaluation.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-mono bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
-                <span className="text-emerald-400 font-bold">1 Credit = ₹1.00</span>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4 mt-5">
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400">40% AI Ecosystem & Voice</span>
-                  <span className="text-[11px] font-mono font-bold text-blue-300">Direct Infrastructure</span>
-                </div>
-                <p className="text-xs text-white/70 mt-2 leading-relaxed">
-                  Powers ElevenLabs studio-grade human voice synthesis, Groq ultra-low-latency reasoning, Whisper real-time audio transcription, and secure inference.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">60% Evaluation & Verification</span>
-                  <span className="text-[11px] font-mono font-bold text-emerald-300">Platform Value</span>
-                </div>
-                <p className="text-xs text-white/70 mt-2 leading-relaxed">
-                  Funds comprehensive candidate rubric scoring, adaptive difficulty calibration, benchmark reporting, and verified skill badges for employers.
-                </p>
-              </div>
-            </div>
-          </div>
-
           <h2 className="text-lg font-bold">Credit history</h2>
           <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
             {ledger.length === 0 ? (
@@ -294,11 +257,6 @@ export default function CandidateCreditsPage() {
                   <div>
                     <p className="text-sm font-semibold flex items-center gap-2">
                       <span>{entry.reference || entry.type}</span>
-                      {entry.amount < 0 && (
-                        <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
-                          40% AI Voice · 60% Report
-                        </span>
-                      )}
                     </p>
                     <p className="text-xs text-text-muted">{new Date(entry.createdAt).toLocaleString()}</p>
                   </div>

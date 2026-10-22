@@ -81,18 +81,29 @@ export async function POST(request: NextRequest) {
     const roleTarget = session.roleTarget || "Candidate";
     const seniority = session.declaredSeniority || "Mid-Level";
 
-    const systemPrompt = `You are ${personaName}, an experienced Executive & Technical Interviewer conducting a live spoken first-round interview call with a candidate for "${roleTarget}" (${seniority}).
+    const systemPrompt = `You are Sara, a Senior Executive Technical Interviewer with 10+ years of hiring experience at top technology companies (Google, Amazon, Microsoft, and high-growth scale-ups).
+
+You are conducting a live spoken first-round technical and behavioural interview for "${roleTarget}" at the ${seniority} level.
+
+YOUR CHARACTER & METHODOLOGY:
+- Sharp, warm, perceptive, and conversational — like an elite interviewer conducting a real phone screening.
+- You evaluate real-world engineering and domain substance, not buzzwords or rehearsed textbook definitions.
+- You actively drive the mock interview: acknowledge what the candidate just said in a few words, then immediately ask a focused, high-yield follow-up or next interview question.
+- Across turns, probe key competencies: architecture & system trade-offs, debugging edge cases, scale & performance, error handling, and team collaboration.
+- If their answer was strong: validate briefly, then raise the stakes ("How would that hold up if traffic spiked 10x?", "What was the single biggest failure mode you hit?").
+- If their answer was vague or struggling: give a gentle nudge or guide them to a concrete example from their recent work.
+- If the candidate asked a question or interrupted: address it naturally in 1 sentence, then smoothly guide back to the topic.
 
 CRITICAL LIVE VOICE RULES:
-1. You are speaking out loud on a real-time voice call.
-2. Respond in 2 spoken sentences maximum. Be concise, sharp, and natural.
-3. React directly to what the candidate just answered (give authentic feedback, validate a good point, or follow up with a deeper practical question).
-4. If the candidate asked a question or interrupted you, address it immediately.
-5. NEVER use markdown, bullet points, asterisks, emojis, quotes, or emotion tags like *nods*. Output ONLY plain spoken words.`;
+1. You are speaking out loud on a real-time voice call. Not typing.
+2. Maximum 2 spoken sentences (under 35 words total). Crisp, punchy, natural spoken English.
+3. Sentence 1: Acknowledge or react to their previous point authentically (never repeat "Great point" or "Good question").
+4. Sentence 2: Ask the next clear, role-specific interview question.
+5. NEVER use markdown, bullet points, asterisks, emojis, quotes, or action tags like *nods*. Output ONLY plain spoken words.`;
 
     let cleanedReply = "";
 
-    // 1. FAST PATH: Groq (responds in ~500ms)
+    // 1. FAST PATH A: Groq (ultra-low latency ~500ms - 1.2s)
     const groqKey = process.env.GROQ_API_KEY?.trim();
     if (groqKey) {
       try {
@@ -105,6 +116,7 @@ CRITICAL LIVE VOICE RULES:
           { role: "user", content: body.candidateSpeech },
         ];
 
+        // Try qwen/qwen3.8-27b or openai/gpt-oss-20b on Groq
         const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -114,10 +126,10 @@ CRITICAL LIVE VOICE RULES:
           body: JSON.stringify({
             model: "qwen/qwen3.8-27b",
             messages: groqMessages,
-            max_tokens: 100,
+            max_tokens: 150,
             temperature: 0.7,
           }),
-          signal: AbortSignal.timeout(4_000),
+          signal: AbortSignal.timeout(3_500),
         });
 
         if (groqResponse.ok) {
@@ -128,11 +140,51 @@ CRITICAL LIVE VOICE RULES:
           }
         }
       } catch (groqErr) {
-        console.warn("[LiveTurn] Groq fast-path skipped, using router fallback:", groqErr);
+        console.warn("[LiveTurn] Groq fast-path skipped, using OpenRouter fast-fallback:", groqErr);
       }
     }
 
-    // 2. FALLBACK PATH: ModelRouter
+    // 2. FAST PATH B: OpenRouter fast-fallback (~1.2s)
+    if (!cleanedReply) {
+      const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+      if (openRouterKey) {
+        try {
+          const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${openRouterKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+              messages: [
+                { role: "system", content: systemPrompt },
+                ...body.history.slice(-4).map((h) => ({
+                  role: h.role,
+                  content: h.content,
+                })),
+                { role: "user", content: body.candidateSpeech },
+              ],
+              max_tokens: 150,
+              temperature: 0.7,
+            }),
+            signal: AbortSignal.timeout(4_000),
+          });
+
+          if (orResponse.ok) {
+            const orJson = await orResponse.json();
+            const orContent = orJson.choices?.[0]?.message?.content?.trim();
+            if (orContent) {
+              cleanedReply = cleanSpokenWords(orContent);
+            }
+          }
+        } catch (orErr) {
+          console.warn("[LiveTurn] OpenRouter fast-fallback skipped:", orErr);
+        }
+      }
+    }
+
+    // 3. FALLBACK PATH: ModelRouter
     if (!cleanedReply) {
       const promptMessages = [
         systemPrompt,
@@ -166,7 +218,7 @@ CRITICAL LIVE VOICE RULES:
     }
 
     if (!cleanedReply) {
-      cleanedReply = "That makes sense. Can you walk me through a specific challenge you faced while implementing that?";
+      cleanedReply = `That is a solid point. In your work as a ${roleTarget}, walk me through the most critical engineering trade-off you had to make.`;
     }
 
     // Record turn in database

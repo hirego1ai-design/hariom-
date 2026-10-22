@@ -32,8 +32,9 @@ export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
   if (normalized.includes("daniel")) {
     return "onwK4e9ZLuTAKqWW03F9"; // Daniel
   }
-  if (voiceKey.length > 15 && !voiceKey.includes(" ")) {
-    return voiceKey;
+  // ElevenLabs voice IDs are strictly alphanumeric (18-24 chars, never hyphens or underscores like persona keys)
+  if (/^[A-Za-z0-9]{18,24}$/.test(voiceKey.trim())) {
+    return voiceKey.trim();
   }
   return "EXAVITQu4vr4xnSDxMaL"; // Sarah
 }
@@ -92,7 +93,7 @@ export async function synthesizeMockInterviewSpeech(params: {
     const started = Date.now();
     const logId = crypto.randomUUID();
     const voiceId = resolveElevenLabsVoiceId(voiceKey);
-    const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+    const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4`;
 
     try {
       const response = await fetch(elevenUrl, {
@@ -109,7 +110,7 @@ export async function synthesizeMockInterviewSpeech(params: {
             similarity_boost: 0.75,
           },
         }),
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(8_000),
       });
 
       if (response.ok) {

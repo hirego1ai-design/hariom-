@@ -166,7 +166,7 @@ export default function MockInterviewActivePage() {
         setSession(data.session);
         setCurrentTurn(active);
 
-        // Prepopulate conversation history
+        // Prepopulate conversation history from all completed turns
         const initialMessages: ChatMessage[] = [];
         if (data.session.openingMessage) {
           initialMessages.push({
@@ -176,13 +176,25 @@ export default function MockInterviewActivePage() {
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           });
         }
-        if (active && active.questionText && active.questionText !== data.session.openingMessage) {
-          initialMessages.push({
-            id: `q-${active.questionIndex}`,
-            sender: "assistant",
-            text: active.questionText,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          });
+        if (Array.isArray(data.session.turns)) {
+          for (const t of data.session.turns) {
+            if (t.questionText && t.questionText !== data.session.openingMessage) {
+              initialMessages.push({
+                id: `q-${t.questionIndex}`,
+                sender: "assistant",
+                text: t.questionText,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              });
+            }
+            if (t.candidateAnswerTranscript) {
+              initialMessages.push({
+                id: `a-${t.questionIndex}`,
+                sender: "user",
+                text: t.candidateAnswerTranscript,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              });
+            }
+          }
         }
         setConversation(initialMessages);
       } catch (err) {
@@ -237,7 +249,7 @@ export default function MockInterviewActivePage() {
           body: JSON.stringify({
             sessionId,
             text,
-            voiceKey: session?.persona?.key || "sarah",
+            voiceKey: "sarah",
           }),
         });
 
@@ -288,7 +300,7 @@ export default function MockInterviewActivePage() {
         }
       }
     },
-    [sessionId, session?.persona?.key, stopSaraSpeaking],
+    [sessionId, stopSaraSpeaking],
   );
 
   // Send candidate speech to LLM and trigger Sara's live response
