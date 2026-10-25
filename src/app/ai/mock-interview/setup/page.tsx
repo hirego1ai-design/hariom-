@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { searchRoles } from "@/lib/skill-master";
 import {
   Sparkles,
@@ -297,8 +298,9 @@ export default function MockInterviewSetupPage() {
   return (
     <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col font-sans">
       <header className="h-16 border-b border-white/10 px-4 md:px-8 flex items-center justify-between bg-[#141414]/90 backdrop-blur-md sticky top-0 z-40">
-        <Link href="/dashboard" className="flex items-center gap-1 font-bold text-xl tracking-tight">
-          <span>Hire<span className="text-[#C5221F]">Go</span></span>
+        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-xl tracking-tight">
+          <Image src="/marketing/hirego-logo-hd.png" alt="HireGo AI" width={110} height={28} className="h-7 w-auto" priority />
+          <span className="sr-only">Checking voice practice availability</span>
         </Link>
         <Link
           href="/credits"
