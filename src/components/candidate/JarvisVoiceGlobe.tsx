@@ -55,6 +55,7 @@ export default function JarvisVoiceGlobe() {
   const [actions, setActions] = useState<VoiceAction[]>([]);
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
+  const [userName, setUserName] = useState("");
 
   const activeRef = useRef(false);
   const sequenceRef = useRef(0);
@@ -66,6 +67,7 @@ export default function JarvisVoiceGlobe() {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const orbRef = useRef<HTMLDivElement | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const beginListeningRef = useRef<(generation: number) => Promise<void>>(async () => undefined);
@@ -101,6 +103,11 @@ export default function JarvisVoiceGlobe() {
     }
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     audioUrlRef.current = null;
+    if (activeUtteranceRef.current) {
+      activeUtteranceRef.current.onend = null;
+      activeUtteranceRef.current.onerror = null;
+      activeUtteranceRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -121,9 +128,11 @@ export default function JarvisVoiceGlobe() {
     const controller = new AbortController();
     fetch("/api/candidate/jarvis", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        const data = await response.json().catch(() => ({})) as JarvisResponse;
+        const data = await response.json().catch(() => ({})) as JarvisResponse & { userName?: string };
         if (!response.ok || !data.success) return false;
-        return Boolean(data.enabled && data.voiceEnabled);
+        if (data.userName) setUserName(data.userName);
+        const hasBrowserSpeech = typeof window !== "undefined" && "speechSynthesis" in window;
+        return Boolean(data.enabled && (data.voiceEnabled || hasBrowserSpeech));
       })
       .then((available) => {
         if (controller.signal.aborted) return;
@@ -205,22 +214,61 @@ export default function JarvisVoiceGlobe() {
         if (typeof window !== "undefined" && "speechSynthesis" in window && messageToSpeak && !muted) {
           try {
             window.speechSynthesis.cancel();
-            const utteranceObj = new SpeechSynthesisUtterance(messageToSpeak);
-            utteranceObj.rate = 1.05;
-            const voices = window.speechSynthesis.getVoices();
-            const preferred = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Neural") || v.name.includes("Ava") || v.name.includes("Jenny"))) || voices.find((v) => v.lang.startsWith("en"));
-            if (preferred) utteranceObj.voice = preferred;
-            utteranceObj.onend = () => {
-              if (activeRef.current && sequenceRef.current === generation) {
-                void beginListeningRef.current(generation);
+            setTimeout(() => {
+              if (!activeRef.current || sequenceRef.current !== generation) return;
+              try {
+                window.speechSynthesis.resume();
+                const utteranceObj = new SpeechSynthesisUtterance(messageToSpeak);
+                activeUtteranceRef.current = utteranceObj;
+                utteranceObj.lang = "en-US";
+                utteranceObj.rate = 1.0;
+                utteranceObj.pitch = 1.0;
+                utteranceObj.volume = 1.0;
+
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                  const preferred = voices.find(
+                    (v) =>
+                      v.lang.startsWith("en") &&
+                      (v.name.includes("Natural") ||
+                        v.name.includes("Google") ||
+                        v.name.includes("Neural") ||
+                        v.name.includes("Online") ||
+                        v.name.includes("Ava") ||
+                        v.name.includes("Jenny") ||
+                        v.name.includes("David") ||
+                        v.name.includes("Zira")),
+                  ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+                  if (preferred) utteranceObj.voice = preferred;
+                }
+
+                let completed = false;
+                const finish = () => {
+                  if (completed) return;
+                  completed = true;
+                  activeUtteranceRef.current = null;
+                  if (activeRef.current && sequenceRef.current === generation) {
+                    void beginListeningRef.current(generation);
+                  }
+                };
+
+                utteranceObj.onend = finish;
+                utteranceObj.onerror = (e) => {
+                  if (e.error !== "canceled" && e.error !== "interrupted") {
+                    console.warn("Jarvis TTS voice error:", e.error);
+                  }
+                  finish();
+                };
+
+                window.speechSynthesis.speak(utteranceObj);
+                window.speechSynthesis.resume();
+              } catch (err) {
+                console.warn("Jarvis Web Speech failed:", err);
+                if (activeRef.current && sequenceRef.current === generation) {
+                  void beginListeningRef.current(generation);
+                }
               }
-            };
-            utteranceObj.onerror = () => {
-              if (activeRef.current && sequenceRef.current === generation) {
-                void beginListeningRef.current(generation);
-              }
-            };
-            window.speechSynthesis.speak(utteranceObj);
+            }, 60);
             return;
           } catch {
             // fallback
@@ -296,6 +344,7 @@ export default function JarvisVoiceGlobe() {
   const beginListening = useCallback(async (generation: number) => {
     if (!activeRef.current || sequenceRef.current !== generation) return;
     setStage("listening");
+
     try {
       let stream = streamRef.current;
       if (!stream || stream.getAudioTracks().every((track) => track.readyState !== "live")) {
@@ -365,8 +414,8 @@ export default function JarvisVoiceGlobe() {
           sawVoice = true;
           lastSpeech = now;
         }
-        // VAD silence trigger: snappy 650ms for live conversational turns (legacy now - lastSpeech > 1100)
-        if ((sawVoice && now - lastSpeech > 650 && now - started > 450) ||
+        // VAD silence trigger: snappy 500ms conversational turn (with upper bound now - lastSpeech > 1100)
+        if ((sawVoice && (now - lastSpeech > 500 || now - lastSpeech > 1100) && now - started > 350) ||
             now - started >= 25_000) {
           recorder.stop();
         }
@@ -396,16 +445,80 @@ export default function JarvisVoiceGlobe() {
     } catch {}
     // This method runs from a real user click; mic permission is never requested on mount.
     stopSession();
-    const generation = sequenceRef.current;
+    const generation = sequenceRef.current + 1;
+    sequenceRef.current = generation;
     activeRef.current = true;
     setSessionActive(true);
     setError("");
     setHeard("");
-    setAnswer("");
     setActions([]);
-    setStage("listening");
-    void beginListeningRef.current(generation);
-  }, [ready, stopSession]);
+
+    // Instant personalized greeting (< 1s speech latency)
+    const firstName = userName ? userName.trim().split(/\s+/)[0] : "";
+    const greeting = firstName
+      ? `Hi ${firstName}! How can I help you today?`
+      : "Hi! How can I help you today?";
+
+    setAnswer(greeting);
+    setStage("speaking");
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+          if (!activeRef.current || sequenceRef.current !== generation) return;
+          try {
+            window.speechSynthesis.resume();
+            const utteranceObj = new SpeechSynthesisUtterance(greeting);
+            activeUtteranceRef.current = utteranceObj;
+            utteranceObj.lang = "en-US";
+            utteranceObj.rate = 1.0;
+            utteranceObj.pitch = 1.0;
+            utteranceObj.volume = 1.0;
+
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+              const preferred = voices.find(
+                (v) =>
+                  v.lang.startsWith("en") &&
+                  (v.name.includes("Natural") ||
+                    v.name.includes("Google") ||
+                    v.name.includes("Neural") ||
+                    v.name.includes("Online") ||
+                    v.name.includes("Ava") ||
+                    v.name.includes("Jenny") ||
+                    v.name.includes("David") ||
+                    v.name.includes("Zira")),
+              ) || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+              if (preferred) utteranceObj.voice = preferred;
+            }
+
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              activeUtteranceRef.current = null;
+              if (activeRef.current && sequenceRef.current === generation) {
+                void beginListeningRef.current(generation);
+              }
+            };
+            utteranceObj.onend = finish;
+            utteranceObj.onerror = finish;
+            window.speechSynthesis.speak(utteranceObj);
+            window.speechSynthesis.resume();
+          } catch {
+            if (activeRef.current && sequenceRef.current === generation) {
+              void beginListeningRef.current(generation);
+            }
+          }
+        }, 60);
+      } catch {
+        void beginListeningRef.current(generation);
+      }
+    } else {
+      void beginListeningRef.current(generation);
+    }
+  }, [ready, stopSession, userName]);
 
   const interrupt = useCallback(() => {
     if (!activeRef.current) return;

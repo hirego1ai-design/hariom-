@@ -33,20 +33,6 @@ export async function POST(request: NextRequest) {
       throw new ApiError("Candidate Jarvis voice is not enabled.", 503);
     }
 
-    const form = await request.formData();
-    const audio = form.get("audio");
-    if (!(audio instanceof File)) {
-      throw new ApiError("Voice audio stream chunk is required.", 400);
-    }
-
-    const mediaType = (audio.type || "").split(";")[0].trim().toLowerCase();
-    if (!ALLOWED_AUDIO_TYPES.has(mediaType)) {
-      throw new ApiError("Unsupported voice recording format.", 415);
-    }
-    if (audio.size < 128 || audio.size > config.maxVoiceAudioBytes) {
-      throw new ApiError("Voice recording size is outside the allowed range.", 413);
-    }
-
     // 1. Instant User Preferences Lookup
     const preference = await prisma.userAiPreference.findUnique({
       where: { userId: auth.id },
@@ -57,23 +43,65 @@ export async function POST(request: NextRequest) {
         ? preference.preferredLanguage || config.defaultLanguage
         : preference?.preferredLanguage || null;
 
-    // 2. Transcribe with Self-Hosted Engine (Fast STT)
-    const sttResult = await transcribeHireGoVoice({
-      audio,
-      expectedLanguage,
-      timeoutMs: 12_000,
-    });
+    const form = await request.formData();
+    const rawTranscript = form.get("transcript");
+    let utterance = typeof rawTranscript === "string" ? rawTranscript.trim() : "";
 
-    const utterance = sttResult.transcript.trim();
     if (!utterance) {
-      throw new ApiError("No audible speech detected.", 422);
+      const audio = form.get("audio");
+      if (!(audio instanceof File)) {
+        throw new ApiError("Voice audio stream chunk or transcript is required.", 400);
+      }
+
+      const mediaType = (audio.type || "").split(";")[0].trim().toLowerCase();
+      if (!ALLOWED_AUDIO_TYPES.has(mediaType)) {
+        throw new ApiError("Unsupported voice recording format.", 415);
+      }
+      if (audio.size < 128 || audio.size > config.maxVoiceAudioBytes) {
+        throw new ApiError("Voice recording size is outside the allowed range.", 413);
+      }
+
+      // 2. Transcribe with Self-Hosted Engine or Cloud Whisper fallback
+      try {
+        const sttResult = await transcribeHireGoVoice({
+          audio,
+          expectedLanguage,
+          timeoutMs: 12_000,
+        });
+        utterance = sttResult.transcript.trim();
+      } catch (err) {
+        throw new ApiError(
+          err instanceof Error ? err.message : "I couldn't hear that clearly. Please try speaking again.",
+          422,
+        );
+      }
     }
 
-    // 3. AI Reply Generation (Hybrid Classifier / Fast Path)
-    const reply = await executeCandidateJarvis({
-      userId: auth.id,
-      message: utterance,
-    });
+    if (!utterance) {
+      throw new ApiError("No audible speech detected. Please speak again.", 422);
+    }
+
+    // 3. AI Reply Generation (Protected against unconfigured routing/keys)
+    let reply;
+    try {
+      reply = await executeCandidateJarvis({
+        userId: auth.id,
+        message: utterance,
+      });
+    } catch (cause) {
+      const diagnostic = cause instanceof Error ? cause.message : "";
+      if (
+        diagnostic.includes("All configured AI endpoints failed") ||
+        diagnostic.includes("No enabled, configured model") ||
+        diagnostic.includes("No AI routing policy is configured")
+      ) {
+        throw new ApiError(
+          "Jarvis couldn't connect to its AI service. Please verify your configured LLM API keys in Admin or try again shortly.",
+          503,
+        );
+      }
+      throw cause;
+    }
 
     const navigation = pickSafeVoiceNavigation(utterance, reply.actions || []);
 

@@ -41,37 +41,43 @@ export async function getPublicJobsForCity(
   category?: SeoJobCategory,
   limit = 60,
 ) {
-  const cityFilter: Prisma.JobListingWhereInput = {
-    OR: city.dbTerms.map((term) => ({
-      location: { contains: term, mode: "insensitive" as const },
-    })),
-  };
-  const categoryFilters = category ? categoryPrismaOr(category) : [];
+  try {
+    const cityFilter: Prisma.JobListingWhereInput = {
+      OR: city.dbTerms.map((term) => ({
+        location: { contains: term, mode: "insensitive" as const },
+      })),
+    };
+    const categoryFilters = category ? categoryPrismaOr(category) : [];
 
-  return prisma.jobListing.findMany({
-    where: {
-      AND: [
-        activePublicJobWhere(),
-        cityFilter,
-        ...(category ? [{ OR: categoryFilters }] : []),
-      ],
-    },
-    select: {
-      id: true,
-      title: true,
-      location: true,
-      type: true,
-      workMode: true,
-      experienceLevel: true,
-      salaryRange: true,
-      publishedAt: true,
-      company: {
-        select: {
-          name: true,
+    return await prisma.jobListing.findMany({
+      where: {
+        AND: [
+          activePublicJobWhere(),
+          cityFilter,
+          ...(category ? [{ OR: categoryFilters }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        location: true,
+        type: true,
+        workMode: true,
+        experienceLevel: true,
+        salaryRange: true,
+        publishedAt: true,
+        company: {
+          select: {
+            name: true,
+          },
         },
       },
-    },
-    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    take: Math.max(1, Math.min(limit, 100)),
-  });
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: Math.max(1, Math.min(limit, 100)),
+    });
+  } catch (err) {
+    console.warn(`[getPublicJobsForCity] Database unreachable during static generation for ${city.slug}:`, err instanceof Error ? err.message : err);
+    return [];
+  }
 }
+

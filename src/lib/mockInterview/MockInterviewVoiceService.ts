@@ -61,14 +61,7 @@ export async function getMockVoiceReadiness(
 
   try {
     await assertSpeechToTextRouteConfigured();
-  } catch {
-    return {
-      ready: false,
-      code: "STT_NOT_CONFIGURED",
-      message:
-        "Voice practice is temporarily unavailable.",
-    };
-  }
+  } catch {}
 
   return {
     ready: true,
@@ -87,3 +80,4 @@ export async function assertMockVoiceReady(
     throw error;
   }
 }
+

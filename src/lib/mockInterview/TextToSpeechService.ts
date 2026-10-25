@@ -17,6 +17,28 @@ export class TextToSpeechUnavailableError extends Error {
   }
 }
 
+export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
+  if (!voiceKey) return "EXAVITQu4vr4xnSDxMaL"; // Sarah (warm executive interviewer)
+  const normalized = voiceKey.toLowerCase().trim();
+  if (normalized.includes("adam") || normalized === "echo" || normalized === "onyx") {
+    return "pNInz6obpgDQGcFmaJgB"; // Adam (deep male interviewer)
+  }
+  if (normalized.includes("george")) {
+    return "JBFqnCBsd6RMkjVDRZzb"; // George
+  }
+  if (normalized.includes("alice")) {
+    return "Xb7hH8MSUJpSbSDYk0k2"; // Alice
+  }
+  if (normalized.includes("daniel")) {
+    return "onwK4e9ZLuTAKqWW03F9"; // Daniel
+  }
+  // ElevenLabs voice IDs are strictly alphanumeric (18-24 chars, never hyphens or underscores like persona keys)
+  if (/^[A-Za-z0-9]{18,24}$/.test(voiceKey.trim())) {
+    return voiceKey.trim();
+  }
+  return "EXAVITQu4vr4xnSDxMaL"; // Sarah
+}
+
 function baseUrlForProvider(provider: string, runtimeBaseUrl?: string) {
   if (provider === "openai") {
     return runtimeBaseUrl || "https://api.openai.com/v1";
@@ -30,6 +52,10 @@ function baseUrlForProvider(provider: string, runtimeBaseUrl?: string) {
 }
 
 export async function assertTextToSpeechRouteConfigured(): Promise<void> {
+  if (process.env.ELEVENLABS_API_KEY?.trim()) {
+    return;
+  }
+
   const route = await ModelRouter.route({
     taskType: "mock-interview-tts",
     requiredCapabilities: ["TTS"],
@@ -58,12 +84,68 @@ export async function synthesizeMockInterviewSpeech(params: {
   model: string;
 }> {
   const text = params.text.trim().slice(0, MAX_TTS_INPUT_CHARS);
-  const voiceKey = params.voiceKey.trim().slice(0, 160);
+  const voiceKey = params.voiceKey?.trim()?.slice(0, 160) || "sarah";
   if (!text) throw new TextToSpeechUnavailableError("TTS input is empty.");
-  if (!voiceKey) {
-    throw new TextToSpeechUnavailableError(
-      "The selected interviewer does not have a configured voice.",
-    );
+
+  // Check ElevenLabs first (Primary High-Fidelity Voice Provider)
+  const elevenKey = process.env.ELEVENLABS_API_KEY?.trim();
+  if (elevenKey) {
+    const started = Date.now();
+    const logId = crypto.randomUUID();
+    const voiceId = resolveElevenLabsVoiceId(voiceKey);
+    const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4`;
+
+    try {
+      const response = await fetch(elevenUrl, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_turbo_v2_5",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+
+      if (response.ok) {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length > 0 && bytes.length <= MAX_TTS_RESPONSE_BYTES) {
+          void prisma.aiExecutionLog.create({
+            data: {
+              id: logId,
+              task: "mock-interview-tts",
+              provider: "elevenlabs",
+              model: "eleven_turbo_v2_5",
+              promptTokens: null,
+              completionTokens: null,
+              totalTokens: null,
+              latencyMs: Date.now() - started,
+              costEstUsd: null,
+              status: "SUCCESS",
+              timestamp: new Date(),
+            },
+          }).catch(() => {});
+
+          return {
+            audio: bytes,
+            contentType: "audio/mpeg",
+            provider: "elevenlabs",
+            model: "eleven_turbo_v2_5",
+          };
+        }
+      } else {
+        const errorText = await response.text().catch(() => "");
+        console.warn(`[ElevenLabs] TTS returned HTTP ${response.status}: ${errorText.slice(0, 200)}`);
+      }
+    } catch (elevenError) {
+      console.warn("[ElevenLabs] Error during synthesis, falling back to router:", elevenError);
+    }
   }
 
   const routed = await ModelRouter.executeWithFallback({

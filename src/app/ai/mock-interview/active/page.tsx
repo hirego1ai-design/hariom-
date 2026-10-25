@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,13 +10,16 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  BookOpen,
-  Gauge,
   ShieldCheck,
-  Mic2,
-  Square,
+  Mic,
+  MicOff,
   Volume2,
-  AudioLines,
+  PhoneOff,
+  Radio,
+  Hand,
+  VolumeX,
+  Play,
+  RotateCcw,
 } from "lucide-react";
 
 type Persona = {
@@ -55,104 +58,20 @@ type InterviewSession = {
   turns: Turn[];
 };
 
-type AdaptiveEvaluation = {
-  score: number;
-  feedback: string;
-  evidenceConfidence: number;
-  demonstratedLevel:
-    | "JUNIOR"
-    | "MID"
-    | "SENIOR"
-    | "STAFF_LEAD"
-    | "INSUFFICIENT_EVIDENCE";
-  difficultyAdjustment: "DOWN" | "SAME" | "UP";
-  nextDifficulty: number;
-  supportMode: "NONE" | "GUIDED" | "HINT";
-};
-
-type NextQuestion = {
+type ChatMessage = {
+  id: string;
+  sender: "assistant" | "user";
   text: string;
-  questionIndex: number;
-  difficulty: number | null;
-  competency: string | null;
-  skillTags: string[];
+  timestamp: string;
 };
 
-type TurnResponse = {
-  success?: boolean;
-  error?: string;
-  voiceMode?: boolean;
-  turnScore?: number;
-  feedback?: string;
-  evidenceConfidence?: number;
-  evaluation?: AdaptiveEvaluation;
-  nextQuestion?: NextQuestion;
-  isComplete?: boolean;
-};
-
-type VoiceTranscriptionResponse = {
-  success?: boolean;
-  error?: string;
-  requiresRepeat?: boolean;
-  requiresConfirmation?: boolean;
-  draftId?: string;
-  receiptId?: string;
-  transcript?: string;
-  heardText?: string;
-  confidence?: number | null;
-  detectedLanguage?: string;
-  durationSeconds?: number;
-  message?: string;
-};
-
-type VoiceConfirmationResponse = {
-  success?: boolean;
-  error?: string;
-  receiptId?: string;
-  transcript?: string;
-  confidence?: number | null;
-  detectedLanguage?: string;
-};
-
-type VoiceUiState =
-  | "READY"
+type LiveVoiceStatus =
+  | "IDLE"
+  | "CONNECTING"
   | "SPEAKING"
-  | "LISTENING_READY"
   | "LISTENING"
-  | "UNDERSTANDING"
-  | "CONFIRM_TRANSCRIPT"
-  | "REPEAT"
-  | "FOLLOW_UP_READY"
-  | "COMPLETE";
-
-const difficultyLabel = (
-  difficulty: number | null | undefined,
-) => {
-  if (!difficulty) return "Calibrating";
-  return (
-    [
-      "",
-      "Foundation",
-      "Core",
-      "Advanced",
-      "Senior depth",
-      "Stretch",
-    ][difficulty] ?? "Adaptive"
-  );
-};
-
-function preferredRecorderMimeType() {
-  if (typeof MediaRecorder === "undefined") return "";
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  return (
-    candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ""
-  );
-}
+  | "THINKING"
+  | "MUTED";
 
 export default function MockInterviewActivePage() {
   const router = useRouter();
@@ -161,47 +80,76 @@ export default function MockInterviewActivePage() {
 
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [currentTurn, setCurrentTurn] = useState<Turn | null>(null);
-  const [answerText, setAnswerText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [turnEvaluation, setTurnEvaluation] =
-    useState<AdaptiveEvaluation | null>(null);
-  const [pendingNextQuestion, setPendingNextQuestion] =
-    useState<NextQuestion | null>(null);
-  const [isFinalQuestion, setIsFinalQuestion] = useState(false);
-  const [showOpening, setShowOpening] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [voiceState, setVoiceState] = useState<VoiceUiState>("READY");
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [voiceConfidence, setVoiceConfidence] = useState<number | null>(
-    null,
-  );
-  const [voiceMessage, setVoiceMessage] = useState("");
-  const [voiceDraftId, setVoiceDraftId] = useState<string | null>(null);
-  const [openingSpoken, setOpeningSpoken] = useState(false);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const recordingStartedAtRef = useRef<number>(0);
+  // Live Duplex Voice States
+  const [liveStatus, setLiveStatus] = useState<LiveVoiceStatus>("IDLE");
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
+  const [interimUserText, setInterimUserText] = useState("");
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+
+  // Text Mode States (for text assessment fallback)
+  const [answerText, setAnswerText] = useState("");
+  const [isSubmittingText, setIsSubmittingText] = useState(false);
+  const [turnEvaluation, setTurnEvaluation] = useState<any>(null);
+  const [showOpening, setShowOpening] = useState(false);
+
+  // References for live full-duplex conversation
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const speechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPlayingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const accumulatedSpeechRef = useRef("");
+  const liveStatusRef = useRef<LiveVoiceStatus>("IDLE");
+  const isMicMutedRef = useRef(false);
+  const conversationRef = useRef<ChatMessage[]>([]);
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (
-        recorderRef.current &&
-        recorderRef.current.state !== "inactive"
-      ) {
-        recorderRef.current.stop();
-      }
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      audioRef.current?.pause();
-    };
+    liveStatusRef.current = liveStatus;
+  }, [liveStatus]);
+
+  useEffect(() => {
+    isMicMutedRef.current = isMicMuted;
+  }, [isMicMuted]);
+
+  useEffect(() => {
+    conversationRef.current = conversation;
+  }, [conversation]);
+
+  // Stop Sara's Audio immediately (Barge-In)
+  const stopSaraSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    isPlayingRef.current = false;
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+      stopSaraSpeaking();
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+    };
+  }, [stopSaraSpeaking]);
+
+  // Fetch Session
   useEffect(() => {
     if (!sessionId) {
       router.push("/ai/mock-interview/setup");
@@ -220,63 +168,59 @@ export default function MockInterviewActivePage() {
             signal: controller.signal,
           },
         );
-        const data = (await res.json().catch(() => null)) as
-          | {
-              success?: boolean;
-              error?: string;
-              session?: InterviewSession;
-            }
-          | null;
+        const data = await res.json().catch(() => null);
 
         if (!res.ok || !data?.success || !data.session) {
-          throw new Error(
-            data?.error || "Could not load interview session.",
-          );
+          throw new Error(data?.error || "Could not load interview session.");
         }
 
         if (data.session.status === "COMPLETED") {
-          router.push(
-            `/ai/mock-interview/summary?sessionId=${sessionId}`,
-          );
+          router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
           return;
-        }
-        if (data.session.status === "ABANDONED") {
-          throw new Error("This practice session has been abandoned.");
         }
 
         const active =
           data.session.turns.find(
-            (turn) =>
-              turn.questionIndex ===
-              data.session?.currentQuestionIndex,
-          ) ?? null;
-
-        if (!active) {
-          throw new Error(
-            "The current interview question is unavailable.",
-          );
-        }
+            (t: Turn) => t.questionIndex === data.session.currentQuestionIndex,
+          ) || data.session.turns[0];
 
         setSession(data.session);
         setCurrentTurn(active);
-        if (data.session.mode === "VOICE") {
-          setVoiceState("READY");
-          setShowOpening(false);
-        } else {
-          setShowOpening(
-            Boolean(
-              data.session.openingMessage &&
-                active.questionIndex === 0,
-            ),
-          );
+
+        // Prepopulate conversation history from all completed turns
+        const initialMessages: ChatMessage[] = [];
+        if (data.session.openingMessage) {
+          initialMessages.push({
+            id: "opening",
+            sender: "assistant",
+            text: data.session.openingMessage,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          });
         }
-      } catch (error) {
+        if (Array.isArray(data.session.turns)) {
+          for (const t of data.session.turns) {
+            if (t.questionText && t.questionText !== data.session.openingMessage) {
+              initialMessages.push({
+                id: `q-${t.questionIndex}`,
+                sender: "assistant",
+                text: t.questionText,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              });
+            }
+            if (t.candidateAnswerTranscript) {
+              initialMessages.push({
+                id: `a-${t.questionIndex}`,
+                sender: "user",
+                text: t.candidateAnswerTranscript,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              });
+            }
+          }
+        }
+        setConversation(initialMessages);
+      } catch (err) {
         if (controller.signal.aborted) return;
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Failed to load session.",
-        );
+        setErrorMessage(err instanceof Error ? err.message : "Failed to load session.");
       } finally {
         if (!controller.signal.aborted) setIsLoadingSession(false);
       }
@@ -286,1050 +230,646 @@ export default function MockInterviewActivePage() {
     return () => controller.abort();
   }, [sessionId, router]);
 
+  // Overall Session Timer
   useEffect(() => {
-    setElapsedSeconds(0);
-    const isVoice = session?.mode === "VOICE";
-    const timerBlocked = isVoice
-      ? voiceState !== "LISTENING" &&
-        voiceState !== "LISTENING_READY"
-      : showOpening || Boolean(turnEvaluation);
-
-    if (!currentTurn || timerBlocked) return;
-
+    if (!session || liveStatus === "IDLE") return;
     timerRef.current = setInterval(() => {
-      setElapsedSeconds((previous) => previous + 1);
-    }, 1_000);
-
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
     };
-  }, [
-    currentTurn?.questionIndex,
-    showOpening,
-    turnEvaluation,
-    session?.mode,
-    voiceState,
-  ]);
+  }, [session, liveStatus]);
 
-  async function finishInterview() {
-    if (!sessionId) return;
-    setIsSubmitting(true);
-    setErrorMessage(null);
+  // Play Sara's speech (ElevenLabs Sarah voice, with fallback)
+  const playSaraSpeech = useCallback(
+    async (text: string) => {
+      if (!text || !sessionId) return;
+      stopSaraSpeaking();
+      isPlayingRef.current = true;
+      setLiveStatus("SPEAKING");
+
+      try {
+        const response = await fetch("/api/assessment/mock-interview/voice/live-speech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sessionId,
+            text,
+            voiceKey: "sarah",
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Speech synthesis failed");
+        }
+
+        const blob = await response.blob();
+        if (!isMountedRef.current || !isPlayingRef.current) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        const audio = new Audio(objectUrl);
+        audioRef.current = audio;
+
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("Audio playback failed"));
+          };
+          void audio.play().catch(reject);
+        });
+      } catch (err) {
+        // Fallback: If network/ElevenLabs fails, speak via Web Speech API
+        if (typeof window !== "undefined" && "speechSynthesis" in window && isPlayingRef.current) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "en-US";
+          utterance.rate = 1.05;
+          const voices = window.speechSynthesis.getVoices();
+          const natural = voices.find(
+            (v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("Google")),
+          );
+          if (natural) utterance.voice = natural;
+          await new Promise<void>((resolve) => {
+            utterance.onend = () => resolve();
+            utterance.onerror = () => resolve();
+            window.speechSynthesis.speak(utterance);
+          });
+        }
+      } finally {
+        if (isMountedRef.current && isPlayingRef.current) {
+          isPlayingRef.current = false;
+          setLiveStatus(isMicMutedRef.current ? "MUTED" : "LISTENING");
+        }
+      }
+    },
+    [sessionId, stopSaraSpeaking],
+  );
+
+  // Send candidate speech to LLM and trigger Sara's live response
+  const handleCandidateFinishedSpeaking = useCallback(
+    async (candidateSpeech: string) => {
+      const cleanSpeech = candidateSpeech.trim();
+      if (!cleanSpeech || !sessionId) {
+        setLiveStatus("LISTENING");
+        return;
+      }
+
+      setLiveStatus("THINKING");
+      setInterimUserText("");
+      accumulatedSpeechRef.current = "";
+
+      // Append candidate speech to chat
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        sender: "user",
+        text: cleanSpeech,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setConversation((prev) => [...prev, userMsg]);
+
+      try {
+        const historyPayload = conversationRef.current.slice(-6).map((m) => ({
+          role: m.sender,
+          content: m.text,
+        }));
+
+        const res = await fetch("/api/assessment/mock-interview/live-turn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sessionId,
+            candidateSpeech: cleanSpeech,
+            history: historyPayload,
+          }),
+        });
+
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success || !data.replyText) {
+          throw new Error(data?.error || "Could not process live conversation turn.");
+        }
+
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          sender: "assistant",
+          text: data.replyText,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setConversation((prev) => [...prev, assistantMsg]);
+
+        // Sara speaks the response out loud with ElevenLabs
+        await playSaraSpeech(data.replyText);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Error in live discussion.");
+        setLiveStatus("LISTENING");
+      }
+    },
+    [sessionId, playSaraSpeech],
+  );
+
+  // Setup Continuous Speech Recognition with Instant Barge-In
+  const startLiveRecognition = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecClass) {
+      setErrorMessage("Live speech recognition requires Google Chrome, Edge, or Safari.");
+      return;
+    }
+
     try {
-      const res = await fetch("/api/assessment/mock-interview/finish", {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    } catch {}
+
+    const recognition = new SpeechRecClass();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      if (isMicMutedRef.current) return;
+
+      let interim = "";
+      let final = "";
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript + " ";
+        } else {
+          interim += transcript;
+        }
+      }
+
+      const activeSound = (final + " " + interim).trim();
+
+      // BARGE-IN: If Sara is speaking and candidate starts talking, STOP SARA IMMEDIATELY!
+      if (activeSound.length > 2 && isPlayingRef.current) {
+        stopSaraSpeaking();
+        setLiveStatus("LISTENING");
+      }
+
+      if (final.trim()) {
+        accumulatedSpeechRef.current = (accumulatedSpeechRef.current + " " + final).trim();
+      }
+      setInterimUserText(interim || accumulatedSpeechRef.current);
+
+      // Debounce: detect when candidate pauses speaking (~550ms for snappy natural response)
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+      speechTimerRef.current = setTimeout(() => {
+        const fullCandidateSpeech = (accumulatedSpeechRef.current + " " + interim).trim();
+        if (fullCandidateSpeech.length >= 4) {
+          void handleCandidateFinishedSpeaking(fullCandidateSpeech);
+        }
+      }, 550);
+    };
+
+    recognition.onerror = (e: any) => {
+      if (e.error !== "no-speech") {
+        console.warn("[LiveInterview] Speech recognition notice:", e.error);
+      }
+    };
+
+    recognition.onend = () => {
+      // Keep listening continuously unless muted or idle
+      if (liveStatusRef.current !== "IDLE" && !isMicMutedRef.current) {
+        try {
+          recognition.start();
+        } catch {}
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (err) {
+      console.warn("Could not start continuous speech recognition:", err);
+    }
+  }, [handleCandidateFinishedSpeaking, stopSaraSpeaking]);
+
+  // Connect to Live Interview Room
+  const handleStartLiveCall = async () => {
+    setLiveStatus("CONNECTING");
+    setErrorMessage(null);
+
+    try {
+      // Request mic permission
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      startLiveRecognition();
+
+      // Start with Sara's opening / first question
+      const opening =
+        session?.openingMessage ||
+        currentTurn?.questionText ||
+        "Hello! I'm Sara, your interviewer today. Thank you for joining. To begin, could you briefly introduce yourself and share a key challenge you worked on recently?";
+
+      await playSaraSpeech(opening);
+    } catch (err) {
+      setErrorMessage(
+        "Microphone access is required for the live interview. Please allow microphone permissions in your browser.",
+      );
+      setLiveStatus("IDLE");
+    }
+  };
+
+  // Toggle Microphone
+  const toggleMute = () => {
+    const nextState = !isMicMuted;
+    setIsMicMuted(nextState);
+    if (nextState) {
+      setLiveStatus("MUTED");
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+    } else {
+      setLiveStatus("LISTENING");
+      try {
+        recognitionRef.current?.start();
+      } catch {}
+    }
+  };
+
+  // Manual Interrupt Button
+  const handleManualInterrupt = () => {
+    stopSaraSpeaking();
+    setLiveStatus("LISTENING");
+  };
+
+  // End Interview & Complete
+  const finishInterview = async () => {
+    if (!sessionId) return;
+    setIsFinishing(true);
+    stopSaraSpeaking();
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+
+    try {
+      await fetch("/api/assessment/mock-interview/finish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ sessionId }),
       });
-      const data = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
-        | null;
-      if (!res.ok || !data?.success) {
-        throw new Error(
-          data?.error || "Could not complete this practice session.",
-        );
-      }
-      router.push(
-        `/ai/mock-interview/summary?sessionId=${sessionId}`,
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not complete this practice session.",
-      );
-      setVoiceState("COMPLETE");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  const handleSubmitAnswer = async () => {
-    if (!sessionId || !currentTurn) return;
-    if (answerText.trim().length < 5) {
-      setErrorMessage(
-        "Please provide a little more detail before submitting.",
-      );
-      return;
-    }
-
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      const res = await fetch("/api/assessment/mock-interview/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId,
-          questionIndex: currentTurn.questionIndex,
-          answer: answerText.trim(),
-          durationMs: elapsedSeconds * 1_000,
-        }),
-      });
-
-      const data = (await res.json().catch(() => null)) as
-        | TurnResponse
-        | null;
-      if (!res.ok || !data?.success) {
-        throw new Error(
-          data?.error || "Evaluation failed. Please try again.",
-        );
-      }
-
-      if (
-        typeof data.turnScore !== "number" ||
-        typeof data.feedback !== "string" ||
-        !data.evaluation
-      ) {
-        throw new Error(
-          "The evaluation service returned an incomplete adaptive result.",
-        );
-      }
-
-      setTurnEvaluation(data.evaluation);
-      setPendingNextQuestion(data.nextQuestion ?? null);
-      setIsFinalQuestion(
-        Boolean(data.isComplete || !data.nextQuestion),
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not submit response. Please try again.",
-      );
-    } finally {
-      setIsSubmitting(false);
+      router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
+    } catch (err) {
+      setErrorMessage("Could not finalize report. Redirecting to summary...");
+      router.push(`/ai/mock-interview/summary?sessionId=${sessionId}`);
     }
   };
 
-  const handleProceedToNext = async () => {
-    if (!sessionId || !session) return;
-
-    if (isFinalQuestion) {
-      await finishInterview();
-      return;
-    }
-
-    if (!pendingNextQuestion) {
-      setErrorMessage(
-        "The next adaptive question is unavailable. Please reload.",
-      );
-      setTurnEvaluation(null);
-      return;
-    }
-
-    const nextTurn: Turn = {
-      id: `pending-${pendingNextQuestion.questionIndex}`,
-      questionIndex: pendingNextQuestion.questionIndex,
-      questionText: pendingNextQuestion.text,
-      difficulty: pendingNextQuestion.difficulty,
-      competency: pendingNextQuestion.competency,
-      skillTags: pendingNextQuestion.skillTags,
-      candidateAnswerTranscript: null,
-      score: null,
-      feedback: null,
-      evidenceConfidence: null,
-    };
-
-    setSession({
-      ...session,
-      currentQuestionIndex: nextTurn.questionIndex,
-      turns: [
-        ...session.turns.filter(
-          (turn) => turn.questionIndex !== nextTurn.questionIndex,
-        ),
-        nextTurn,
-      ],
-    });
-    setCurrentTurn(nextTurn);
-    setTurnEvaluation(null);
-    setPendingNextQuestion(null);
-    setAnswerText("");
-    setElapsedSeconds(0);
-  };
-
-  async function playSpeech(
-    kind: "OPENING" | "QUESTION",
-    questionIndex?: number,
-  ) {
-    if (!sessionId) return;
-    setVoiceState("SPEAKING");
-    setErrorMessage(null);
-
-    const response = await fetch(
-      "/api/assessment/mock-interview/voice/speech",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId,
-          kind,
-          ...(kind === "QUESTION"
-            ? { questionIndex: questionIndex ?? 0 }
-            : {}),
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      throw new Error(
-        data?.error || "Interviewer voice is temporarily unavailable.",
-      );
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const audio = new Audio(objectUrl);
-        audioRef.current = audio;
-        audio.onended = () => resolve();
-        audio.onerror = () =>
-          reject(new Error("Could not play interviewer audio."));
-        void audio.play().catch(reject);
-      });
-    } finally {
-      audioRef.current = null;
-      URL.revokeObjectURL(objectUrl);
-    }
-  }
-
-  async function hearCurrentQuestion() {
-    if (!session || !currentTurn) return;
-    try {
-      if (
-        currentTurn.questionIndex === 0 &&
-        session.openingMessage &&
-        !openingSpoken
-      ) {
-        await playSpeech("OPENING");
-        setOpeningSpoken(true);
-      }
-      await playSpeech("QUESTION", currentTurn.questionIndex);
-      setVoiceState("LISTENING_READY");
-      setVoiceMessage("Your turn. Record your answer when ready.");
-    } catch (error) {
-      setVoiceState("READY");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Interviewer voice is unavailable.",
-      );
-    }
-  }
-
-  async function submitVoiceReceipt(
-    receiptId: string,
-    transcript: string,
-    confidence: number | null,
-  ) {
-    if (!sessionId || !session || !currentTurn) return;
-    setVoiceState("UNDERSTANDING");
-    setVoiceTranscript(transcript);
-    setVoiceConfidence(confidence);
-    setVoiceMessage("Understanding your answer and preparing the next step...");
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/turn",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            sessionId,
-            questionIndex: currentTurn.questionIndex,
-            transcriptionReceiptId: receiptId,
-          }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | TurnResponse
-        | null;
-      if (!response.ok || !data?.success || data.voiceMode !== true) {
-        throw new Error(
-          data?.error ||
-            "The voice answer could not be processed safely.",
-        );
-      }
-
-      if (data.isComplete) {
-        setVoiceState("COMPLETE");
-        setVoiceMessage(
-          "Interview complete. Preparing your evidence-based practice report...",
-        );
-        await finishInterview();
-        return;
-      }
-
-      if (!data.nextQuestion) {
-        throw new Error("The next adaptive question is unavailable.");
-      }
-
-      const nextTurn: Turn = {
-        id: `pending-${data.nextQuestion.questionIndex}`,
-        questionIndex: data.nextQuestion.questionIndex,
-        questionText: data.nextQuestion.text,
-        difficulty: data.nextQuestion.difficulty,
-        competency: data.nextQuestion.competency,
-        skillTags: data.nextQuestion.skillTags,
-        candidateAnswerTranscript: null,
-        score: null,
-        feedback: null,
-        evidenceConfidence: null,
-      };
-
-      setSession({
-        ...session,
-        currentQuestionIndex: nextTurn.questionIndex,
-        turns: [
-          ...session.turns.filter(
-            (turn) =>
-              turn.questionIndex !== nextTurn.questionIndex,
-          ),
-          nextTurn,
-        ],
-      });
-      setCurrentTurn(nextTurn);
-      setElapsedSeconds(0);
-      setVoiceState("FOLLOW_UP_READY");
-      setVoiceMessage(
-        "I have understood your answer. The next question is ready.",
-      );
-    } catch (error) {
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "The voice answer could not be processed.",
-      );
-    }
-  }
-
-  async function transcribeVoiceBlob(blob: Blob) {
-    if (!sessionId || !currentTurn) return;
-    setVoiceState("UNDERSTANDING");
-    setVoiceMessage("Transcribing your answer...");
-    setErrorMessage(null);
-
-    const form = new FormData();
-    form.append(
-      "audio",
-      blob,
-      blob.type.includes("mp4")
-        ? "voice-answer.mp4"
-        : blob.type.includes("ogg")
-          ? "voice-answer.ogg"
-          : "voice-answer.webm",
-    );
-    form.append("sessionId", sessionId);
-    form.append("questionIndex", String(currentTurn.questionIndex));
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/voice/transcribe",
-        {
-          method: "POST",
-          credentials: "include",
-          body: form,
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | VoiceTranscriptionResponse
-        | null;
-
-      if (!response.ok || !data?.success) {
-        throw new Error(
-          data?.error || "Voice transcription failed.",
-        );
-      }
-
-      if (data.requiresRepeat) {
-        setVoiceTranscript(data.heardText || "");
-        setVoiceConfidence(
-          typeof data.confidence === "number"
-            ? data.confidence
-            : null,
-        );
-        setVoiceDraftId(null);
-        setVoiceState("REPEAT");
-        setVoiceMessage(
-          data.message ||
-            "I could not hear that confidently enough. Please answer again.",
-        );
-        return;
-      }
-
-      if (
-        data.requiresConfirmation &&
-        data.draftId &&
-        data.transcript
-      ) {
-        setVoiceDraftId(data.draftId);
-        setVoiceTranscript(data.transcript);
-        setVoiceConfidence(null);
-        setVoiceState("CONFIRM_TRANSCRIPT");
-        setVoiceMessage(
-          data.message ||
-            "Please confirm the transcript before HireGo evaluates it.",
-        );
-        return;
-      }
-
-      if (!data.receiptId || !data.transcript) {
-        throw new Error(
-          "Voice transcription returned an incomplete verified result.",
-        );
-      }
-
-      await submitVoiceReceipt(
-        data.receiptId,
-        data.transcript,
-        typeof data.confidence === "number"
-          ? data.confidence
-          : null,
-      );
-    } catch (error) {
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Voice transcription failed.",
-      );
-    }
-  }
-
-  async function confirmVoiceTranscript() {
-    if (
-      !sessionId ||
-      !currentTurn ||
-      !voiceDraftId ||
-      voiceTranscript.trim().length < 1
-    ) {
-      setErrorMessage("A transcript is required before confirmation.");
-      return;
-    }
-
-    setVoiceState("UNDERSTANDING");
-    setVoiceMessage("Confirming transcript...");
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch(
-        "/api/assessment/mock-interview/voice/confirm-transcript",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            sessionId,
-            questionIndex: currentTurn.questionIndex,
-            draftId: voiceDraftId,
-            transcript: voiceTranscript.trim(),
-          }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | VoiceConfirmationResponse
-        | null;
-
-      if (
-        !response.ok ||
-        !data?.success ||
-        !data.receiptId ||
-        !data.transcript
-      ) {
-        throw new Error(
-          data?.error || "Transcript confirmation failed.",
-        );
-      }
-
-      setVoiceDraftId(null);
-      await submitVoiceReceipt(
-        data.receiptId,
-        data.transcript,
-        typeof data.confidence === "number"
-          ? data.confidence
-          : null,
-      );
-    } catch (error) {
-      setVoiceState("CONFIRM_TRANSCRIPT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Transcript confirmation failed.",
-      );
-    }
-  }
-
-  async function startRecording() {
-    if (
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setErrorMessage(
-        "This browser does not support secure microphone recording for Voice Mode.",
-      );
-      return;
-    }
-
-    setErrorMessage(null);
-    setVoiceMessage("");
-    setVoiceTranscript("");
-    setVoiceConfidence(null);
-    setVoiceDraftId(null);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
-      streamRef.current = stream;
-
-      const mimeType = preferredRecorderMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-
-      chunksRef.current = [];
-      recorderRef.current = recorder;
-      recordingStartedAtRef.current = Date.now();
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-
-      recorder.onerror = () => {
-        setErrorMessage("Microphone recording failed.");
-        setVoiceState("REPEAT");
-      };
-
-      recorder.onstop = () => {
-        const recordedType =
-          recorder.mimeType || mimeType || "audio/webm";
-        const blob = new Blob(chunksRef.current, {
-          type: recordedType,
-        });
-        chunksRef.current = [];
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
-        void transcribeVoiceBlob(blob);
-      };
-
-      recorder.start(250);
-      setVoiceState("LISTENING");
-      setElapsedSeconds(0);
-      recordingStartedAtRef.current = Date.now();
-    } catch (error) {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-      setVoiceState("REPEAT");
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Microphone permission is required for Voice Mode.",
-      );
-    }
-  }
-
-  function stopRecording() {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state === "inactive") return;
-    const duration = Date.now() - recordingStartedAtRef.current;
-    if (duration < 500) {
-      setErrorMessage(
-        "Keep recording a little longer before submitting your answer.",
-      );
-      return;
-    }
-    recorder.stop();
-  }
-
-  const formatTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
-
-  const wordCount = answerText
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
+  const isVoice = session?.mode === "VOICE";
 
   if (isLoadingSession) {
     return (
-      <div className="min-h-screen bg-[#0E0E0E] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#0A0A0C] text-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-[#C5221F] border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs uppercase tracking-widest text-white/50">
-            Loading Interview Session...
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#4285F4] border-t-transparent" />
+          <p className="text-xs font-mono uppercase tracking-widest text-white/50">
+            Connecting to Live Interview Room...
           </p>
         </div>
       </div>
     );
   }
 
-  if (!session || !currentTurn) {
+  if (!session) {
     return (
-      <div className="min-h-screen bg-[#0E0E0E] text-white flex items-center justify-center p-6">
-        <div className="max-w-md rounded-2xl border border-white/10 bg-[#161616] p-8 text-center">
-          <AlertCircle className="mx-auto mb-4 h-9 w-9 text-[#C5221F]" />
-          <h1 className="mb-2 text-lg font-bold">
-            Interview unavailable
-          </h1>
-          <p className="mb-5 text-sm text-white/60">
-            {errorMessage || "The session could not be loaded."}
+      <div className="min-h-screen bg-[#0A0A0C] text-white flex items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-2xl border border-white/10 bg-[#141416] p-6 text-center">
+          <AlertCircle className="w-10 h-10 text-[#C5221F] mx-auto mb-3" />
+          <h2 className="text-lg font-bold">Interview Unavailable</h2>
+          <p className="text-xs text-white/60 mt-1 mb-6">
+            {errorMessage || "We could not locate this interview session."}
           </p>
           <Link
             href="/ai/mock-interview/setup"
-            className="inline-flex h-10 items-center rounded-xl bg-[#C5221F] px-5 text-xs font-bold uppercase tracking-wider"
+            className="inline-flex h-11 items-center justify-center px-6 rounded-xl bg-[#4285F4] text-xs font-bold uppercase tracking-wider hover:bg-[#3367D6]"
           >
-            Return to Practice Studio
+            Start New Interview
           </Link>
         </div>
       </div>
     );
   }
-
-  const isVoice = session.mode === "VOICE";
-  const progress = Math.round(
-    ((currentTurn.questionIndex + 1) / session.totalQuestions) * 100,
-  );
 
   return (
-    <div className="min-h-screen bg-[#0E0E0E] text-white flex flex-col">
-      <header className="min-h-[64px] border-b border-white/10 px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3 bg-[#121212]/90 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="flex shrink-0 items-center gap-1 font-bold text-xl tracking-tight"
-          >
-            <span>
-              Hire<span className="text-[#C5221F]">Go</span>
-            </span>
-            <span className="text-[#4285F4]">AI</span>
+    <div className="min-h-screen bg-[#0A0A0C] text-white flex flex-col font-sans select-none">
+      {/* Top Navigation Bar */}
+      <header className="h-16 border-b border-white/10 px-4 md:px-8 flex items-center justify-between bg-[#111114]/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-1 font-bold text-xl tracking-tight">
+            <span>Hire<span className="text-[#C5221F]">Go</span></span>
           </Link>
-          <span className="text-white/30">|</span>
-          <div className="min-w-0">
-            <div className="truncate text-xs font-semibold text-white/80">
-              {session.persona?.name || "HireGo Interviewer"} ·{" "}
-              {session.roleTarget}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-white/35">
-              {session.declaredSeniority || "Adaptive"} start ·{" "}
-              {isVoice ? "Real Voice" : "Text"} · {session.language}
-            </div>
+          <span className="text-white/20">|</span>
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-semibold text-white/80">
+              Live Mock Interview: <span className="text-white font-bold">{session.roleTarget}</span>
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 flex items-center gap-2 font-mono text-xs text-white/80">
-            <Clock className="w-3.5 h-3.5 text-[#C5221F]" />
-            <span>{formatTimer(elapsedSeconds)}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-white/70">
+            <Clock className="w-3.5 h-3.5 text-[#4285F4]" />
+            <span>
+              {Math.floor(elapsedSeconds / 60)}:
+              {(elapsedSeconds % 60).toString().padStart(2, "0")}
+            </span>
           </div>
-          <Link
-            href="/ai/mock-interview/setup"
-            className="text-xs text-white/50 hover:text-white"
+
+          <button
+            type="button"
+            onClick={finishInterview}
+            disabled={isFinishing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C5221F]/20 hover:bg-[#C5221F]/30 text-[#FF6B6B] border border-[#C5221F]/30 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50"
           >
-            Leave Session
-          </Link>
+            <PhoneOff className="w-3.5 h-3.5" />
+            {isFinishing ? "Finishing..." : "End Call"}
+          </button>
         </div>
       </header>
 
+      {/* Main Live Stage */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-8 flex flex-col">
-        <div className="mb-5">
-          <div className="flex flex-wrap justify-between gap-2 text-xs uppercase tracking-wider text-white/60 mb-2 font-semibold">
-            <span>
-              Question {currentTurn.questionIndex + 1} of{" "}
-              {session.totalQuestions}
-            </span>
-            <span>{progress}% completed</span>
-          </div>
-          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-[#C5221F] to-[#4285F4] transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="mb-5 flex flex-wrap gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#4285F4]/20 bg-[#4285F4]/10 px-3 py-1 text-[11px] text-[#AECBFA]">
-            <Gauge className="h-3 w-3" />
-            {difficultyLabel(currentTurn.difficulty)}
-          </span>
-          {currentTurn.competency && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/65">
-              {currentTurn.competency}
-            </span>
-          )}
-          {currentTurn.skillTags.slice(0, 4).map((skill) => (
-            <span
-              key={skill}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/55"
-            >
-              {skill}
-            </span>
-          ))}
-        </div>
-
         {errorMessage && (
-          <div className="mb-4 p-4 rounded-xl bg-[#C5221F]/10 border border-[#C5221F]/30 text-white flex items-start gap-3">
+          <div className="mb-6 p-4 rounded-2xl bg-[#C5221F]/15 border border-[#C5221F]/30 text-white flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-[#C5221F] shrink-0 mt-0.5" />
-            <div className="text-sm leading-relaxed">
-              {errorMessage}
-            </div>
+            <div className="text-xs md:text-sm leading-relaxed">{errorMessage}</div>
           </div>
         )}
 
-        <div className="bg-[#161616] border border-white/10 rounded-2xl p-6 md:p-8 mb-6 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#C5221F] via-[#4285F4] to-[#C5221F]" />
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[#C5221F] font-bold mb-3">
-            <Sparkles className="w-4 h-4" />
-            {session.persona?.name || "AI Interviewer"}
-          </div>
-          <h2 className="text-lg md:text-xl font-medium text-white leading-relaxed">
-            {currentTurn.questionText}
-          </h2>
-        </div>
-
         {isVoice ? (
-          <section className="flex-1 rounded-3xl border border-white/10 bg-[#121216] p-5 md:p-8 shadow-2xl">
-            <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+          /* =========================================================
+             LIVE FULL-DUPLEX GEMINI-STYLE CONVERSATIONAL ROOM
+             ========================================================= */
+          <div className="flex-1 flex flex-col items-center justify-between gap-6 py-4">
+            {/* Top Persona Tag */}
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#4285F4]/10 border border-[#4285F4]/20 text-[#4285F4] text-xs font-bold uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5" />
+                Interviewer: {session.persona?.name || "Sara"} (Executive HR & Technical)
+              </div>
+              <h1 className="text-xl md:text-2xl font-semibold mt-2 text-white">
+                Live Full-Duplex Voice Discussion
+              </h1>
+              <p className="text-xs text-white/50 mt-1">
+                Natural continuous dialogue. You can interrupt Sara at any moment by speaking.
+              </p>
+            </div>
+
+            {/* Central Animated Neural Voice Orb */}
+            <div className="relative flex flex-col items-center justify-center my-4">
               <div
-                className={`relative flex h-44 w-44 items-center justify-center rounded-full border transition-all duration-500 ${
-                  voiceState === "SPEAKING"
-                    ? "border-[#4285F4]/70 shadow-[0_0_70px_rgba(66,133,244,0.25)]"
-                    : voiceState === "LISTENING"
-                      ? "border-[#C5221F]/70 shadow-[0_0_70px_rgba(197,34,31,0.28)]"
-                      : voiceState === "UNDERSTANDING"
-                        ? "border-[#4285F4]/50 shadow-[0_0_45px_rgba(66,133,244,0.18)]"
-                        : "border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+                className={`relative flex h-52 w-52 md:h-64 md:w-64 items-center justify-center rounded-full transition-all duration-700 ${
+                  liveStatus === "SPEAKING"
+                    ? "scale-105 shadow-[0_0_100px_rgba(66,133,244,0.45)] ring-4 ring-[#4285F4]/50"
+                    : liveStatus === "LISTENING"
+                      ? "scale-100 shadow-[0_0_90px_rgba(16,185,129,0.35)] ring-4 ring-emerald-500/50"
+                      : liveStatus === "THINKING"
+                        ? "scale-95 shadow-[0_0_80px_rgba(168,85,247,0.35)] ring-4 ring-purple-500/50 animate-pulse"
+                        : liveStatus === "MUTED"
+                          ? "shadow-[0_0_40px_rgba(197,34,31,0.25)] ring-2 ring-[#C5221F]/40"
+                          : "shadow-[0_0_50px_rgba(255,255,255,0.06)] border border-white/10"
                 }`}
               >
-                <div className="absolute inset-4 rounded-full bg-gradient-to-br from-[#4285F4]/25 via-black/50 to-[#C5221F]/25 backdrop-blur-xl" />
+                {/* Background Fluid Gradient */}
                 <div
-                  className={`absolute inset-8 rounded-full border border-white/10 ${
-                    ["SPEAKING", "LISTENING", "UNDERSTANDING"].includes(
-                      voiceState,
-                    )
-                      ? "animate-pulse"
-                      : ""
+                  className={`absolute inset-2 rounded-full transition-all duration-700 blur-xl opacity-75 ${
+                    liveStatus === "SPEAKING"
+                      ? "bg-gradient-to-tr from-[#4285F4] via-cyan-400 to-indigo-600 animate-spin"
+                      : liveStatus === "LISTENING"
+                        ? "bg-gradient-to-tr from-emerald-500 via-teal-400 to-blue-500"
+                        : liveStatus === "THINKING"
+                          ? "bg-gradient-to-tr from-purple-600 via-pink-500 to-indigo-500 animate-pulse"
+                          : liveStatus === "MUTED"
+                            ? "bg-gradient-to-tr from-[#C5221F] to-orange-700"
+                            : "bg-gradient-to-tr from-white/10 to-white/5"
                   }`}
+                  style={{ animationDuration: "8s" }}
                 />
-                {voiceState === "LISTENING" ? (
-                  <Mic2 className="relative z-10 h-12 w-12 text-[#C5221F]" />
-                ) : voiceState === "SPEAKING" ? (
-                  <Volume2 className="relative z-10 h-12 w-12 text-[#4285F4]" />
-                ) : (
-                  <AudioLines className="relative z-10 h-12 w-12 text-white/80" />
-                )}
-              </div>
 
-              <div className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-white/55">
-                {voiceState === "SPEAKING"
-                  ? "Interviewer speaking"
-                  : voiceState === "LISTENING"
-                    ? "Listening"
-                    : voiceState === "UNDERSTANDING"
-                      ? "Understanding"
-                      : voiceState === "FOLLOW_UP_READY"
-                        ? "Follow-up ready"
-                        : voiceState === "REPEAT"
-                          ? "Please repeat"
-                          : voiceState === "COMPLETE"
-                            ? "Interview complete"
-                            : "Ready"}
-              </div>
-
-              {(voiceMessage || voiceTranscript) && (
-                <div className="mt-5 w-full rounded-2xl border border-white/5 bg-white/5 p-4 text-left">
-                  {voiceMessage && (
-                    <p className="text-sm leading-relaxed text-white/70">
-                      {voiceMessage}
-                    </p>
-                  )}
-                  {voiceTranscript && (
-                    <div className="mt-3 border-t border-white/5 pt-3">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                        Transcript
-                        {voiceConfidence !== null
-                          ? ` · ${Math.round(
-                              voiceConfidence * 100,
-                            )}% confidence`
-                          : voiceState === "CONFIRM_TRANSCRIPT"
-                            ? " · confirm before scoring"
-                            : ""}
-                      </div>
-                      {voiceState === "CONFIRM_TRANSCRIPT" ? (
-                        <textarea
-                          value={voiceTranscript}
-                          onChange={(event) =>
-                            setVoiceTranscript(event.target.value)
-                          }
-                          maxLength={10_000}
-                          rows={5}
-                          className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs leading-relaxed text-white focus:border-[#4285F4] focus:outline-none"
+                {/* Center Core */}
+                <div className="relative z-10 flex flex-col items-center justify-center bg-[#0D0D11] h-40 w-40 md:h-48 md:w-48 rounded-full border border-white/15 backdrop-blur-2xl">
+                  {liveStatus === "SPEAKING" ? (
+                    <div className="flex items-center gap-1.5 h-10">
+                      {[12, 28, 44, 20, 36, 16, 32].map((height, i) => (
+                        <span
+                          key={i}
+                          className="w-1.5 bg-[#4285F4] rounded-full animate-bounce"
+                          style={{
+                            height: `${height}px`,
+                            animationDelay: `${i * 0.1}s`,
+                            animationDuration: "0.6s",
+                          }}
                         />
-                      ) : (
-                        <p className="mt-1 text-xs leading-relaxed text-white/60">
-                          {voiceTranscript}
-                        </p>
-                      )}
+                      ))}
+                    </div>
+                  ) : liveStatus === "LISTENING" ? (
+                    <div className="flex flex-col items-center">
+                      <Mic className="w-12 h-12 text-emerald-400 animate-pulse" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80 mt-1">
+                        Listening
+                      </span>
+                    </div>
+                  ) : liveStatus === "THINKING" ? (
+                    <div className="flex flex-col items-center">
+                      <Sparkles className="w-10 h-10 text-purple-400 animate-spin" style={{ animationDuration: "3s" }} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400/80 mt-1">
+                        Thinking
+                      </span>
+                    </div>
+                  ) : liveStatus === "MUTED" ? (
+                    <div className="flex flex-col items-center">
+                      <MicOff className="w-10 h-10 text-[#C5221F]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#C5221F] mt-1">
+                        Mic Muted
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Radio className="w-10 h-10 text-white/50" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 mt-1">
+                        Ready
+                      </span>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
 
-              <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
-                {["READY", "FOLLOW_UP_READY"].includes(voiceState) && (
-                  <button
-                    type="button"
-                    onClick={() => void hearCurrentQuestion()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#3367D6]"
-                  >
-                    <Volume2 className="h-4 w-4" />
-                    {currentTurn.questionIndex === 0 && !openingSpoken
-                      ? "Start Interview"
-                      : "Hear Question"}
-                  </button>
-                )}
-
-                {voiceState === "CONFIRM_TRANSCRIPT" && (
+              {/* Status Pill */}
+              <div className="mt-5 flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-white/80">
+                {liveStatus === "SPEAKING" && (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => void confirmVoiceTranscript()}
-                      disabled={!voiceDraftId || voiceTranscript.trim().length < 1}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#3367D6] disabled:opacity-40"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Confirm Transcript
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceDraftId(null);
-                        setVoiceTranscript("");
-                        setVoiceConfidence(null);
-                        setVoiceState("REPEAT");
-                        setVoiceMessage(
-                          "Record the answer again if this transcript is not accurate.",
-                        );
-                      }}
-                      className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 text-xs font-bold uppercase tracking-wider text-white"
-                    >
-                      <Mic2 className="h-4 w-4" />
-                      Record Again
-                    </button>
+                    <span className="h-2 w-2 rounded-full bg-[#4285F4] animate-ping" />
+                    <span>Sara is speaking (Talk to interrupt anytime)</span>
                   </>
                 )}
-
-                {["LISTENING_READY", "REPEAT"].includes(voiceState) && (
-                  <button
-                    type="button"
-                    onClick={() => void startRecording()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#C5221F] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#A31816]"
-                  >
-                    <Mic2 className="h-4 w-4" />
-                    {voiceState === "REPEAT"
-                      ? "Record Again"
-                      : "Record Answer"}
-                  </button>
+                {liveStatus === "LISTENING" && (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Listening to you... Speak freely</span>
+                  </>
                 )}
-
-                {voiceState === "LISTENING" && (
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-xs font-black uppercase tracking-wider text-black"
-                  >
-                    <Square className="h-4 w-4" />
-                    Finish Answer
-                  </button>
+                {liveStatus === "THINKING" && (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                    <span>Sara is formulating response...</span>
+                  </>
                 )}
-
-                {voiceState === "COMPLETE" && errorMessage && (
-                  <button
-                    type="button"
-                    onClick={() => void finishInterview()}
-                    disabled={isSubmitting}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#4285F4] px-6 text-xs font-bold uppercase tracking-wider text-white disabled:opacity-50"
-                  >
-                    Prepare Report
-                  </button>
+                {liveStatus === "MUTED" && (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-[#C5221F]" />
+                    <span>Microphone is muted</span>
+                  </>
+                )}
+                {liveStatus === "IDLE" && (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-white/40" />
+                    <span>Click &quot;Start Live Call&quot; to begin conversation</span>
+                  </>
                 )}
               </div>
-
-              <p className="mt-6 max-w-xl text-[11px] leading-relaxed text-white/35">
-                Voice practice gives feedback after the interview, not after every question. You can review and confirm the text of your answers before they are assessed. Individual answer recordings are not saved by this practice.
-              </p>
             </div>
-          </section>
+
+            {/* Live Real-Time Transcript Bubbles */}
+            <div className="w-full max-w-2xl bg-[#141418] border border-white/10 rounded-2xl p-4 md:p-5 shadow-2xl flex flex-col gap-3 min-h-[140px] max-h-[220px] overflow-y-auto">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-white/40 flex items-center justify-between pb-1 border-b border-white/5">
+                <span>Live Spoken Transcript</span>
+                <span className="text-emerald-400 font-mono">ElevenLabs + Groq Voice Engine</span>
+              </div>
+
+              {conversation.length === 0 && !interimUserText && (
+                <div className="text-center text-xs text-white/40 py-6">
+                  {liveStatus === "IDLE"
+                    ? "Click 'Start Live Call' below to connect with Sara."
+                    : "Conversation is starting..."}
+                </div>
+              )}
+
+              {conversation.slice(-3).map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col text-xs leading-relaxed ${
+                    msg.sender === "user" ? "items-end" : "items-start"
+                  }`}
+                >
+                  <span className="text-[10px] font-semibold text-white/40 mb-0.5">
+                    {msg.sender === "user" ? "You" : session.persona?.name || "Sara"}
+                  </span>
+                  <div
+                    className={`p-3 rounded-xl max-w-[85%] ${
+                      msg.sender === "user"
+                        ? "bg-emerald-600/20 border border-emerald-500/30 text-emerald-100"
+                        : "bg-white/5 border border-white/10 text-white/90"
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+
+              {interimUserText && (
+                <div className="flex flex-col items-end text-xs leading-relaxed">
+                  <span className="text-[10px] font-semibold text-emerald-400 mb-0.5">You (speaking...)</span>
+                  <div className="p-3 rounded-xl max-w-[85%] bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 animate-pulse">
+                    {interimUserText}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Live Action Controls (Hands-free duplex) */}
+            <div className="flex items-center gap-3">
+              {liveStatus === "IDLE" ? (
+                <button
+                  type="button"
+                  onClick={handleStartLiveCall}
+                  className="inline-flex h-14 items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#4285F4] to-indigo-600 px-8 text-sm font-bold uppercase tracking-wider text-white shadow-xl hover:opacity-95 transition-all"
+                >
+                  <Play className="h-5 w-5 fill-current" />
+                  Start Live Call
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className={`h-12 w-12 rounded-2xl border flex items-center justify-center transition-all ${
+                      isMicMuted
+                        ? "bg-[#C5221F]/20 border-[#C5221F] text-[#C5221F]"
+                        : "bg-white/10 border-white/20 text-white hover:bg-white/15"
+                    }`}
+                    title={isMicMuted ? "Unmute Mic" : "Mute Mic"}
+                  >
+                    {isMicMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </button>
+
+                  {liveStatus === "SPEAKING" && (
+                    <button
+                      type="button"
+                      onClick={handleManualInterrupt}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-purple-600/20 border border-purple-500/40 px-5 text-xs font-bold uppercase tracking-wider text-purple-300 hover:bg-purple-600/30 transition-all"
+                    >
+                      <Hand className="h-4 w-4" />
+                      Interrupt Sara
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={finishInterview}
+                    disabled={isFinishing}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white/10 border border-white/20 px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#C5221F]/20 hover:border-[#C5221F]/40 hover:text-[#FF6B6B] transition-all"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Complete & View Scorecard
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         ) : (
-          <section className="flex-1 flex flex-col bg-[#161616] border border-white/10 rounded-2xl p-5 md:p-6 relative">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/70 font-bold">
-                <BookOpen className="w-3.5 h-3.5 text-[#4285F4]" />
-                Your response
-              </div>
-              <div className="flex items-center gap-3 text-xs text-white/50 font-mono">
-                <span>
-                  {wordCount} {wordCount === 1 ? "word" : "words"}
-                </span>
-                <span>•</span>
-                <span>{answerText.length} characters</span>
-              </div>
+          /* =========================================================
+             FALLBACK TEXT ASSESSMENT MODE
+             ========================================================= */
+          <div className="flex-1 flex flex-col gap-6">
+            <div className="bg-[#161616] border border-white/10 rounded-2xl p-6">
+              <span className="text-xs font-bold uppercase text-[#4285F4]">
+                Question {currentTurn ? currentTurn.questionIndex + 1 : 1}
+              </span>
+              <h2 className="text-lg font-medium text-white mt-2 leading-relaxed">
+                {currentTurn?.questionText}
+              </h2>
             </div>
 
             <textarea
               value={answerText}
-              onChange={(event) => setAnswerText(event.target.value)}
-              disabled={isSubmitting || Boolean(turnEvaluation)}
-              placeholder="Answer naturally. Explain what you know, how you would apply it, and any trade-offs you would consider."
-              maxLength={10_000}
-              className="flex-1 min-h-[220px] w-full text-sm leading-relaxed bg-black/40 border border-white/10 rounded-xl p-4 text-white placeholder-white/25 focus:outline-none focus:border-[#C5221F] transition-colors resize-y mb-4"
+              onChange={(e) => setAnswerText(e.target.value)}
+              placeholder="Type your response here..."
+              rows={8}
+              className="w-full rounded-2xl border border-white/10 bg-[#121216] p-4 text-sm text-white focus:outline-none focus:border-[#4285F4]"
             />
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-white/5">
-              <p className="text-xs text-white/40 max-w-xl">
-                It is okay not to know everything. HireGo can lower
-                difficulty or use a guided follow-up instead of treating
-                one weak answer as your level.
-              </p>
-              <button
-                type="button"
-                onClick={handleSubmitAnswer}
-                disabled={
-                  isSubmitting ||
-                  Boolean(turnEvaluation) ||
-                  answerText.trim().length < 5
-                }
-                className="h-11 px-6 rounded-xl bg-[#C5221F] hover:bg-[#A31816] text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Understanding...
-                  </>
-                ) : (
-                  <>
-                    Submit Answer <Send className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
-            </div>
-          </section>
-        )}
-
-        <div className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-white/35">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-          Private practice only. Practice scores and level guidance are not
-          written into employer-facing verified skill evidence or used to
-          select/reject you.
-        </div>
-
-        {!isVoice && showOpening && session.openingMessage && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="max-w-lg w-full rounded-2xl border border-white/10 bg-[#181818] p-6 shadow-2xl">
-              <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-widest font-bold text-[#4285F4]">
-                <Sparkles className="h-4 w-4" />
-                {session.persona?.name || "HireGo Interviewer"}
-              </div>
-              <p className="text-sm leading-relaxed text-white/90">
-                {session.openingMessage}
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowOpening(false)}
-                className="mt-6 w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#3367D6] text-white font-bold text-xs uppercase tracking-wider"
-              >
-                I&apos;m ready
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!isVoice && turnEvaluation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-[#181818] border border-white/10 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 my-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-widest font-bold text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Practice response reviewed
-                </div>
-                <div className="text-sm font-mono font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {turnEvaluation.score}/100
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs uppercase tracking-wider text-white/60 font-bold mb-2">
-                  Constructive feedback
-                </h4>
-                <p className="text-sm text-white/90 leading-relaxed bg-black/30 p-4 rounded-xl border border-white/5">
-                  {turnEvaluation.feedback}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-                  <div className="text-[10px] uppercase tracking-wider text-white/40">
-                    Evidence confidence
-                  </div>
-                  <div className="mt-1 text-sm font-bold text-white">
-                    {turnEvaluation.evidenceConfidence}%
-                  </div>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-                  <div className="text-[10px] uppercase tracking-wider text-white/40">
-                    Next adaptation
-                  </div>
-                  <div className="mt-1 text-sm font-bold text-white">
-                    {turnEvaluation.difficultyAdjustment === "UP"
-                      ? "Slightly harder"
-                      : turnEvaluation.difficultyAdjustment === "DOWN"
-                        ? "More foundational"
-                        : turnEvaluation.supportMode === "NONE"
-                          ? "Similar depth"
-                          : "Guided follow-up"}
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-[11px] leading-relaxed text-white/40">
-                One answer does not determine your final level. HireGo
-                aggregates evidence across the practice session.
-              </p>
-
-              <button
-                type="button"
-                onClick={handleProceedToNext}
-                disabled={isSubmitting}
-                className="w-full h-11 rounded-xl bg-[#4285F4] hover:bg-[#3367D6] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-              >
-                {isFinalQuestion
-                  ? "Complete Interview & View Report"
-                  : "Continue to Adaptive Question"}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={finishInterview}
+              className="self-end px-6 py-3 rounded-xl bg-[#4285F4] text-xs font-bold uppercase tracking-wider hover:bg-[#3367D6]"
+            >
+              Submit & Next
+            </button>
           </div>
         )}
       </main>

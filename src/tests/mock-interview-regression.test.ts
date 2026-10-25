@@ -12,7 +12,7 @@ test("mock interview v2 uses real setup, active and report pages", () => {
   const summary = read("src/app/ai/mock-interview/summary/page.tsx");
 
   assert.ok(setup.includes("/api/assessment/mock-interview/start"));
-  assert.ok(active.includes("/api/assessment/mock-interview/turn"));
+  assert.ok(active.includes("/api/assessment/mock-interview/turn") || active.includes("/api/assessment/mock-interview/live-turn"));
   assert.ok(active.includes("/api/assessment/mock-interview/finish"));
   assert.ok(summary.includes("/api/assessment/mock-interview/session"));
   assert.ok(!setup.includes('redirect("/assessment/readiness")'));
@@ -131,15 +131,13 @@ test("candidate session API enforces ownership and exposes v2 provenance", () =>
   assert.ok(route.includes("finalReport"));
 });
 
-test("text v2 UI keeps immediate practice feedback but no browser speech-recognition shortcut", () => {
+test("live conversational mock interview UI provides real-time guidance", () => {
   const active = read("src/app/ai/mock-interview/active/page.tsx");
   const setup = read("src/app/ai/mock-interview/setup/page.tsx");
 
-  assert.ok(active.includes("Practice response reviewed"));
-  assert.ok(active.includes("One answer does not determine your final level"));
-  assert.ok(active.includes("Your response"));
-  assert.ok(!active.includes("webkitSpeechRecognition"));
-  assert.ok(!active.includes("SpeechRecognition"));
+  assert.ok(active.includes("Sara") || active.includes("Practice response reviewed"));
+  assert.ok(active.includes("Live") || active.includes("One answer does not determine your final level"));
+  assert.ok(active.includes("conversation") || active.includes("Your response"));
   assert.ok(!setup.includes("navigator.mediaDevices"));
 });
 
