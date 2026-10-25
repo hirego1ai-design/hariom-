@@ -12,7 +12,7 @@ const originalGroqKey = process.env.GROQ_API_KEY;
 const originalGroqBaseUrl = process.env.GROQ_BASE_URL;
 
 test("every Model Registry provider can be configured from Admin", () => {
-  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "groq", "self_hosted"]);
+  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "groq", "openrouter", "self_hosted"]);
 });
 
 test("Groq uses the official OpenAI-compatible endpoint and server-side API key", () => {
