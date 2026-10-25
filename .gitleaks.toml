@@ -37,3 +37,11 @@ id = "jwt"
   regexTarget = "secret"
   paths = ['''^src/proxy\.ts$''']
   regexes = ['''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpZCI6InVzZXItYWRtaW4tMSIsImVtYWlsIjoiYWRtaW5AaGlyZWdvLmFpIiwicm9sZSI6IkFETUlOIiwibmFtZSI6IkRldmVsb3BlciBCeXBhc3MifQ\.mockSignature$''']
+
+[[rules]]
+id = "curl-auth-header"
+
+  [[rules.allowlists]]
+  description = "Documentation curl auth header example in VULNERABILITIES_QUICK_START.md"
+  condition = "AND"
+  paths = ['''^VULNERABILITIES_QUICK_START\.md$''']

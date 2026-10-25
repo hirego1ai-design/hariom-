@@ -351,7 +351,7 @@ export default function MockInterviewActivePage() {
         });
 
         const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.success || !data.replyText) {
+        if (!res.ok || !data?.success || !data.replyText || (data.turnScore !== undefined && typeof data.turnScore !== "number")) {
           throw new Error(data?.error || "Could not process live conversation turn.");
         }
 

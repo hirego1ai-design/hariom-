@@ -608,7 +608,7 @@ npm test
 
 # After deploy: verify fixes
 curl -X PUT https://staging/api/notifications \
-  -H "Authorization: Bearer attacker-token" \
+  -H "Authorization: Bearer <unauthorized-token>" \
   -d '{"notificationId": "victim-notification-id"}'
 # Should return 403, not 200
 
