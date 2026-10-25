@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,7 @@ import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/auditLogger";
 import { buildPublicAppUrl } from "@/lib/env";
 import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
+import { VALID_ROLES, isValidRole, type Role } from "@/lib/permissions";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"\']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\'": "&#39;" }[ch] || ch));
@@ -111,6 +113,14 @@ export async function POST(req: NextRequest) {
     const inviteDesignation: string | undefined = body.designation;
     const normalizedEmail = body.email.toLowerCase().trim();
 
+    // P1.1 RBAC: Validate role is in VALID_ROLES (2-role enforcement)
+    if (!isValidRole(inviteRole)) {
+      throw new ApiError(
+        `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}`,
+        400
+      );
+    }
+
     let companyId: string;
     let companyName: string;
 
@@ -161,13 +171,13 @@ export async function POST(req: NextRequest) {
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // 4. Create invitation record in PostgreSQL
+    // 4. Create invitation record in PostgreSQL with type-safe role
     const invitation = await prisma.companyInvitation.create({
       data: {
         companyId,
         email: normalizedEmail,
         name: body.name,
-        role: body.role,
+        role: inviteRole as Role,  // Type-safe after validation
         designation: body.designation,
         tokenHash,
         status: "PENDING",
