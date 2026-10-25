@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
   try {
     const admin = await requireAdminSession(request);
     await enforceRateLimit(request, `admin_subscription_settings_write:${admin.id}`, 20, 60_000);
-    const raw = await readValidatedJson(request, z.record(z.unknown()), 64 * 1024);
+    const raw = await readValidatedJson(request, z.record(z.string(), z.unknown()), 64 * 1024);
     if (raw.kind === "COPILOT_CONFIG") {
       throw new ApiError("Legacy per-job Co-Pilot configuration is disabled. Use the standalone Copilot Commerce console.", 409);
     }
