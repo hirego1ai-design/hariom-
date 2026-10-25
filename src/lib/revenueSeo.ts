@@ -18,37 +18,55 @@ export type RevenueSeoPage = {
 export const REVENUE_SEO_PAGES: Record<string, RevenueSeoPage> = {
   "pay-per-hire": {
     slug: "pay-per-hire",
-    metadataTitle: "Pay Per Hire Recruitment India | HireGo AI",
-    description: "Managed Hiring from HireGo AI supports sourcing, screening, interview coordination and joining follow-up under agreed Pay Per Hire terms in India.",
+    metadataTitle: "Pay Per Hire Recruitment India | 8.33% & Flat Fix Charge | HireGo AI",
+    description: "HireGo AI Pay Per Hire Managed Recruitment: Job-ready candidates delivered in minutes with video resumes and proctored code. 8.33% success fee (or Flat Fix Charge), 45-day replacement, invoice on Day 25, Net-30 payment.",
     eyebrow: "Managed hiring",
     title: "Pay Per Hire recruitment built around a successful hiring outcome.",
-    lead: "Share the role and hiring context. HireGo helps run the agreed sourcing, screening and coordination work while your team interviews candidates and makes the final hiring decision.",
+    lead: "Share your hiring requirements. HireGo matches job-ready, video-screened, and code-proctored candidates in just minutes. Choose our standard 8.33% contingent model (with 45-day replacement guarantee and Net-30 payment terms) or discuss a Fixed Flat Charge plan tailored in a meeting with our team.",
     serviceType: "Pay Per Hire recruitment and managed hiring",
-    audience: "Employers that need hiring capacity without building a large recruiting operation first.",
+    audience: "Employers, startups and enterprises that need high-velocity hiring with zero upfront risk and flexible commercial models (8.33% or Fixed Flat Charge).",
     problems: [
-      "Urgent roles are consuming founder or hiring-manager time.",
-      "Candidate sourcing and follow-up are fragmented across tools.",
-      "The internal recruiting team does not have enough capacity for the hiring volume."
+      "Traditional agency retainers demand high upfront fees with zero outcome guarantee.",
+      "Delays in receiving unvetted keyword resumes without verification.",
+      "Rigid percentage structures that inflate hiring budgets during salary negotiations."
     ],
     outcomes: [
-      "A structured requirement before sourcing starts.",
-      "Candidate discovery and organized role-relevant evidence.",
-      "Interview coordination and joining follow-up under agreed scope."
+      "Calibrated, job-ready candidates delivered in minutes with verified video resumes.",
+      "Fair 8.33% success fee (or custom Fixed Flat Charge) strictly payable after joining.",
+      "45-day free replacement guarantee covering two full development sprint cycles.",
+      "Invoices raised on Day 25 post-joining with standard 30-day payment clearance."
     ],
     workflow: [
-      "Define the role and success criteria",
-      "Agree commercial terms and service scope",
-      "Source and organize relevant candidates",
-      "Coordinate screening, assessments and interviews",
-      "Employer makes the hiring decision",
-      "Complete the agreed successful-hire and joining workflow"
+      "Define role requirements & select commercial model (8.33% or Flat Fix Charge in meeting)",
+      "Job-ready candidates delivered in minutes with 2-minute video resumes & proctored coding scores",
+      "Company HR conducts final interviews and retains 100% hiring authority",
+      "Candidate accepts offer and joins with ₹0 upfront fees",
+      "Invoice raised on Day 25 post-joining; payment strictly due within 30 days (delay modifies terms)",
+      "45-day free replacement guarantee active across all placements"
     ],
     primaryCta: { label: "Discuss a role", href: "/contact" },
     secondaryCta: { label: "See employer plans", href: "/pricing" },
     faqs: [
-      { question: "What does Pay Per Hire mean on HireGo AI?", answer: "Pay Per Hire is a managed hiring model where the fee trigger, amount, replacement terms and invoice timing are agreed before work begins and are linked to the successful hiring outcome defined in the agreement." },
-      { question: "Does HireGo decide who gets hired?", answer: "No. HireGo can support sourcing, screening evidence, coordination and follow-up, but the employer remains responsible for consequential hiring decisions." },
-      { question: "Can Pay Per Hire work for more than one role?", answer: "Yes, subject to agreed scope and capacity. Each requirement should have clear role criteria, commercial terms and an accountable employer decision maker." }
+      {
+        question: "What does Pay Per Hire mean on HireGo AI?",
+        answer: "Pay Per Hire is a managed hiring model where you pay strictly upon successful joining. We offer a standard 8.33% success fee (1-month CTC equivalent) backed by a 45-day free replacement warranty, as well as an optional Fixed Flat Charge plan discussed in a meeting with our leadership."
+      },
+      {
+        question: "How fast does HireGo deliver candidate shortlists?",
+        answer: "HireGo delivers job-ready, calibrated candidates in just minutes rather than 72 hours. Our autonomous hiring OS continuously pre-screens software engineers with verified video resumes and anti-cheat coding sandboxes."
+      },
+      {
+        question: "When is the invoice raised and what are the payment terms?",
+        answer: "The invoice is officially raised on Day 25 post-joining. Payment is strictly due within 30 days of the candidate's joining date. Across all Managed Hiring plans, payment terms are strictly within 30 days; if payment is delayed, commercial terms and warranties are subject to change."
+      },
+      {
+        question: "How does the Fixed Flat Charge plan work?",
+        answer: "For companies hiring cohorts or needing predictable recruiting budgets, HireGo offers a Flat Fix Charge instead of a CTC percentage. The exact flat fee is discussed, calibrated, and finalized in a meeting with the HireGo team based on role type, tech stack, and volume."
+      },
+      {
+        question: "Does HireGo decide who gets hired?",
+        answer: "No. HireGo executes sourcing, proctoring, video screening, and calendar dispatch, while your company HR and engineering leaders conduct final interviews and make all consequential hiring decisions."
+      }
     ]
   },
   "ai-hiring-copilot": {

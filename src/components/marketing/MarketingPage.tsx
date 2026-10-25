@@ -7,7 +7,7 @@ type PageKind = "features" | "pricing" | "enterprise" | "about" | "company" | "c
 
 const content: Record<PageKind, { eyebrow: string; title: string; intro: string }> = {
   features: { eyebrow: "Agentic Hiring Operating System", title: "One connected system for the hiring workflow.", intro: "HireGo AI connects sourcing, screening, assessments, interviews, candidate communication and workflow coordination while keeping consequential employment decisions under human control." },
-  pricing: { eyebrow: "Employer Pricing", title: "Choose how you want to hire.", intro: "Use employer hiring plans, add the AI Hiring Co-Pilot as a separate product, or talk to HireGo about managed hiring support." },
+  pricing: { eyebrow: "Employer Pricing", title: "Simple, Transparent Pricing", intro: "Flexible self-serve job posting packages or hands-on Managed Hiring with 100% outcome-based fees." },
   enterprise: { eyebrow: "For teams that are hiring", title: "Hire people for what they can do.", intro: "Create structured hiring workflows, compare verified skills, and move from shortlist to offer with confidence." },
   about: { eyebrow: "Our mission", title: "Make opportunity easier to reach.", intro: "We are building a more useful bridge between human potential and the teams looking for it." },
   company: { eyebrow: "Inside HireGo", title: "A team building better hiring infrastructure.", intro: "We combine thoughtful product design, responsible AI, and practical workflows to make hiring clearer for everyone." },
@@ -24,6 +24,40 @@ const content: Record<PageKind, { eyebrow: string; title: string; intro: string 
 
 function Hero({ kind }: { kind: PageKind }) {
   const item = content[kind];
+  const isPricing = kind === "pricing";
+  
+  if (isPricing) {
+    return (
+      <section className="relative overflow-hidden border-b border-white/10 pt-20 pb-4 sm:pt-24 sm:pb-6 bg-gradient-to-b from-[#070e1c] via-[#040813] to-[#02050c]">
+        {/* HireGo Logo Multi-Color Ambient Mesh Glow (Electric Blue, Coral Red, Amber Gold, Emerald Green) */}
+        <div className="pointer-events-none absolute -left-20 top-0 h-96 w-96 rounded-full bg-blue-600/25 blur-[120px]" />
+        <div className="pointer-events-none absolute right-10 top-10 h-96 w-96 rounded-full bg-amber-500/20 blur-[120px]" />
+        <div className="pointer-events-none absolute left-1/3 top-1/2 h-64 w-64 rounded-full bg-red-500/15 blur-[100px]" />
+        <div className="pointer-events-none absolute right-1/4 bottom-0 h-64 w-64 rounded-full bg-emerald-500/20 blur-[100px]" />
+
+        <div className="relative mx-auto max-w-4xl px-5 text-center">
+          {/* Branded Logo Pill matching Logo */}
+          <div className="mb-3 inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-gradient-to-r from-blue-900/30 via-indigo-900/30 to-amber-900/30 px-4 py-1.5 shadow-xl backdrop-blur-xl">
+            <img src="/marketing/hirego-logo-hd.png" alt="HireGo AI" className="h-4 sm:h-4.5 w-auto object-contain drop-shadow" />
+            <span className="h-3 w-[1px] bg-white/20" />
+            <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-cyan-300">Employer Pricing & Solutions</span>
+          </div>
+
+          <h1 className="text-2xl font-black tracking-tight sm:text-4xl md:text-5xl text-white leading-tight">
+            Transparent Pricing Built for
+            <span className="block mt-1 bg-gradient-to-r from-blue-400 via-sky-300 to-amber-300 bg-clip-text text-transparent">
+              Every Hiring Model & Scale.
+            </span>
+          </h1>
+
+          <p className="mx-auto mt-2 max-w-xl text-xs sm:text-sm leading-relaxed text-slate-300">
+            Choose self-serve job posting packages or hands-on Managed Hiring with 100% outcome-based fees where you pay strictly when your chosen candidate joins.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="relative overflow-hidden border-b border-white/10 px-5 py-20 sm:px-8 md:py-28">
       <div className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-[#ff5252]/15 blur-3xl" />
@@ -49,7 +83,10 @@ export default function MarketingPage({ kind }: { kind: PageKind }) {
   return (
     <MarketingShell>
       <Hero kind={kind} />
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 md:py-24">\n        {kind === "features" && <FeaturesContent />}\n        {kind === "career-resources" && <CareerResourcesContent />}\n        {kind === "find-jobs" && <FindJobsContent />}
+      <section className={`mx-auto max-w-7xl px-5 ${kind === "pricing" ? "py-6 sm:px-8 md:py-8" : "py-16 sm:px-8 md:py-24"}`}>
+        {kind === "features" && <FeaturesContent />}
+        {kind === "career-resources" && <CareerResourcesContent />}
+        {kind === "find-jobs" && <FindJobsContent />}
         {["ai-features", "certifications"].includes(kind) && (
           <div className="grid gap-5 md:grid-cols-2">
             {featureCards.map(([number, title, description]) => (
@@ -167,18 +204,421 @@ function FindJobsContent() {
 }
 
 function PricingContent() {
-  return <div className="space-y-14">
-    <section>
-      <div className="mx-auto mb-8 max-w-3xl text-center"><h2 className="text-3xl font-extrabold text-white">Employer hiring plans</h2><p className="mt-4 leading-7 text-slate-400">The plans and prices below are loaded from HireGo's live subscription catalog. Administrators control plan names, prices, job-posting quotas, validity and public benefits from the Admin Subscription & Plan Management console.</p></div>
-      <EmployerPricingPreview />
-    </section>
-    <section className="grid gap-5 lg:grid-cols-2">
-      <article className="glass-card p-8"><p className="text-sm font-bold uppercase tracking-[0.18em] text-[#82b1ff]">AI Hiring Co-Pilot</p><h2 className="mt-4 text-3xl font-extrabold text-white">A separate agentic hiring product.</h2><p className="mt-4 leading-7 text-slate-400">Co-Pilot plans and regional pricing are managed independently through HireGo's Admin Copilot Commerce console. The public Co-Pilot flow resolves the applicable catalog for the billing country, while checkout uses the authoritative commerce configuration.</p><p className="mt-3 text-sm leading-6 text-slate-500">Job posting is separate from Co-Pilot, and consequential employment decisions remain with people.</p><Link href="/ai-hiring-copilot" className="mt-6 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore AI Hiring Co-Pilot →</Link></article>
-      <article className="glass-card p-8"><p className="text-sm font-bold uppercase tracking-[0.18em] text-[#ff8a80]">Managed Hiring</p><h2 className="mt-4 text-3xl font-extrabold text-white">Need hands-on hiring support?</h2><p className="mt-4 leading-7 text-slate-400">Managed Hiring is for employers that want additional operational support rather than a self-serve subscription alone. Commercial terms depend on the agreed hiring requirement and service arrangement.</p><Link href="/pay-per-hire" className="mt-6 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore Managed Hiring →</Link></article>
-    </section>
-    <section className="glass-card p-8 sm:p-10"><h2 className="text-3xl font-extrabold text-white">Which option fits your workflow?</h2><div className="mt-7 grid gap-5 md:grid-cols-3"><div><h3 className="font-bold text-white">Employer plans</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want job-posting and plan entitlements from the standard employer catalog.</p></div><div><h3 className="font-bold text-white">AI Hiring Co-Pilot</h3><p className="mt-2 text-sm leading-6 text-slate-400">For teams that want agentic assistance with permitted hiring operations and workflow coordination.</p></div><div><h3 className="font-bold text-white">Managed Hiring</h3><p className="mt-2 text-sm leading-6 text-slate-400">For employers who want HireGo to provide additional operational hiring support under agreed commercial terms.</p></div></div><div className="mt-8 flex flex-wrap gap-3"><Link href="/features" className="btn-primary-blue">Compare platform capabilities</Link><Link href="/contact" className="btn-primary-red">Contact HireGo</Link></div></section>
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-center text-xs leading-6 text-slate-400">Displayed employer plan pricing comes from the current Admin-managed catalog and may change when an administrator updates that catalog. Paid services are subject to the <Link href="/terms" className="text-[#82b1ff] hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-[#82b1ff] hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-[#82b1ff] hover:underline">Refund & Cancellation Policy</Link> and <Link href="/service-delivery" className="text-[#82b1ff] hover:underline">Service Delivery Policy</Link>.</div>
-  </div>;
+  return (
+    <div className="space-y-8">
+      {/* ─── 1. Main Pricing Catalog (Tabs: Subscriptions & Managed Hiring) ─── */}
+      <section>
+        <EmployerPricingPreview />
+      </section>
+
+      {/* ─── 2. PRODUCT SHOWCASE: AI Hiring Co-Pilot ─── */}
+      <section className="relative overflow-hidden rounded-[32px] border border-cyan-500/25 bg-gradient-to-br from-[#08152c] via-[#050f1f] to-[#040a14] p-8 sm:p-12 shadow-2xl">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-96 w-96 rounded-full bg-cyan-500/15 blur-[110px]" />
+        
+        <div className="relative grid gap-10 lg:grid-cols-12 lg:items-center">
+          {/* Left: Product Information & 3D Icons Grid */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="inline-flex items-center gap-2.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-cyan-300 shadow-md">
+              <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span>AI SOFTWARE PRODUCT · RECRUITING AUTOMATION</span>
+            </div>
+
+            <h2 className="text-2xl font-black tracking-tight text-white sm:text-4xl leading-tight">
+              AI Hiring Co-Pilot: Put Repetitive Hiring Operations on Autopilot.
+            </h2>
+
+            <p className="text-sm sm:text-base leading-relaxed text-slate-300">
+              Recruiting teams spend up to 70% of their week chasing updates, checking candidate status, and scheduling interviews. 
+              <strong className="text-white"> AI Hiring Co-Pilot</strong> executes these permitted operations autonomously—organizing candidates, routing skill assessments, and scheduling rounds while keeping consequential hiring decisions strictly in your hands.
+            </p>
+
+            {/* 3D Glass Icon Feature Grid */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-2">
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-[0_8px_20px_-4px_rgba(6,182,212,0.6)] border border-cyan-300/40 text-white font-black">
+                    <span className="text-lg">⚡</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Auto-Sourcing & Signals</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Automatically analyzes applicants against job criteria, highlighting verified skill evidence without manual resume parsing.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-400 to-purple-600 shadow-[0_8px_20px_-4px_rgba(99,102,241,0.6)] border border-indigo-300/40 text-white font-black">
+                    <span className="text-lg">📅</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Autonomous Scheduling</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Collects interviewer availability, syncs calendars, and sends candidate confirmation reminders with zero back-and-forth emails.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-[0_8px_20px_-4px_rgba(16,185,129,0.6)] border border-emerald-300/40 text-white font-black">
+                    <span className="text-lg">📝</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Assessment Routing</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Dispatches role-relevant MCQ tests and video interview prompts, compiling proctoring integrity scores for fast review.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-[0_8px_20px_-4px_rgba(245,158,11,0.6)] border border-amber-300/40 text-white font-black">
+                    <span className="text-lg">🛡️</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Human in the Loop</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Never rejects or selects candidates automatically. Final hiring decisions and offers remain strictly under human authorization.
+                </p>
+              </div>
+            </div>
+
+            {/* Pricing & CTAs */}
+            <div className="pt-4 flex flex-wrap items-center gap-4 border-t border-white/10">
+              <Link
+                href="/ai-hiring-copilot"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-500 px-7 py-3.5 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:brightness-110 shadow-lg shadow-cyan-400/30"
+              >
+                <span>Explore AI Hiring Co-Pilot</span>
+                <span>→</span>
+              </Link>
+              <Link
+                href="/features"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3.5 text-xs font-bold text-white hover:bg-white/5 transition"
+              >
+                <span>View Platform Features</span>
+              </Link>
+              <span className="text-xs font-semibold text-slate-300 ml-auto">
+                Add-on available at <strong className="text-cyan-300">₹499</strong> / role
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Crisp High-Visibility 3D Control Center Mockup */}
+          <div className="lg:col-span-5">
+            <div className="relative rounded-[24px] border border-cyan-400/40 bg-gradient-to-b from-[#0c1a33] to-[#060e1d] p-5 shadow-2xl">
+              {/* Window Header */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full bg-red-500/80" />
+                  <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
+                  <span className="h-3 w-3 rounded-full bg-green-500/80" />
+                  <span className="ml-2 text-xs font-bold text-cyan-300">HireGo Co-Pilot Control</span>
+                </div>
+                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black text-emerald-400 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active
+                </span>
+              </div>
+
+              {/* Job Profile Overview */}
+              <div className="mt-4 rounded-xl bg-white/[0.03] border border-white/5 p-3.5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Role</h5>
+                    <p className="text-sm font-black text-white mt-0.5">Senior Full-Stack Engineer</p>
+                  </div>
+                  <span className="rounded-lg bg-blue-500/20 border border-blue-500/30 px-2 py-1 text-[11px] font-bold text-blue-300">
+                    42 Sourced
+                  </span>
+                </div>
+              </div>
+
+              {/* Real-time Pipeline Stages */}
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-2.5">
+                  <span className="text-[10px] font-bold text-slate-400 block">Screened</span>
+                  <span className="text-base font-black text-cyan-300">18 Candidates</span>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-2.5">
+                  <span className="text-[10px] font-bold text-slate-400 block">Assessed</span>
+                  <span className="text-base font-black text-indigo-300">9 Completed</span>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-2.5">
+                  <span className="text-[10px] font-bold text-slate-400 block">HR Interviews</span>
+                  <span className="text-base font-black text-emerald-300">4 Shortlisted</span>
+                </div>
+              </div>
+
+              {/* Candidate Spotlight Card */}
+              <div className="mt-3 rounded-xl border border-cyan-400/20 bg-gradient-to-r from-cyan-950/40 to-blue-950/40 p-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-full bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center">
+                      AS
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">Aarav Sharma</p>
+                      <p className="text-[10px] text-slate-400">Next.js · TypeScript · Cloud</p>
+                    </div>
+                  </div>
+                  <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                    96% Match
+                  </span>
+                </div>
+
+                <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2 text-[10px] text-slate-300">
+                  <span className="text-cyan-300 font-bold">
+                    ✓ Video Resume (Score 94)
+                  </span>
+                  <span className="text-slate-400">Proctoring Verified</span>
+                </div>
+              </div>
+
+              {/* Status footer */}
+              <div className="mt-4 flex items-center justify-between text-[11px] font-bold text-slate-400 border-t border-white/10 pt-3">
+                <span className="flex items-center gap-1.5 text-emerald-400">
+                  ✓ Human Authorization Required
+                </span>
+                <span className="text-[10px] text-slate-400">Company HR Decides</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── 3. SERVICE SHOWCASE: HireGo Managed Hiring ─── */}
+      <section className="relative overflow-hidden rounded-[32px] border border-amber-500/30 bg-gradient-to-br from-[#1a1107] via-[#110c05] to-[#070503] p-8 sm:p-12 shadow-2xl">
+        <div className="pointer-events-none absolute -left-20 -top-20 h-96 w-96 rounded-full bg-amber-500/15 blur-[110px]" />
+
+        <div className="relative grid gap-10 lg:grid-cols-12 lg:items-center">
+          {/* Left: 3D Visual Delivery Pipeline Showcase */}
+          <div className="lg:col-span-5 order-2 lg:order-1">
+            <div className="relative rounded-[24px] border border-amber-400/40 bg-gradient-to-b from-[#1c1308] to-[#0e0904] p-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <img src="/marketing/hirego-logo-hd.png" alt="HireGo" className="h-4 w-auto" />
+                  <span className="text-xs font-bold text-amber-300">Managed Hiring Operations</span>
+                </div>
+                <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
+                  100% Pay on Joining
+                </span>
+              </div>
+
+              {/* Visual Recruitment Pipeline Steps */}
+              <div className="mt-4 space-y-2.5">
+                {[
+                  { step: "01", title: "Role Requirement Sourced", sub: "HireGo talent sourcers activate active/passive pools" },
+                  { step: "02", title: "Video Resumes & Pre-Screening", sub: "Verified communication, tests & tech evidence" },
+                  { step: "03", title: "Company HR Conducts Interviews", sub: "Your hiring manager takes interviews & decides", highlight: true },
+                  { step: "04", title: "Candidate Joins & Fee Triggered", sub: "30 to 90 days replacement warranty begins" },
+                ].map((item) => (
+                  <div
+                    key={item.step}
+                    className={`rounded-xl p-3 border ${
+                      item.highlight
+                        ? "border-amber-400/50 bg-gradient-to-r from-amber-500/20 to-orange-500/20 shadow-md"
+                        : "border-white/5 bg-white/[0.02]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className={`font-mono text-xs font-black ${item.highlight ? "text-amber-300" : "text-slate-400"}`}>{item.step}</span>
+                      <h6 className={`text-xs font-bold ${item.highlight ? "text-white" : "text-slate-300"}`}>{item.title}</h6>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400 ml-6">{item.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bottom Guarantee Badge */}
+              <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-2.5 text-center text-xs font-bold text-emerald-400">
+                🛡️ Zero Upfront Cost · Guaranteed Free Replacement
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Service Information & Why Take It */}
+          <div className="lg:col-span-7 space-y-6 order-1 lg:order-2">
+            <div className="inline-flex items-center gap-2.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-black tracking-wide text-amber-300 shadow-md">
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+              <span>WHITE-GLOVE RECRUITMENT SERVICE · PAY PER HIRE</span>
+            </div>
+
+            <h2 className="text-2xl font-black tracking-tight text-white sm:text-4xl leading-tight">
+              Managed Hiring: Don’t Want to Manage Software? We Deliver the Entire Hire.
+            </h2>
+
+            <p className="text-sm sm:text-base leading-relaxed text-slate-300">
+              If your founding or leadership team does not have the bandwidth to source, screen, and coordinate interviews, 
+              <strong className="text-white"> HireGo Managed Hiring</strong> takes over the operational heavy lifting. 
+              Our talent partners handle discovery, vetting, video resumes, and candidate coordination. 
+              <strong className="text-amber-300"> Your company HR conducts the final interviews and makes the hiring decision.</strong> You pay strictly when your chosen candidate joins.
+            </p>
+
+            {/* 3D Glass Icon Feature Grid */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-2">
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-[0_8px_20px_-4px_rgba(245,158,11,0.6)] border border-amber-300/40 text-white font-black text-base">
+                    ₹0
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Zero Financial Risk</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Never pay for software licenses or inactive job postings. You pay strictly upon the successful joining of your chosen candidate.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-[0_8px_20px_-4px_rgba(6,182,212,0.6)] border border-cyan-300/40 text-white font-black">
+                    <span className="text-lg">🎥</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Pre-Vetted Video Resumes</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Review recorded video communication responses and role-aligned test scores before dedicating interviewer hours.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-[0_8px_20px_-4px_rgba(16,185,129,0.6)] border border-emerald-300/40 text-white font-black">
+                    <span className="text-lg">⏱️</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Delivered in Minutes</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Our autonomous OS matches pre-screened software engineers with video resumes and proctored code in just minutes.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] p-5 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-400 to-purple-600 shadow-[0_8px_20px_-4px_rgba(99,102,241,0.6)] border border-indigo-300/40 text-white font-black">
+                    <span className="text-lg">🤝</span>
+                  </div>
+                  <h4 className="font-bold text-white text-sm">Free Replacement Warranty</h4>
+                </div>
+                <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                  Enjoy complete peace of mind with 45 to 90 days replacement warranty if a candidate departs within the warranty window.
+                </p>
+              </div>
+            </div>
+
+            {/* Action CTAs */}
+            <div className="pt-4 flex flex-wrap items-center gap-4 border-t border-white/10">
+              <Link
+                href="/employer/managed-hiring/request"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 px-7 py-3.5 text-xs font-black uppercase tracking-wider text-slate-950 transition hover:brightness-110 shadow-lg shadow-amber-400/30"
+              >
+                <span>Submit Role for Managed Hiring</span>
+                <span>→</span>
+              </Link>
+              <Link
+                href="/pay-per-hire"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3.5 text-xs font-bold text-white hover:bg-white/5 transition"
+              >
+                <span>Read Pay-Per-Hire Terms</span>
+              </Link>
+              <Link
+                href="/contact?topic=managed-hiring"
+                className="text-xs font-semibold text-amber-300 hover:underline ml-auto"
+              >
+                Talk to a Talent Partner →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── 4. DECISION MATRIX: Which Option Fits Your Workflow? ─── */}
+      <section className="rounded-[32px] border border-white/10 bg-gradient-to-b from-[#081324] to-[#040914] p-8 sm:p-12 shadow-2xl">
+        <h2 className="text-center text-2xl font-black text-white sm:text-3xl">
+          Which Option Fits Your Team Best?
+        </h2>
+        <p className="mx-auto mt-2 max-w-xl text-center text-xs sm:text-sm text-slate-400">
+          Compare our three hiring models to select the right approach for your current hiring context.
+        </p>
+
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
+          {/* Option 1 */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7 flex flex-col justify-between shadow-lg">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Self-Serve SaaS</span>
+              <h3 className="mt-2 text-xl font-bold text-white">Employer Packages</h3>
+              <p className="mt-3 text-xs leading-relaxed text-slate-400">
+                You have an internal recruiter or HR manager who wants to post jobs, run assessments, and track applicants using our platform.
+              </p>
+              <ul className="mt-4 space-y-2 text-xs text-slate-300 border-t border-white/5 pt-4">
+                <li>• Quota-based job posting</li>
+                <li>• Automated JD generation</li>
+                <li>• Candidate match scoring</li>
+                <li>• Self-directed candidate contact</li>
+              </ul>
+            </div>
+            <div className="mt-6 pt-4 border-t border-white/5">
+              <span className="block text-xs font-bold text-white">Cost: ₹0 to ₹999 package</span>
+              <Link href="#subscriptions" className="mt-3 block text-center rounded-xl border border-white/15 py-2.5 text-xs font-bold text-white hover:bg-white/5">
+                View Subscription Plans
+              </Link>
+            </div>
+          </div>
+
+          {/* Option 2 */}
+          <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-b from-cyan-950/30 to-blue-950/20 p-7 flex flex-col justify-between shadow-lg">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Agentic Product</span>
+              <h3 className="mt-2 text-xl font-bold text-white">AI Hiring Co-Pilot</h3>
+              <p className="mt-3 text-xs leading-relaxed text-slate-300">
+                You want software agents to automate sourcing pipelines, schedule rounds, and route tests while your hiring managers make final decisions.
+              </p>
+              <ul className="mt-4 space-y-2 text-xs text-slate-200 border-t border-cyan-400/20 pt-4">
+                <li>• Autonomous candidate scoring</li>
+                <li>• Automated calendar coordination</li>
+                <li>• Role-specific test routing</li>
+                <li>• Human approval safeguards</li>
+              </ul>
+            </div>
+            <div className="mt-6 pt-4 border-t border-cyan-400/20">
+              <span className="block text-xs font-bold text-cyan-300">Cost: ₹499 per role assignment</span>
+              <Link href="/ai-hiring-copilot" className="mt-3 block text-center rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 py-2.5 text-xs font-black text-slate-950 hover:brightness-110 shadow-md">
+                Explore AI Co-Pilot
+              </Link>
+            </div>
+          </div>
+
+          {/* Option 3 */}
+          <div className="rounded-2xl border border-amber-400/40 bg-gradient-to-b from-amber-950/30 to-orange-950/20 p-7 flex flex-col justify-between shadow-lg">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">Full Service</span>
+              <h3 className="mt-2 text-xl font-bold text-white">Managed Hiring</h3>
+              <p className="mt-3 text-xs leading-relaxed text-slate-300">
+                You want HireGo to handle candidate sourcing, pre-screening, and coordination. <strong className="text-white">Your company HR conducts the final interviews and makes the hiring decision.</strong> You pay strictly upon joining.
+              </p>
+              <ul className="mt-4 space-y-2 text-xs text-slate-200 border-t border-amber-400/20 pt-4">
+                <li>• 100% Pay on success (₹0 upfront)</li>
+                <li>• Pre-recorded video resumes</li>
+                <li>• 45 to 90 days replacement warranty</li>
+                <li>• Company HR takes final interview</li>
+              </ul>
+            </div>
+            <div className="mt-6 pt-4 border-t border-amber-400/20">
+              <span className="block text-xs font-bold text-amber-300">Cost: 8.33% to 12.5% CTC or Flat Fix Charge</span>
+              <Link href="/employer/managed-hiring/request" className="mt-3 block text-center rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 py-2.5 text-xs font-black text-slate-950 hover:brightness-110 shadow-md">
+                Submit Requirement
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Customer-Facing Legal Disclaimer (Zero Admin Wording) ─── */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 text-center text-xs leading-6 text-slate-400">
+        All plan pricing, allowances, and service packages are backed by official HireGo service guarantees. Paid services are subject to the <Link href="/terms" className="text-cyan-400 hover:underline">Terms & Conditions</Link>, <Link href="/privacy" className="text-cyan-400 hover:underline">Privacy Policy</Link>, <Link href="/refund-cancellation" className="text-cyan-400 hover:underline">Refund & Cancellation Policy</Link>, and <Link href="/service-delivery" className="text-cyan-400 hover:underline">Service Delivery Policy</Link>.
+      </div>
+    </div>
+  );
 }
 
 function PostJobPublicContent() {

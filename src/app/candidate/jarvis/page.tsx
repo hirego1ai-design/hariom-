@@ -52,6 +52,7 @@ export default function CandidateJarvisPage() {
   const liveAudioRef = useRef<HTMLAudioElement | null>(null);
   const liveBlobUrlRef = useRef<string | null>(null);
   const liveOrbRef = useRef<HTMLDivElement | null>(null);
+  const startLiveListeningRef = useRef<(generation: number) => Promise<void> | void>(() => {});
 
   // Standard Turn-based recording refs
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -256,16 +257,16 @@ export default function CandidateJarvisPage() {
       playSpokenVoice(audioUrl, replyMessage, () => {
         // Automatically resume listening for the next question (hands-free loop!)
         if (liveActiveRef.current && liveSequenceRef.current === generation) {
-          void startLiveListening(generation);
+          void startLiveListeningRef.current(generation);
         }
       });
     } catch (err) {
       if (!liveActiveRef.current || liveSequenceRef.current !== generation) return;
       setError(err instanceof Error ? err.message : "Voice turn failed.");
       setLiveStage("listening");
-      void startLiveListening(generation);
+      void startLiveListeningRef.current(generation);
     }
-  }, [playSpokenVoice]); // startLiveListening is hoisted via ref or inline
+  }, [playSpokenVoice]);
 
   const executeLiveTurnRef = useRef(executeLiveTurn);
   useEffect(() => { executeLiveTurnRef.current = executeLiveTurn; }, [executeLiveTurn]);
@@ -356,6 +357,10 @@ export default function CandidateJarvisPage() {
       stopLiveSession();
     }
   }, [stopLiveSession]);
+
+  useEffect(() => {
+    startLiveListeningRef.current = startLiveListening;
+  }, [startLiveListening]);
 
   // Launch Live Voice Mode (Gemini Live / GPT-4o style)
   const startLiveVoiceSession = useCallback(() => {

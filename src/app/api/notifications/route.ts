@@ -25,8 +25,15 @@ export async function PUT(request:NextRequest){
   await enforceRateLimit(request,"notifications_update",60,60_000);
   const session=await requireSession(request);
   const body=await readValidatedJson(request,updateSchema);
-  const result=await prisma.notification.updateMany({where:body.markAll?{userId:session.id,isRead:false}:{id:body.notificationId,userId:session.id},data:{isRead:true}});
-  if(!body.markAll&&result.count!==1)throw new ApiError("Notification not found.",404);
-  return NextResponse.json({success:true,updatedCount:result.count});
+  
+  if(body.markAll){
+   const result=await prisma.notification.updateMany({where:{userId:session.id,isRead:false},data:{isRead:true}});
+   return NextResponse.json({success:true,updatedCount:result.count});
+  }else{
+   const notification=await prisma.notification.findUnique({where:{id:body.notificationId},select:{userId:true}});
+   if(!notification||notification.userId!==session.id)throw new ApiError("Notification not found.",404);
+   const result=await prisma.notification.updateMany({where:{id:body.notificationId,userId:session.id},data:{isRead:true}});
+   return NextResponse.json({success:true,updatedCount:result.count});
+  }
  }catch(error){return handleApiError(error);}
 }
