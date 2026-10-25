@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import CandidateSidebar from "@/components/candidate/CandidateSidebar";
 
 type Service = { serviceKey: string; name: string; description: string | null; creditCost: number };
@@ -34,7 +33,6 @@ function submitPayU(url: string, params: Record<string, unknown>) {
 }
 
 export default function CandidateCreditsPage() {
-  const router = useRouter();
   const [balance, setBalance] = useState<number | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -90,7 +88,8 @@ export default function CandidateCreditsPage() {
           setError("");
           await load();
           if (requestedReturn === "mock-interview") {
-            router.push("/ai/mock-interview/setup");
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+            window.location.assign("/ai/mock-interview/setup");
             return;
           }
           window.history.replaceState({}, "", "/credits");
