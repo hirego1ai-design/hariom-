@@ -247,3 +247,22 @@ test("voice provider models are configuration data, not hard-coded runtime fallb
   assert.ok(!stt.includes("gpt-4o-mini-transcribe"));
   assert.ok(!tts.includes("gpt-4o-mini-tts"));
 });
+
+
+test("Live voice recognition avoids tight restart loops and ignores interviewer playback", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  assert.ok(active.includes("Do not restart in a tight onend loop"));
+  assert.ok(active.includes("scheduleRecognitionRestart"));
+  assert.ok(active.includes('liveStatusRef.current === "SPEAKING"'));
+  assert.ok(active.includes("isProcessingTurnRef.current"));
+  assert.ok(!active.includes("BARGE-IN: If Sara is speaking"));
+  assert.ok(!active.includes("await navigator.mediaDevices.getUserMedia"));
+});
+
+test("Voice UI removes audio disclaimer and inaccurate interruption claim", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  assert.ok(!active.includes("interrupt Sara at any moment by speaking"));
+  assert.ok(!setup.includes("Tip for shared rooms"));
+  assert.ok(!setup.includes("automatically filters out background room conversations"));
+});
