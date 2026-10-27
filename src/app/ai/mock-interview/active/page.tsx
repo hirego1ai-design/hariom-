@@ -444,7 +444,9 @@ export default function MockInterviewActivePage() {
       } finally {
         if (isMountedRef.current && isPlayingRef.current) {
           isPlayingRef.current = false;
-          setLiveStatus(isMicMutedRef.current ? "MUTED" : "LISTENING");
+          const nextStatus = isMicMutedRef.current ? "MUTED" : "LISTENING";
+          liveStatusRef.current = nextStatus;
+          setLiveStatus(nextStatus);
           if (!isMicMutedRef.current) void startListeningCapture();
         }
       }
@@ -504,6 +506,7 @@ export default function MockInterviewActivePage() {
         await playSaraSpeech(data.replyText);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Error in live discussion.");
+        liveStatusRef.current = "LISTENING";
         setLiveStatus("LISTENING");
       } finally {
         isProcessingTurnRef.current = false;
