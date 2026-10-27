@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Edit3,
   UserCheck,
-  Headphones,
 } from "lucide-react";
 
 type RoleOption = {
@@ -321,7 +320,7 @@ export default function MockInterviewSetupPage() {
             Live Voice Interview Practice
           </h1>
           <p className="text-sm text-white/60 mt-1 max-w-2xl">
-            Simulate a real-time, first-round voice interview with Sara. Speak naturally, interrupt anytime, and receive an executive scorecard upon completion.
+            Practice a first-round voice interview with Sara and receive an executive scorecard upon completion.
           </p>
         </div>
 
@@ -383,14 +382,6 @@ export default function MockInterviewSetupPage() {
                 <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Ready
                 </div>
-              </div>
-
-              {/* Shared Room & Audio Isolation Guidance */}
-              <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3.5 py-2.5 flex items-center gap-2.5 text-xs text-sky-200/80">
-                <Headphones className="w-4 h-4 text-sky-400 shrink-0" />
-                <span>
-                  <strong className="text-sky-300">Tip for shared rooms:</strong> Using earphones or a headset helps isolate your voice and automatically filters out background room conversations.
-                </span>
               </div>
 
               {/* Profile Auto-Populate Summary Card */}
