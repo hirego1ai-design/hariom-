@@ -100,22 +100,34 @@ export default function MockInterviewActivePage() {
 
   // References for live full-duplex conversation
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recognitionRef = useRef<any>(null);
-  const speechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPlayingRef = useRef(false);
   const isMountedRef = useRef(true);
-  const accumulatedSpeechRef = useRef("");
   const liveStatusRef = useRef<LiveVoiceStatus>("IDLE");
   const isMicMutedRef = useRef(false);
   const conversationRef = useRef<ChatMessage[]>([]);
   const isProcessingTurnRef = useRef(false);
-  const recognitionRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioObjectUrlRef = useRef<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const preSpeechChunksRef = useRef<Blob[]>([]);
+  const recordingHasSpeechRef = useRef(false);
+  const lastSpeechAtRef = useRef(0);
+  const segmentStartedAtRef = useRef(0);
+  const discardRecordingRef = useRef(false);
+  const candidateTurnHandlerRef = useRef<(speech: string) => Promise<void>>(async () => {});
+  const sessionIdRef = useRef<string | null>(sessionId);
+  const questionIndexRef = useRef(0);
 
   useEffect(() => {
     liveStatusRef.current = liveStatus;
   }, [liveStatus]);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  useEffect(() => { questionIndexRef.current = currentTurn?.questionIndex ?? session?.currentQuestionIndex ?? 0; }, [currentTurn?.questionIndex, session?.currentQuestionIndex]);
 
   useEffect(() => {
     isMicMutedRef.current = isMicMuted;
@@ -151,13 +163,7 @@ export default function MockInterviewActivePage() {
     return () => {
       isMountedRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
-      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
-      if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
       stopSaraSpeaking();
-      try {
-        recognitionRef.current?.abort?.();
-      } catch {}
-      recognitionRef.current = null;
     };
   }, [stopSaraSpeaking]);
 
@@ -253,15 +259,120 @@ export default function MockInterviewActivePage() {
     };
   }, [session, liveStatus]);
 
-  // Recover only when the candidate should be listening; delay prevents tight browser restart loops.
-  const scheduleRecognitionRestart = useCallback(() => {
-    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
-    recognitionRestartTimerRef.current = setTimeout(() => {
-      recognitionRestartTimerRef.current = null;
-      if (!isMountedRef.current || isMicMutedRef.current || isProcessingTurnRef.current ||
-          liveStatusRef.current !== "LISTENING" || isPlayingRef.current || !recognitionRef.current) return;
-      try { recognitionRef.current.start(); } catch { /* Already starting/listening. */ }
-    }, 700);
+  // MediaRecorder captures speech locally; transcription runs on the server to avoid browser speech beeps.
+  const ensureMicrophone = useCallback(async () => {
+    if (microphoneStreamRef.current?.getTracks().some((track) => track.readyState === "live")) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") throw new Error("This browser does not support microphone recording. Please use a recent Chrome, Edge, or Safari browser.");
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    microphoneStreamRef.current = stream;
+    const context = new AudioContext();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    audioContextRef.current = context;
+    analyserRef.current = analyser;
+  }, []);
+
+  const startListeningCapture = useCallback(async () => {
+    if (!isMountedRef.current || isMicMutedRef.current || isProcessingTurnRef.current || isPlayingRef.current ||
+        liveStatusRef.current === "SPEAKING" || liveStatusRef.current === "THINKING" || liveStatusRef.current === "CONNECTING") return;
+    if (recorderRef.current && recorderRef.current.state !== "inactive") return;
+    try {
+      await ensureMicrophone();
+      if (!isMountedRef.current || isMicMutedRef.current || isPlayingRef.current) return;
+      const stream = microphoneStreamRef.current;
+      const analyser = analyserRef.current;
+      if (!stream || !analyser) return;
+      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      preSpeechChunksRef.current = [];
+      recordingHasSpeechRef.current = false;
+      lastSpeechAtRef.current = 0;
+      segmentStartedAtRef.current = Date.now();
+      discardRecordingRef.current = false;
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (!event.data?.size) return;
+        if (recordingHasSpeechRef.current) recordingChunksRef.current.push(event.data);
+        else preSpeechChunksRef.current = [...preSpeechChunksRef.current.slice(-2), event.data];
+      };
+      recorder.onstop = async () => {
+        if (recorderRef.current === recorder) recorderRef.current = null;
+        if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+        const discard = discardRecordingRef.current;
+        discardRecordingRef.current = false;
+        const hadSpeech = recordingHasSpeechRef.current;
+        const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        recordingChunksRef.current = [];
+        preSpeechChunksRef.current = [];
+        recordingHasSpeechRef.current = false;
+        if (discard || !hadSpeech || blob.size < 128) {
+          if (isMountedRef.current && !isMicMutedRef.current && !isPlayingRef.current && !isProcessingTurnRef.current && liveStatusRef.current === "LISTENING") void startListeningCapture();
+          return;
+        }
+        const activeSessionId = sessionIdRef.current;
+        if (!activeSessionId) return;
+        setLiveStatus("THINKING");
+        setInterimUserText("Transcribing your answer...");
+        try {
+          const form = new FormData();
+          form.append("audio", blob, mime?.startsWith("audio/mp4") ? "answer.mp4" : "answer.webm");
+          form.append("sessionId", activeSessionId);
+          form.append("questionIndex", String(questionIndexRef.current));
+          const response = await fetch("/api/assessment/mock-interview/voice/live-transcribe", { method: "POST", credentials: "include", body: form });
+          const data = await response.json().catch(() => null);
+          if (!response.ok || !data?.success || typeof data.transcript !== "string" || !data.transcript.trim()) throw new Error(data?.error || "We could not hear that clearly. Please try again.");
+          setInterimUserText(data.transcript.trim());
+          await candidateTurnHandlerRef.current(data.transcript.trim());
+        } catch (error) {
+          setErrorMessage(error instanceof Error ? error.message : "Could not transcribe your answer. Please try again.");
+          setLiveStatus("LISTENING");
+          setInterimUserText("");
+          if (!isMicMutedRef.current) void startListeningCapture();
+        }
+      };
+      recorder.start(250);
+      setLiveStatus("LISTENING");
+      const samples = new Uint8Array(analyser.fftSize);
+      const detectSpeech = () => {
+        if (recorderRef.current !== recorder || recorder.state !== "recording") return;
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++) { const v = (samples[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / samples.length);
+        const now = Date.now();
+        if (rms > 0.025) {
+          if (!recordingHasSpeechRef.current) {
+            recordingHasSpeechRef.current = true;
+            recordingChunksRef.current = [...preSpeechChunksRef.current];
+            preSpeechChunksRef.current = [];
+          }
+          lastSpeechAtRef.current = now;
+        }
+        if (recordingHasSpeechRef.current && (now - lastSpeechAtRef.current > 1200 || now - segmentStartedAtRef.current > 45_000)) {
+          animationFrameRef.current = null;
+          try { recorder.stop(); } catch {}
+          return;
+        }
+        animationFrameRef.current = requestAnimationFrame(detectSpeech);
+      };
+      animationFrameRef.current = requestAnimationFrame(detectSpeech);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Microphone access is required for the live interview.");
+      setLiveStatus("IDLE");
+    }
+  }, [ensureMicrophone]);
+
+  const stopListeningCapture = useCallback((discard = true) => {
+    if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+    animationFrameRef.current = null;
+    if (recorderRef.current?.state === "recording") {
+      discardRecordingRef.current = discard;
+      try { recorderRef.current.stop(); } catch {}
+    }
   }, []);
 
   // Play Sara's speech (ElevenLabs Sarah voice, with fallback)
@@ -334,11 +445,11 @@ export default function MockInterviewActivePage() {
         if (isMountedRef.current && isPlayingRef.current) {
           isPlayingRef.current = false;
           setLiveStatus(isMicMutedRef.current ? "MUTED" : "LISTENING");
-          if (!isMicMutedRef.current) scheduleRecognitionRestart();
+          if (!isMicMutedRef.current) void startListeningCapture();
         }
       }
     },
-    [sessionId, stopSaraSpeaking, scheduleRecognitionRestart],
+    [sessionId, stopSaraSpeaking, startListeningCapture],
   );
 
   // Send candidate speech to LLM and trigger Sara's live response
@@ -347,10 +458,8 @@ export default function MockInterviewActivePage() {
       const cleanSpeech = candidateSpeech.trim();
       if (!cleanSpeech || !sessionId || isProcessingTurnRef.current) return;
       isProcessingTurnRef.current = true;
-      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
       setLiveStatus("THINKING");
       setInterimUserText("");
-      accumulatedSpeechRef.current = "";
 
       // Append candidate speech to chat
       const userMsg: ChatMessage = {
@@ -398,86 +507,11 @@ export default function MockInterviewActivePage() {
         setLiveStatus("LISTENING");
       } finally {
         isProcessingTurnRef.current = false;
-        if (liveStatusRef.current === "LISTENING" && !isMicMutedRef.current) scheduleRecognitionRestart();
+        if (liveStatusRef.current === "LISTENING" && !isMicMutedRef.current) void startListeningCapture();
       }
     },
-    [sessionId, playSaraSpeech, scheduleRecognitionRestart],
+    [sessionId, playSaraSpeech, startListeningCapture],
   );
-
-  // Setup Continuous Speech Recognition with Instant Barge-In
-  const startLiveRecognition = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    const SpeechRecClass =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecClass) {
-      setErrorMessage("Live speech recognition requires Google Chrome, Edge, or Safari.");
-      return;
-    }
-
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    } catch {}
-
-    const recognition = new SpeechRecClass();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event: any) => {
-      if (isMicMutedRef.current || isProcessingTurnRef.current ||
-          liveStatusRef.current === "SPEAKING" || liveStatusRef.current === "THINKING" ||
-          liveStatusRef.current === "CONNECTING") return;
-
-      let interim = "";
-      let final = "";
-
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript + " ";
-        } else {
-          interim += transcript;
-        }
-      }
-
-      if (final.trim()) {
-        accumulatedSpeechRef.current = (accumulatedSpeechRef.current + " " + final).trim();
-      }
-      setInterimUserText(interim || accumulatedSpeechRef.current);
-
-      // Debounce: detect when candidate pauses speaking (~550ms for snappy natural response)
-      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
-      speechTimerRef.current = setTimeout(() => {
-        const fullCandidateSpeech = accumulatedSpeechRef.current.trim();
-        if (fullCandidateSpeech.length >= 4 && !isProcessingTurnRef.current) {
-          void handleCandidateFinishedSpeaking(fullCandidateSpeech);
-        }
-      }, 900);
-    };
-
-    recognition.onerror = (e: any) => {
-      if (e.error !== "no-speech") {
-        console.warn("[LiveInterview] Speech recognition notice:", e.error);
-      }
-    };
-
-    recognition.onend = () => {
-      // Do not restart in a tight onend loop; recover only during the listening phase.
-      if (liveStatusRef.current === "LISTENING" && !isMicMutedRef.current) scheduleRecognitionRestart();
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (err) {
-      console.warn("Could not start continuous speech recognition:", err);
-    }
-  }, [handleCandidateFinishedSpeaking, scheduleRecognitionRestart]);
 
   // Connect to Live Interview Room
   const handleStartLiveCall = async () => {
@@ -485,9 +519,7 @@ export default function MockInterviewActivePage() {
     setErrorMessage(null);
 
     try {
-      // SpeechRecognition manages microphone permission itself. Avoid opening a second
-      // microphone stream that can compete with recognition on mobile browsers.
-      startLiveRecognition();
+      await ensureMicrophone();
 
       // Start with Sara's opening / first question
       const opening =
@@ -504,28 +536,23 @@ export default function MockInterviewActivePage() {
     }
   };
 
+  // Keep the current handler available to asynchronous recorder callbacks.
+  candidateTurnHandlerRef.current = handleCandidateFinishedSpeaking;
+
   // Toggle Microphone
   const toggleMute = () => {
     const nextState = !isMicMuted;
     setIsMicMuted(nextState);
     isMicMutedRef.current = nextState;
-    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
-    if (nextState) {
-      setLiveStatus("MUTED");
-      try {
-        recognitionRef.current?.stop();
-      } catch {}
-    } else {
-      setLiveStatus("LISTENING");
-      scheduleRecognitionRestart();
-    }
+    if (nextState) { stopListeningCapture(true); setLiveStatus("MUTED"); }
+    else { setLiveStatus("LISTENING"); void startListeningCapture(); }
   };
 
   // Manual Interrupt Button
   const handleManualInterrupt = () => {
     stopSaraSpeaking();
     setLiveStatus("LISTENING");
-    if (!isMicMutedRef.current) scheduleRecognitionRestart();
+    if (!isMicMutedRef.current) void startListeningCapture();
   };
 
   // End Interview & Complete
@@ -533,9 +560,12 @@ export default function MockInterviewActivePage() {
     if (!sessionId) return;
     setIsFinishing(true);
     stopSaraSpeaking();
-    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
     isProcessingTurnRef.current = false;
-    try { recognitionRef.current?.abort?.(); } catch {}
+    stopListeningCapture(true);
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneStreamRef.current = null;
+    void audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
 
     try {
       await fetch("/api/assessment/mock-interview/finish", {
