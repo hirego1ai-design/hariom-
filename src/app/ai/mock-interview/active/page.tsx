@@ -103,6 +103,7 @@ export default function MockInterviewActivePage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPlayingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const isInterviewEndingRef = useRef(false);
   const liveStatusRef = useRef<LiveVoiceStatus>("IDLE");
   const isMicMutedRef = useRef(false);
   const conversationRef = useRef<ChatMessage[]>([]);
@@ -275,7 +276,7 @@ export default function MockInterviewActivePage() {
   }, []);
 
   const startListeningCapture = useCallback(async () => {
-    if (!isMountedRef.current || isMicMutedRef.current || isProcessingTurnRef.current || isPlayingRef.current ||
+    if (!isMountedRef.current || isInterviewEndingRef.current || isMicMutedRef.current || isProcessingTurnRef.current || isPlayingRef.current ||
         liveStatusRef.current === "SPEAKING" || liveStatusRef.current === "THINKING" || liveStatusRef.current === "CONNECTING") return;
     if (recorderRef.current && recorderRef.current.state !== "inactive") return;
     try {
@@ -310,7 +311,7 @@ export default function MockInterviewActivePage() {
         preSpeechChunksRef.current = [];
         recordingHasSpeechRef.current = false;
         if (discard || !hadSpeech || blob.size < 128) {
-          if (isMountedRef.current && !isMicMutedRef.current && !isPlayingRef.current && !isProcessingTurnRef.current && liveStatusRef.current === "LISTENING") void startListeningCapture();
+          if (isMountedRef.current && !isInterviewEndingRef.current && !isMicMutedRef.current && !isPlayingRef.current && !isProcessingTurnRef.current && liveStatusRef.current === "LISTENING") void startListeningCapture();
           return;
         }
         const activeSessionId = sessionIdRef.current;
@@ -562,6 +563,7 @@ export default function MockInterviewActivePage() {
   const finishInterview = async () => {
     if (!sessionId) return;
     setIsFinishing(true);
+    isInterviewEndingRef.current = true;
     stopSaraSpeaking();
     isProcessingTurnRef.current = false;
     stopListeningCapture(true);
