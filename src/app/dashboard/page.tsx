@@ -573,18 +573,18 @@ export default function CandidateDashboardPage() {
                 </div>
                 <h3 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>AI Mock Interview Practice</h3>
                 <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  Practice role-relevant questions in a text-based mock interview and receive structured feedback on your answers.
+                  Simulate real-time, first-round voice interviews with Sara. Live conversation, realistic probing, and an executive scorecard.
                 </p>
                 <div className="mt-5 space-y-2">
                   <Link
-                    href="/ai/mock-interview/active"
+                    href="/ai/mock-interview/setup"
                     className="block w-full py-3 rounded-full text-white font-bold text-xs shadow-lg transition-all"
                     style={{
                       background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                       boxShadow: "var(--shadow-btn-red)",
                     }}
                   >
-                    Start AI Mock Session
+                    Start Live Voice Interview
                   </Link>
                   <Link
                     href="/ai/practice-hub"

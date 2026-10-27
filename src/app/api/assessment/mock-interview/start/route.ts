@@ -145,6 +145,65 @@ export async function POST(request: Request) {
       });
     }
 
+    // ZERO-LOSS RESUME ENGINE: Check if candidate already has an active IN_PROGRESS session (<24h old)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const activeSession = await prisma.mockInterviewSession.findFirst({
+      where: {
+        candidateProfileId: candidateProfile.id,
+        status: "IN_PROGRESS",
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+      include: {
+        persona: true,
+        turns: { orderBy: { questionIndex: "asc" } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (activeSession) {
+      const latestTurn =
+        activeSession.turns.find(
+          (t) => t.questionIndex === activeSession.currentQuestionIndex,
+        ) ||
+        activeSession.turns[activeSession.turns.length - 1] ||
+        activeSession.turns[0];
+
+      return NextResponse.json({
+        success: true,
+        reused: true,
+        resumed: true,
+        message: "Resuming your active interview session with 0 credit deduction.",
+        session: {
+          id: activeSession.id,
+          roleTarget: activeSession.roleTarget,
+          declaredSeniority: activeSession.declaredSeniority,
+          roleFamily: activeSession.roleFamily,
+          totalQuestions: activeSession.totalQuestions,
+          currentQuestionIndex: activeSession.currentQuestionIndex,
+          focusSkills: activeSession.focusSkills,
+          language: activeSession.language,
+          mode: activeSession.mode,
+          openingMessage: activeSession.openingMessage,
+          persona: activeSession.persona
+            ? {
+                name: activeSession.persona.displayName,
+                roleFamily: activeSession.persona.roleFamily,
+                rubricVersion: activeSession.persona.rubricVersion,
+              }
+            : null,
+        },
+        question: latestTurn
+          ? {
+              text: latestTurn.questionText,
+              questionIndex: latestTurn.questionIndex,
+              difficulty: latestTurn.difficulty,
+              competency: latestTurn.competency,
+              skillTags: latestTurn.skillTags,
+            }
+          : null,
+      });
+    }
+
     const mockService = await prisma.candidateServiceCatalog.findFirst({
       where: {
         serviceKey: { in: ["mock-interview", "mock_interview"] },

@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  async redirects() {
+    return [
+      {
+        source: "/ai/mock-interview",
+        destination: "/ai/mock-interview/setup",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     const headers = Object.entries(
       configuredSecurityHeaders(process.env.NODE_ENV !== "production"),

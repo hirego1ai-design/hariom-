@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAllTests } from "@/tests/suite.test";
 import { requireAdminSession } from "@/lib/routeAuthorization";
 import { ApiError, enforceRateLimit, handleApiError } from "@/lib/apiSecurity";
 
@@ -16,6 +15,7 @@ export async function POST(req: NextRequest) {
       throw new ApiError("The destructive test runner is disabled in deployed environments.", 404);
     }
 
+    const { runAllTests } = await import("@/tests/suite.test");
     const report = await runAllTests();
     return NextResponse.json({
       success: true,

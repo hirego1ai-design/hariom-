@@ -88,6 +88,7 @@ export default function CandidateCreditsPage() {
           setError("");
           await load();
           if (requestedReturn === "mock-interview") {
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
             window.location.assign("/ai/mock-interview/setup");
             return;
           }
@@ -169,91 +170,109 @@ export default function CandidateCreditsPage() {
     }
   };
 
-  return <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
-    <CandidateSidebar />
-    <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl p-6 lg:p-10">
-      <header className="mb-8">
-        <p className="text-primary text-xs font-bold uppercase tracking-wider">Candidate account</p>
-        <h1 className="mt-2 text-3xl font-extrabold">Career Credits</h1>
-        <p className="mt-3 max-w-3xl text-sm text-text-secondary">Credits are separate from employer credits. They can be used for AI Mock Interviews and career services; they cannot buy an artificial score, badge, or job outcome.</p>
-      </header>
-
-      {error && <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
-      {successNotice && <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">{successNotice}</div>}
-
-      <section className="mb-8 glass-card rounded-3xl border border-white/10 p-6">
-        <p className="text-xs uppercase font-bold text-text-muted">Available credits</p>
-        <p className="mt-2 text-4xl font-extrabold text-primary">{balance === null ? "—" : balance}</p>
-      </section>
-
-      {purchaseStatus === "READY" && packages.length > 0 && (
-        <section className="mb-10" aria-label="Buy candidate credits">
-          <h2 className="text-lg font-bold">Buy credits</h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            Choose a credit pack and pay securely. Your credits will appear after payment is confirmed.
+  return (
+    <div className="min-h-screen bg-[#0E0E0E] text-text-primary flex">
+      <CandidateSidebar />
+      <main className="flex-1 ml-0 md:ml-[116px] max-w-5xl p-6 lg:p-10">
+        <header className="mb-8">
+          <p className="text-primary text-xs font-bold uppercase tracking-wider">Candidate account</p>
+          <h1 className="mt-2 text-3xl font-extrabold">Career Credits</h1>
+          <p className="mt-3 max-w-3xl text-sm text-text-secondary">
+            Credits are separate from employer credits. They can be used for AI Mock Interviews and career services; they cannot buy an artificial score, badge, or job outcome.
           </p>
-          {returnTo === "mock-interview" && (
-            <p className="mt-3 text-sm text-blue-100">
-              After successful payment, you can return to your mock interview.
+        </header>
+
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {successNotice && (
+          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+            {successNotice}
+          </div>
+        )}
+
+        <section className="mb-10 grid gap-5 sm:grid-cols-2">
+          <div className="glass-card rounded-3xl border border-white/10 p-6">
+            <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Available wallet balance</p>
+            <p className="mt-4 text-4xl font-extrabold">
+              {balance === null ? "…" : balance} <span className="text-sm font-semibold text-text-secondary">credits</span>
             </p>
-          )}
-          <div className="mt-4 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {packages.map((pkg) => (
-              <article key={pkg.id} className="glass-card rounded-3xl border border-white/10 p-6">
-                <h3 className="font-bold">{pkg.name}</h3>
-                {pkg.description && <p className="mt-2 text-sm text-text-secondary">{pkg.description}</p>}
-                <p className="mt-5 text-3xl font-extrabold">
-                  {pkg.credits} <span className="text-sm font-semibold text-text-secondary">credits</span>
-                </p>
-                <p className="mt-2 text-sm font-semibold">
-                  {pkg.currency.toUpperCase()} {pkg.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                </p>
-                <button
-                  onClick={() => void buyCredits(pkg)}
-                  disabled={purchasing !== ""}
-                  className="mt-5 w-full rounded-xl btn-3d-red px-4 py-3 text-xs font-bold text-white disabled:opacity-50"
-                >
-                  {purchasing === pkg.id ? "Opening secure checkout…" : "Buy securely"}
-                </button>
-              </article>
-            ))}
+            <p className="mt-3 text-xs text-text-muted">1 credit = ₹1.00 INR</p>
+          </div>
+
+          <div className="glass-card rounded-3xl border border-white/10 p-6 flex flex-col justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Live Voice Practice</p>
+              <p className="mt-2 text-sm text-white/80 font-medium">Ready for real-time interview practice with Sara.</p>
+            </div>
+            <a
+              href="/ai/mock-interview/setup"
+              className="mt-4 inline-flex items-center justify-center rounded-xl btn-3d-red px-5 py-3 text-xs font-bold text-white text-center"
+            >
+              Start Live Interview
+            </a>
           </div>
         </section>
-      )}
 
-      {returnTo === "mock-interview" && purchaseStatus !== "READY" && balance !== null && (
-        <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-text-secondary">
-          Your available credits can be used for interview practice.{" "}
-          <a href="/ai/mock-interview/setup" className="font-bold text-white underline underline-offset-4">
-            Back to mock interview
-          </a>
-        </div>
-      )}
+        {purchaseStatus === "READY" && packages.length > 0 && (
+          <section className="mb-10" aria-label="Buy candidate credits">
+            <h2 className="text-lg font-bold">Buy credits</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Choose a credit pack and pay securely. Your credits will appear after payment is confirmed.
+            </p>
+            <div className="mt-4 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {packages.map((pkg) => (
+                <article key={pkg.id} className="glass-card rounded-3xl border border-white/10 p-6">
+                  <h3 className="font-bold">{pkg.name}</h3>
+                  {pkg.description && <p className="mt-2 text-sm text-text-secondary">{pkg.description}</p>}
+                  <p className="mt-5 text-3xl font-extrabold">
+                    {pkg.credits} <span className="text-sm font-semibold text-text-secondary">credits</span>
+                  </p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {pkg.currency.toUpperCase()} {pkg.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </p>
+                  <button
+                    onClick={() => void buyCredits(pkg)}
+                    disabled={purchasing !== ""}
+                    className="mt-5 w-full rounded-xl btn-3d-red px-4 py-3 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {purchasing === pkg.id ? "Opening secure checkout…" : "Buy securely"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
-      <section>
-        <h2 className="text-lg font-bold">Available career services</h2>
-        <div className="mt-4 grid gap-5 md:grid-cols-2">
-          {services.map((service) => <article key={service.serviceKey} className="glass-card rounded-3xl border border-white/10 p-6">
-            <h3 className="font-bold">{service.name}</h3>
-            {service.description && <p className="mt-2 text-sm text-text-secondary">{service.description}</p>}
-            <p className="mt-4 text-xs text-text-muted">Cost: {service.creditCost} credits</p>
-            <button onClick={() => void requestService(service)} disabled={requesting !== "" || balance === null || balance < service.creditCost} className="mt-5 w-full rounded-xl btn-3d-red px-4 py-3 text-xs font-bold text-white disabled:opacity-50">
-              {requesting === service.serviceKey ? "Requesting…" : balance !== null && balance < service.creditCost ? "Insufficient credits" : "Request service"}
-            </button>
-          </article>)}
-        </div>
-        
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-lg font-bold">Credit history</h2>
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
-          {ledger.length === 0 ? <p className="p-5 text-sm text-text-secondary">No credit activity yet.</p> : ledger.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-4 border-b border-white/10 p-4 last:border-0">
-            <div><p className="text-sm font-semibold">{entry.reference || entry.type}</p><p className="text-xs text-text-muted">{new Date(entry.createdAt).toLocaleString()}</p></div>
-            <div className="text-right"><p className={entry.amount < 0 ? "text-red-300 font-bold" : "text-green font-bold"}>{entry.amount > 0 ? "+" : ""}{entry.amount}</p><p className="text-xs text-text-muted">Balance {entry.balanceAfter}</p></div>
-          </div>)}
-        </div>
-      </section>
-    </main>
-  </div>;
+        <section className="mt-10">
+          <h2 className="text-lg font-bold">Credit history</h2>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+            {ledger.length === 0 ? (
+              <p className="p-5 text-sm text-text-secondary">No credit activity yet.</p>
+            ) : (
+              ledger.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-4 border-b border-white/10 p-4 last:border-0">
+                  <div>
+                    <p className="text-sm font-semibold flex items-center gap-2">
+                      <span>{entry.reference || entry.type}</span>
+                    </p>
+                    <p className="text-xs text-text-muted">{new Date(entry.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={entry.amount < 0 ? "text-red-300 font-bold" : "text-green font-bold"}>
+                      {entry.amount > 0 ? "+" : ""}{entry.amount}
+                    </p>
+                    <p className="text-xs text-text-muted">Balance {entry.balanceAfter}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
 }

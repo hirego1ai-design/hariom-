@@ -56,7 +56,7 @@ async function smartOrder(taskType: string, candidates: ProviderModel[], configu
       status: true,
     },
     orderBy: { timestamp: "desc" },
-    take: 500,
+    take: 50,
   });
 
   const stats = new Map<string, {
@@ -178,7 +178,9 @@ export class ModelRouter {
         return qualityDelta !== 0 ? qualityDelta : costWeight(a.config) - costWeight(b.config);
       });
     } else if (policy.mode === "SMART_AUTO") {
-      candidates = await smartOrder(params.taskType, candidates, policy.primaryModelKey);
+      if (candidates.length > 1) {
+        candidates = await smartOrder(params.taskType, candidates, policy.primaryModelKey);
+      }
     } else {
       const primaryIndex = candidates.findIndex((candidate) => candidate.key === policy.primaryModelKey);
       if (primaryIndex > 0) {

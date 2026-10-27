@@ -9,7 +9,7 @@ const read = (relative: string) =>
 test("Candidate Jarvis is hybrid: deterministic actions bypass LLM and reasoning is routed", () => {
   const service = read("src/lib/jarvis/CandidateJarvisService.ts");
   assert.ok(service.includes('path: "FAST"'));
-  assert.ok(service.includes("directCommand(message, context)"));
+  assert.ok(service.includes("directCommand(message, fastContext)"));
   assert.ok(service.includes("ModelRouter.executeWithFallback"));
   assert.ok(service.includes('taskType ='));
   assert.ok(service.includes('"candidate-jarvis"') || read("src/lib/jarvis/CandidateJarvisConfig.ts").includes('"candidate-jarvis"'));
@@ -71,7 +71,8 @@ test("Candidate Jarvis UI presents discoverable voice controls without internal 
 test("Jarvis basic greetings do not depend on AI provider credentials", () => {
   const service = read("src/lib/jarvis/CandidateJarvisService.ts");
   const api = read("src/app/api/candidate/jarvis/route.ts");
-  assert.ok(service.includes("good morning|good afternoon|good evening"));
+  const intents = read("src/lib/jarvis/CandidateIntentRouter.ts");
+  assert.ok(intents.includes("good morning|good afternoon|good evening"));
   assert.ok(service.includes("Hi! I'm Jarvis"));
   assert.ok(api.includes("All configured AI endpoints failed"));
   assert.ok(api.includes("503"));

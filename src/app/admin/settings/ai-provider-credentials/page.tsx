@@ -5,7 +5,11 @@ import Link from "next/link";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
+<<<<<<< HEAD
 type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen" | "self_hosted";
+=======
+type ProviderName = "openai" | "gemini" | "deepseek" | "kimi" | "qwen" | "groq" | "openrouter" | "self_hosted";
+>>>>>>> origin/main
 type ProviderView = {
   provider: ProviderName;
   configured: boolean;
@@ -21,7 +25,11 @@ type Model = { key: string; provider: ProviderName; label: string; modelId: stri
 type Draft = { apiKey: string; baseUrl: string; reason: string; modelKey: string };
 const names: Record<ProviderName, string> = {
   openai: "OpenAI", gemini: "Google Gemini", deepseek: "DeepSeek",
+<<<<<<< HEAD
   kimi: "Kimi / Moonshot", qwen: "Qwen / DashScope", self_hosted: "Self-hosted LLM",
+=======
+  kimi: "Kimi / Moonshot", qwen: "Qwen / DashScope", groq: "GroqCloud", openrouter: "OpenRouter (Free/Paid Models)", self_hosted: "Self-hosted LLM",
+>>>>>>> origin/main
 };
 const providerNames = Object.keys(names) as ProviderName[];
 const editableEndpoint = (p: ProviderName) => p === "qwen" || p === "self_hosted";

@@ -11,7 +11,7 @@ import { z } from "zod";
 
 const dispatchSchema = z.object({
   agentId: z.enum(DIRECT_DISPATCH_AGENT_IDS),
-  input: z.record(z.unknown()),
+  input: z.record(z.string(), z.unknown()),
 }).strict().superRefine((body, ctx) => {
   const schema = body.agentId === "jd-generator"
     ? z.object({ title: z.string().trim().min(2).max(160) }).strict()

@@ -7,6 +7,7 @@ import { enqueueSecurityAuditEvent } from "@/lib/securityAuditOutbox";
 import { llmProviderSchema } from "@/lib/ai/AiRoutingConfig";
 import {
   encryptAiProviderKey, getAiProviderCredentialAdminView, validateAiProviderEndpoint,
+  invalidateAiProviderStatusCache,
 } from "@/lib/ai/AiProviderCredentials";
 
 export const runtime = "nodejs";
@@ -79,6 +80,7 @@ export async function PUT(request: NextRequest) {
       });
       await enqueueSecurityAuditEvent(tx, audit, admin.id);
     });
+    invalidateAiProviderStatusCache();
     return noStore({ success: true, message: "Provider credential settings saved.", providers: await getAiProviderCredentialAdminView() });
   } catch (error) {
     return handleApiError(error);
@@ -104,6 +106,7 @@ export async function DELETE(request: NextRequest) {
       });
       await enqueueSecurityAuditEvent(tx, audit, admin.id);
     });
+    invalidateAiProviderStatusCache();
     return noStore({
       success: true,
       message: "Admin override cleared. Environment credentials, if present, remain active.",

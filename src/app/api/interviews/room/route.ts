@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, enforceRateLimit, getCurrentSession, handleApiError, jsonError, readValidatedJson } from "@/lib";
 import { prisma } from "@/lib/prisma";
@@ -46,7 +46,16 @@ const roomActionSchema = z.object({
   }
 });
 
-async function findAuthorizedInterview(session: { id: string; role: string }, roomId: string) {
+/**
+ * SECURITY FIX 2: Admin Bypass Prevention
+ * 
+ * This function now includes authMethod parameter to enforce that:
+ * - SESSION_COOKIE based ADMIN access is denied (403 Forbidden)
+ * - Only API_KEY based ADMIN access is allowed
+ * 
+ * This prevents admins from eavesdropping on interviews via web UI login
+ */
+async function findAuthorizedInterview(session: { id: string; role: string; authMethod?: "API_KEY" | "SESSION_COOKIE" }, roomId: string) {
   const interview = await prisma.interview.findFirst({
     where: {
       OR: [
@@ -64,7 +73,17 @@ async function findAuthorizedInterview(session: { id: string; role: string }, ro
   if (session.role === "CANDIDATE") return session.id === candidateUserId ? interview : null;
   if (session.role !== "EMPLOYER" && session.role !== "RECRUITER" && session.role !== "ADMIN") return null;
   if (!interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id)) return null;
-  if (session.role === "ADMIN") return interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id) ? interview : null;
+  
+  // SECURITY FIX 2: Deny session-based ADMIN access (require API key)
+  if (session.role === "ADMIN") {
+    if (session.authMethod !== "API_KEY") {
+      // ADMIN attempted access via session cookie - deny with 403
+      return null;
+    }
+    // ADMIN with API key is authorized if in interviewers list (already checked above)
+    return interview.roundProgress?.round.interviewers.some((item) => item.userId === session.id) ? interview : null;
+  }
+  
   const profile = await prisma.employerProfile.findUnique({ where: { userId: session.id }, select: { companyId: true } });
   return profile?.companyId === interview.application.job.companyId ? interview : null;
 }

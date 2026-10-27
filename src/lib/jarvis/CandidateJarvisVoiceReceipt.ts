@@ -39,19 +39,43 @@ export async function createCandidateJarvisSpeechReceipt(params: {
   return receipt;
 }
 
+/**
+ * Upstash can deserialize a Redis EVAL JSON response into an object before it
+ * reaches the caller. Development Redis returns its raw serialized string.
+ * Never double-JSON.parse a value that is already an object.
+ *
+ * Every receipt is additionally bound to its user and creation time. The
+ * atomic takeRedisValue call, not this parser, enforces single consumption.
+ */
+export function parseCandidateJarvisSpeechReceipt(
+  raw: unknown,
+  userId: string,
+  nowMs: number = Date.now(),
+): CandidateJarvisSpeechReceipt | null {
+  if (raw === null || raw === undefined) return null;
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  const parsed = speechReceiptSchema.safeParse(value);
+  if (!parsed.success || parsed.data.userId !== userId) return null;
+  const createdMs = Date.parse(parsed.data.createdAt);
+  if (!Number.isFinite(createdMs) ||
+      createdMs > nowMs + 60_000 ||
+      nowMs - createdMs > TTL_SECONDS * 1_000) {
+    return null;
+  }
+  return parsed.data;
+}
+
 export async function takeCandidateJarvisSpeechReceipt(params: {
   receiptId: string;
   userId: string;
 }): Promise<CandidateJarvisSpeechReceipt | null> {
-  const raw = await takeRedisValue(key(params.receiptId));
-  if (!raw) return null;
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  const parsed = speechReceiptSchema.safeParse(json);
-  if (!parsed.success || parsed.data.userId !== params.userId) return null;
-  return parsed.data;
+  const raw: unknown = await takeRedisValue(key(params.receiptId));
+  return parseCandidateJarvisSpeechReceipt(raw, params.userId);
 }

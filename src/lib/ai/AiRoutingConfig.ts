@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 
-export const llmProviderSchema = z.enum(["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"]);
+export const llmProviderSchema = z.enum(["openai", "gemini", "deepseek", "kimi", "qwen", "groq", "openrouter", "self_hosted"]);
 export type LlmProviderName = z.infer<typeof llmProviderSchema>;
 
 export const routingModeSchema = z.enum([
@@ -105,23 +105,32 @@ export type AiRoutingConfig = z.infer<typeof aiRoutingConfigSchema>;
 
 const CONFIG_ID = "global-admin-config";
 
+let _configCache: { data: AiRoutingConfig; expiresAt: number } | null = null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export async function getAiRoutingConfig(): Promise<AiRoutingConfig> {
+  if (_configCache && Date.now() < _configCache.expiresAt) {
+    return _configCache.data;
+  }
+
   const row = await prisma.adminConfiguration.findUnique({
     where: { id: CONFIG_ID },
     select: { platformConfig: true },
   });
   if (!row || !isRecord(row.platformConfig) || !("aiRouting" in row.platformConfig)) {
-    return { version: 1, models: [], routes: [] };
+    const fallback: AiRoutingConfig = { version: 1, models: [], routes: [] };
+    _configCache = { data: fallback, expiresAt: Date.now() + 30_000 };
+    return fallback;
   }
 
   const parsed = aiRoutingConfigSchema.safeParse(row.platformConfig.aiRouting);
   if (!parsed.success) {
     throw new Error("Stored AI routing configuration is invalid. Refusing to route an AI request.");
   }
+  _configCache = { data: parsed.data, expiresAt: Date.now() + 30_000 };
   return parsed.data;
 }
 
@@ -151,6 +160,8 @@ export async function saveAiRoutingConfig(config: AiRoutingConfig): Promise<void
       data: { platformConfig: platformConfig as Prisma.InputJsonValue },
     });
   });
+
+  _configCache = null;
 }
 
 type ProviderRuntime = {
@@ -189,6 +200,16 @@ export function getProviderRuntime(provider: LlmProviderName): ProviderRuntime {
     if (!process.env.QWEN_BASE_URL) return { configured: false, reason: "QWEN_BASE_URL is missing" };
     return { configured: true, baseURL: process.env.QWEN_BASE_URL };
   }
+  if (provider === "groq") {
+    return process.env.GROQ_API_KEY
+      ? { configured: true, baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1" }
+      : { configured: false, reason: "GROQ_API_KEY is missing" };
+  }
+  if (provider === "openrouter") {
+    return process.env.OPENROUTER_API_KEY
+      ? { configured: true, baseURL: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1" }
+      : { configured: false, reason: "OPENROUTER_API_KEY is missing" };
+  }
 
   if (!process.env.SELF_HOSTED_LLM_BASE_URL) {
     return { configured: false, reason: "SELF_HOSTED_LLM_BASE_URL is missing" };
@@ -210,7 +231,11 @@ export function getProviderApiKey(provider: LlmProviderName): string | null {
           ? process.env.KIMI_API_KEY
           : provider === "qwen"
             ? process.env.QWEN_API_KEY
-            : process.env.SELF_HOSTED_LLM_API_KEY;
+            : provider === "groq"
+              ? process.env.GROQ_API_KEY
+              : provider === "openrouter"
+                ? process.env.OPENROUTER_API_KEY
+                : process.env.SELF_HOSTED_LLM_API_KEY;
   return value?.trim() || null;
 }
 

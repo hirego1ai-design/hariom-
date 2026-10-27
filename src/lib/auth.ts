@@ -1,8 +1,9 @@
-import { UserRole } from "@/types";
+﻿import { UserRole } from "@/types";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getRedisValue, setRedisValue } from "./redis";
+import { sessionCache } from "./cache/SessionCache";
 
 export interface UserSession {
   id: string;
@@ -11,6 +12,7 @@ export interface UserSession {
   name: string;
   sessionVersion?: number;
   jti?: string;
+  authMethod?: "API_KEY" | "SESSION_COOKIE";
 }
 
 export const AUTH_COOKIE_NAME = "hirego_session";
@@ -113,9 +115,32 @@ export function getSessionToken(reqHeaders?: Headers): string | null {
 }
 
 /**
- * Authoritative server-side session verification.  JWT claims are only a
- * transport mechanism: production checks Redis revocation/version state and
+ * Extract authentication method from request headers
+ * Returns "API_KEY" for Bearer tokens, "SESSION_COOKIE" for cookie-based auth
+ * 
+ * FIX 2: Admin Bypass - distinguishes between API key and session-based authentication
+ */
+function getAuthMethod(reqHeaders?: Headers): "API_KEY" | "SESSION_COOKIE" {
+  if (!reqHeaders) return "SESSION_COOKIE";
+  const authHeader = reqHeaders.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) return "API_KEY";
+  return "SESSION_COOKIE";
+}
+
+/**
+ * Authoritative server-side session verification with Redis fallback.
+ * 
+ * JWT claims are only a transport mechanism: production checks Redis revocation/version state and
  * refreshes identity and role from the database on every protected request.
+ * 
+ * REDIS FALLBACK (Fix 4):
+ * - When Redis is unavailable, fall back to local session cache (5-minute TTL)
+ * - This ensures platform availability even during Redis outages
+ * - Cache is fail-closed: after TTL expires, requests are rejected
+ * 
+ * ADMIN BYPASS FIX (Fix 2):
+ * - Extract authMethod from request headers (API_KEY vs SESSION_COOKIE)
+ * - Include in returned session object
  */
 export async function getCurrentSession(reqHeaders?: Headers): Promise<UserSession | null> {
   const token = getSessionToken(reqHeaders);
@@ -123,6 +148,9 @@ export async function getCurrentSession(reqHeaders?: Headers): Promise<UserSessi
 
   const tokenSession = verifySessionToken(token) as (UserSession & { jti?: string }) | null;
   if (!tokenSession?.id || !tokenSession.jti) return null;
+
+  // FIX 2: Extract and include auth method in session
+  const authMethod = getAuthMethod(reqHeaders);
 
   try {
     const [revoked, cachedVersion] = await Promise.all([
@@ -133,7 +161,9 @@ export async function getCurrentSession(reqHeaders?: Headers): Promise<UserSessi
 
     if (process.env.NODE_ENV !== "production") {
       const currentVersion = cachedVersion === null ? (tokenSession.sessionVersion ?? 0) : Number(cachedVersion);
-      return currentVersion === (tokenSession.sessionVersion ?? 0) ? tokenSession : null;
+      return currentVersion === (tokenSession.sessionVersion ?? 0) 
+        ? { ...tokenSession, authMethod }
+        : null;
     }
 
     // Avoid a static auth/prisma import cycle (prisma's development helpers use
@@ -153,16 +183,38 @@ export async function getCurrentSession(reqHeaders?: Headers): Promise<UserSessi
     }
     if ((tokenSession.sessionVersion ?? 0) !== user.sessionVersion) return null;
 
-    return {
+    // Cache successful session validation for fallback use
+    const sessionData = {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       sessionVersion: user.sessionVersion,
       jti: tokenSession.jti,
+      authMethod, // FIX 2: Include auth method in cached session
     };
-  } catch (error) {
-    throw new SessionValidationError(error instanceof Error ? error.message : undefined);
+    sessionCache.set(user.id, sessionData, token);
+
+    return sessionData;
+  } catch (redisError) {
+    // REDIS FALLBACK (Fix 4): When Redis is unavailable, use local cache
+    // This ensures the platform doesn't go down during Redis outages
+    
+    const cachedSession = sessionCache.get(tokenSession.id);
+    
+    if (cachedSession) {
+      // Successfully fell back to cache
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[AUTH] Using cached session for user ${tokenSession.id} due to Redis unavailability`);
+      }
+      return { ...cachedSession, authMethod };
+    }
+
+    // No cache available and Redis down - fail closed (return 503)
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[AUTH] Redis unavailable and no cache for user ${tokenSession.id}`, redisError instanceof Error ? redisError.message : "Unknown error");
+    }
+    throw new SessionValidationError(redisError instanceof Error ? redisError.message : undefined);
   }
 }
 

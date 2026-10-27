@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.x"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+<<<<<<< HEAD
     "test": "tsx src/tests/suite.test.ts && tsx src/tests/communication-template-regression.test.ts && tsx --test src/tests/security-boundary-regression.test.ts && tsx --test src/tests/skill-validation.test.ts && tsx --test src/tests/knowledge-screening-policy.test.ts && tsx --test src/tests/assessment-policy-validation.test.ts && tsx --test src/tests/universal-validation-ai-routing-regression.test.ts && tsx --test src/tests/evidence-first-screening.test.ts && tsx --test src/tests/managed-hiring-orchestration.test.ts && tsx --test src/tests/managed-hiring-intake-integrity.test.ts && tsx --test src/tests/managed-hiring-runtime-completion.test.ts && tsx --test src/tests/managed-hiring-runtime-integration.test.ts && tsx --test src/tests/copilot-commerce.test.ts && tsx --test src/tests/copilot-hiring-flow-regression.test.ts && tsx --test src/tests/recorded-assessment-direct-worker-regression.test.ts && tsx --test src/tests/editorial-content-cms.test.ts && tsx --test src/tests/interview-duration-regression.test.ts && tsx --test src/tests/whatsapp-autonomous-candidate.test.ts && tsx --test src/tests/whatsapp-autonomous-orchestrator.test.ts && tsx --test src/tests/live-ux-regression.test.ts && tsx --test src/tests/intelligence-foundation.test.ts && tsx --test src/tests/candidate-jarvis-hybrid.test.ts && tsx --test src/tests/mock-interview-regression.test.ts && tsx --test src/tests/mock-interview-voice-regression.test.ts && tsx --test src/tests/public-discovery-seo.test.ts && tsx --test src/tests/onboarding-role-ux.test.ts && tsx --test src/tests/candidate-profile-and-mock-ux.test.ts && npm run test:ai-credentials",
+=======
+    "test": "tsx src/tests/suite.test.ts && tsx src/tests/communication-template-regression.test.ts && tsx --test src/tests/security-boundary-regression.test.ts && tsx --test src/tests/skill-validation.test.ts && tsx --test src/tests/knowledge-screening-policy.test.ts && tsx --test src/tests/assessment-policy-validation.test.ts && tsx --test src/tests/universal-validation-ai-routing-regression.test.ts && tsx --test src/tests/evidence-first-screening.test.ts && tsx --test src/tests/managed-hiring-orchestration.test.ts && tsx --test src/tests/managed-hiring-intake-integrity.test.ts && tsx --test src/tests/managed-hiring-runtime-completion.test.ts && tsx --test src/tests/managed-hiring-runtime-integration.test.ts && tsx --test src/tests/copilot-commerce.test.ts && tsx --test src/tests/copilot-hiring-flow-regression.test.ts && tsx --test src/tests/recorded-assessment-direct-worker-regression.test.ts && tsx --test src/tests/editorial-content-cms.test.ts && tsx --test src/tests/interview-duration-regression.test.ts && tsx --test src/tests/whatsapp-autonomous-candidate.test.ts && tsx --test src/tests/whatsapp-autonomous-orchestrator.test.ts && tsx --test src/tests/live-ux-regression.test.ts && tsx --test src/tests/intelligence-foundation.test.ts && tsx --test src/tests/candidate-jarvis-hybrid.test.ts && tsx --test src/tests/candidate-jarvis-deterministic-routing.test.ts && tsx --test src/tests/jarvis-persistent-voice.test.ts && tsx --test src/tests/jarvis-tts-receipt-regression.test.ts && tsx --test src/tests/mock-interview-regression.test.ts && tsx --test src/tests/mock-interview-voice-regression.test.ts && tsx --test src/tests/public-discovery-seo.test.ts && tsx --test src/tests/onboarding-role-ux.test.ts && tsx --test src/tests/candidate-profile-and-mock-ux.test.ts && tsx --test src/tests/permissions.test.ts && tsx --test src/tests/phase4-alignment.test.ts && npm run test:ai-credentials",
+>>>>>>> origin/main
     "test:audit": "node scripts/generate-production-wiring-inventory.mjs && node scripts/generate-production-wiring-report.mjs && node scripts/audit-regressions.mjs",
     "test:phase5": "tsx src/tests/run-phase5-tests.ts && tsx --test src/tests/workflow-engine-regression.test.ts && tsx --test src/tests/hiring-pipeline-contract.test.ts",
     "verify:phase5": "prisma validate && prisma generate && tsc --noEmit && eslint src/lib/workflows/WorkflowEngine.ts src/lib/tools/ToolRegistry.ts src/lib/agents/OperationalAgents.ts src/tests/phase5-agent-security.test.ts src/tests/run-phase5-tests.ts src/tests/workflow-engine-regression.test.ts src/tests/hiring-pipeline-contract.test.ts && npm run test:phase5",
@@ -33,7 +37,7 @@
     "html-react-parser": "^6.1.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^1.26.0",
-    "next": "16.3.8",
+    "next": "^16.4.3",
     "openai": "^4.73.0",
     "pg": "^8.23.0",
     "postcss": "8.5.23",
@@ -43,7 +47,7 @@
     "react-select": "^5.10.2",
     "sharp": "0.35.5",
     "tailwind-merge": "^3.6.0",
-    "zod": "^3.25.76",
+    "zod": "4.6.7",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -55,7 +59,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "^16.4.3",
     "glob": "^13.0.6",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.17",
@@ -69,6 +73,9 @@
     "sharp": "0.35.5",
     "minimatch@>=10": "10.2.5",
     "minimatch@<10": "3.1.5",
-    "source-map-js": "1.2.2"
+    "source-map-js": "1.2.2",
+    "openai": {
+      "zod": "$zod"
+    }
   }
 }

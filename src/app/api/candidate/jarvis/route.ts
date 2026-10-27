@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       success: true,
       enabled: config.enabled,
       voiceEnabled,
+      userName: session.name || "there",
     });
   } catch (error) {
     return handleApiError(error);

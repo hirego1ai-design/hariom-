@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppProvider } from "@/context/AppContext";
+import JarvisVoiceMount from "@/components/candidate/JarvisVoiceMount";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.hiregoai.com"),
@@ -75,7 +76,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body-md min-h-full flex flex-col overflow-x-hidden">
-        <AppProvider>{children}</AppProvider>
+        <AppProvider>{children}<JarvisVoiceMount /></AppProvider>
       </body>
     </html>
   );

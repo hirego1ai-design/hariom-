@@ -128,7 +128,11 @@ export default async function JobDetailPage({ params }: Props) {
           </article>
 
           <aside className="lg:col-span-4 space-y-5 lg:sticky lg:top-8">
-            <JobActions jobId={job.id} candidateAuthenticated={candidateAuthenticated} />
+            <JobActions
+              jobId={job.id}
+              jobTitle={job.title}
+              candidateAuthenticated={candidateAuthenticated}
+            />
 
             <div className="glass-card p-6 rounded-3xl border border-white/10 space-y-3">
               <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">Hiring Organization</h2>

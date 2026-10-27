@@ -16,6 +16,10 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/hirego"
+ENV DIRECT_URL="postgresql://postgres:postgres@localhost:5432/hirego"
+ENV JWT_SECRET="build_time_jwt_secret_placeholder_32chars"
+ENV INTERNAL_API_KEY="build_time_internal_api_key_placeholder"
 
 RUN npx prisma generate
 RUN npm run build

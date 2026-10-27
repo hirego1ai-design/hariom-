@@ -92,8 +92,8 @@ export default function EmployerDocumentVerificationPage() {
         throw new Error(uploadJson.error || "Upload failed.");
       }
 
-      // Submit for document verification
-      const verifyResponse = await fetch("/api/admin/document-verification", {
+      // Submit for document verification via employer-scoped endpoint
+      const verifyResponse = await fetch("/api/employer/document-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

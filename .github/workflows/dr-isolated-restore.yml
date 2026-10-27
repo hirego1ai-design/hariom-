@@ -1,0 +1,146 @@
+name: Isolated Database Restore Verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-restore-drill:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || contains(github.event.head_commit.message, '[dr-sandbox-test]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hirego_dr_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hirego_dr_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/hirego_dr_source?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/hirego_dr_source?schema=public
+      PGPASSWORD: postgres
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create realistic HireGo schema from Prisma migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prisma validate
+
+          # The voice-routing migration requires the global AdminConfiguration
+          # row normally seeded by application onboarding. Bootstrap a synthetic
+          # row at the correct migration boundary on this throwaway database.
+          later="$(mktemp -d)"
+          for migration in prisma/migrations/[0-9]*; do
+            [ -d "$migration" ] || continue
+            if [[ "$(basename "$migration")" > "20261005093000" ]]; then
+              mv "$migration" "$later/"
+            fi
+          done
+          npx prisma migrate deploy
+
+          psql -v ON_ERROR_STOP=1 -d hirego_dr_source <<'SQL'
+          INSERT INTO public."AdminConfiguration" ("id", "platformConfig", "updatedAt")
+          VALUES ('global-admin-config', '{"aiRouting":{"version":1,"models":[],"routes":[]}}'::jsonb, now())
+          ON CONFLICT ("id") DO NOTHING;
+          SQL
+
+          mv "$later"/* prisma/migrations/
+          npx prisma migrate deploy
+
+      - name: Backup and restore complete schema with disposable synthetic data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dr-evidence
+          psql -v ON_ERROR_STOP=1 -d hirego_dr_source <<'SQL'
+          CREATE TABLE public.__hirego_dr_synthetic_fixture (
+            id integer PRIMARY KEY,
+            payload text NOT NULL
+          );
+          INSERT INTO public.__hirego_dr_synthetic_fixture VALUES
+            (1,'candidate-no-pii'),(2,'employer-no-pii');
+          SQL
+
+          # Use the same PostgreSQL major version for dump and restore;
+          # GitHub-hosted runners may ship older psql/pg_dump clients.
+          docker run --rm --network host -e PGPASSWORD=postgres \
+            -v "$PWD/dr-evidence:/evidence" pgvector/pgvector:pg17 \
+            pg_dump -h 127.0.0.1 -U postgres -d hirego_dr_source \
+              --schema=public --format=custom --no-owner --no-privileges \
+              --file=/evidence/synthetic-hirego.dump
+          test -s dr-evidence/synthetic-hirego.dump
+          createdb hirego_dr_restored
+          # Public-only backups reference extension types such as extensions.vector.
+          # Bootstrap the non-public extension schema in this throwaway target.
+          psql -v ON_ERROR_STOP=1 -d hirego_dr_restored <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS extensions;
+          CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+          DROP SCHEMA public CASCADE;
+          SQL
+          docker run --rm --network host -e PGPASSWORD=postgres \
+            -v "$PWD/dr-evidence:/evidence" pgvector/pgvector:pg17 \
+            pg_restore -h 127.0.0.1 -U postgres -d hirego_dr_restored \
+              --no-owner --no-privileges --exit-on-error \
+              /evidence/synthetic-hirego.dump
+
+          schema_fingerprint() {
+            psql -Atq -d "$1" -c "
+              SELECT md5(COALESCE(string_agg(
+                table_name || ':' || column_name || ':' || udt_name || ':' || is_nullable,
+                ',' ORDER BY table_name,ordinal_position),''))
+              FROM information_schema.columns WHERE table_schema='public';"
+          }
+          source_hash="$(schema_fingerprint hirego_dr_source)"
+          restored_hash="$(schema_fingerprint hirego_dr_restored)"
+          test "$source_hash" = "$restored_hash"
+
+          source_tables="$(psql -Atq -d hirego_dr_source -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")"
+          restored_tables="$(psql -Atq -d hirego_dr_restored -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")"
+          test "$source_tables" = "$restored_tables"
+          test "$source_tables" -gt 10
+          source_rows="$(psql -Atq -d hirego_dr_source -c 'SELECT count(*) FROM public.__hirego_dr_synthetic_fixture')"
+          restored_rows="$(psql -Atq -d hirego_dr_restored -c 'SELECT count(*) FROM public.__hirego_dr_synthetic_fixture')"
+          test "$source_rows" = "$restored_rows"
+          test "$restored_rows" = 2
+
+          DR_TABLES="$restored_tables" DR_SCHEMA="$restored_hash" DR_ROWS="$restored_rows" \
+            node -e 'const fs=require("fs"); const d={verification:"pass",scope:"isolated-synthetic-schema-and-data",productionDataCopied:false,restoredTables:Number(process.env.DR_TABLES),schemaFingerprint:process.env.DR_SCHEMA,fixtureRows:Number(process.env.DR_ROWS),completedAt:new Date().toISOString()};fs.writeFileSync("dr-evidence/restore-verification.json",JSON.stringify(d,null,2));'
+          # Never upload even synthetic database dumps to build artifacts.
+          rm dr-evidence/synthetic-hirego.dump
+
+      - name: Upload synthetic-only verification metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-restore-verification
+          path: dr-evidence/restore-verification.json
+          if-no-files-found: warn
+          retention-days: 14

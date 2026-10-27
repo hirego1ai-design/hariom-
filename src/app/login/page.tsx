@@ -62,9 +62,10 @@ function CandidateLoginContent() {
 
       if (typeof window !== "undefined") {
         sessionStorage.removeItem(POST_AUTH_REDIRECT_STORAGE_KEY);
+        window.location.href = requestedRedirect;
+        return;
       }
       router.replace(requestedRedirect);
-      router.refresh();
     } catch (error: unknown) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to sign in. Please try again.");
       setIsSubmitting(false);

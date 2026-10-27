@@ -4,13 +4,37 @@ import { readFileSync } from "node:fs";
 import {
   encryptAiProviderKey, decryptAiProviderKey, validateAiProviderEndpoint,
 } from "../lib/ai/AiProviderCredentials";
-import { llmProviderSchema } from "../lib/ai/AiRoutingConfig";
+import { getProviderApiKey, getProviderRuntime, llmProviderSchema } from "../lib/ai/AiRoutingConfig";
 
 const originalKey = process.env.AI_PROVIDER_CREDENTIALS_ENCRYPTION_KEY;
 const originalHosts = process.env.AI_SELF_HOSTED_ALLOWED_HOSTS;
+const originalGroqKey = process.env.GROQ_API_KEY;
+const originalGroqBaseUrl = process.env.GROQ_BASE_URL;
 
 test("every Model Registry provider can be configured from Admin", () => {
-  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "self_hosted"]);
+  assert.deepEqual(llmProviderSchema.options, ["openai", "gemini", "deepseek", "kimi", "qwen", "groq", "openrouter", "self_hosted"]);
+});
+
+test("Groq uses the official OpenAI-compatible endpoint and server-side API key", () => {
+  process.env.GROQ_API_KEY = "gsk-test-not-a-real-key";
+  delete process.env.GROQ_BASE_URL;
+  try {
+    assert.deepEqual(getProviderRuntime("groq"), {
+      configured: true,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+    assert.equal(getProviderApiKey("groq"), "gsk-test-not-a-real-key");
+    delete process.env.GROQ_API_KEY;
+    assert.deepEqual(getProviderRuntime("groq"), {
+      configured: false,
+      reason: "GROQ_API_KEY is missing",
+    });
+  } finally {
+    if (originalGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = originalGroqKey;
+    if (originalGroqBaseUrl === undefined) delete process.env.GROQ_BASE_URL;
+    else process.env.GROQ_BASE_URL = originalGroqBaseUrl;
+  }
 });
 
 test("AES-GCM encrypts AI keys with a provider-specific authenticated binding", () => {
