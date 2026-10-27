@@ -415,7 +415,8 @@ export default function MockInterviewActivePage() {
       const activeSound = (final + " " + interim).trim();
 
       // BARGE-IN: If Sara is speaking and candidate starts talking, STOP SARA IMMEDIATELY!
-      if (activeSound.length > 2 && isPlayingRef.current) {
+      const spokenWords = activeSound.split(/\s+/).filter(Boolean);
+      if ((spokenWords.length >= 2 || activeSound.length >= 6) && isPlayingRef.current) {
         stopSaraSpeaking();
         setLiveStatus("LISTENING");
       }
@@ -465,7 +466,13 @@ export default function MockInterviewActivePage() {
 
     try {
       // Request mic permission
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+        },
+      });
       startLiveRecognition();
 
       // Start with Sara's opening / first question

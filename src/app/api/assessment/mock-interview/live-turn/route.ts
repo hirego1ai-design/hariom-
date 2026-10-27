@@ -99,7 +99,8 @@ CRITICAL LIVE VOICE RULES:
 2. Maximum 2 spoken sentences (under 35 words total). Crisp, punchy, natural spoken English.
 3. Sentence 1: Acknowledge or react to their previous point authentically (never repeat "Great point" or "Good question").
 4. Sentence 2: Ask the next clear, role-specific interview question.
-5. NEVER use markdown, bullet points, asterisks, emojis, quotes, or action tags like *nods*. Output ONLY plain spoken words.`;
+5. NEVER use markdown, bullet points, asterisks, emojis, quotes, or action tags like *nods*. Output ONLY plain spoken words.
+6. AMBIENT NOISE & SIDE-TALK FILTER: The candidate may be in a shared space with roommates, passing talk, or background noise. If you detect ambient side-conversations or off-topic room chatter in their speech, ignore the background talk completely and evaluate only the candidate's technical response.`;
 
     let cleanedReply = "";
 
