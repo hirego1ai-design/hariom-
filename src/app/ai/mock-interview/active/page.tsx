@@ -109,6 +109,9 @@ export default function MockInterviewActivePage() {
   const liveStatusRef = useRef<LiveVoiceStatus>("IDLE");
   const isMicMutedRef = useRef(false);
   const conversationRef = useRef<ChatMessage[]>([]);
+  const isProcessingTurnRef = useRef(false);
+  const recognitionRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     liveStatusRef.current = liveStatus;
@@ -125,9 +128,16 @@ export default function MockInterviewActivePage() {
   // Stop Sara's Audio immediately (Barge-In)
   const stopSaraSpeaking = useCallback(() => {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      const audio = audioRef.current;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute("src");
+      audio.load();
       audioRef.current = null;
+    }
+    if (audioObjectUrlRef.current) {
+      URL.revokeObjectURL(audioObjectUrlRef.current);
+      audioObjectUrlRef.current = null;
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -142,10 +152,12 @@ export default function MockInterviewActivePage() {
       isMountedRef.current = false;
       if (timerRef.current) clearInterval(timerRef.current);
       if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+      if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
       stopSaraSpeaking();
       try {
-        recognitionRef.current?.stop();
+        recognitionRef.current?.abort?.();
       } catch {}
+      recognitionRef.current = null;
     };
   }, [stopSaraSpeaking]);
 
@@ -241,6 +253,17 @@ export default function MockInterviewActivePage() {
     };
   }, [session, liveStatus]);
 
+  // Recover only when the candidate should be listening; delay prevents tight browser restart loops.
+  const scheduleRecognitionRestart = useCallback(() => {
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
+    recognitionRestartTimerRef.current = setTimeout(() => {
+      recognitionRestartTimerRef.current = null;
+      if (!isMountedRef.current || isMicMutedRef.current || isProcessingTurnRef.current ||
+          liveStatusRef.current !== "LISTENING" || isPlayingRef.current || !recognitionRef.current) return;
+      try { recognitionRef.current.start(); } catch { /* Already starting/listening. */ }
+    }, 700);
+  }, []);
+
   // Play Sara's speech (ElevenLabs Sarah voice, with fallback)
   const playSaraSpeech = useCallback(
     async (text: string) => {
@@ -269,21 +292,27 @@ export default function MockInterviewActivePage() {
         if (!isMountedRef.current || !isPlayingRef.current) return;
 
         const objectUrl = URL.createObjectURL(blob);
+        audioObjectUrlRef.current = objectUrl;
         const audio = new Audio(objectUrl);
+        audio.preload = "auto";
         audioRef.current = audio;
 
         await new Promise<void>((resolve, reject) => {
-          audio.onended = () => {
-            URL.revokeObjectURL(objectUrl);
-            resolve();
+          const releaseUrl = () => {
+            if (audioObjectUrlRef.current === objectUrl) {
+              URL.revokeObjectURL(objectUrl);
+              audioObjectUrlRef.current = null;
+            }
           };
-          audio.onerror = () => {
-            URL.revokeObjectURL(objectUrl);
-            reject(new Error("Audio playback failed"));
-          };
-          void audio.play().catch(reject);
+          audio.onended = () => { releaseUrl(); if (audioRef.current === audio) audioRef.current = null; resolve(); };
+          audio.onerror = () => { releaseUrl(); if (audioRef.current === audio) audioRef.current = null; reject(new Error("Audio playback failed")); };
+          void audio.play().catch((error) => { releaseUrl(); if (audioRef.current === audio) audioRef.current = null; reject(error); });
         });
       } catch (err) {
+        if (audioObjectUrlRef.current) {
+          URL.revokeObjectURL(audioObjectUrlRef.current);
+          audioObjectUrlRef.current = null;
+        }
         // Fallback: If network/ElevenLabs fails, speak via Web Speech API
         if (typeof window !== "undefined" && "speechSynthesis" in window && isPlayingRef.current) {
           window.speechSynthesis.cancel();
@@ -305,21 +334,20 @@ export default function MockInterviewActivePage() {
         if (isMountedRef.current && isPlayingRef.current) {
           isPlayingRef.current = false;
           setLiveStatus(isMicMutedRef.current ? "MUTED" : "LISTENING");
+          if (!isMicMutedRef.current) scheduleRecognitionRestart();
         }
       }
     },
-    [sessionId, stopSaraSpeaking],
+    [sessionId, stopSaraSpeaking, scheduleRecognitionRestart],
   );
 
   // Send candidate speech to LLM and trigger Sara's live response
   const handleCandidateFinishedSpeaking = useCallback(
     async (candidateSpeech: string) => {
       const cleanSpeech = candidateSpeech.trim();
-      if (!cleanSpeech || !sessionId) {
-        setLiveStatus("LISTENING");
-        return;
-      }
-
+      if (!cleanSpeech || !sessionId || isProcessingTurnRef.current) return;
+      isProcessingTurnRef.current = true;
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
       setLiveStatus("THINKING");
       setInterimUserText("");
       accumulatedSpeechRef.current = "";
@@ -368,9 +396,12 @@ export default function MockInterviewActivePage() {
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Error in live discussion.");
         setLiveStatus("LISTENING");
+      } finally {
+        isProcessingTurnRef.current = false;
+        if (liveStatusRef.current === "LISTENING" && !isMicMutedRef.current) scheduleRecognitionRestart();
       }
     },
-    [sessionId, playSaraSpeech],
+    [sessionId, playSaraSpeech, scheduleRecognitionRestart],
   );
 
   // Setup Continuous Speech Recognition with Instant Barge-In
@@ -398,7 +429,9 @@ export default function MockInterviewActivePage() {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event: any) => {
-      if (isMicMutedRef.current) return;
+      if (isMicMutedRef.current || isProcessingTurnRef.current ||
+          liveStatusRef.current === "SPEAKING" || liveStatusRef.current === "THINKING" ||
+          liveStatusRef.current === "CONNECTING") return;
 
       let interim = "";
       let final = "";
@@ -412,15 +445,6 @@ export default function MockInterviewActivePage() {
         }
       }
 
-      const activeSound = (final + " " + interim).trim();
-
-      // BARGE-IN: If Sara is speaking and candidate starts talking, STOP SARA IMMEDIATELY!
-      const spokenWords = activeSound.split(/\s+/).filter(Boolean);
-      if ((spokenWords.length >= 2 || activeSound.length >= 6) && isPlayingRef.current) {
-        stopSaraSpeaking();
-        setLiveStatus("LISTENING");
-      }
-
       if (final.trim()) {
         accumulatedSpeechRef.current = (accumulatedSpeechRef.current + " " + final).trim();
       }
@@ -429,11 +453,11 @@ export default function MockInterviewActivePage() {
       // Debounce: detect when candidate pauses speaking (~550ms for snappy natural response)
       if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
       speechTimerRef.current = setTimeout(() => {
-        const fullCandidateSpeech = (accumulatedSpeechRef.current + " " + interim).trim();
-        if (fullCandidateSpeech.length >= 4) {
+        const fullCandidateSpeech = accumulatedSpeechRef.current.trim();
+        if (fullCandidateSpeech.length >= 4 && !isProcessingTurnRef.current) {
           void handleCandidateFinishedSpeaking(fullCandidateSpeech);
         }
-      }, 550);
+      }, 900);
     };
 
     recognition.onerror = (e: any) => {
@@ -443,12 +467,8 @@ export default function MockInterviewActivePage() {
     };
 
     recognition.onend = () => {
-      // Keep listening continuously unless muted or idle
-      if (liveStatusRef.current !== "IDLE" && !isMicMutedRef.current) {
-        try {
-          recognition.start();
-        } catch {}
-      }
+      // Do not restart in a tight onend loop; recover only during the listening phase.
+      if (liveStatusRef.current === "LISTENING" && !isMicMutedRef.current) scheduleRecognitionRestart();
     };
 
     recognitionRef.current = recognition;
@@ -457,7 +477,7 @@ export default function MockInterviewActivePage() {
     } catch (err) {
       console.warn("Could not start continuous speech recognition:", err);
     }
-  }, [handleCandidateFinishedSpeaking, stopSaraSpeaking]);
+  }, [handleCandidateFinishedSpeaking, scheduleRecognitionRestart]);
 
   // Connect to Live Interview Room
   const handleStartLiveCall = async () => {
@@ -465,14 +485,8 @@ export default function MockInterviewActivePage() {
     setErrorMessage(null);
 
     try {
-      // Request mic permission
-      await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false,
-        },
-      });
+      // SpeechRecognition manages microphone permission itself. Avoid opening a second
+      // microphone stream that can compete with recognition on mobile browsers.
       startLiveRecognition();
 
       // Start with Sara's opening / first question
@@ -494,6 +508,8 @@ export default function MockInterviewActivePage() {
   const toggleMute = () => {
     const nextState = !isMicMuted;
     setIsMicMuted(nextState);
+    isMicMutedRef.current = nextState;
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
     if (nextState) {
       setLiveStatus("MUTED");
       try {
@@ -501,9 +517,7 @@ export default function MockInterviewActivePage() {
       } catch {}
     } else {
       setLiveStatus("LISTENING");
-      try {
-        recognitionRef.current?.start();
-      } catch {}
+      scheduleRecognitionRestart();
     }
   };
 
@@ -511,6 +525,7 @@ export default function MockInterviewActivePage() {
   const handleManualInterrupt = () => {
     stopSaraSpeaking();
     setLiveStatus("LISTENING");
+    if (!isMicMutedRef.current) scheduleRecognitionRestart();
   };
 
   // End Interview & Complete
@@ -518,9 +533,9 @@ export default function MockInterviewActivePage() {
     if (!sessionId) return;
     setIsFinishing(true);
     stopSaraSpeaking();
-    try {
-      recognitionRef.current?.stop();
-    } catch {}
+    if (recognitionRestartTimerRef.current) clearTimeout(recognitionRestartTimerRef.current);
+    isProcessingTurnRef.current = false;
+    try { recognitionRef.current?.abort?.(); } catch {}
 
     try {
       await fetch("/api/assessment/mock-interview/finish", {
@@ -633,7 +648,7 @@ export default function MockInterviewActivePage() {
                 Live Full-Duplex Voice Discussion
               </h1>
               <p className="text-xs text-white/50 mt-1">
-                Natural continuous dialogue. You can interrupt Sara at any moment by speaking.
+                Take turns speaking with Sara. Use the interrupt button to stop her audio.
               </p>
             </div>
 
@@ -721,7 +736,7 @@ export default function MockInterviewActivePage() {
                 {liveStatus === "SPEAKING" && (
                   <>
                     <span className="h-2 w-2 rounded-full bg-[#4285F4] animate-ping" />
-                    <span>Sara is speaking (Talk to interrupt anytime)</span>
+                    <span>Sara is speaking</span>
                   </>
                 )}
                 {liveStatus === "LISTENING" && (
