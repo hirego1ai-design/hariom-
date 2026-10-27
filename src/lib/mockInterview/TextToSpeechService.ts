@@ -1,10 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { ModelRouter } from "@/lib/ai/ModelRouter";
-import {
-  getProviderApiKey,
-  getProviderRuntime,
-} from "@/lib/ai/AiRoutingConfig";
+import { resolveAiProvider } from "@/lib/ai/AiProviderCredentials";
 import { assertSafeOutboundNetworkTarget } from "@/lib/security/outboundUrl";
 
 const MAX_TTS_INPUT_CHARS = 4_096;
@@ -168,15 +165,15 @@ export async function synthesizeMockInterviewSpeech(params: {
     requiredCapabilities: ["TTS"],
     fn: async (endpoint, policy, isFallback) => {
       const started = Date.now();
-      const runtime = getProviderRuntime(endpoint.provider);
-      const apiKey = getProviderApiKey(endpoint.provider);
-      if (!runtime.configured || !apiKey) {
+      const providerConfig = await resolveAiProvider(endpoint.provider);
+      const apiKey = providerConfig.apiKey;
+      if (!providerConfig.configured || !apiKey) {
         throw new TextToSpeechUnavailableError(
-          runtime.reason || "TTS provider is not configured.",
+          providerConfig.reason || "TTS provider is not configured.",
         );
       }
 
-      const baseUrl = baseUrlForProvider(endpoint.provider, runtime.baseURL);
+      const baseUrl = baseUrlForProvider(endpoint.provider, providerConfig.baseURL);
       const speechUrl = new URL(
         "audio/speech",
         baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`,
