@@ -648,7 +648,7 @@ export default function MockInterviewActivePage() {
                 Live Full-Duplex Voice Discussion
               </h1>
               <p className="text-xs text-white/50 mt-1">
-                Take turns speaking with Sara. Use the interrupt button to stop her audio.
+                Natural continuous dialogue. You can interrupt Sara at any moment by speaking.
               </p>
             </div>
 
