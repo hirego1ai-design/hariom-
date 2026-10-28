@@ -249,14 +249,21 @@ test("voice provider models are configuration data, not hard-coded runtime fallb
 });
 
 
-test("Live voice recognition avoids tight restart loops and ignores interviewer playback", () => {
+test("Live voice chat uses MediaRecorder and server transcription, not browser SpeechRecognition", () => {
   const active = read("src/app/ai/mock-interview/active/page.tsx");
-  assert.ok(active.includes("Do not restart in a tight onend loop"));
-  assert.ok(active.includes("scheduleRecognitionRestart"));
-  assert.ok(active.includes('liveStatusRef.current === "SPEAKING"'));
-  assert.ok(active.includes("isProcessingTurnRef.current"));
-  assert.ok(!active.includes("BARGE-IN: If Sara is speaking"));
-  assert.ok(!active.includes("await navigator.mediaDevices.getUserMedia"));
+  const liveTranscribe = read("src/app/api/assessment/mock-interview/voice/live-transcribe/route.ts");
+  assert.ok(active.includes("new MediaRecorder"));
+  assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
+  assert.ok(active.includes("/api/assessment/mock-interview/voice/live-transcribe"));
+  assert.ok(!active.includes("SpeechRecognition"));
+  assert.ok(!active.includes("webkitSpeechRecognition"));
+  assert.ok(!active.includes("scheduleRecognitionRestart"));
+  assert.ok(liveTranscribe.includes('auth.role !== "CANDIDATE"'));
+  assert.ok(liveTranscribe.includes("enforceRateLimit"));
+  assert.ok(liveTranscribe.includes("transcribeMockInterviewAudio"));
+  assert.ok(liveTranscribe.includes("interviewSession.candidateProfileId !== candidateProfile.id"));
+  assert.ok(!liveTranscribe.includes("createVoiceTranscriptReceipt"));
+  assert.ok(!liveTranscribe.includes("mockInterviewTurn.update"));
 });
 
 test("Voice UI removes audio disclaimer and inaccurate interruption claim", () => {
