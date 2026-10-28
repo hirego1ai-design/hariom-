@@ -121,6 +121,7 @@ export default function MockInterviewActivePage() {
   const segmentStartedAtRef = useRef(0);
   const discardRecordingRef = useRef(false);
   const candidateTurnHandlerRef = useRef<(speech: string) => Promise<void>>(async () => {});
+  const startListeningCaptureRef = useRef<() => Promise<void>>(async () => {});
   const sessionIdRef = useRef<string | null>(sessionId);
   const questionIndexRef = useRef(0);
 
@@ -311,7 +312,7 @@ export default function MockInterviewActivePage() {
         preSpeechChunksRef.current = [];
         recordingHasSpeechRef.current = false;
         if (discard || !hadSpeech || blob.size < 128) {
-          if (isMountedRef.current && !isInterviewEndingRef.current && !isMicMutedRef.current && !isPlayingRef.current && !isProcessingTurnRef.current && liveStatusRef.current === "LISTENING") void startListeningCapture();
+          if (isMountedRef.current && !isInterviewEndingRef.current && !isMicMutedRef.current && !isPlayingRef.current && !isProcessingTurnRef.current && liveStatusRef.current === "LISTENING") void startListeningCaptureRef.current();
           return;
         }
         const activeSessionId = sessionIdRef.current;
@@ -366,6 +367,10 @@ export default function MockInterviewActivePage() {
       setLiveStatus("IDLE");
     }
   }, [ensureMicrophone]);
+
+  useEffect(() => {
+    startListeningCaptureRef.current = startListeningCapture;
+  }, [startListeningCapture]);
 
   const stopListeningCapture = useCallback((discard = true) => {
     if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
@@ -541,7 +546,9 @@ export default function MockInterviewActivePage() {
   };
 
   // Keep the current handler available to asynchronous recorder callbacks.
-  candidateTurnHandlerRef.current = handleCandidateFinishedSpeaking;
+  useEffect(() => {
+    candidateTurnHandlerRef.current = handleCandidateFinishedSpeaking;
+  }, [handleCandidateFinishedSpeaking]);
 
   // Toggle Microphone
   const toggleMute = () => {
