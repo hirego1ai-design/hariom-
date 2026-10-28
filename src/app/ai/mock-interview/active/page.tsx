@@ -333,7 +333,7 @@ export default function MockInterviewActivePage() {
           setErrorMessage(error instanceof Error ? error.message : "Could not transcribe your answer. Please try again.");
           setLiveStatus("LISTENING");
           setInterimUserText("");
-          if (!isMicMutedRef.current) void startListeningCapture();
+          if (!isMicMutedRef.current) void startListeningCaptureRef.current();
         }
       };
       recorder.start(250);
