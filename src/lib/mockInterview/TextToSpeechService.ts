@@ -110,7 +110,7 @@ export async function synthesizeMockInterviewSpeech(params: {
             similarity_boost: 0.75,
           },
         }),
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (response.ok) {

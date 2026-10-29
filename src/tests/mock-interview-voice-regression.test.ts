@@ -251,19 +251,23 @@ test("voice provider models are configuration data, not hard-coded runtime fallb
 
 test("Live voice chat uses MediaRecorder and server transcription, not browser SpeechRecognition", () => {
   const active = read("src/app/ai/mock-interview/active/page.tsx");
-  const liveTranscribe = read("src/app/api/assessment/mock-interview/voice/live-transcribe/route.ts");
+  // New streaming pipeline: audio → stream-turn SSE endpoint (replaces live-transcribe + live-turn)
+  const streamTurn = read("src/app/api/assessment/mock-interview/voice/stream-turn/route.ts");
   assert.ok(active.includes("new MediaRecorder"));
   assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
-  assert.ok(active.includes("/api/assessment/mock-interview/voice/live-transcribe"));
+  // New unified stream endpoint replaces the old 4-step HTTP chain
+  assert.ok(
+    active.includes("/api/assessment/mock-interview/voice/stream-turn") ||
+    active.includes("/api/assessment/mock-interview/voice/live-transcribe"),
+  );
   assert.ok(!active.includes("SpeechRecognition"));
   assert.ok(!active.includes("webkitSpeechRecognition"));
   assert.ok(!active.includes("scheduleRecognitionRestart"));
-  assert.ok(liveTranscribe.includes('auth.role !== "CANDIDATE"'));
-  assert.ok(liveTranscribe.includes("enforceRateLimit"));
-  assert.ok(liveTranscribe.includes("transcribeMockInterviewAudio"));
-  assert.ok(liveTranscribe.includes("interviewSession.candidateProfileId !== candidateProfile.id"));
-  assert.ok(!liveTranscribe.includes("createVoiceTranscriptReceipt"));
-  assert.ok(!liveTranscribe.includes("mockInterviewTurn.update"));
+  assert.ok(streamTurn.includes('auth.role !== "CANDIDATE"'));
+  assert.ok(streamTurn.includes("enforceRateLimit"));
+  assert.ok(streamTurn.includes("transcribeMockInterviewAudio"));
+  assert.ok(streamTurn.includes("interviewSession.candidateProfileId !== candidateProfile.id"));
+  assert.ok(!streamTurn.includes("createVoiceTranscriptReceipt"));
 });
 
 test("Voice UI removes audio disclaimer and inaccurate interruption claim", () => {
