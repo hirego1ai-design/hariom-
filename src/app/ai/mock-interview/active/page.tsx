@@ -180,16 +180,25 @@ export default function MockInterviewActivePage() {
     isPlayingAudioRef.current = false;
   }, []);
 
-  const getAudioContext = useCallback((): AudioContext => {
+  const getAudioContext = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
       audioCtxRef.current = new AudioContext();
+    }
+    // Resume if suspended (browser autoplay policy after tab backgrounding)
+    if (audioCtxRef.current.state === "suspended") {
+      await audioCtxRef.current.resume();
     }
     return audioCtxRef.current;
   }, []);
 
   const playNextChunk = useCallback(async () => {
-    if (!isPlayingAudioRef.current || audioQueueRef.current.length === 0) return;
-    const ctx = getAudioContext();
+    if (!isPlayingAudioRef.current) return;
+    // Queue drained — mark playback as finished so waitForAudio loop can exit
+    if (audioQueueRef.current.length === 0) {
+      isPlayingAudioRef.current = false;
+      return;
+    }
+    const ctx = await getAudioContext();
     const buffer = audioQueueRef.current.shift()!;
     try {
       const decoded = await ctx.decodeAudioData(buffer);
@@ -203,6 +212,7 @@ export default function MockInterviewActivePage() {
       };
       source.start();
     } catch {
+      // Bad chunk — skip and try next
       void playNextChunk();
     }
   }, [getAudioContext]);
@@ -251,7 +261,7 @@ export default function MockInterviewActivePage() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     microphoneStreamRef.current = stream;
-    const ctx = getAudioContext();
+    const ctx = await getAudioContext();
     const source = ctx.createMediaStreamSource(stream);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
@@ -606,7 +616,7 @@ export default function MockInterviewActivePage() {
       if (!isMountedRef.current) return;
 
       const arrayBuffer = await blob.arrayBuffer();
-      const ctx = getAudioContext();
+      const ctx = await getAudioContext();
       const decoded = await ctx.decodeAudioData(arrayBuffer);
       const source = ctx.createBufferSource();
       source.buffer = decoded;
@@ -736,6 +746,8 @@ export default function MockInterviewActivePage() {
   const handleInterrupt = () => {
     stopAllAudio();
     isPlayingAudioRef.current = false;
+    // Sync the ref immediately — startListeningCapture reads liveStatusRef synchronously
+    liveStatusRef.current = "LISTENING";
     setLiveStatus("LISTENING");
     if (!isMicMutedRef.current) void startListeningCapture();
   };
