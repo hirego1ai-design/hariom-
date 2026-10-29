@@ -89,7 +89,7 @@ export async function transcribeMockInterviewAudio(params: {
         method: "POST",
         headers: { Authorization: `Bearer ${groqKey}` },
         body: groqForm,
-        signal: AbortSignal.timeout(6_000),
+        signal: AbortSignal.timeout(15_000),
       });
       if (groqRes.ok) {
         const payload = await groqRes.json();
@@ -105,9 +105,12 @@ export async function transcribeMockInterviewAudio(params: {
             version: "provider-file-transcription-v1",
           };
         }
+      } else {
+        const errText = await groqRes.text().catch(() => "");
+        console.warn(`[STT] Groq returned HTTP ${groqRes.status}: ${errText.slice(0, 200)}`);
       }
     } catch (groqErr) {
-      console.warn("[STT] Groq Whisper fast-path notice:", groqErr);
+      console.warn("[STT] Groq Whisper fast-path notice:", groqErr instanceof Error ? groqErr.message : groqErr);
     }
   }
 

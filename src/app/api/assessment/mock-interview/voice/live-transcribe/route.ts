@@ -84,7 +84,8 @@ export async function POST(request: NextRequest) {
         roleTarget: interviewSession.roleTarget,
         skillTags: turn.skillTags,
       });
-    } catch {
+    } catch (sttError) {
+      console.error("[LiveTranscribe] STT transcription failed:", sttError instanceof Error ? sttError.message : sttError);
       throw new ApiError("Voice transcription is temporarily unavailable. Please try again.", 503);
     }
 
