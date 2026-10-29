@@ -131,7 +131,7 @@ CRITICAL LIVE VOICE RULES:
             max_tokens: 150,
             temperature: 0.7,
           }),
-          signal: AbortSignal.timeout(3_500),
+          signal: AbortSignal.timeout(5_000),
         });
 
         if (groqResponse.ok) {
@@ -142,11 +142,54 @@ CRITICAL LIVE VOICE RULES:
           }
         }
       } catch (groqErr) {
-        console.warn("[LiveTurn] Groq fast-path skipped, using OpenRouter fast-fallback:", groqErr);
+        console.warn("[LiveTurn] Groq fast-path skipped, using Gemini fallback:", groqErr);
       }
     }
 
-    // 2. FAST PATH B: OpenRouter fast-fallback (~1.2s)
+    // 2. FAST PATH B: Google Gemini cost-saving model (gemini-3.5-flash-lite)
+    if (!cleanedReply) {
+      const geminiKey = process.env.GEMINI_API_KEY?.trim();
+      if (geminiKey) {
+        try {
+          const geminiPrompt = [
+            systemPrompt,
+            "",
+            "RECENT CONVERSATION:",
+            ...body.history.slice(-4).map((h) => `${h.role === "assistant" ? personaName : "Candidate"}: ${h.content}`),
+            `Candidate: ${body.candidateSpeech}`,
+            `${personaName}:`,
+          ].join("\n");
+
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: geminiPrompt }] }],
+                generationConfig: {
+                  maxOutputTokens: 120,
+                  temperature: 0.7,
+                },
+              }),
+              signal: AbortSignal.timeout(6_000),
+            }
+          );
+
+          if (geminiRes.ok) {
+            const geminiJson = await geminiRes.json();
+            const text = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (text) {
+              cleanedReply = cleanSpokenWords(text);
+            }
+          }
+        } catch (geminiErr) {
+          console.warn("[LiveTurn] Gemini cost-saving fast-path skipped, using OpenRouter fallback:", geminiErr);
+        }
+      }
+    }
+
+    // 3. FAST PATH C: OpenRouter fast-fallback (~1.2s)
     if (!cleanedReply) {
       const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
       if (openRouterKey) {

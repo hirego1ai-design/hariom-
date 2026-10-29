@@ -1,4 +1,4 @@
-﻿import { UserRole } from "@/types";
+import { UserRole } from "@/types";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -77,13 +77,13 @@ export function createSessionToken(payload: UserSession): string {
     throw new Error("Session tokens require an explicit user ID, email, name, and role.");
   }
 
-  return jwt.sign({ ...payload, sessionVersion: payload.sessionVersion ?? 0 }, getJwtSecret(), { expiresIn: "12h", jwtid: crypto.randomUUID() });
+  return jwt.sign({ ...payload, sessionVersion: payload.sessionVersion ?? 0 }, getJwtSecret(), { expiresIn: "7d", jwtid: crypto.randomUUID() });
 }
 
 export async function revokeSessionToken(token: string): Promise<void> {
   const decoded = jwt.verify(token, getJwtSecret()) as { jti?: string; exp?: number };
   if (!decoded?.jti) throw new SessionValidationError("Session token has no revocation identifier.");
-  const ttlSeconds = decoded.exp ? Math.max(1, decoded.exp - Math.floor(Date.now() / 1_000)) : 12 * 60 * 60;
+  const ttlSeconds = decoded.exp ? Math.max(1, decoded.exp - Math.floor(Date.now() / 1_000)) : 7 * 24 * 60 * 60;
   try {
     await setRedisValue(`session:revoked:${decoded.jti}`, "1", ttlSeconds);
   } catch (error) {

@@ -346,7 +346,7 @@ export default function MockInterviewActivePage() {
         for (let i = 0; i < samples.length; i++) { const v = (samples[i] - 128) / 128; sum += v * v; }
         const rms = Math.sqrt(sum / samples.length);
         const now = Date.now();
-        if (rms > 0.015) {
+        if (rms > 0.012) {
           if (!recordingHasSpeechRef.current) {
             recordingHasSpeechRef.current = true;
             recordingChunksRef.current = [...preSpeechChunksRef.current];
@@ -354,7 +354,7 @@ export default function MockInterviewActivePage() {
           }
           lastSpeechAtRef.current = now;
         }
-        if (recordingHasSpeechRef.current && (now - lastSpeechAtRef.current > 1200 || now - segmentStartedAtRef.current > 45_000)) {
+        if (recordingHasSpeechRef.current && (now - lastSpeechAtRef.current > 1000 || now - segmentStartedAtRef.current > 45_000)) {
           animationFrameRef.current = null;
           try { recorder.stop(); } catch {}
           return;
@@ -508,6 +508,12 @@ export default function MockInterviewActivePage() {
         };
         setConversation((prev) => [...prev, assistantMsg]);
 
+        if (typeof data.turnIndex === "number") {
+          questionIndexRef.current = data.turnIndex;
+          setSession((prev) => prev ? { ...prev, currentQuestionIndex: data.turnIndex } : null);
+          setCurrentTurn((prev) => prev ? { ...prev, questionIndex: data.turnIndex, questionText: data.replyText } : null);
+        }
+
         // Sara speaks the response out loud with ElevenLabs
         await playSaraSpeech(data.replyText);
       } catch (err) {
@@ -530,11 +536,12 @@ export default function MockInterviewActivePage() {
     try {
       await ensureMicrophone();
 
-      // Start with Sara's opening / first question
-      const opening =
-        session?.openingMessage ||
-        currentTurn?.questionText ||
-        "Hello! I'm Sara, your interviewer today. Thank you for joining. To begin, could you briefly introduce yourself and share a key challenge you worked on recently?";
+      // Start with Sara's opening greeting AND first question together
+      const firstQuestionText = currentTurn?.questionText?.trim() || "";
+      const openingGreeting = session?.openingMessage?.trim() || "Hello! I'm Sara, your interviewer today. Thank you for joining.";
+      const opening = firstQuestionText && !openingGreeting.includes(firstQuestionText)
+        ? `${openingGreeting} ${firstQuestionText}`
+        : (firstQuestionText || openingGreeting);
 
       // Display Sara's opening question in transcript if not already visible
       setConversation((prev) => {

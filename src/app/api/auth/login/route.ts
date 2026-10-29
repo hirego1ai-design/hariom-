@@ -118,9 +118,9 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      // Match the 12-hour JWT expiry. A longer cookie must never imply that
+      // Match the 7-day JWT expiry. A longer cookie must never imply that
       // the user still has a valid session after the token has expired.
-      maxAge: 12 * 60 * 60,
+      maxAge: 7 * 24 * 60 * 60,
     });
 
     return response;
