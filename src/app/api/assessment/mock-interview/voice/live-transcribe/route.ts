@@ -73,8 +73,8 @@ export async function POST(request: NextRequest) {
       throw new ApiError("The interview state changed. Please reload.", 409);
     }
     const turn = interviewSession.turns[0];
-    if (!turn || turn.candidateAnswerTranscript !== null) {
-      throw new ApiError("This voice turn is no longer accepting a response.", 409);
+    if (!turn) {
+      throw new ApiError("Voice turn not found for this question index.", 404);
     }
 
     let result;
