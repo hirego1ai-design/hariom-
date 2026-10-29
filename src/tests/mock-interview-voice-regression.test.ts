@@ -247,3 +247,29 @@ test("voice provider models are configuration data, not hard-coded runtime fallb
   assert.ok(!stt.includes("gpt-4o-mini-transcribe"));
   assert.ok(!tts.includes("gpt-4o-mini-tts"));
 });
+
+
+test("Live voice chat uses MediaRecorder and server transcription, not browser SpeechRecognition", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  const liveTranscribe = read("src/app/api/assessment/mock-interview/voice/live-transcribe/route.ts");
+  assert.ok(active.includes("new MediaRecorder"));
+  assert.ok(active.includes("navigator.mediaDevices.getUserMedia"));
+  assert.ok(active.includes("/api/assessment/mock-interview/voice/live-transcribe"));
+  assert.ok(!active.includes("SpeechRecognition"));
+  assert.ok(!active.includes("webkitSpeechRecognition"));
+  assert.ok(!active.includes("scheduleRecognitionRestart"));
+  assert.ok(liveTranscribe.includes('auth.role !== "CANDIDATE"'));
+  assert.ok(liveTranscribe.includes("enforceRateLimit"));
+  assert.ok(liveTranscribe.includes("transcribeMockInterviewAudio"));
+  assert.ok(liveTranscribe.includes("interviewSession.candidateProfileId !== candidateProfile.id"));
+  assert.ok(!liveTranscribe.includes("createVoiceTranscriptReceipt"));
+  assert.ok(!liveTranscribe.includes("mockInterviewTurn.update"));
+});
+
+test("Voice UI removes audio disclaimer and inaccurate interruption claim", () => {
+  const active = read("src/app/ai/mock-interview/active/page.tsx");
+  const setup = read("src/app/ai/mock-interview/setup/page.tsx");
+  assert.ok(!active.includes("interrupt Sara at any moment by speaking"));
+  assert.ok(!setup.includes("Tip for shared rooms"));
+  assert.ok(!setup.includes("automatically filters out background room conversations"));
+});
