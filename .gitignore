@@ -59,3 +59,5 @@ test_*.log
 production-wiring-inventory.json
 production-wiring-inventory.csv
 PRODUCTION_WIRING_AUDIT_REPORT.md
+
+.kiro/

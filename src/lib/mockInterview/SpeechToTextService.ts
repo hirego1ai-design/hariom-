@@ -74,6 +74,43 @@ export async function transcribeMockInterviewAudio(params: {
     "Preserve technical terms, product names, acronyms, numbers, and code-switching faithfully.",
   ].filter(Boolean);
 
+    // Fast-Path: Groq Whisper (ultra-low latency ~200ms)
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  if (groqKey) {
+    try {
+      const groqForm = new FormData();
+      groqForm.append("file", params.audio, params.audio.name || "voice-answer.webm");
+      groqForm.append("model", "whisper-large-v3-turbo");
+      groqForm.append("response_format", "json");
+      if (promptParts.length) {
+        groqForm.append("prompt", promptParts.join("\n").slice(0, 2_000));
+      }
+      const groqRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}` },
+        body: groqForm,
+        signal: AbortSignal.timeout(6_000),
+      });
+      if (groqRes.ok) {
+        const payload = await groqRes.json();
+        const transcript = typeof payload.text === "string" ? payload.text.trim() : "";
+        if (transcript) {
+          return {
+            transcript,
+            detectedLanguage: payload.language || params.expectedLanguage || "en",
+            confidence: null,
+            requiresConfirmation: true,
+            provider: "groq",
+            model: "whisper-large-v3-turbo",
+            version: "provider-file-transcription-v1",
+          };
+        }
+      }
+    } catch (groqErr) {
+      console.warn("[STT] Groq Whisper fast-path notice:", groqErr);
+    }
+  }
+
   const routed = await ModelRouter.executeWithFallback({
     taskType: "mock-interview-stt",
     requiredCapabilities: ["STT"],

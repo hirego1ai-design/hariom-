@@ -346,7 +346,7 @@ export default function MockInterviewActivePage() {
         for (let i = 0; i < samples.length; i++) { const v = (samples[i] - 128) / 128; sum += v * v; }
         const rms = Math.sqrt(sum / samples.length);
         const now = Date.now();
-        if (rms > 0.025) {
+        if (rms > 0.015) {
           if (!recordingHasSpeechRef.current) {
             recordingHasSpeechRef.current = true;
             recordingChunksRef.current = [...preSpeechChunksRef.current];
@@ -536,6 +536,20 @@ export default function MockInterviewActivePage() {
         currentTurn?.questionText ||
         "Hello! I'm Sara, your interviewer today. Thank you for joining. To begin, could you briefly introduce yourself and share a key challenge you worked on recently?";
 
+      // Display Sara's opening question in transcript if not already visible
+      setConversation((prev) => {
+        if (prev.some((m) => m.id === "opening" || m.text === opening)) return prev;
+        return [
+          ...prev,
+          {
+            id: "opening",
+            sender: "assistant",
+            text: opening,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ];
+      });
+
       await playSaraSpeech(opening);
     } catch (err) {
       setErrorMessage(
@@ -684,7 +698,7 @@ export default function MockInterviewActivePage() {
             <div className="text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#4285F4]/10 border border-[#4285F4]/20 text-[#4285F4] text-xs font-bold uppercase tracking-widest">
                 <Sparkles className="w-3.5 h-3.5" />
-                Interviewer: {session.persona?.name || "Sara"} (Executive HR & Technical)
+                Interviewer: {session.persona?.name || "Sara"} (Multilingual • Hindi & 30+ Languages)
               </div>
               <h1 className="text-xl md:text-2xl font-semibold mt-2 text-white">
                 Live Full-Duplex Voice Discussion

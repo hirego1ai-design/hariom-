@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   Edit3,
   UserCheck,
+  Globe,
+  ChevronDown,
 } from "lucide-react";
 
 type RoleOption = {
@@ -78,6 +80,7 @@ export default function MockInterviewSetupPage() {
   const [isProfileLoaded, setIsProfileLoaded] = useState(false);
   const [isEditingRole, setIsEditingRole] = useState(false);
   const [hasProfileData, setHasProfileData] = useState(false);
+  const [language, setLanguage] = useState("auto");
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pastSessions, setPastSessions] = useState<SessionSummary[]>([]);
@@ -262,6 +265,7 @@ export default function MockInterviewSetupPage() {
           focusSkills: focusSkills.length > 0 ? focusSkills : profileSkills.slice(0, 6),
           practiceContext: practiceContext.trim() || null,
           mode: "VOICE", // Always live voice-to-voice for mock interview
+          language: language === "auto" ? "en" : language,
         }),
       });
 
@@ -502,6 +506,57 @@ export default function MockInterviewSetupPage() {
                   </div>
                 </>
               )}
+
+              {/* Interview Language */}
+              <div>
+                <label
+                  htmlFor="interview-language"
+                  className="block text-xs uppercase tracking-wider text-white/70 font-bold mb-2 flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-[#4285F4]" />
+                    Interview Language
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">
+                    Hindi & 30+ Languages Supported
+                  </span>
+                </label>
+                <div className="relative">
+                  <select
+                    id="interview-language"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full text-xs bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#4285F4] transition-colors appearance-none cursor-pointer"
+                  >
+                    <option value="auto" className="bg-[#141416] text-white">🌐 Auto-Detect / Multilingual (Adapts to Hindi, Hinglish, English, etc.)</option>
+                    <option value="en" className="bg-[#141416] text-white">🇺🇸 English (Global Standard)</option>
+                    <option value="hi" className="bg-[#141416] text-white">🇮🇳 Hindi / Hinglish (हिंदी / हिंग्लिश)</option>
+                    <option value="es" className="bg-[#141416] text-white">🇪🇸 Spanish (Español)</option>
+                    <option value="fr" className="bg-[#141416] text-white">🇫🇷 French (Français)</option>
+                    <option value="de" className="bg-[#141416] text-white">🇩🇪 German (Deutsch)</option>
+                    <option value="ja" className="bg-[#141416] text-white">🇯🇵 Japanese (日本語)</option>
+                    <option value="ar" className="bg-[#141416] text-white">🇸🇦 Arabic (العربية)</option>
+                    <option value="pt" className="bg-[#141416] text-white">🇧🇷 Portuguese (Português)</option>
+                    <option value="zh" className="bg-[#141416] text-white">🇨🇳 Chinese (中文)</option>
+                    <option value="ru" className="bg-[#141416] text-white">🇷🇺 Russian (Русский)</option>
+                    <option value="it" className="bg-[#141416] text-white">🇮🇹 Italian (Italiano)</option>
+                    <option value="ko" className="bg-[#141416] text-white">🇰🇷 Korean (한국어)</option>
+                    <option value="nl" className="bg-[#141416] text-white">🇳🇱 Dutch (Nederlands)</option>
+                    <option value="tr" className="bg-[#141416] text-white">🇹🇷 Turkish (Türkçe)</option>
+                    <option value="id" className="bg-[#141416] text-white">🇮🇩 Indonesian (Bahasa)</option>
+                    <option value="ta" className="bg-[#141416] text-white">🇮🇳 Tamil (தமிழ்)</option>
+                    <option value="te" className="bg-[#141416] text-white">🇮🇳 Telugu (తెలుగు)</option>
+                    <option value="mr" className="bg-[#141416] text-white">🇮🇳 Marathi (मराठी)</option>
+                    <option value="bn" className="bg-[#141416] text-white">🇮🇳 Bengali (বাংলা)</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-white/50">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-white/50 mt-1">
+                  Sara natively understands Indian accents, Hindi, Hinglish, and adapts to whatever language you speak.
+                </p>
+              </div>
 
               {/* Optional Context */}
               <div>

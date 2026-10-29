@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     const personaName = session.persona?.displayName || "Sara";
     const roleTarget = session.roleTarget || "Candidate";
     const seniority = session.declaredSeniority || "Mid-Level";
+    const sessionLanguage = session.language || "en";
 
     const systemPrompt = `You are Sara, a Senior Executive Technical Interviewer with 10+ years of hiring experience at top technology companies (Google, Amazon, Microsoft, and high-growth scale-ups).
 

@@ -18,7 +18,7 @@ export class TextToSpeechUnavailableError extends Error {
 }
 
 export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
-  if (!voiceKey) return "FFUyfdtZviQ3xDCrBrR2"; // User requested Sara voice
+  if (!voiceKey) return "EXAVITQu4vr4xnSDxMaL"; // User requested Sara voice
   const normalized = voiceKey.toLowerCase().trim();
   if (normalized.includes("adam") || normalized === "echo" || normalized === "onyx") {
     return "pNInz6obpgDQGcFmaJgB"; // Adam (deep male interviewer)
@@ -36,7 +36,7 @@ export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
   if (/^[A-Za-z0-9]{18,24}$/.test(voiceKey.trim())) {
     return voiceKey.trim();
   }
-  return "FFUyfdtZviQ3xDCrBrR2"; // User requested Sara voice
+  return "EXAVITQu4vr4xnSDxMaL"; // User requested Sara voice
 }
 
 function baseUrlForProvider(provider: string, runtimeBaseUrl?: string) {
@@ -142,7 +142,7 @@ export async function synthesizeMockInterviewSpeech(params: {
       } else {
         const errorText = await response.text().catch(() => "");
         console.warn(`[ElevenLabs] TTS returned HTTP ${response.status}: ${errorText.slice(0, 200)}`);
-        if (response.status === 402 && voiceId !== "EXAVITQu4vr4xnSDxMaL") {
+        if (!response.ok && voiceId !== "EXAVITQu4vr4xnSDxMaL") {
           console.warn("[ElevenLabs] Custom voice requires paid plan, retrying with standard premade voice...");
           const retryRes = await fetch("https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL?optimize_streaming_latency=4", {
             method: "POST",
