@@ -69,13 +69,12 @@ export async function POST(request: NextRequest) {
     if (interviewSession.mode !== "VOICE" || interviewSession.status !== "IN_PROGRESS") {
       throw new ApiError("This voice interview is not accepting audio.", 409);
     }
-    if (interviewSession.currentQuestionIndex !== metadata.data.questionIndex) {
-      throw new ApiError("The interview state changed. Please reload.", 409);
-    }
-    const turn = interviewSession.turns[0];
-    if (!turn) {
-      throw new ApiError("Voice turn not found for this question index.", 404);
-    }
+    const turn =
+      interviewSession.turns[0] ||
+      (await prisma.mockInterviewTurn.findFirst({
+        where: { sessionId: interviewSession.id },
+        orderBy: { questionIndex: "desc" },
+      }));
 
     let result;
     try {

@@ -131,7 +131,7 @@ CRITICAL LIVE VOICE RULES:
             max_tokens: 150,
             temperature: 0.7,
           }),
-          signal: AbortSignal.timeout(3_500),
+          signal: AbortSignal.timeout(5_000),
         });
 
         if (groqResponse.ok) {
