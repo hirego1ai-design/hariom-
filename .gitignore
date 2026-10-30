@@ -52,6 +52,17 @@ next-env.d.ts
 scratch/
 skills-lock.json
 
+# Scripts containing secrets or one-time internal tooling
+scripts/set-gh-secrets*.ps1
+scripts/set-gh-secrets*.sh
+
+# Root-level one-off dev/fix scripts
+fix_duplicates.js
+fix_duplicates.py
+fix_sections.js
+fix_styles.js
+refactor.js
+
 __pycache__/
 .env*.local
 
