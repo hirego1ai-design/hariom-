@@ -88,9 +88,13 @@ export async function POST(request: Request) {
     const unanswered = interviewSession.turns.filter(
       (turn) => !turn.candidateAnswerTranscript?.trim(),
     );
+    // VOICE mode: turns are saved with both question + answer in the same row by stream-turn.
+    // The session-start turn (questionIndex 0) never has a candidateAnswerTranscript — skip that check.
+    const isVoiceMode = interviewSession.mode === "VOICE";
+    const minAnswered = Math.min(3, interviewSession.totalQuestions);
     if (
-      report.answeredTurns < Math.min(3, interviewSession.totalQuestions) ||
-      unanswered.length > 0
+      report.answeredTurns < minAnswered ||
+      (!isVoiceMode && unanswered.length > 0)
     ) {
       throw new ApiError(
         "Complete the planned interview questions before generating the final practice report.",

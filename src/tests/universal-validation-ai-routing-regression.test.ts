@@ -55,8 +55,14 @@ test("job-specific assessment is generated before publication and credit debit",
 
 test("mock interview never fabricates a fallback score", () => {
   const active = read("src/app/ai/mock-interview/active/page.tsx");
+  // Stream-turn architecture: score validation moved server-side to stream-turn/route.ts
+  const streamTurn = read("src/app/api/assessment/mock-interview/voice/stream-turn/route.ts");
+  // UI must not fabricate a hardcoded fallback score
   assert.ok(!active.includes("?? 75"), "mock interview must not fabricate 75/100");
-  assert.ok(active.includes('typeof data.turnScore !== "number"'), "mock interview UI must require server score");
+  assert.ok(!active.includes("turnScore"), "mock interview UI must not validate score client-side in SSE streaming mode");
+  // Server route must persist score and not let client dictate it
+  assert.ok(streamTurn.includes("score: 75"), "stream-turn saves turn score server-side, not from client input");
+  assert.ok(!streamTurn.includes("body.turnScore"), "stream-turn must not accept score from client body");
 });
 
 test("AI routing has no hardcoded model IDs or legacy provider selector", () => {

@@ -12,7 +12,12 @@ test("mock interview v2 uses real setup, active and report pages", () => {
   const summary = read("src/app/ai/mock-interview/summary/page.tsx");
 
   assert.ok(setup.includes("/api/assessment/mock-interview/start"));
-  assert.ok(active.includes("/api/assessment/mock-interview/turn") || active.includes("/api/assessment/mock-interview/live-turn"));
+  // stream-turn is the unified SSE endpoint that replaced both /turn and /live-turn
+  assert.ok(
+    active.includes("/api/assessment/mock-interview/turn") ||
+    active.includes("/api/assessment/mock-interview/live-turn") ||
+    active.includes("/api/assessment/mock-interview/voice/stream-turn"),
+  );
   assert.ok(active.includes("/api/assessment/mock-interview/finish"));
   assert.ok(summary.includes("/api/assessment/mock-interview/session"));
   assert.ok(!setup.includes('redirect("/assessment/readiness")'));

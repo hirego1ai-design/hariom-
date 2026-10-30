@@ -91,6 +91,13 @@ type SSEEvent =
   | { type: "audio_end" }
   | { type: "error"; message: string };
 
+// ─── Environment check icon (module scope) ───
+function EnvCheckIcon({ state }: { state: EnvCheckState }) {
+  if (state === "pending") return <Loader2 className="w-5 h-5 text-white/40 animate-spin" />;
+  if (state === "pass") return <CheckCircle className="w-5 h-5 text-emerald-400" />;
+  return <XCircle className="w-5 h-5 text-amber-400" />;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function MockInterviewActivePage() {
   const router = useRouter();
@@ -153,25 +160,8 @@ export default function MockInterviewActivePage() {
     questionIndexRef.current = currentTurn?.questionIndex ?? session?.currentQuestionIndex ?? 0;
   }, [currentTurn?.questionIndex, session?.currentQuestionIndex]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (timerRef.current) clearInterval(timerRef.current);
-      stopAllAudio();
-      microphoneStreamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Session timer
-  useEffect(() => {
-    if (!session || liveStatus === "IDLE" || liveStatus === "ENV_CHECK") return;
-    timerRef.current = setInterval(() => setElapsedSeconds((p) => p + 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [session, liveStatus]);
-
-  // ─── Audio playback via Web Audio API (low-latency chunk playback) ───────────
+  // ─── Audio playback via Web Audio API ───
+  // Declared before any useEffect that references it to satisfy React Compiler / ESLint ordering rules.
   const stopAllAudio = useCallback(() => {
     try { audioSourceRef.current?.stop(); } catch {}
     audioSourceRef.current = null;
@@ -180,16 +170,25 @@ export default function MockInterviewActivePage() {
     isPlayingAudioRef.current = false;
   }, []);
 
-  const getAudioContext = useCallback((): AudioContext => {
+  const getAudioContext = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
       audioCtxRef.current = new AudioContext();
+    }
+    if (audioCtxRef.current.state === "suspended") {
+      await audioCtxRef.current.resume();
     }
     return audioCtxRef.current;
   }, []);
 
+  const playNextChunkRef = useRef<() => Promise<void>>(async () => {});
+
   const playNextChunk = useCallback(async () => {
-    if (!isPlayingAudioRef.current || audioQueueRef.current.length === 0) return;
-    const ctx = getAudioContext();
+    if (!isPlayingAudioRef.current) return;
+    if (audioQueueRef.current.length === 0) {
+      isPlayingAudioRef.current = false;
+      return;
+    }
+    const ctx = await getAudioContext();
     const buffer = audioQueueRef.current.shift()!;
     try {
       const decoded = await ctx.decodeAudioData(buffer);
@@ -199,18 +198,42 @@ export default function MockInterviewActivePage() {
       audioSourceRef.current = source;
       source.onended = () => {
         audioSourceRef.current = null;
-        void playNextChunk();
+        void playNextChunkRef.current();
       };
       source.start();
     } catch {
-      void playNextChunk();
+      void playNextChunkRef.current();
     }
   }, [getAudioContext]);
 
-  const enqueueAudioChunk = useCallback((b64: string) => {
+  useEffect(() => {
+    playNextChunkRef.current = playNextChunk;
+  }, [playNextChunk]);
+
+  // Cleanup on unmount — inline ref operations to avoid forward-reference lint error
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
+      // Inline stopAllAudio to avoid referencing it before declaration
+      try { audioSourceRef.current?.stop(); } catch {}
+      audioSourceRef.current = null;
+      audioQueueRef.current = [];
+      pendingChunksRef.current = [];
+      isPlayingAudioRef.current = false;
+      microphoneStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Session timer
+  useEffect(() => {
+    if (!session || liveStatus === "IDLE" || liveStatus === "ENV_CHECK") return;
+    timerRef.current = setInterval(() => setElapsedSeconds((p) => p + 1), 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [session, liveStatus]);  const enqueueAudioChunk = useCallback((b64: string) => {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     pendingChunksRef.current.push(bytes);
-    // Accumulate a reasonable buffer (≥16 KB) before decoding to avoid glitches
     const totalBytes = pendingChunksRef.current.reduce((s, c) => s + c.length, 0);
     if (totalBytes >= 16 * 1024) {
       const merged = new Uint8Array(totalBytes);
@@ -220,10 +243,10 @@ export default function MockInterviewActivePage() {
       audioQueueRef.current.push(merged.buffer);
       if (!isPlayingAudioRef.current) {
         isPlayingAudioRef.current = true;
-        void playNextChunk();
+        void playNextChunkRef.current();
       }
     }
-  }, [playNextChunk]);
+  }, []);
 
   const flushAudioChunks = useCallback(() => {
     if (pendingChunksRef.current.length === 0) return;
@@ -236,10 +259,10 @@ export default function MockInterviewActivePage() {
       audioQueueRef.current.push(merged.buffer);
       if (!isPlayingAudioRef.current) {
         isPlayingAudioRef.current = true;
-        void playNextChunk();
+        void playNextChunkRef.current();
       }
     }
-  }, [playNextChunk]);
+  }, []);
 
   // ─── Microphone setup ─────────────────────────────────────────────────────────
   const ensureMicrophone = useCallback(async () => {
@@ -251,7 +274,7 @@ export default function MockInterviewActivePage() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     microphoneStreamRef.current = stream;
-    const ctx = getAudioContext();
+    const ctx = await getAudioContext();
     const source = ctx.createMediaStreamSource(stream);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
@@ -606,7 +629,7 @@ export default function MockInterviewActivePage() {
       if (!isMountedRef.current) return;
 
       const arrayBuffer = await blob.arrayBuffer();
-      const ctx = getAudioContext();
+      const ctx = await getAudioContext();
       const decoded = await ctx.decodeAudioData(arrayBuffer);
       const source = ctx.createBufferSource();
       source.buffer = decoded;
@@ -736,6 +759,8 @@ export default function MockInterviewActivePage() {
   const handleInterrupt = () => {
     stopAllAudio();
     isPlayingAudioRef.current = false;
+    // Sync the ref immediately — startListeningCapture reads liveStatusRef synchronously
+    liveStatusRef.current = "LISTENING";
     setLiveStatus("LISTENING");
     if (!isMicMutedRef.current) void startListeningCapture();
   };
@@ -791,15 +816,8 @@ export default function MockInterviewActivePage() {
       </div>
     );
   }
-
-  // ─── Environment check overlay ────────────────────────────────────────────────
-  const EnvCheckIcon = ({ state }: { state: EnvCheckState }) => {
-    if (state === "pending") return <Loader2 className="w-5 h-5 text-white/40 animate-spin" />;
-    if (state === "pass") return <CheckCircle className="w-5 h-5 text-emerald-400" />;
-    return <XCircle className="w-5 h-5 text-amber-400" />;
-  };
-
-  const allChecksPass = envChecks.mic === "pass" && envChecks.network === "pass";
+  // ─── Environment check state helpers ───
+const allChecksPass = envChecks.mic === "pass" && envChecks.network === "pass";
   const micFailed = envChecks.mic === "fail";
 
   // ─── Render ───────────────────────────────────────────────────────────────────
