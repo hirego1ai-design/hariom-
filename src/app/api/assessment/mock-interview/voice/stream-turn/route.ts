@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
       if (elevenKey) {
         const voiceId = resolveElevenLabsVoiceId(voiceKey);
         // Use ElevenLabs streaming endpoint for lowest-latency audio delivery
-        const ttsRes = await fetch(
+        let ttsRes = await fetch(
           `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=3`,
           {
             method: "POST",
@@ -325,6 +325,24 @@ export async function POST(request: NextRequest) {
             signal: AbortSignal.timeout(20_000),
           },
         );
+
+        // Fallback to premade Sarah voice if custom/library voice returned 402 or error
+        if (!ttsRes.ok && voiceId !== "EXAVITQu4vr4xnSDxMaL") {
+          console.warn(`[StreamTurn] Voice ${voiceId} returned ${ttsRes.status}, falling back to premade voice EXAVITQu4vr4xnSDxMaL`);
+          ttsRes = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL/stream?optimize_streaming_latency=3`,
+            {
+              method: "POST",
+              headers: { "xi-api-key": elevenKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: saraReply,
+                model_id: "eleven_turbo_v2_5",
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+              }),
+              signal: AbortSignal.timeout(20_000),
+            },
+          );
+        }
 
         if (ttsRes.ok && ttsRes.body) {
           const CHUNK_SIZE = 8 * 1024; // 8 KB chunks
