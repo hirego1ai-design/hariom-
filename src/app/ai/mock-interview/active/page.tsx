@@ -224,7 +224,7 @@ export default function MockInterviewActivePage() {
       isPlayingAudioRef.current = false;
       microphoneStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Session timer
   useEffect(() => {
@@ -573,10 +573,7 @@ export default function MockInterviewActivePage() {
             case "error":
               console.warn("[StreamTurn] Server error:", event.message);
               setInterimUserText("");
-              // Only show persistent red alert for auth/config errors
-              if (event.message.includes("not enabled") || event.message.includes("Unauthorized")) {
-                setErrorMessage(event.message);
-              }
+              setErrorMessage(event.message || "Failed to process speech. Please check your mic or connection.");
               break;
           }
         }
@@ -882,6 +879,18 @@ const allChecksPass = envChecks.mic === "pass" && envChecks.network === "pass";
               <h1 className="text-xl md:text-2xl font-semibold mt-2 text-white">Live Voice Interview</h1>
               <p className="text-xs text-white/50 mt-1">Speak naturally — Sara listens and responds in real time.</p>
             </div>
+
+            {/* Current Question Display */}
+            {liveStatus !== "ENV_CHECK" && currentTurn?.questionText && (
+              <div className="w-full max-w-xl mx-auto bg-white/5 border border-white/10 rounded-2xl p-4 text-center shadow-lg backdrop-blur-sm">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#4285F4] bg-[#4285F4]/10 px-3 py-1 rounded-full">
+                  Question {(currentTurn.questionIndex ?? 0) + 1} of {session.totalQuestions || 5}
+                </span>
+                <p className="text-sm md:text-base font-medium text-white/95 mt-3 leading-relaxed">
+                  {currentTurn.questionText}
+                </p>
+              </div>
+            )}
 
             {/* ── Environment check panel (shown when ENV_CHECK) ── */}
             {liveStatus === "ENV_CHECK" && (
