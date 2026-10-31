@@ -5,14 +5,6 @@ import Link from "next/link";
 
 const modules = [
   {
-    title: "AI Mock Interview",
-    description:
-      "Text-based private practice with role-relevant questions and server-recorded feedback. Practice results do not change employer hiring decisions or your historical Skill Validation score.",
-    href: "/ai/mock-interview/setup",
-    action: "Start mock interview",
-    icon: "smart_toy",
-  },
-  {
     title: "Assigned Assessments",
     description:
       "Open active job-specific assessments assigned through your applications. Question ownership, timing, answer keys, and scoring are enforced on the server.",

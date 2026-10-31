@@ -39,7 +39,7 @@ const QUICK_ACTIONS = [
   { label: "Browse Jobs", prompt: "open jobs", href: "/jobs", icon: Briefcase },
   { label: "My Applications", prompt: "show my applications", href: "/applications", icon: FileText },
   { label: "Interview Schedule", prompt: "when is my next interview", href: "/interviews", icon: Calendar },
-  { label: "Mock Interview", prompt: "start mock interview", href: "/ai/mock-interview/setup", icon: Award },
+
   { label: "My Profile", prompt: "open my profile", href: "/profile", icon: User },
   { label: "Career Credits", prompt: "check my credit balance", href: "/credits", icon: CreditCard },
 ];
@@ -62,7 +62,7 @@ function detectAutoNavigation(
 
   if (isCommand) {
     if (/\b(mock|practice)\b/i.test(text)) {
-      return { href: "/ai/mock-interview/setup", label: "AI Mock Interview" };
+      return { href: "/jobs", label: "Browse Jobs" };
     }
     if (/\b(jobs?|openings|vacancies|naukri)\b/i.test(text)) {
       return { href: "/jobs", label: "Job Listings" };

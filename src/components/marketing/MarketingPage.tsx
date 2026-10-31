@@ -115,7 +115,7 @@ function FeaturesContent() {
   const capabilities = [
     { title: "Employer AI Co-Pilot", description: "Assist with defined hiring operations, workflow context and next-step coordination while your team retains control of consequential decisions.", href: "/ai-hiring-copilot", cta: "Explore AI Co-Pilot" },
     { title: "Candidate Search & Screening", description: "Bring candidate discovery and evidence-based screening into the same workflow so teams can review relevant signals with context.", href: "/candidate-screening-software", cta: "Explore candidate screening" },
-    { title: "Assessments & AI Mock Interviews", description: "Use structured assessments and interview-practice experiences to build useful evidence of skills and job readiness.", href: "/ai-mock-interview", cta: "Explore AI Mock Interviews" },
+    { title: "Candidate Discovery & Job Matching", description: "Search, filter, and apply directly to verified active opportunities matching your target role and skills.", href: "/jobs", cta: "Explore Jobs" },
     { title: "Video Resume & Candidate Intelligence", description: "Combine candidate information, video resumes, assessment evidence and interview insights into a more unified candidate view.", href: "/video-resume", cta: "Explore Video Resume" },
     { title: "Interview Orchestration", description: "Coordinate interview stages, interviewer context and workflow progression without separating the process across disconnected tools.", href: "/interview-proctoring-software", cta: "Explore interview workflows" },
     { title: "Candidate Communication & Follow-ups", description: "Support timely candidate communication and follow-up workflows while maintaining durable hiring context across stages.", href: "/solutions", cta: "Explore hiring workflows" },
@@ -152,7 +152,7 @@ function FeaturesContent() {
 
 function CareerResourcesContent() {
   const guides = [
-    ["Interview preparation", "Practise answering role-specific interview questions in a structured environment before speaking with an employer.", "/ai-mock-interview", "Start an AI Mock Interview"],
+    ["Find verified jobs", "Search and apply to verified job opportunities matching your interests, skills, and target location.", "/jobs", "Browse Jobs"],
     ["Resume & Video Resume", "Use your profile and Video Resume to introduce yourself, communicate your experience and add context beyond a traditional resume.", "/video-resume", "Explore Video Resume"],
     ["Skills & assessments", "Use structured assessments and preparation tools to demonstrate what you know and identify areas where additional practice may help.", "/certifications", "Explore skill evidence"],
     ["Find the right jobs", "Search HireGo jobs and review roles that match your interests, skills and location when you are ready to explore opportunities.", "/jobs", "Browse Jobs"],
@@ -167,7 +167,7 @@ function CareerResourcesContent() {
     ["Where can I find jobs on HireGo?", "Use the HireGo Jobs area to browse available opportunities and review roles relevant to your interests, skills and location."],
   ];
   return <div className="space-y-16">
-    <div className="flex flex-wrap justify-center gap-3"><Link href="/ai-mock-interview" className="btn-primary-blue">Practice AI Mock Interview</Link><Link href="/jobs" className="btn-primary-red">Find Jobs</Link></div>
+    <div className="flex flex-wrap justify-center gap-3"><Link href="/jobs" className="btn-primary-red">Browse Verified Jobs</Link><Link href="/register" className="btn-primary-blue">Create Candidate Profile</Link></div>
     <section>
       <div className="mx-auto max-w-3xl text-center"><h2 className="text-3xl font-extrabold text-white sm:text-4xl">Prepare for interviews before they count.</h2><p className="mt-5 leading-7 text-slate-400">Use practical preparation tools to become more comfortable explaining your experience, skills and approach before speaking with an employer.</p></div>
       <div className="mt-10 grid gap-5 md:grid-cols-2">{guides.map(([title, description, href, cta]) => <article key={title} className="glass-card p-7"><h3 className="text-2xl font-bold text-white">{title}</h3><p className="mt-3 leading-7 text-slate-400">{description}</p><Link href={href} className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">{cta} →</Link></article>)}</div>
@@ -195,7 +195,7 @@ function FindJobsContent() {
     </section>
     <section className="grid gap-5 lg:grid-cols-3">
       <article className="glass-card p-7"><h2 className="text-2xl font-bold text-white">Prepare before you apply</h2><p className="mt-3 leading-7 text-slate-400">Use Career Resources for interview preparation, skill readiness and practical guidance throughout your job search.</p><Link href="/career-resources" className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore Career Resources →</Link></article>
-      <article className="glass-card p-7"><h2 className="text-2xl font-bold text-white">Practise interviews</h2><p className="mt-3 leading-7 text-slate-400">Use AI Mock Interviews to practise explaining your experience and responses before an employer interview.</p><Link href="/ai-mock-interview" className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Practice AI Mock Interview →</Link></article>
+      <article className="glass-card p-7"><h2 className="text-2xl font-bold text-white">Browse Active Jobs</h2><p className="mt-3 leading-7 text-slate-400">Search through active roles across India with verified salary and company details.</p><Link href="/jobs" className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Browse Jobs →</Link></article>
       <article className="glass-card p-7"><h2 className="text-2xl font-bold text-white">Add a Video Resume</h2><p className="mt-3 leading-7 text-slate-400">Give employers another way to understand your experience and communication beyond the information on a traditional resume.</p><Link href="/video-resume" className="mt-5 inline-flex text-sm font-semibold text-[#82b1ff] hover:underline">Explore Video Resume →</Link></article>
     </section>
     <section className="glass-card p-8 sm:p-10"><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff8a80]">Important</p><h2 className="mt-4 text-3xl font-extrabold text-white">HireGo helps connect candidates and hiring workflows. Employers make employment decisions.</h2><p className="mt-5 max-w-4xl leading-7 text-slate-300">Job availability, application progression and hiring outcomes depend on the employer and the requirements of each role. HireGo does not guarantee an interview, selection or job offer.</p></section>

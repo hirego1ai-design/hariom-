@@ -118,17 +118,6 @@ export default function JobActions({
           {isApplied ? "Application Submitted" : checking ? "Checking account…" : "Apply Now"}
         </button>
 
-        {jobTitle && (
-          <Link
-            href={`/ai/mock-interview/setup?role=${encodeURIComponent(jobTitle)}`}
-            className="w-full h-11 rounded-2xl bg-gradient-to-r from-blue-600/20 via-indigo-600/20 to-purple-600/20 hover:from-blue-600/30 hover:to-purple-600/30 border border-blue-500/30 text-xs font-bold text-blue-300 hover:text-white flex items-center justify-center gap-2 transition-all shadow-md group"
-          >
-            <span className="material-symbols-outlined text-[18px] text-blue-400 group-hover:scale-110 transition-transform">
-              mic
-            </span>
-            <span>Practice Interview for this Role</span>
-          </Link>
-        )}
 
         <button
           type="button"

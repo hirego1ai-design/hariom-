@@ -559,7 +559,7 @@ export default function CandidateDashboardPage() {
             
             {/* Left Column: AI Copilot & Practice Suite */}
             <div className="lg:col-span-4 space-y-gutter">
-              {/* AI Practice Card */}
+              {/* Job Search & Opportunities Card */}
               <div
                 className="rounded-2xl p-6 relative overflow-hidden text-center"
                 style={{
@@ -569,25 +569,25 @@ export default function CandidateDashboardPage() {
                 }}
               >
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-primary to-primary-dim flex items-center justify-center shadow-lg mb-4">
-                  <span className="material-symbols-outlined text-white text-[32px]">psychology</span>
+                  <span className="material-symbols-outlined text-white text-[32px]">work</span>
                 </div>
-                <h3 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>AI Mock Interview Practice</h3>
+                <h3 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>Find Your Next Opportunity</h3>
                 <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  Simulate real-time, first-round voice interviews with Sara. Live conversation, realistic probing, and an executive scorecard.
+                  Browse active verified job listings across India, apply directly with your profile, and fast-track your hiring.
                 </p>
                 <div className="mt-5 space-y-2">
                   <Link
-                    href="/ai/mock-interview/setup"
+                    href="/jobs"
                     className="block w-full py-3 rounded-full text-white font-bold text-xs shadow-lg transition-all"
                     style={{
                       background: "linear-gradient(135deg, var(--primary), var(--primary-dim))",
                       boxShadow: "var(--shadow-btn-red)",
                     }}
                   >
-                    Start Live Voice Interview
+                    Browse Verified Jobs
                   </Link>
                   <Link
-                    href="/ai/practice-hub"
+                    href="/applications"
                     className="block w-full py-2.5 rounded-full font-bold text-xs border transition-all"
                     style={{
                       backgroundColor: "var(--surface-container-high)",
@@ -595,7 +595,7 @@ export default function CandidateDashboardPage() {
                       color: "var(--text-primary)",
                     }}
                   >
-                    Explore Practice Hub
+                    Track My Applications
                   </Link>
                 </div>
               </div>

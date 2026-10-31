@@ -5,7 +5,7 @@ import { PUBLIC_BUSINESS_DETAILS } from "@/lib/publicBusinessDetails";
 const groups = [
   { title: "Platform", links: [["Platform", "/features"], ["Services", "/services"], ["Solutions", "/solutions"], ["Pricing", "/pricing"]] },
   { title: "Employers", links: [["Managed Hiring", "/services#managed-hiring"], ["Pay Per Hire", "/pay-per-hire"], ["Employer Co-Pilot", "/ai-hiring-copilot"], ["Candidate Screening", "/candidate-screening-software"], ["Interview & Proctoring", "/interview-proctoring-software"], ["Hire by City", "/hiring-in"]] },
-  { title: "Candidates", links: [["Browse Jobs", "/jobs"], ["Jobs by City", "/jobs-in"], ["Video Resume", "/video-resume"], ["AI Mock Interview", "/ai-mock-interview"], ["Career Resources", "/career-resources"]] },
+  { title: "Candidates", links: [["Browse Jobs", "/jobs"], ["Jobs by City", "/jobs-in"], ["Video Resume", "/video-resume"], ["Job Applications", "/applications"], ["Career Resources", "/career-resources"]] },
   { title: "Company", links: [["About Us", "/about"], ["Careers", "/careers"], ["News & Insights", "/resources"], ["Press Releases", "/press-releases"], ["Press Kit", "/press-kit"], ["Contact", "/contact"]] },
   { title: "Legal", links: [["Legal & Trust Center", "/legal"], ["Privacy Policy", "/privacy"], ["Terms & Conditions", "/terms"], ["Refund & Cancellation", "/refund-cancellation"], ["Service Delivery", "/service-delivery"]] },
 ];
