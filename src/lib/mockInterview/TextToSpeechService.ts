@@ -17,9 +17,16 @@ export class TextToSpeechUnavailableError extends Error {
   }
 }
 
+export const DEFAULT_ELEVENLABS_VOICE_ID =
+  process.env.ELEVENLABS_VOICE_ID?.trim() || "oO7sLA3dWfQXsKeSAjpA";
+export const PREMADE_FALLBACK_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah (premade voice guaranteed across free & paid tiers)
+
 export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
-  if (!voiceKey) return "EXAVITQu4vr4xnSDxMaL"; // User requested Sara voice
+  if (!voiceKey) return DEFAULT_ELEVENLABS_VOICE_ID;
   const normalized = voiceKey.toLowerCase().trim();
+  if (normalized === "sarah" || normalized === "sara") {
+    return DEFAULT_ELEVENLABS_VOICE_ID;
+  }
   if (normalized.includes("adam") || normalized === "echo" || normalized === "onyx") {
     return "pNInz6obpgDQGcFmaJgB"; // Adam (deep male interviewer)
   }
@@ -36,7 +43,7 @@ export function resolveElevenLabsVoiceId(voiceKey?: string | null): string {
   if (/^[A-Za-z0-9]{18,24}$/.test(voiceKey.trim())) {
     return voiceKey.trim();
   }
-  return "EXAVITQu4vr4xnSDxMaL"; // User requested Sara voice
+  return DEFAULT_ELEVENLABS_VOICE_ID;
 }
 
 function baseUrlForProvider(provider: string, runtimeBaseUrl?: string) {
