@@ -825,8 +825,8 @@ export default function HomePage() {
               <Link href="/video-resume" className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-7 py-3.5 text-xs font-black uppercase tracking-wider text-white hover:brightness-110 shadow-lg shadow-blue-600/30">
                 Explore Video Resumes →
               </Link>
-              <Link href="/ai-mock-interview" className="rounded-xl border border-white/20 px-6 py-3.5 text-xs font-bold text-white hover:bg-white/5">
-                Practice AI Mock Interview
+              <Link href="/jobs" className="rounded-xl border border-white/20 px-6 py-3.5 text-xs font-bold text-white hover:bg-white/5">
+                Browse Verified Jobs
               </Link>
             </div>
           </div>

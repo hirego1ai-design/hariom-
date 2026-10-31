@@ -205,14 +205,14 @@ export default function CandidateCreditsPage() {
 
           <div className="glass-card rounded-3xl border border-white/10 p-6 flex flex-col justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Live Voice Practice</p>
-              <p className="mt-2 text-sm text-white/80 font-medium">Ready for real-time interview practice with Sara.</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-text-muted">Job Opportunities</p>
+              <p className="mt-2 text-sm text-white/80 font-medium">Explore active verified job openings matching your profile.</p>
             </div>
             <a
-              href="/ai/mock-interview/setup"
+              href="/jobs"
               className="mt-4 inline-flex items-center justify-center rounded-xl btn-3d-red px-5 py-3 text-xs font-bold text-white text-center"
             >
-              Start Live Interview
+              Browse Jobs
             </a>
           </div>
         </section>
